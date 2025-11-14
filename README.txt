@@ -25,3 +25,21 @@ Challenges:
 - it seems like it might be a lot of data to load. I think it's best to send the requests as soon as the location is known.
 - ideally i'd like to extract insights from the data to highlight things on the graph (like a record high temperature, etc.)
 - I'm not sure whether the average monthly or even daily temperatures will clearly show the effect of global warming, maybe it's only visible in daily highs and lows rather than average? in this case it might make sense to show not only the average but also the min/max.
+
+---
+
+Step 1 - Detect location
+- I wasn't prompted to allow browser location, so not sure if this happens at all?
+- There are two maps shown on the page (CARTO and Leaflet), not sure why.
+- Clicking on any map doesn't set the location or change the latitude/longitude.
+I'd like a better UX:
+- location is detected from IP or browser API
+- location is displayed with a dot/pin on a single map
+- no latitude/longitude inputs
+- clicking somewhere else on the map updates the location
+
+Step 2:
+- once the chunks have been downloaded, I'm getting this error (same as the one we got on the other page I believe, so we need to account for a different 'time' field)
+```
+KeyError: "No variable named 'time'. Variables on the dataset include ['2t', 'forecast_reference_time', 'latitude', 'longitude']"
+```
