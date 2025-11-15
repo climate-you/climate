@@ -183,6 +183,12 @@ def fetch_openmeteo_hourly(lat, lon, start_dt, end_dt) -> xr.Dataset:
     )
     return xr.Dataset({"temperature_2m": da})
 
+def daily_series_openmeteo_for_year(lat, lon, year: int) -> xr.DataArray:
+    """Fetch hourly temperature for a full year via Open-Meteo ERA5 (°C already),
+       then return daily-mean series as an xarray DataArray."""
+    ds = fetch_openmeteo_hourly(lat, lon, datetime(year, 1, 1), datetime(year, 12, 31))
+    return hourly_to_daily_mean(ds)  # uses get_temp_da under the hood
+
 # ---------------- Feature computations ----------------
 def hourly_to_daily_mean(ds: xr.Dataset) -> xr.DataArray:
     da = get_temp_da(ds)
@@ -416,47 +422,54 @@ if started:
     st.markdown('<div id="typical"></div>', unsafe_allow_html=True)
     st.header("“Typical” year: daily average (recent vs 50y earlier)")
 
-    if cache_only:
-        st.caption("Disabled in **Cache-only** mode to avoid CDS requests.")
-    else:
-        st.caption("Click to compute two representative years (fast).")
-        typical_ready = get_state("typical_ready", False)
-        recent_daily  = get_state("typical_recent")
-        past_daily    = get_state("typical_past")
+    # For this section, always use Open-Meteo (fast, no CDS jobs, no timeouts)
+    st.caption("This calculation uses Open-Meteo’s ERA5 archive (fast, no CDS queue).")
 
-        if st.button("Compute typical year (fast 2-year version)", key="typical_btn"):
-            now = datetime.utcnow()
-            recent_refs = [now.year - 1, now.year - 2]
-            past_refs   = [y - 50 for y in recent_refs]
+    typical_ready = get_state("typical_ready", False)
+    recent_daily  = get_state("typical_recent")
+    past_daily    = get_state("typical_past")
 
-            def daily_series_for_year(y):
-                ds_y = fetch_hourly_range(lat, lon, datetime(y,1,1), datetime(y,12,31), 0.25, "grib")
-                return hourly_to_daily_mean(ds_y)
+    if st.button("Compute typical year (fast, no CDS)", key="typical_btn"):
+        now = datetime.utcnow()
+        recent_refs = [now.year - 1, now.year - 2]
+        past_refs   = [y - 50 for y in recent_refs]
 
-            with cf.ThreadPoolExecutor(max_workers=2) as ex:
-                r1 = ex.submit(daily_series_for_year, recent_refs[0]).result(timeout=timeout_sec)
-                r2 = ex.submit(daily_series_for_year, recent_refs[1]).result(timeout=timeout_sec)
-            recent_daily = xr.concat([r1, r2], dim="time")
+        # Small progress UI
+        prog = st.progress(0.0)
+        status = st.empty()
 
-            p1 = daily_series_for_year(past_refs[0])
-            p2 = daily_series_for_year(past_refs[1])
-            past_daily = xr.concat([p1, p2], dim="time")
+        # Recent: two representative years
+        status.markdown(f"Fetching recent year {recent_refs[0]}…")
+        r1 = daily_series_openmeteo_for_year(lat, lon, recent_refs[0]); prog.progress(0.25)
+        status.markdown(f"Fetching recent year {recent_refs[1]}…")
+        r2 = daily_series_openmeteo_for_year(lat, lon, recent_refs[1]); prog.progress(0.50)
+        recent_daily = xr.concat([r1, r2], dim="time")
 
-            st.session_state["typical_recent"] = recent_daily
-            st.session_state["typical_past"]   = past_daily
-            st.session_state["typical_ready"]  = True
-            scroll_to("typical")
+        # Past: same two years shifted 50 years back
+        status.markdown(f"Fetching past year {past_refs[0]}…")
+        p1 = daily_series_openmeteo_for_year(lat, lon, past_refs[0]); prog.progress(0.75)
+        status.markdown(f"Fetching past year {past_refs[1]}…")
+        p2 = daily_series_openmeteo_for_year(lat, lon, past_refs[1]); prog.progress(1.0)
+        past_daily = xr.concat([p1, p2], dim="time")
 
-        # Render if available (persisted)
-        if get_state("typical_ready", False):
-            clim_recent = st.session_state["typical_recent"].groupby("time.dayofyear").mean()
-            clim_past   = st.session_state["typical_past"].groupby("time.dayofyear").mean()
-            days = np.arange(1, len(clim_recent) + 1)
-            fig5 = go.Figure()
-            fig5.add_trace(go.Scatter(x=days, y=clim_recent.values, mode="lines", name="Typical recent"))
-            fig5.add_trace(go.Scatter(x=days, y=clim_past.values,   mode="lines", name="Typical past"))
-            fig5.update_layout(height=360, xaxis_title="Day of year", yaxis_title="°C")
-            st.plotly_chart(fig5, width="stretch", config={"displayModeBar": False})
+        prog.empty(); status.empty()
+
+        # Persist so reruns don’t recompute
+        st.session_state["typical_recent"] = recent_daily
+        st.session_state["typical_past"]   = past_daily
+        st.session_state["typical_ready"]  = True
+        scroll_to("typical")
+
+    # Render if available (persisted)
+    if get_state("typical_ready", False):
+        clim_recent = st.session_state["typical_recent"].groupby("time.dayofyear").mean()
+        clim_past   = st.session_state["typical_past"].groupby("time.dayofyear").mean()
+        days = np.arange(1, len(clim_recent) + 1)
+        fig5 = go.Figure()
+        fig5.add_trace(go.Scatter(x=days, y=clim_recent.values, mode="lines", name="Typical recent"))
+        fig5.add_trace(go.Scatter(x=days, y=clim_past.values,   mode="lines", name="Typical past"))
+        fig5.update_layout(height=360, xaxis_title="Day of year", yaxis_title="°C")
+        st.plotly_chart(fig5, width="stretch", config={"displayModeBar": False})
 
 else:
     st.info("Set your location (map or browser button), then press **Start** to fetch data.")
