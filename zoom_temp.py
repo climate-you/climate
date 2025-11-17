@@ -14,11 +14,11 @@ import folium
 from streamlit_folium import st_folium
 from streamlit_geolocation import streamlit_geolocation
 
-# Earthkit
+# Earthkit (used only when Fast mode is OFF for monthly CDS)
 import earthkit.data as ekd
 from earthkit.data import config as ek_config, cache as ek_cache
 
-# ---------------- Streamlit page config ----------------
+# ---------------- Page config ----------------
 st.set_page_config(page_title="Your Place, Warming Over Time", layout="wide")
 
 # ---------------- Debug helper ----------------
@@ -40,7 +40,7 @@ def scroll_to(element_id: str):
         height=0,
     )
 
-# ---------------- Earthkit persistent cache ----------------
+# ---------------- Earthkit persistent cache (for optional CDS) ----------------
 ek_config.set({
     "cache-policy": "user",
     "user-cache-directory": str(Path("~/ek-cache").expanduser()),
@@ -52,12 +52,12 @@ st.sidebar.caption(f"EK cache: {ek_cache.directory()}")
 # ---------------- Sidebar toggles ----------------
 with st.sidebar:
     st.header("Options")
-    fast_mode   = st.toggle("Fast mode for recent windows (Open-Meteo)", value=True)
+    fast_mode   = st.toggle("Fast mode (Open-Meteo) for recent & monthly", value=True)
     cache_only  = st.toggle("Cache-only for CDS (don’t submit new jobs)", value=False)
     max_workers = st.slider("Max parallel jobs", 1, 3, 2)
     timeout_sec = st.slider("Per-chunk timeout (s)", 30, 240, 120, step=10)
 
-# ---------------- Helpers: xarray/ERA5 quirks ----------------
+# ---------------- Xarray/ERA5 helpers ----------------
 def normalise_dims(ds: xr.Dataset) -> xr.Dataset:
     if "expver" in ds.dims:
         ds = ds.sortby("expver").ffill("expver").isel(expver=-1, drop=True)
@@ -66,7 +66,6 @@ def normalise_dims(ds: xr.Dataset) -> xr.Dataset:
     return ds
 
 def standardise_time(ds: xr.Dataset) -> xr.Dataset:
-    """Canonicalise to a single coordinate named 'time'."""
     if "valid_time" in ds.dims and "time" not in ds.dims:
         ds = ds.rename({"valid_time": "time"})
     if "time" in ds.dims and "valid_time" in ds.coords:
@@ -83,12 +82,13 @@ def standardise_time(ds: xr.Dataset) -> xr.Dataset:
 def get_temp_da(ds: xr.Dataset) -> xr.DataArray:
     """
     Return 2m air temperature in °C.
-
-    - ERA5 (CDS): 't2m' (monthly) or '2t' (hourly) are in Kelvin → convert.
-    - Open-Meteo: 'temperature_2m' (or aliases '*_c') already °C → leave as is.
+    ERA5 via CDS: 't2m' (monthly) or '2t' (hourly) in Kelvin → convert.
+    Open-Meteo: 'temperature_2m' or *_c already °C → return as is.
     """
     var = None
-    for candidate in ("t2m", "2t", "temperature_2m", "2t_c", "t2m_c"):
+    for candidate in ("t2m", "2t", "temperature_2m",
+                      "t2m_mean_c", "t2m_max_c", "t2m_min_c",
+                      "t2m_mon_mean_c", "t2m_mon_max_c", "t2m_mon_min_c"):
         if candidate in ds.data_vars:
             var = candidate
             break
@@ -97,11 +97,8 @@ def get_temp_da(ds: xr.Dataset) -> xr.DataArray:
 
     da = ds[var]
     units = (da.attrs.get("units") or "").lower()
-    if "c" in units:  # 'c', '°c', 'degc', 'celsius'
+    if "c" in units:
         return da
-
-    # Heuristic fallback
-    vmin = float(np.nanmin(da.values))
     vmax = float(np.nanmax(da.values))
     looks_kelvin = vmax > 200.0
     return da - 273.15 if looks_kelvin else da
@@ -109,44 +106,73 @@ def get_temp_da(ds: xr.Dataset) -> xr.DataArray:
 def small_bbox(lat, lon, buf=0.25):
     return [lat + buf, lon - buf, lat - buf, lon + buf]  # [N, W, S, E]
 
-# ---------------- CDS helper (we will fully skip when cache_only=True) ----------------
+# ---------------- Open-Meteo fetchers (FAST PATH) ----------------
+def fetch_openmeteo_hourly(lat, lon, start_dt, end_dt) -> xr.Dataset:
+    start = start_dt.strftime("%Y-%m-%d")
+    end   = end_dt.strftime("%Y-%m-%d")
+    url = (
+        "https://archive-api.open-meteo.com/v1/era5"
+        f"?latitude={lat}&longitude={lon}"
+        f"&start_date={start}&end_date={end}"
+        "&hourly=temperature_2m&timezone=UTC"
+    )
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    j = r.json()
+    ts = pd.to_datetime(j["hourly"]["time"])
+    vals = np.array(j["hourly"]["temperature_2m"], dtype=float)  # °C already
+    da = xr.DataArray(
+        vals, coords={"time": ts}, dims=["time"],
+        name="temperature_2m", attrs={"units": "degC", "source": "open-meteo ERA5"}
+    )
+    return xr.Dataset({"temperature_2m": da})
+
+def fetch_openmeteo_daily(lat, lon, start_dt, end_dt,
+                          fields=("temperature_2m_mean","temperature_2m_max","temperature_2m_min")) -> xr.Dataset:
+    start = start_dt.strftime("%Y-%m-%d"); end = end_dt.strftime("%Y-%m-%d")
+    daily = ",".join(fields)
+    url = (
+        "https://archive-api.open-meteo.com/v1/era5"
+        f"?latitude={lat}&longitude={lon}"
+        f"&start_date={start}&end_date={end}"
+        f"&daily={daily}&timezone=UTC"
+    )
+    r = requests.get(url, timeout=45)
+    r.raise_for_status()
+    j = r.json()
+    idx = pd.to_datetime(j["daily"]["time"])
+    ds = xr.Dataset()
+    if "temperature_2m_mean" in j["daily"]:
+        ds["t2m_mean_c"] = xr.DataArray(j["daily"]["temperature_2m_mean"], coords={"time": idx}, dims=["time"], attrs={"units":"degC"})
+    if "temperature_2m_max" in j["daily"]:
+        ds["t2m_max_c"]  = xr.DataArray(j["daily"]["temperature_2m_max"],  coords={"time": idx}, dims=["time"], attrs={"units":"degC"})
+    if "temperature_2m_min" in j["daily"]:
+        ds["t2m_min_c"]  = xr.DataArray(j["daily"]["temperature_2m_min"],  coords={"time": idx}, dims=["time"], attrs={"units":"degC"})
+    return ds
+
+def daily_to_monthly(ds_daily: xr.Dataset) -> xr.Dataset:
+    """Compute monthly mean/min/max from Open-Meteo daily °C series."""
+    out = xr.Dataset()
+    if "t2m_mean_c" in ds_daily:
+        out["t2m_mon_mean_c"] = ds_daily["t2m_mean_c"].resample(time="1MS").mean()
+    if "t2m_max_c" in ds_daily:
+        out["t2m_mon_max_c"]  = ds_daily["t2m_max_c"].resample(time="1MS").mean()
+    if "t2m_min_c" in ds_daily:
+        out["t2m_mon_min_c"]  = ds_daily["t2m_min_c"].resample(time="1MS").mean()
+    return out
+
+def daily_series_openmeteo_for_year(lat, lon, year: int) -> xr.DataArray:
+    ds = fetch_openmeteo_hourly(lat, lon, datetime(year, 1, 1), datetime(year, 12, 31))
+    da = get_temp_da(ds)
+    if "latitude" in da.dims and "longitude" in da.dims:
+        da = da.mean(["latitude","longitude"])
+    return da.resample(time="1D").mean()
+
+# ---------------- Optional CDS fetchers (SLOW PATH for monthly when Fast OFF) ----------------
 def cds_from_source(dataset: str, req: dict):
     return ekd.from_source("cds", dataset, req)
 
-# ---------------- ERA5 fetchers (CDS) ----------------
-def _req_hourly(area, years, months, hours, fmt="grib"):
-    return {
-        "product_type": "reanalysis",
-        "variable": ["2m_temperature"],
-        "year": [str(y) for y in years],
-        "month": [f"{m:02d}" for m in months],
-        "day": [f"{d:02d}" for d in range(1, 32)],
-        "time": [f"{h:02d}:00" for h in hours],
-        "area": area,
-        "format": fmt,
-    }
-
-def fetch_hourly_range(lat, lon, start_dt, end_dt, buf=0.25, fmt="grib") -> xr.Dataset:
-    area = small_bbox(lat, lon, buf=buf)
-    months = []
-    y, m = start_dt.year, start_dt.month
-    while True:
-        months.append((y, m))
-        if y == end_dt.year and m == end_dt.month:
-            break
-        if m == 12: y, m = y + 1, 1
-        else:       m += 1
-    years = sorted(set(y for y, _ in months))
-    months_only = sorted(set(m for _, m in months))
-    hours = list(range(24))
-    req = _req_hourly(area, years, months_only, hours, fmt=fmt)
-
-    d = cds_from_source("reanalysis-era5-single-levels", req)
-    ds = d.to_xarray()
-    ds = normalise_dims(standardise_time(ds)).sortby("time")
-    return ds.sel(time=slice(np.datetime64(start_dt), np.datetime64(end_dt)))
-
-def fetch_monthly(lat, lon, years, buf=0.25, fmt="grib") -> xr.Dataset:
+def fetch_monthly_cds(lat, lon, years, buf=0.25, fmt="grib") -> xr.Dataset:
     area = small_bbox(lat, lon, buf=buf)
     req = {
         "product_type": "monthly_averaged_reanalysis",
@@ -161,33 +187,6 @@ def fetch_monthly(lat, lon, years, buf=0.25, fmt="grib") -> xr.Dataset:
     ds = d.to_xarray()
     ds = normalise_dims(standardise_time(ds)).sortby("time")
     return ds
-
-# ---------------- Fast mode (Open-Meteo ERA5 hourly) ----------------
-def fetch_openmeteo_hourly(lat, lon, start_dt, end_dt) -> xr.Dataset:
-    start = start_dt.strftime("%Y-%m-%d")
-    end   = end_dt.strftime("%Y-%m-%d")
-    url = (
-        "https://archive-api.open-meteo.com/v1/era5"
-        f"?latitude={lat}&longitude={lon}"
-        f"&start_date={start}&end_date={end}"
-        "&hourly=temperature_2m&timezone=UTC"
-    )
-    r = requests.get(url, timeout=20)
-    r.raise_for_status()
-    j = r.json()
-    ts = pd.to_datetime(j["hourly"]["time"])
-    vals = np.array(j["hourly"]["temperature_2m"], dtype=float)  # already °C
-    da = xr.DataArray(
-        vals, coords={"time": ts}, dims=["time"],
-        name="temperature_2m", attrs={"units": "degC", "source": "open-meteo ERA5"}
-    )
-    return xr.Dataset({"temperature_2m": da})
-
-def daily_series_openmeteo_for_year(lat, lon, year: int) -> xr.DataArray:
-    """Fetch hourly temperature for a full year via Open-Meteo ERA5 (°C already),
-       then return daily-mean series as an xarray DataArray."""
-    ds = fetch_openmeteo_hourly(lat, lon, datetime(year, 1, 1), datetime(year, 12, 31))
-    return hourly_to_daily_mean(ds)  # uses get_temp_da under the hood
 
 # ---------------- Feature computations ----------------
 def hourly_to_daily_mean(ds: xr.Dataset) -> xr.DataArray:
@@ -231,7 +230,7 @@ def ip_geo() -> tuple | None:
             j = r.json()
             if "latitude" in j and "longitude" in j:
                 lat, lon = float(j["latitude"]), float(j["longitude"])
-            elif "loc" in j:  # ipinfo
+            elif "loc" in j:
                 lat, lon = map(float, j["loc"].split(","))
             elif j.get("success") and "latitude" in j:
                 lat, lon = float(j["latitude"]), float(j["longitude"])
@@ -250,24 +249,23 @@ if STATE_KEY not in st.session_state:
     if g and g.get("latitude") and g.get("longitude"):
         st.session_state[STATE_KEY] = (float(g["latitude"]), float(g["longitude"]))
     else:
-        st.session_state[STATE_KEY] = ip_geo() or (51.5074, -0.1278)  # London fallback
+        st.session_state[STATE_KEY] = ip_geo() or (51.5074, -0.1278)
 
 lat, lon = st.session_state[STATE_KEY]
 
 st.title("Your location, your warming story")
 st.markdown("**Step 1 — Select your location.** We try your browser location; you can also click the map to move the pin.")
 
-# One Leaflet map with a single pin; clicking moves the pin and refreshes
+# One Folium map; clicking moves the pin and refreshes
 m = folium.Map(location=[lat, lon], zoom_start=7, tiles="OpenStreetMap")
 folium.Marker(location=[lat, lon], draggable=False).add_to(m)
-map_out = st_folium(m, height=360, width="stretch")  # one map only
+map_out = st_folium(m, height=360, width="stretch")
 
 clicked = map_out.get("last_clicked") if map_out else None
 if clicked and "lat" in clicked and "lng" in clicked:
     st.session_state[STATE_KEY] = (float(clicked["lat"]), float(clicked["lng"]))
     st.rerun()
 
-# Button to (re)ask the browser for location
 if st.button("Use browser location"):
     g = streamlit_geolocation()
     if g and g.get("latitude") and g.get("longitude"):
@@ -287,7 +285,6 @@ with col_start:
     if st.button("Start (fetch data)", key="start_fetch_btn"):
         st.session_state["started"] = True
         started = True
-
 with col_clear:
     if st.button("Clear fetched data", key="clear_btn"):
         for k in ("ds_7d", "ds_5m", "ds_m_recent", "ds_m_past", "fetch_params",
@@ -296,7 +293,7 @@ with col_clear:
         st.session_state["started"] = False
         started = False
 
-# ---------------- Data fetch orchestration (runs only after Start) ----------------
+# ---------------- Data fetch orchestration ----------------
 if started:
     # (re)fetch only if inputs changed or first run
     if get_state("fetch_params") != params_sig:
@@ -305,36 +302,47 @@ if started:
         now = datetime.utcnow()
         seven_days_ago = now - timedelta(days=7)
         five_months_ago = now - timedelta(days=150)
-        recent_years = list(range(now.year - 4, now.year + 1))
-        past_years   = [y - 50 for y in recent_years]
 
         progress = st.empty()
         bar = st.progress(0.0)
 
-        def get_recent_hourly(start_dt, end_dt):
-            if fast_mode:
-                try:
-                    return fetch_openmeteo_hourly(lat, lon, start_dt, end_dt)  # °C already
-                except Exception as e:
-                    dbg("Open-Meteo error:", e)
-                    if cache_only:
-                        return None
-            return fetch_hourly_range(lat, lon, start_dt, end_dt, 0.25, "grib")
-
         futures: dict[str, cf.Future | None] = {}
         with cf.ThreadPoolExecutor(max_workers=max_workers) as ex:
-            futures["hourly_7d"]  = ex.submit(get_recent_hourly, seven_days_ago, now)
-            futures["hourly_5mo"] = ex.submit(get_recent_hourly, five_months_ago, now)
+            # Recent hourly windows: Open-Meteo (fast)
+            futures["hourly_7d"]  = ex.submit(fetch_openmeteo_hourly, lat, lon, seven_days_ago, now)
+            futures["hourly_5mo"] = ex.submit(fetch_openmeteo_hourly, lat, lon, five_months_ago, now)
 
-            if cache_only:
-                futures["monthly_recent"] = None
-                futures["monthly_past"]   = None
-                total = 2
-            else:
-                futures["monthly_recent"] = ex.submit(fetch_monthly, lat, lon, recent_years, 0.25, "grib")
-                futures["monthly_past"]   = ex.submit(fetch_monthly, lat, lon, past_years,   0.25, "grib")
+            # Monthly blocks: Open-Meteo daily→monthly (fast) OR CDS (slow)
+            if fast_mode:
+                # Clamp end dates to avoid 400 (future/incomplete months)
+                safe_end = (datetime.utcnow() - timedelta(days=5)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+                start_recent = datetime(now.year - 4, 1, 1)
+                end_recent   = min(datetime(now.year, 12, 31), safe_end)
+
+                start_past = datetime(now.year - 54, 1, 1)
+                end_past   = min(datetime(now.year - 50, 12, 31), safe_end)
+
+                futures["monthly_recent"] = ex.submit(
+                    lambda: daily_to_monthly(fetch_openmeteo_daily(lat, lon, start_recent, end_recent))
+                )
+                futures["monthly_past"] = ex.submit(
+                    lambda: daily_to_monthly(fetch_openmeteo_daily(lat, lon, start_past, end_past))
+                )
                 total = 4
+            else:
+                if cache_only:
+                    futures["monthly_recent"] = None
+                    futures["monthly_past"]   = None
+                    total = 2
+                else:
+                    recent_years = list(range(now.year - 4, now.year + 1))
+                    past_years   = [y - 50 for y in recent_years]
+                    futures["monthly_recent"] = ex.submit(fetch_monthly_cds, lat, lon, recent_years, 0.25, "grib")
+                    futures["monthly_past"]   = ex.submit(fetch_monthly_cds, lat, lon, past_years,   0.25, "grib")
+                    total = 4
 
+            # Gather
             done = 0
             for name in ("hourly_7d", "hourly_5mo", "monthly_recent", "monthly_past"):
                 fut = futures.get(name)
@@ -349,12 +357,12 @@ if started:
                 done += 1
                 bar.progress(done/total)
                 progress.markdown(
-                    f"Fetched **{done}/{total}**" + (" (CDS monthly skipped in Cache-only)" if cache_only else "")
+                    f"Fetched **{done}/{total}**" +
+                    (" (CDS monthly skipped in Cache-only)" if (not fast_mode and cache_only) else "")
                 )
 
         bar.empty(); progress.empty()
 
-        # persist datasets
         st.session_state["ds_7d"]       = futures["hourly_7d"]
         st.session_state["ds_5m"]       = futures["hourly_5mo"]
         st.session_state["ds_m_recent"] = futures.get("monthly_recent")
@@ -366,64 +374,136 @@ if started:
     ds_m_recent = get_state("ds_m_recent")
     ds_m_past   = get_state("ds_m_past")
 
-    # ---------- PLOTS (use config= and set height in layout) ----------
+    # ---------- Past 7 days — hourly ----------
     if ds_7d is not None:
-        st.header("Past 7 days — hourly average")
-        ts_hourly = get_temp_da(ds_7d)
-        if "latitude" in ts_hourly.dims and "longitude" in ts_hourly.dims:
-            ts_hourly = ts_hourly.mean(["latitude", "longitude"])
+        st.header("Past 7 days — hourly temperature")
+        show_band_7d = st.toggle("Show daily min–max envelope", value=True, key="band_7d")
+        t2m_h = get_temp_da(ds_7d)
+        if "latitude" in t2m_h.dims and "longitude" in t2m_h.dims:
+            t2m_h = t2m_h.mean(["latitude","longitude"])
+
+        # daily stats and upsample to hourly grid for a proper band
+        daily_min = t2m_h.resample(time="1D").min()
+        daily_max = t2m_h.resample(time="1D").max()
+        min_hr = daily_min.reindex(time=t2m_h.time, method="pad")
+        max_hr = daily_max.reindex(time=t2m_h.time, method="pad")
+
         fig1 = go.Figure()
-        fig1.add_trace(go.Scatter(x=ts_hourly.time.values, y=ts_hourly.values, mode="lines", name="°C"))
+        if show_band_7d:
+            fig1.add_trace(go.Scatter(
+                x=max_hr.time.values, y=max_hr.values, mode="lines", line=dict(width=0),
+                name="Daily max", showlegend=False
+            ))
+            fig1.add_trace(go.Scatter(
+                x=min_hr.time.values, y=min_hr.values, mode="lines", line=dict(width=0),
+                fill="tonexty", fillcolor="rgba(0,0,0,0.18)",
+                name="Daily min", showlegend=False
+            ))
+        fig1.add_trace(go.Scatter(x=t2m_h.time.values, y=t2m_h.values, mode="lines", name="Hourly °C"))
         fig1.update_layout(height=360, yaxis_title="°C", xaxis_title="Time (UTC)")
-        annotate_extremes(fig1, ts_hourly)
         st.plotly_chart(fig1, width="stretch", config={"displayModeBar": False})
     else:
         st.warning("7-day hourly window not available yet.")
 
+    # ---------- Last ~5 months — daily ----------
     if ds_5m is not None:
-        st.header("Last ~5 months — daily average")
-        ts_daily_5m = hourly_to_daily_mean(ds_5m)
+        st.header("Last ~5 months — daily temperature")
+        show_band_5m = st.toggle("Show daily min–max envelope", value=True, key="band_5m")
+        t2m_h = get_temp_da(ds_5m)
+        if "latitude" in t2m_h.dims and "longitude" in t2m_h.dims:
+            t2m_h = t2m_h.mean(["latitude","longitude"])
+        daily_mean = t2m_h.resample(time="1D").mean()
+        daily_min  = t2m_h.resample(time="1D").min()
+        daily_max  = t2m_h.resample(time="1D").max()
+
         fig2 = go.Figure()
-        fig2.add_trace(go.Scatter(x=ts_daily_5m.time.values, y=ts_daily_5m.values, mode="lines", name="Daily mean °C"))
-        annotate_extremes(fig2, ts_daily_5m)
+        if show_band_5m:
+            fig2.add_trace(go.Scatter(
+                x=daily_max.time.values, y=daily_max.values, mode="lines", line=dict(width=0),
+                name="Daily max", showlegend=False
+            ))
+            fig2.add_trace(go.Scatter(
+                x=daily_min.time.values, y=daily_min.values, mode="lines", line=dict(width=0),
+                fill="tonexty", fillcolor="rgba(0,0,0,0.18)",
+                name="Daily min", showlegend=False
+            ))
+        fig2.add_trace(go.Scatter(x=daily_mean.time.values, y=daily_mean.values, mode="lines", name="Daily mean"))
         fig2.update_layout(height=360, yaxis_title="°C", xaxis_title="Date")
         st.plotly_chart(fig2, width="stretch", config={"displayModeBar": False})
     else:
         st.warning("5-month daily window not available yet.")
 
+    # ---------- Past 5 years — monthly (Open-Meteo daily→monthly or CDS) ----------
+    def have_openmeteo_monthly(ds) -> bool:
+        return isinstance(ds, xr.Dataset) and any(k in ds for k in ("t2m_mon_mean_c","t2m_mon_max_c","t2m_mon_min_c"))
+
     if ds_m_recent is not None:
-        st.header("Past 5 years — monthly average")
-        ts_m_recent = monthly_point_series(ds_m_recent)
+        st.header("Past 5 years — monthly temperature")
+        show_band_mon = st.toggle("Show min–max envelope (monthly)", value=True, key="band_recent_mon")
         fig3 = go.Figure()
-        fig3.add_trace(go.Scatter(x=ts_m_recent.time.values, y=ts_m_recent.values, mode="lines+markers", name="Recent 5y"))
+        if have_openmeteo_monthly(ds_m_recent):
+            x = ds_m_recent["t2m_mon_mean_c"]["time"].values
+            y = ds_m_recent["t2m_mon_mean_c"].values
+            ylo = ds_m_recent.get("t2m_mon_min_c")
+            yhi = ds_m_recent.get("t2m_mon_max_c")
+            if show_band_mon and (ylo is not None) and (yhi is not None):
+                fig3.add_trace(go.Scatter(x=x, y=yhi.values, mode="lines", line=dict(width=0), name="Monthly max", showlegend=False))
+                fig3.add_trace(go.Scatter(x=x, y=ylo.values, mode="lines", line=dict(width=0), fill="tonexty", fillcolor="rgba(0,0,0,0.18)", name="Monthly min", showlegend=False))
+            fig3.add_trace(go.Scatter(x=x, y=y, mode="lines+markers", name="Monthly mean"))
+        else:
+            ts_m_recent = monthly_point_series(ds_m_recent)
+            fig3.add_trace(go.Scatter(x=ts_m_recent.time.values, y=ts_m_recent.values, mode="lines+markers", name="Monthly mean"))
         fig3.update_layout(height=360, yaxis_title="°C", xaxis_title="Month")
         st.plotly_chart(fig3, width="stretch", config={"displayModeBar": False})
     else:
-        st.warning("Recent monthly window not available. (CDS monthly skipped in Cache-only mode)")
+        st.warning("Recent monthly window not available." + (" (CDS monthly skipped in Cache-only mode)" if (not fast_mode and cache_only) else ""))
 
+    # ---------- Overlay: recent vs same months 50 years earlier (aligned by month 1..12) ----------
     if ds_m_recent is not None and ds_m_past is not None:
         st.header("Overlay: past 5 years vs same months 50 years earlier")
-        ts_m_past = monthly_point_series(ds_m_past)
-        rec_m = ts_m_recent.groupby("time.month").mean()
-        pas_m = ts_m_past.groupby("time.month").mean()
-        months = list(range(1, 13))
+
+        show_band_overlay = st.toggle("Show min–max envelopes", value=True, key="band_overlay_mon")
         fig4 = go.Figure()
-        fig4.add_trace(go.Scatter(x=months, y=rec_m.values, mode="lines+markers",
-                                  name=f"{ts_m_recent.time.dt.year.min().item()}–{ts_m_recent.time.dt.year.max().item()}"))
-        fig4.add_trace(go.Scatter(x=months, y=pas_m.values, mode="lines+markers",
-                                  name=f"{ts_m_past.time.dt.year.min().item()}–{ts_m_past.time.dt.year.max().item()}"))
-        fig4.update_layout(height=360, xaxis=dict(tickmode="array", tickvals=months),
-                           yaxis_title="°C", xaxis_title="Month")
+        months = list(range(1, 13))
+
+        def monthly_by_month(ds):
+            """Return mean/min/max grouped by calendar month index (1..12)."""
+            if have_openmeteo_monthly(ds):
+                mean = ds["t2m_mon_mean_c"].groupby("time.month").mean()
+                lo = ds.get("t2m_mon_min_c")
+                hi = ds.get("t2m_mon_max_c")
+                minv = lo.groupby("time.month").mean() if lo is not None else None
+                maxv = hi.groupby("time.month").mean() if hi is not None else None
+            else:
+                base = monthly_point_series(ds)
+                mean = base.groupby("time.month").mean()
+                minv = maxv = None
+            return mean, minv, maxv
+
+        rec_mean, rec_min, rec_max = monthly_by_month(ds_m_recent)
+        pas_mean, pas_min, pas_max = monthly_by_month(ds_m_past)
+
+        # Draw recent band + mean
+        if show_band_overlay and (rec_min is not None) and (rec_max is not None):
+            fig4.add_trace(go.Scatter(x=months, y=rec_max.sel(month=months).values, mode="lines", line=dict(width=0), name="Recent max", showlegend=False))
+            fig4.add_trace(go.Scatter(x=months, y=rec_min.sel(month=months).values, mode="lines", line=dict(width=0), fill="tonexty", fillcolor="rgba(0,0,0,0.18)", name="Recent min", showlegend=False))
+        fig4.add_trace(go.Scatter(x=months, y=rec_mean.sel(month=months).values, mode="lines+markers", name="Recent mean"))
+
+        # Draw past band + mean
+        if show_band_overlay and (pas_min is not None) and (pas_max is not None):
+            fig4.add_trace(go.Scatter(x=months, y=pas_max.sel(month=months).values, mode="lines", line=dict(width=0), name="Past max", showlegend=False))
+            fig4.add_trace(go.Scatter(x=months, y=pas_min.sel(month=months).values, mode="lines", line=dict(width=0), fill="tonexty", fillcolor="rgba(0,0,0,0.14)", name="Past min", showlegend=False))
+        fig4.add_trace(go.Scatter(x=months, y=pas_mean.sel(month=months).values, mode="lines+markers", name="Past mean"))
+
+        fig4.update_layout(height=360, yaxis_title="°C", xaxis_title="Month", xaxis=dict(tickmode="array", tickvals=months))
         st.plotly_chart(fig4, width="stretch", config={"displayModeBar": False})
     else:
-        st.warning("Overlay not available. (CDS monthly skipped in Cache-only mode)")
+        st.warning("Overlay not available." + (" (CDS monthly skipped in Cache-only mode)" if (not fast_mode and cache_only) else ""))
 
-    # ---------- Typical year (sticky; no state loss; auto-scroll back) ----------
+    # ---------- Typical year (Open-Meteo only; sticky; envelope toggle) ----------
     st.markdown('<div id="typical"></div>', unsafe_allow_html=True)
     st.header("“Typical” year: daily average (recent vs 50y earlier)")
-
-    # For this section, always use Open-Meteo (fast, no CDS jobs, no timeouts)
-    st.caption("This calculation uses Open-Meteo’s ERA5 archive (fast, no CDS queue).")
+    st.caption("Uses Open-Meteo ERA5 (fast, no CDS queue).")
 
     typical_ready = get_state("typical_ready", False)
     recent_daily  = get_state("typical_recent")
@@ -434,40 +514,44 @@ if started:
         recent_refs = [now.year - 1, now.year - 2]
         past_refs   = [y - 50 for y in recent_refs]
 
-        # Small progress UI
-        prog = st.progress(0.0)
-        status = st.empty()
-
-        # Recent: two representative years
-        status.markdown(f"Fetching recent year {recent_refs[0]}…")
+        prog = st.progress(0.0); status = st.empty()
+        status.markdown(f"Fetching recent {recent_refs[0]}…")
         r1 = daily_series_openmeteo_for_year(lat, lon, recent_refs[0]); prog.progress(0.25)
-        status.markdown(f"Fetching recent year {recent_refs[1]}…")
+        status.markdown(f"Fetching recent {recent_refs[1]}…")
         r2 = daily_series_openmeteo_for_year(lat, lon, recent_refs[1]); prog.progress(0.50)
         recent_daily = xr.concat([r1, r2], dim="time")
 
-        # Past: same two years shifted 50 years back
-        status.markdown(f"Fetching past year {past_refs[0]}…")
+        status.markdown(f"Fetching past {past_refs[0]}…")
         p1 = daily_series_openmeteo_for_year(lat, lon, past_refs[0]); prog.progress(0.75)
-        status.markdown(f"Fetching past year {past_refs[1]}…")
+        status.markdown(f"Fetching past {past_refs[1]}…")
         p2 = daily_series_openmeteo_for_year(lat, lon, past_refs[1]); prog.progress(1.0)
         past_daily = xr.concat([p1, p2], dim="time")
-
         prog.empty(); status.empty()
 
-        # Persist so reruns don’t recompute
         st.session_state["typical_recent"] = recent_daily
         st.session_state["typical_past"]   = past_daily
         st.session_state["typical_ready"]  = True
         scroll_to("typical")
 
-    # Render if available (persisted)
     if get_state("typical_ready", False):
-        clim_recent = st.session_state["typical_recent"].groupby("time.dayofyear").mean()
-        clim_past   = st.session_state["typical_past"].groupby("time.dayofyear").mean()
-        days = np.arange(1, len(clim_recent) + 1)
+        show_band_typ = st.toggle("Show min–max envelope (climatology)", value=True, key="band_typical")
+        clim_recent_mean = st.session_state["typical_recent"].groupby("time.dayofyear").mean()
+        clim_recent_min  = st.session_state["typical_recent"].groupby("time.dayofyear").min()
+        clim_recent_max  = st.session_state["typical_recent"].groupby("time.dayofyear").max()
+        clim_past_mean   = st.session_state["typical_past"].groupby("time.dayofyear").mean()
+        clim_past_min    = st.session_state["typical_past"].groupby("time.dayofyear").min()
+        clim_past_max    = st.session_state["typical_past"].groupby("time.dayofyear").max()
+
+        days = np.arange(1, len(clim_recent_mean) + 1)
         fig5 = go.Figure()
-        fig5.add_trace(go.Scatter(x=days, y=clim_recent.values, mode="lines", name="Typical recent"))
-        fig5.add_trace(go.Scatter(x=days, y=clim_past.values,   mode="lines", name="Typical past"))
+        if show_band_typ:
+            fig5.add_trace(go.Scatter(x=days, y=clim_recent_max.values, mode="lines", line=dict(width=0), name="Recent max", showlegend=False))
+            fig5.add_trace(go.Scatter(x=days, y=clim_recent_min.values, mode="lines", line=dict(width=0), fill="tonexty", fillcolor="rgba(0,0,0,0.10)", name="Recent min", showlegend=False))
+        fig5.add_trace(go.Scatter(x=days, y=clim_recent_mean.values, mode="lines", name="Recent mean"))
+        if show_band_typ:
+            fig5.add_trace(go.Scatter(x=days, y=clim_past_max.values, mode="lines", line=dict(width=0), name="Past max", showlegend=False))
+            fig5.add_trace(go.Scatter(x=days, y=clim_past_min.values, mode="lines", line=dict(width=0), fill="tonexty", fillcolor="rgba(0,0,0,0.08)", name="Past min", showlegend=False))
+        fig5.add_trace(go.Scatter(x=days, y=clim_past_mean.values, mode="lines", name="Past mean"))
         fig5.update_layout(height=360, xaxis_title="Day of year", yaxis_title="°C")
         st.plotly_chart(fig5, width="stretch", config={"displayModeBar": False})
 
