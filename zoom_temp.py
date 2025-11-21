@@ -111,67 +111,6 @@ def yearly_mean_series_from_monthly(ds_monthly: xr.Dataset) -> xr.DataArray:
     )
 
 
-def annotate_extrema_points(fig: go.Figure, x, y, label_prefix=""):
-    """
-    Highlight min and max on a series with big markers and vertical lines.
-    Markers are hidden from the legend; only the main line appears there.
-    """
-    if len(y) == 0 or np.all(np.isnan(y)):
-        return
-
-    y = np.asarray(y)
-    ymax_i = int(np.nanargmax(y))
-    ymin_i = int(np.nanargmin(y))
-    y_min = float(np.nanmin(y))
-    y_max = float(np.nanmax(y))
-
-    extremes = [
-        (ymax_i, "max", "rgba(220, 50, 47, 1.0)"),  # red
-        (ymin_i, "min", "rgba(38, 139, 210, 1.0)"),  # blue
-    ]
-
-    for idx, lab, color in extremes:
-        x_val = x[idx]
-        y_val = float(y[idx])
-
-        # vertical dashed line at the extreme
-        fig.add_shape(
-            type="line",
-            x0=x_val,
-            x1=x_val,
-            y0=y_min,
-            y1=y_max,
-            line=dict(color=color, width=2, dash="dash"),
-        )
-
-        # big marker on the curve
-        fig.add_trace(
-            go.Scatter(
-                x=[x_val],
-                y=[y_val],
-                mode="markers",
-                marker=dict(
-                    size=18,
-                    symbol="circle",
-                    line=dict(width=3, color="rgba(0,0,0,0.8)"),
-                    color=color,
-                ),
-                showlegend=False,
-                hovertemplate=f"{label_prefix}{lab}: %{{y:.1f}}°C<extra></extra>",
-            )
-        )
-
-        fig.add_annotation(
-            x=x_val,
-            y=y_val,
-            text=lab,
-            showarrow=True,
-            arrowhead=2,
-            ax=0,
-            ay=-25,
-        )
-
-
 # ---------------- Climatology (precomputed ERA5) ----------------
 CLIM_FILES = {
     # adjust paths if needed
@@ -486,46 +425,138 @@ if clim_region:
     st.caption(f"Using precomputed climatology: **{clim_region}**")
 
 # ---------------- Charts ----------------
-# 1) Past 7 days — hourly with min/max markers
+# 1) Past 7 days — hourly temperature, with max/min annotations
 ds = get_state("ds_h_7d")
 if ds is not None:
     st.header("Past 7 days — hourly temperature")
     t2m = get_temp_da(ds)
-    x = t2m.time.values
-    y = t2m.values
+
+    # convert times to plain Python datetimes for Plotly
+    x_raw = t2m.time.values
+    x = pd.to_datetime(x_raw).to_pydatetime()
+    y_arr = np.asarray(t2m.values, dtype=float)
+
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name="Hourly °C"))
-    annotate_extrema_points(fig, x, y)
+
+    # main line in grey
+    fig.add_trace(
+        go.Scatter(
+            x=x,
+            y=y_arr,
+            mode="lines",
+            name="Hourly °C",
+            line=dict(color="rgba(120,120,120,0.9)", width=2),
+        )
+    )
+
+    if y_arr.size > 0 and not np.all(np.isnan(y_arr)):
+        imax = int(np.nanargmax(y_arr))
+        imin = int(np.nanargmin(y_arr))
+        max_val = float(y_arr[imax])
+        min_val = float(y_arr[imin])
+
+        st.caption(f"7-day extremes: max={max_val:.1f}°C, min={min_val:.1f}°C")
+
+        # max label in red just above the max point
+        fig.add_annotation(
+            x=x[imax],
+            y=max_val,
+            xref="x",
+            yref="y",
+            text=f"max {max_val:.1f}°C",
+            showarrow=False,
+            font=dict(color="rgba(220, 50, 47, 1.0)", size=14),
+            yshift=10,
+        )
+
+        # min label in blue just below the min point
+        fig.add_annotation(
+            x=x[imin],
+            y=min_val,
+            xref="x",
+            yref="y",
+            text=f"min {min_val:.1f}°C",
+            showarrow=False,
+            font=dict(color="rgba(38, 139, 210, 1.0)", size=14),
+            yshift=-14,
+        )
+
     fig.update_layout(height=360, yaxis_title="°C", xaxis_title="Time (UTC)")
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 else:
     maybe_warn("h_7d", "7-day hourly window")
 
-# 2) Past month — hourly and daily temperature
+# 2) Past month — hourly and daily temperature, with max/min annotations
 ds = get_state("ds_h_30d")
 if ds is not None:
     st.header("Past month — hourly and daily temperature")
     t2m = get_temp_da(ds)
+
+    x_raw = t2m.time.values
+    x = pd.to_datetime(x_raw).to_pydatetime()
+    y_arr = np.asarray(t2m.values, dtype=float)
+
     daily = t2m.resample(time="1D").mean()
+    daily_x = pd.to_datetime(daily.time.values).to_pydatetime()
+
     fig = go.Figure()
+
+    # hourly line in grey
     fig.add_trace(
         go.Scatter(
-            x=t2m.time.values, y=t2m.values, mode="lines", name="Hourly °C"
+            x=x,
+            y=y_arr,
+            mode="lines",
+            name="Hourly °C",
+            line=dict(color="rgba(120,120,120,0.9)", width=2),
         )
     )
+
+    # daily mean line
     fig.add_trace(
         go.Scatter(
-            x=daily.time.values,
+            x=daily_x,
             y=daily.values,
             mode="lines+markers",
             name="Daily mean °C",
         )
     )
-    annotate_extrema_points(fig, t2m.time.values, t2m.values)
+
+    if y_arr.size > 0 and not np.all(np.isnan(y_arr)):
+        imax = int(np.nanargmax(y_arr))
+        imin = int(np.nanargmin(y_arr))
+        max_val = float(y_arr[imax])
+        min_val = float(y_arr[imin])
+
+        st.caption(f"30-day extremes: max={max_val:.1f}°C, min={min_val:.1f}°C")
+
+        fig.add_annotation(
+            x=x[imax],
+            y=max_val,
+            xref="x",
+            yref="y",
+            text=f"max {max_val:.1f}°C",
+            showarrow=False,
+            font=dict(color="rgba(220, 50, 47, 1.0)", size=14),
+            yshift=10,
+        )
+
+        fig.add_annotation(
+            x=x[imin],
+            y=min_val,
+            xref="x",
+            yref="y",
+            text=f"min {min_val:.1f}°C",
+            showarrow=False,
+            font=dict(color="rgba(38, 139, 210, 1.0)", size=14),
+            yshift=-14,
+        )
+
     fig.update_layout(height=360, yaxis_title="°C", xaxis_title="Date")
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 else:
     maybe_warn("h_30d", "30-day window")
+
 
 # 3) Last year — daily temperature
 ds = get_state("ds_h_365d")
@@ -633,46 +664,41 @@ else:
         "Overlay monthly window (climatology) not available (not enough historical data in this precomputed file)."
     )
 
-# 7) Typical year — daily average (recent vs 50y earlier, derived from existing data)
+# 7) Typical year — daily average (recent vs 50y earlier, both from monthly climatology)
 st.markdown('<div id="typical"></div>', unsafe_allow_html=True)
-st.header("“Typical” year: daily average (recent vs 50y earlier)")
+st.header("“Typical” year: daily average (recent vs 50y earlier, climatology)")
 
-ds_year = get_state("ds_h_365d")
-ds_m_50y = get_state("ds_m_50y")
+ds_m_recent = get_state("ds_m_recent")
+ds_m_past = get_state("ds_m_past")
 
-if ds_year is None or ds_m_50y is None or "t2m_mon_mean_c" not in ds_m_50y:
+if (
+    ds_m_recent is None
+    or "t2m_mon_mean_c" not in ds_m_recent
+    or ds_m_past is None
+    or "t2m_mon_mean_c" not in ds_m_past
+    or ds_m_past["t2m_mon_mean_c"].sizes.get("time", 0) == 0
+):
     st.warning(
-        "Typical-year view not available (need both last-year daily data and 50-year monthly climatology)."
+        "Typical-year view not available (need both recent and past climatological windows)."
     )
 else:
-    # recent curve: daily climatology from last ~365 days
-    t2m_hourly_year = get_temp_da(ds_year)
-    recent_daily = t2m_hourly_year.resample(time="1D").mean()
+    # monthly climatology for recent and past windows
+    mon_recent = ds_m_recent["t2m_mon_mean_c"].groupby("time.month").mean()
+    mon_past   = ds_m_past["t2m_mon_mean_c"].groupby("time.month").mean()
 
-    clim_recent = recent_daily.groupby("time.dayofyear").mean()
-    clim_recent = clim_recent.sel(dayofyear=slice(1, 365))
-    clim_recent = clim_recent.reindex(dayofyear=np.arange(1, 366))
-    y_recent = clim_recent.values
-
-    # past curve: build daily series from 50y monthly climatology
-    mon_mean = ds_m_50y["t2m_mon_mean_c"]
-    mon_clim = mon_mean.groupby("time.month").mean()  # 12 months
-
+    # 365-day non-leap base year
     base_dates = pd.date_range("2001-01-01", "2001-12-31", freq="D")
     months_for_doy = np.array([d.month for d in base_dates])
-
-    past_vals = []
-    for mth in months_for_doy:
-        past_vals.append(float(mon_clim.sel(month=mth).values))
-    past_vals = np.array(past_vals)
-    y_past = past_vals
-
     x = np.arange(1, 366)
 
-    # align / mask NaNs
+    # build daily series by assigning each day its month's mean
+    y_recent = np.array([float(mon_recent.sel(month=m).values) for m in months_for_doy])
+    y_past   = np.array([float(mon_past.sel(month=m).values)   for m in months_for_doy])
+
+    # mask NaNs if any
     valid = ~(np.isnan(y_recent) | np.isnan(y_past))
     y_recent = np.where(valid, y_recent, np.nan)
-    y_past = np.where(valid, y_past, np.nan)
+    y_past   = np.where(valid, y_past,   np.nan)
 
     # red/blue segmented fills
     sign = np.sign(np.where(valid, y_recent - y_past, 0))
@@ -690,7 +716,7 @@ else:
             continue
         xx = x[a : b + 1]
         upper = (y_recent if s > 0 else y_past)[a : b + 1].copy()
-        lower = (y_past if s > 0 else y_recent)[a : b + 1].copy()
+        lower = (y_past   if s > 0 else y_recent)[a : b + 1].copy()
         color = (
             "rgba(220, 50, 47, 0.35)" if s > 0 else "rgba(38, 139, 210, 0.35)"
         )
@@ -717,7 +743,8 @@ else:
             )
         )
 
-    fig.add_trace(go.Scatter(x=x, y=y_past, mode="lines", name="Past mean"))
+    # lines on top (legend entries)
+    fig.add_trace(go.Scatter(x=x, y=y_past,   mode="lines", name="Past mean"))
     fig.add_trace(go.Scatter(x=x, y=y_recent, mode="lines", name="Recent mean"))
 
     fig.update_layout(height=380, xaxis_title="Day of year", yaxis_title="°C")
