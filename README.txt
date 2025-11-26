@@ -1,3 +1,5 @@
+Data attribution: “Data: ERA5 climate reanalysis via Open-Meteo archive API”
+
 Usage:
 
 1. Contents of ~/.cdsapirc:
