@@ -52,7 +52,6 @@ def make_fake_hourly_from_daily(daily: pd.Series) -> pd.Series:
     hourly_index = pd.date_range(start, end, freq="H")
 
     # Interpolate daily mean onto hourly grid
-    # (convert timestamps to int nanoseconds for np.interp)
     x_daily = daily.index.view("int64")
     x_hourly = hourly_index.view("int64")
     base = np.interp(x_hourly, x_daily, daily.values)
@@ -60,7 +59,7 @@ def make_fake_hourly_from_daily(daily: pd.Series) -> pd.Series:
     # Add a simple diurnal cycle (max mid-afternoon, min pre-dawn)
     hours = np.arange(len(hourly_index))
     hour_of_day = hours % 24
-    diurnal = 4.0 * np.sin(2 * np.pi * (hour_of_day - 15) / 24.0)  # peak around 15:00
+    diurnal = 4.0 * np.sin(2 * np.pi * (hour_of_day - 15) / 24.0)  # peak ~15:00
 
     # Small extra noise
     noise = np.random.normal(0.0, 0.5, size=len(hourly_index))
@@ -294,12 +293,10 @@ if step == "Zoom out":
     # 1A. Last 7 days — hourly + daily mean
     st.markdown("### Last week — hourly temperature and daily mean")
 
-    # Take last 7 days from the hourly series
     last_week_hourly = local_hourly.last("7D")
     if last_week_hourly.empty:
         st.warning("No (fake) hourly data available for last 7 days.")
     else:
-        # Daily mean from hourly
         week_daily_mean = last_week_hourly.resample("D").mean()
 
         fig7 = go.Figure()
@@ -310,7 +307,11 @@ if step == "Zoom out":
                 y=last_week_hourly.values,
                 mode="lines",
                 name="Hourly temperature",
-                line=dict(color="rgba(120,120,120,0.6)", width=1),
+                line=dict(
+                    color="rgba(120,120,120,0.6)",
+                    width=1,
+                    shape="spline",
+                ),
             )
         )
         # Daily mean
@@ -320,12 +321,15 @@ if step == "Zoom out":
                 y=week_daily_mean.values,
                 mode="lines+markers",
                 name="Daily mean",
-                line=dict(color="#1f77b4", width=2),
+                line=dict(
+                    color="#1f77b4",
+                    width=2,
+                    shape="spline",
+                ),
                 marker=dict(size=6),
             )
         )
 
-        # Min/max over the week (based on hourly)
         min_val, max_val = annotate_minmax_on_series(
             fig7,
             last_week_hourly.index.to_pydatetime(),
@@ -365,7 +369,11 @@ if step == "Zoom out":
                 y=last_30.values,
                 mode="lines",
                 name="Daily mean temperature",
-                line=dict(color="rgba(150,150,150,0.7)", width=1),
+                line=dict(
+                    color="rgba(150,150,150,0.7)",
+                    width=1,
+                    shape="spline",
+                ),
             )
         )
         fig30.add_trace(
@@ -374,7 +382,11 @@ if step == "Zoom out":
                 y=smooth_30.values,
                 mode="lines",
                 name="3-day mean",
-                line=dict(color="#1f77b4", width=2),
+                line=dict(
+                    color="#1f77b4",
+                    width=2,
+                    shape="spline",
+                ),
             )
         )
 
@@ -414,7 +426,11 @@ if step == "Zoom out":
                 y=last_365.values,
                 mode="lines",
                 name="Daily mean",
-                line=dict(color="rgba(150,150,150,0.7)", width=1),
+                line=dict(
+                    color="rgba(150,150,150,0.7)",
+                    width=1,
+                    shape="spline",
+                ),
             )
         )
         fig365.add_trace(
@@ -423,7 +439,11 @@ if step == "Zoom out":
                 y=smooth_365.values,
                 mode="lines",
                 name="7-day mean",
-                line=dict(color="#1f77b4", width=2),
+                line=dict(
+                    color="#1f77b4",
+                    width=2,
+                    shape="spline",
+                ),
             )
         )
 
@@ -466,7 +486,11 @@ if step == "Zoom out":
                 y=smooth_7d_5y.values,
                 mode="lines",
                 name="7-day mean",
-                line=dict(color="rgba(150,150,150,0.7)", width=1),
+                line=dict(
+                    color="rgba(150,150,150,0.7)",
+                    width=1,
+                    shape="spline",
+                ),
             )
         )
         fig5y.add_trace(
@@ -475,7 +499,11 @@ if step == "Zoom out":
                 y=monthly_5y.values,
                 mode="lines+markers",
                 name="Monthly mean",
-                line=dict(color="#d95f02", width=2),
+                line=dict(
+                    color="#d95f02",
+                    width=2,
+                    shape="spline",
+                ),
                 marker=dict(size=4),
             )
         )
@@ -504,7 +532,11 @@ if step == "Zoom out":
             y=local_monthly.values,
             mode="lines",
             name="Monthly mean temperature",
-            line=dict(color="rgba(150,150,150,0.7)", width=1),
+            line=dict(
+                color="rgba(150,150,150,0.7)",
+                width=1,
+                shape="spline",
+            ),
         )
     )
 
@@ -515,7 +547,11 @@ if step == "Zoom out":
             y=roll_5y.values,
             mode="lines",
             name="5-year mean",
-            line=dict(color="#d95f02", width=3),
+            line=dict(
+                color="#d95f02",
+                width=3,
+                shape="spline",
+            ),
         )
     )
 
@@ -558,7 +594,11 @@ if step == "Zoom out":
             y=temps,
             mode="lines+markers",
             name="Observed yearly mean",
-            line=dict(color="#1f78b4", width=2),
+            line=dict(
+                color="#1f78b4",
+                width=2,
+                shape="spline",
+            ),
             marker=dict(size=4),
         )
     )
@@ -568,7 +608,12 @@ if step == "Zoom out":
             y=future_temps,
             mode="lines",
             name="Linear projection",
-            line=dict(color="#e31a1c", width=2, dash="dash"),
+            line=dict(
+                color="#e31a1c",
+                width=2,
+                dash="dash",
+                shape="spline",
+            ),
         )
     )
     fig_future.update_layout(
@@ -619,7 +664,11 @@ if step == "Seasons then vs now":
             y=early_clim.values,
             mode="lines+markers",
             name=f"Early decade (around {years_all.min()}s)",
-            line=dict(color="rgba(150,150,150,1.0)", width=2),
+            line=dict(
+                color="rgba(150,150,150,1.0)",
+                width=2,
+                shape="spline",
+            ),
             marker=dict(size=6),
         )
     )
@@ -629,7 +678,11 @@ if step == "Seasons then vs now":
             y=recent_clim.values,
             mode="lines+markers",
             name=f"Recent decade (around {years_all.max()}s)",
-            line=dict(color="#d95f02", width=3),
+            line=dict(
+                color="#d95f02",
+                width=3,
+                shape="spline",
+            ),
             marker=dict(size=6),
         )
     )
@@ -663,71 +716,125 @@ if step == "Seasons then vs now":
 
     col_past, col_recent = st.columns(2)
 
-    # Left: past envelope
+    # Left: past envelope – min/mean/max with coloured bands
     with col_past:
         fig_env_past = go.Figure()
+        # 1) Min line
         fig_env_past.add_trace(
             go.Scatter(
                 x=months,
                 y=early_min.values,
                 mode="lines",
-                name="Min",
-                line=dict(color="rgba(38,139,210,1.0)", width=2),
+                name="Monthly min",
+                line=dict(
+                    color="rgba(38,139,210,1.0)",
+                    width=2,
+                    shape="spline",
+                ),
             )
         )
+        # 2) Mean line (grey), fill between min and mean in blue
+        fig_env_past.add_trace(
+            go.Scatter(
+                x=months,
+                y=early_clim.values,
+                mode="lines",
+                name="Monthly mean",
+                line=dict(
+                    color="rgba(120,120,120,1.0)",
+                    width=2,
+                    shape="spline",
+                ),
+                fill="tonexty",
+                fillcolor="rgba(158,202,225,0.3)",  # blue-ish between min & mean
+            )
+        )
+        # 3) Max line, fill between mean and max in red
         fig_env_past.add_trace(
             go.Scatter(
                 x=months,
                 y=early_max.values,
                 mode="lines",
-                name="Max",
-                line=dict(color="rgba(220,50,47,1.0)", width=2),
+                name="Monthly max",
+                line=dict(
+                    color="rgba(220,50,47,1.0)",
+                    width=2,
+                    shape="spline",
+                ),
                 fill="tonexty",
-                fillcolor="rgba(158,202,225,0.3)",
+                fillcolor="rgba(244,165,130,0.3)",  # red-ish between mean & max
             )
         )
+
         fig_env_past.update_layout(
             height=280,
             margin=dict(l=40, r=20, t=20, b=40),
             yaxis_title="Daily temperature °C",
             xaxis_title="Month",
             xaxis=dict(tickmode="array", tickvals=months),
-            title="Earlier climate (monthly min–max envelope)",
+            title="Earlier climate (monthly min–mean–max)",
         )
         st.plotly_chart(
             fig_env_past, use_container_width=True, config={"displayModeBar": False}
         )
 
-    # Right: recent envelope
+    # Right: recent envelope – same structure
     with col_recent:
         fig_env_recent = go.Figure()
+        # 1) Min
         fig_env_recent.add_trace(
             go.Scatter(
                 x=months,
                 y=recent_min.values,
                 mode="lines",
-                name="Min",
-                line=dict(color="rgba(38,139,210,1.0)", width=2),
+                name="Monthly min",
+                line=dict(
+                    color="rgba(38,139,210,1.0)",
+                    width=2,
+                    shape="spline",
+                ),
             )
         )
+        # 2) Mean
+        fig_env_recent.add_trace(
+            go.Scatter(
+                x=months,
+                y=recent_clim.values,
+                mode="lines",
+                name="Monthly mean",
+                line=dict(
+                    color="rgba(120,120,120,1.0)",
+                    width=2,
+                    shape="spline",
+                ),
+                fill="tonexty",
+                fillcolor="rgba(158,202,225,0.3)",
+            )
+        )
+        # 3) Max
         fig_env_recent.add_trace(
             go.Scatter(
                 x=months,
                 y=recent_max.values,
                 mode="lines",
-                name="Max",
-                line=dict(color="rgba(220,50,47,1.0)", width=2),
+                name="Monthly max",
+                line=dict(
+                    color="rgba(220,50,47,1.0)",
+                    width=2,
+                    shape="spline",
+                ),
                 fill="tonexty",
-                fillcolor="rgba(254,224,210,0.3)",
+                fillcolor="rgba(254,224,210,0.4)",
             )
         )
+
         fig_env_recent.update_layout(
             height=280,
             margin=dict(l=40, r=20, t=20, b=40),
             yaxis_title="Daily temperature °C",
             xaxis_title="Month",
             xaxis=dict(tickmode="array", tickvals=months),
-            title="Recent climate (monthly min–max envelope)",
+            title="Recent climate (monthly min–mean–max)",
         )
         st.plotly_chart(
             fig_env_recent, use_container_width=True, config={"displayModeBar": False}
