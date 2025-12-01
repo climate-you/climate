@@ -1,3 +1,5 @@
+from pathlib import Path
+import xarray as xr
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -7,6 +9,21 @@ import folium
 from streamlit_folium import st_folium
 
 st.set_page_config(page_title="Your Climate Story", layout="wide")
+
+STORY_START_YEAR = 1979
+STORY_END_YEAR = 2024
+
+DATA_DIR = Path("story_climatology")
+
+# Hardcode Port Louis
+DEFAULT_SLUG = "city_mu_port_louis"
+
+@st.cache_data
+def load_city_climatology(slug: str) -> xr.Dataset:
+    """Load precomputed climatology NetCDF for a given location slug."""
+    path = DATA_DIR / f"clim_{slug}_{STORY_START_YEAR}_{STORY_END_YEAR}.nc"
+    ds = xr.load_dataset(path)
+    return ds
 
 # -----------------------------------------------------------
 # 1. Fake data generator (we'll later replace with real data)
@@ -530,13 +547,59 @@ if step == "Zoom out":
     # 1E. Last ~50 years — monthly averages and trend
     st.markdown("### Last 50 years — monthly averages and trend")
 
-    fig50 = go.Figure()
-    fig50.add_trace(
+    # --- 1. Load real data for this location ---
+    ds = load_city_climatology(DEFAULT_SLUG)
+    loc_name = ds.attrs.get("name_long", "this location")
+
+    da_mon = ds["t2m_monthly_mean_c"]  # (time_monthly)
+    time_mon = pd.to_datetime(da_mon["time_monthly"].values)
+    temp_mon = da_mon.values
+
+    # --- 2. Yearly mean and 5-year running mean (from the monthly series) ---
+    monthly_da = xr.DataArray(
+        temp_mon,
+        coords={"time_monthly": time_mon},
+        dims=["time_monthly"],
+        name="t2m_monthly_mean_c",
+    )
+
+    yearly_mean = monthly_da.groupby("time_monthly.year").mean("time_monthly")
+    years = yearly_mean["year"].values.astype(float)
+    t_year = yearly_mean.values
+
+    # 5-year running mean on yearly series
+    yr_series = pd.Series(t_year, index=pd.Index(years, name="year"))
+    yr_smooth = yr_series.rolling(window=5, center=True, min_periods=2).mean()
+    years_smooth = yr_smooth.index.values
+    t_smooth = yr_smooth.values
+
+    # --- 3. Coldest & warmest months per year and their linear trends ---
+    cold_by_year = monthly_da.groupby("time_monthly.year").min("time_monthly")
+    warm_by_year = monthly_da.groupby("time_monthly.year").max("time_monthly")
+
+    cold_years = cold_by_year["year"].values.astype(float)
+    warm_years = warm_by_year["year"].values.astype(float)
+    cold_vals = cold_by_year.values
+    warm_vals = warm_by_year.values
+
+    cold_trend = warm_trend = None
+    if len(cold_years) >= 2:
+        coef_cold = np.polyfit(cold_years, cold_vals, 1)
+        cold_trend = np.polyval(coef_cold, cold_years)
+    if len(warm_years) >= 2:
+        coef_warm = np.polyfit(warm_years, warm_vals, 1)
+        warm_trend = np.polyval(coef_warm, warm_years)
+
+    # --- 4. Build the figure using your original styling ---
+    fig_50 = go.Figure()
+
+    # Monthly mean (thin grey spline)
+    fig_50.add_trace(
         go.Scatter(
-            x=local_monthly.index.to_pydatetime(),
-            y=local_monthly.values,
+            x=time_mon,
+            y=temp_mon,
             mode="lines",
-            name="Monthly mean temperature",
+            name="Monthly mean",
             line=dict(
                 color="rgba(150,150,150,0.7)",
                 width=1,
@@ -545,84 +608,113 @@ if step == "Zoom out":
         )
     )
 
-    roll_5y = local_monthly.rolling(60, center=True).mean()
-    fig50.add_trace(
-        go.Scatter(
-            x=roll_5y.index.to_pydatetime(),
-            y=roll_5y.values,
-            mode="lines",
-            name="5-year mean",
-            line=dict(
-                color="#d95f02",
-                width=3,
-                shape="spline",
-            ),
+    # 5-year mean (thick orange spline)
+    if np.isfinite(t_smooth).any():
+        x_smooth = [datetime(int(y), 1, 1) for y in years_smooth]
+        fig_50.add_trace(
+            go.Scatter(
+                x=x_smooth,
+                y=t_smooth,
+                mode="lines",
+                name="5-year mean",
+                line=dict(
+                    color="#d95f02",
+                    width=3,
+                    shape="spline",
+                ),
+            )
         )
-    )
-    
-    # Group monthly means by calendar year (keys are integers: e.g. 1971, 1972, ...)
-    yearly_groups = local_monthly.groupby(local_monthly.index.year)
 
-    # For each year, take the min and max of the 12 monthly means
-    yearly_coldest_month = yearly_groups.min()   # coldest month each year
-    yearly_warmest_month = yearly_groups.max()   # warmest month each year
-
-    # Smooth with a 5-year rolling window (like the main trend)
-    cold_trend = yearly_coldest_month.rolling(10, center=True).mean()
-    warm_trend = yearly_warmest_month.rolling(10, center=True).mean()
-
-    # Convert year indices (ints) to datetimes (e.g. mid-year: July 1st)
-    cold_x = pd.to_datetime(cold_trend.index.astype(str) + "-07-01")
-    warm_x = pd.to_datetime(warm_trend.index.astype(str) + "-07-01")
-
-    # Add them as extra trend lines
-    fig50.add_trace(
-        go.Scatter(
-            x=cold_x,
-            y=cold_trend.values,
-            mode="lines",
-            name="Coldest month trend",
-            line=dict(
-                color="rgba(38,139,210,0.9)",  # blue-ish
-                width=2,
-                dash="dot",
-                shape="spline",
-            ),
+    # Coldest-month trend (blue dotted spline)
+    if cold_trend is not None:
+        x_cold = [datetime(int(y), 1, 1) for y in cold_years]
+        fig_50.add_trace(
+            go.Scatter(
+                x=x_cold,
+                y=cold_trend,
+                mode="lines",
+                name="Coldest-month trend",
+                line=dict(
+                    color="rgba(38,139,210,0.9)",
+                    width=2,
+                    dash="dot",
+                    shape="spline",
+                ),
+            )
         )
-    )
 
-    fig50.add_trace(
-        go.Scatter(
-            x=warm_x,
-            y=warm_trend.values,
-            mode="lines",
-            name="Warmest month trend",
-            line=dict(
-                color="rgba(220,50,47,0.9)",  # red-ish
-                width=2,
-                dash="dot",
-                shape="spline",
-            ),
+    # Warmest-month trend (red dotted spline)
+    if warm_trend is not None:
+        x_warm = [datetime(int(y), 7, 1) for y in warm_years]
+        fig_50.add_trace(
+            go.Scatter(
+                x=x_warm,
+                y=warm_trend,
+                mode="lines",
+                name="Warmest-month trend",
+                line=dict(
+                    color="rgba(220,50,47,0.9)",
+                    width=2,
+                    dash="dot",
+                    shape="spline",
+                ),
+            )
         )
-    )
 
-    fig50.update_layout(
-        height=280,
-        margin=dict(l=40, r=20, t=20, b=40),
-        yaxis_title="°C",
+    fig_50.update_layout(
+        height=400,
+        margin=dict(l=40, r=20, t=30, b=40),
         xaxis_title="Year",
+        yaxis_title="Temperature (°C)",
+        showlegend=True,
     )
-    st.plotly_chart(fig50, width="stretch", config={"displayModeBar": False})
 
-    approx_years = (now_year - past_year) + 1
-    st.markdown(
-        f"""
-        When you zoom all the way out to about **{approx_years} years**, the
-        year-to-year noise fades and a clear trend emerges: **{loc_choice}** is now
-        roughly **{warming_local:.1f}°C** warmer on average than it was in the
-        mid-{past_year}s.
-        """
-    )
+    st.plotly_chart(fig_50, width="stretch", config={"displayModeBar": False})
+    
+    # --- 5. Text: “zoom out” narrative + sign-sensitive wording ---
+
+    # Use the 5-year mean to describe overall change, if available
+    mask = np.isfinite(t_smooth)
+    if mask.any():
+        ys = years_smooth[mask]
+        vs = t_smooth[mask]
+        delta = float(vs[-1] - vs[0])
+        start_year = int(ys[0])
+        end_year = int(ys[-1])
+
+        if abs(delta) < 0.15:
+            # ~flat
+            change_text = (
+                f"has changed very little — the long-term average is almost the same "
+                f"now as it was in the late {start_year}s."
+            )
+        elif delta > 0:
+            # warmer
+            change_text = (
+                f"is now roughly **{delta:.1f}°C warmer on average** than it was "
+                f"in the late {start_year}s."
+            )
+        else:
+            # cooler
+            change_text = (
+                f"is now roughly **{abs(delta):.1f}°C cooler on average** than it was "
+                f"in the late {start_year}s — a smaller change than in many places."
+            )
+
+        st.markdown(
+            f"""
+    When you zoom all the way out over the last few decades, the year-to-year noise
+    fades and a clear pattern emerges. In **{loc_name}**, the climate {change_text}
+            """
+        )
+    else:
+        st.markdown(
+            f"""
+    When you zoom all the way out over the last few decades, the year-to-year noise
+    fades and a clearer pattern would normally emerge — but here the data window is too short
+    to say much yet for **{loc_name}**.
+            """
+        )
 
     # 1F. A simple 25-year projection, assuming the same trend continues
     st.markdown("### Looking 25 years ahead (simple trend extension)")
