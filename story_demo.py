@@ -49,7 +49,7 @@ def make_fake_hourly_from_daily(daily: pd.Series) -> pd.Series:
     # Hourly index spanning the same date range
     start = daily.index[0]
     end = daily.index[-1] + pd.Timedelta(days=1) - pd.Timedelta(hours=1)
-    hourly_index = pd.date_range(start, end, freq="H")
+    hourly_index = pd.date_range(start, end, freq="h")
 
     # Interpolate daily mean onto hourly grid
     x_daily = daily.index.view("int64")
@@ -229,6 +229,11 @@ def annotate_minmax_on_series(fig, x, y, label_prefix=""):
 
     return min_val, max_val
 
+def last_n_days(series: pd.Series, n: int):
+    if series.empty:
+        return series
+    cutoff = series.index.max() - pd.Timedelta(days=n)
+    return series.loc[series.index >= cutoff]
 
 # -----------------------------------------------------------
 # STEP: INTRO
@@ -293,7 +298,7 @@ if step == "Zoom out":
     # 1A. Last 7 days — hourly + daily mean
     st.markdown("### Last week — hourly temperature and daily mean")
 
-    last_week_hourly = local_hourly.last("7D")
+    last_week_hourly = last_n_days(local_hourly,7)
     if last_week_hourly.empty:
         st.warning("No (fake) hourly data available for last 7 days.")
     else:
@@ -342,7 +347,7 @@ if step == "Zoom out":
             yaxis_title="°C",
             xaxis_title="Last 7 days",
         )
-        st.plotly_chart(fig7, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig7, width="stretch", config={"displayModeBar": False})
 
         if min_val is not None and max_val is not None:
             st.markdown(
@@ -356,7 +361,7 @@ if step == "Zoom out":
     # 1B. Last 30 days — daily + 3-day mean + min/max
     st.markdown("### Last month — daily temperatures")
 
-    last_30 = local_daily.last("30D")
+    last_30 = last_n_days(local_daily,30)
     if last_30.empty:
         st.warning("No daily data available for last 30 days.")
     else:
@@ -400,7 +405,7 @@ if step == "Zoom out":
             yaxis_title="°C",
             xaxis_title="Last 30 days",
         )
-        st.plotly_chart(fig30, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig30, width="stretch", config={"displayModeBar": False})
 
         st.markdown(
             """
@@ -413,7 +418,7 @@ if step == "Zoom out":
     # 1C. Last year — the seasonal cycle
     st.markdown("### Last year — the seasonal cycle")
 
-    last_365 = local_daily.last("365D")
+    last_365 = last_n_days(local_daily,365)
     if last_365.empty:
         st.warning("No daily data available for last year.")
     else:
@@ -457,7 +462,7 @@ if step == "Zoom out":
             yaxis_title="°C",
             xaxis_title=f"Last 12 months",
         )
-        st.plotly_chart(fig365, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig365, width="stretch", config={"displayModeBar": False})
 
         st.markdown(
             """
@@ -513,7 +518,7 @@ if step == "Zoom out":
             yaxis_title="°C",
             xaxis_title="Last 5 years",
         )
-        st.plotly_chart(fig5y, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig5y, width="stretch", config={"displayModeBar": False})
 
         st.markdown(
             """
@@ -554,6 +559,52 @@ if step == "Zoom out":
             ),
         )
     )
+    
+    # Group monthly means by calendar year (keys are integers: e.g. 1971, 1972, ...)
+    yearly_groups = local_monthly.groupby(local_monthly.index.year)
+
+    # For each year, take the min and max of the 12 monthly means
+    yearly_coldest_month = yearly_groups.min()   # coldest month each year
+    yearly_warmest_month = yearly_groups.max()   # warmest month each year
+
+    # Smooth with a 5-year rolling window (like the main trend)
+    cold_trend = yearly_coldest_month.rolling(10, center=True).mean()
+    warm_trend = yearly_warmest_month.rolling(10, center=True).mean()
+
+    # Convert year indices (ints) to datetimes (e.g. mid-year: July 1st)
+    cold_x = pd.to_datetime(cold_trend.index.astype(str) + "-07-01")
+    warm_x = pd.to_datetime(warm_trend.index.astype(str) + "-07-01")
+
+    # Add them as extra trend lines
+    fig50.add_trace(
+        go.Scatter(
+            x=cold_x,
+            y=cold_trend.values,
+            mode="lines",
+            name="Coldest month trend",
+            line=dict(
+                color="rgba(38,139,210,0.9)",  # blue-ish
+                width=2,
+                dash="dot",
+                shape="spline",
+            ),
+        )
+    )
+
+    fig50.add_trace(
+        go.Scatter(
+            x=warm_x,
+            y=warm_trend.values,
+            mode="lines",
+            name="Warmest month trend",
+            line=dict(
+                color="rgba(220,50,47,0.9)",  # red-ish
+                width=2,
+                dash="dot",
+                shape="spline",
+            ),
+        )
+    )
 
     fig50.update_layout(
         height=280,
@@ -561,7 +612,7 @@ if step == "Zoom out":
         yaxis_title="°C",
         xaxis_title="Year",
     )
-    st.plotly_chart(fig50, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig50, width="stretch", config={"displayModeBar": False})
 
     approx_years = (now_year - past_year) + 1
     st.markdown(
@@ -622,7 +673,7 @@ if step == "Zoom out":
         yaxis_title="°C",
         xaxis_title="Year",
     )
-    st.plotly_chart(fig_future, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig_future, width="stretch", config={"displayModeBar": False})
 
     delta_future = float(future_temps[-1] - temps[0])
     st.markdown(
@@ -694,7 +745,7 @@ if step == "Seasons then vs now":
         xaxis_title="Month",
         xaxis=dict(tickmode="array", tickvals=months),
     )
-    st.plotly_chart(fig_typical, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig_typical, width="stretch", config={"displayModeBar": False})
 
     # 2B. Min–max envelopes for early vs recent climates
     st.markdown("### How the range of monthly temperatures has changed")
@@ -775,7 +826,7 @@ if step == "Seasons then vs now":
             title="Earlier climate (monthly min–mean–max)",
         )
         st.plotly_chart(
-            fig_env_past, use_container_width=True, config={"displayModeBar": False}
+            fig_env_past, width="stretch", config={"displayModeBar": False}
         )
 
     # Right: recent envelope – same structure
@@ -837,7 +888,7 @@ if step == "Seasons then vs now":
             title="Recent climate (monthly min–mean–max)",
         )
         st.plotly_chart(
-            fig_env_recent, use_container_width=True, config={"displayModeBar": False}
+            fig_env_recent, width="stretch", config={"displayModeBar": False}
         )
 
     # 2C. Summary text
@@ -904,13 +955,13 @@ if step == "You vs the world":
     with col_local:
         st.plotly_chart(
             anomaly_bars(local_anom, f"{loc_choice} — monthly anomalies"),
-            use_container_width=True,
+            width="stretch",
             config={"displayModeBar": False},
         )
     with col_global:
         st.plotly_chart(
             anomaly_bars(global_anom, "Global average — monthly anomalies"),
-            use_container_width=True,
+            width="stretch",
             config={"displayModeBar": False},
         )
 
