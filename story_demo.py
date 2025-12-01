@@ -702,17 +702,18 @@ if step == "Seasons then vs now":
     recent_clim = local_monthly[recent_mask].groupby(
         local_monthly[recent_mask].index.month
     ).mean()
-    early_clim = local_monthly[early_mask].groupby(
+    past_clim = local_monthly[early_mask].groupby(
         local_monthly[early_mask].index.month
     ).mean()
 
-    months = np.arange(1, 13)
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-    fig_typical = go.Figure()
-    fig_typical.add_trace(
+    fig_seasons = go.Figure()
+    fig_seasons.add_trace(
         go.Scatter(
             x=months,
-            y=early_clim.values,
+            y=past_clim.values,
             mode="lines+markers",
             name=f"Early decade (around {years_all.min()}s)",
             line=dict(
@@ -723,7 +724,7 @@ if step == "Seasons then vs now":
             marker=dict(size=6),
         )
     )
-    fig_typical.add_trace(
+    fig_seasons.add_trace(
         go.Scatter(
             x=months,
             y=recent_clim.values,
@@ -738,14 +739,80 @@ if step == "Seasons then vs now":
         )
     )
 
-    fig_typical.update_layout(
-        height=320,
-        margin=dict(l=40, r=20, t=20, b=40),
-        yaxis_title="Monthly mean °C",
-        xaxis_title="Month",
-        xaxis=dict(tickmode="array", tickvals=months),
+    fig_seasons.add_trace(
+        go.Scatter(
+            x=[None],
+            y=[None],
+            mode="lines+markers+text",
+            name="ΔT (month highlight)",
+            line=dict(color="rgba(117,107,177,0.9)", width=3),
+            marker=dict(size=10),
+            text=[""],
+            showlegend=False,
+        )
     )
-    st.plotly_chart(fig_typical, width="stretch", config={"displayModeBar": False})
+
+    # Build frames: for each month, draw a vertical segment between past & recent
+    frames = []
+    for i, m in enumerate(months):
+        y_p = float(past_clim.values[i])
+        y_r = float(recent_clim.values[i])
+        delta = y_r - y_p
+        mid_y = 0.5 * (y_p + y_r)
+
+        frames.append(
+            go.Frame(
+                name=f"month_{i}",
+                data=[
+                    {},  # trace 0 (past) unchanged
+                    {},  # trace 1 (recent) unchanged
+                    go.Scatter(
+                        x=[m, m],
+                        y=[y_p, y_r],
+                        mode="lines+markers+text",
+                        line=dict(color="rgba(117,107,177,0.9)", width=3),
+                        marker=dict(size=10),
+                        text=[None, f"{delta:+.1f}°C"],
+                        textposition="top right",
+                        showlegend=False,
+                    ),
+                ],
+            )
+        )
+
+    fig_seasons.frames = frames
+
+    fig_seasons.update_layout(
+        xaxis_title="Month",
+        yaxis_title="Monthly mean temperature (°C)",
+        margin=dict(l=40, r=20, t=60, b=60),
+        sliders=[
+            dict(
+                active=0,
+                x=0.0,
+                y=-0.15,
+                xanchor="left",
+                yanchor="top",
+                currentvalue={"visible": True, "prefix": "Month: "},
+                steps=[
+                    dict(
+                        label=months[i],
+                        method="animate",
+                        args=[
+                            [f"month_{i}"],
+                            {
+                                "frame": {"duration": 0, "redraw": True},
+                                "mode": "immediate",
+                                "transition": {"duration": 0},
+                            },
+                        ],
+                    )
+                    for i in range(len(months))
+                ],
+            )
+        ],
+    )
+    st.plotly_chart(fig_seasons, width="stretch", config={"displayModeBar": False})
 
     # 2B. Min–max envelopes for early vs recent climates
     st.markdown("### How the range of monthly temperatures has changed")
@@ -788,7 +855,7 @@ if step == "Seasons then vs now":
         fig_env_past.add_trace(
             go.Scatter(
                 x=months,
-                y=early_clim.values,
+                y=past_clim.values,
                 mode="lines",
                 name="Monthly mean",
                 line=dict(
@@ -900,10 +967,10 @@ if step == "Seasons then vs now":
         winter_months = [12, 1, 2]
 
     summer_delta = (
-        recent_clim.loc[summer_months].mean() - early_clim.loc[summer_months].mean()
+        recent_clim.loc[summer_months].mean() - past_clim.loc[summer_months].mean()
     ).item()
     winter_delta = (
-        recent_clim.loc[winter_months].mean() - early_clim.loc[winter_months].mean()
+        recent_clim.loc[winter_months].mean() - past_clim.loc[winter_months].mean()
     ).item()
 
     st.markdown(
