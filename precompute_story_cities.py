@@ -285,6 +285,64 @@ def derive_monthly_climatologies(ds_daily: xr.Dataset):
     recent_clim = climatology_for_period(RECENT_START, RECENT_END)
     return past_clim, recent_clim
 
+# -----------------------
+# Check existing files
+# -----------------------
+
+def is_existing_file_complete(path: Path, slug: str) -> bool:
+    """Return True if an existing NetCDF file looks complete for this slug & config."""
+    if not path.exists():
+        return False
+
+    try:
+        ds = xr.open_dataset(path)
+    except Exception as e:
+        print(f"  [info] existing file {path} could not be opened: {e}, will recompute")
+        return False
+
+    try:
+        attrs = ds.attrs
+        # Check slug
+        if attrs.get("location_slug") != slug:
+            print(f"  [info] {path} slug mismatch (found {attrs.get('location_slug')}, expected {slug})")
+            return False
+
+        # Check time span attributes
+        start_year_attr = int(attrs.get("start_year", -1))
+        end_year_attr = int(attrs.get("end_year", -1))
+        if start_year_attr != START_YEAR or end_year_attr != END_YEAR:
+            print(
+                f"  [info] {path} year span mismatch "
+                f"({start_year_attr}-{end_year_attr} != {START_YEAR}-{END_YEAR})"
+            )
+            return False
+
+        # Check required variables exist
+        required_vars = [
+            "t2m_daily_mean_c",
+            "t2m_daily_min_c",
+            "t2m_daily_max_c",
+            "t2m_monthly_mean_c",
+            "t2m_yearly_mean_c",
+        ]
+        for v in required_vars:
+            if v not in ds:
+                print(f"  [info] {path} missing variable {v}")
+                return False
+
+        # Optional: check that daily series actually covers the span
+        years = pd.to_datetime(ds["t2m_daily_mean_c"]["time"].values).year
+        if years.min() > START_YEAR or years.max() < END_YEAR:
+            print(
+                f"  [info] {path} daily coverage {years.min()}–{years.max()} "
+                f"does not fully cover {START_YEAR}–{END_YEAR}"
+            )
+            return False
+
+        return True
+    finally:
+        ds.close()
+
 
 # -----------------------
 # Precompute per location
@@ -297,8 +355,12 @@ def precompute_for_location(loc: dict):
 
     out_path = OUT_DIR / f"clim_{slug}_{START_YEAR}_{END_YEAR}.nc"
     if out_path.exists():
-        print(f"[skip] {slug}: {out_path} already exists")
-        return
+        print(f"[check] {slug}: found existing {out_path}")
+        if is_existing_file_complete(out_path, slug):
+            print(f"[skip] {slug}: existing file looks complete, skipping\n")
+            return
+        else:
+            print(f"[recompute] {slug}: existing file incomplete/mismatched, will overwrite\n")
 
     print(f"[city] {loc['name_long']} ({slug}) at lat={lat}, lon={lon}")
 
