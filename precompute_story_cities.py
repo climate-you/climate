@@ -235,7 +235,8 @@ def fetch_openmeteo_daily_block(
 
 def fetch_city_daily_history(lat: float, lon: float, start_date: date, end_date: date) -> xr.Dataset:
     """Fetch daily mean/min/max 2m temperature from Open-Meteo ERA5 archive
-    for a single point and a given date range.
+    for a single point and a given date range, with simple retry/backoff
+    on 429 and transient HTTP errors.
     """
     params = {
         "latitude": lat,
@@ -247,10 +248,54 @@ def fetch_city_daily_history(lat: float, lon: float, start_date: date, end_date:
     }
 
     url = "https://archive-api.open-meteo.com/v1/era5"
-    r = requests.get(url, params=params, timeout=60)
-    r.raise_for_status()
-    j = r.json()
 
+    max_retries = 5
+    base_sleep = 10  # seconds (we'll back off from here)
+
+    last_err: Exception | None = None
+
+    for attempt in range(max_retries):
+        try:
+            r = requests.get(url, params=params, timeout=60)
+
+            # Explicit handling for rate limiting
+            if r.status_code == 429:
+                wait = base_sleep * (2 ** attempt)
+                print(
+                    f"  [warn] 429 Too Many Requests from Open-Meteo "
+                    f"(attempt {attempt+1}/{max_retries}), sleeping {wait}s..."
+                )
+                time.sleep(wait)
+                last_err = requests.HTTPError("429 Too Many Requests", response=r)
+                continue
+
+            # For other non-OK statuses, raise here
+            r.raise_for_status()
+            j = r.json()
+            break  # success → exit retry loop
+
+        except requests.RequestException as e:
+            # Any network / HTTP error ends up here
+            last_err = e
+            if attempt == max_retries - 1:
+                print(
+                    f"  [error] giving up after {max_retries} attempts "
+                    f"for lat={lat}, lon={lon}, range={start_date}→{end_date}"
+                )
+                raise
+            wait = base_sleep * (2 ** attempt)
+            print(
+                f"  [warn] request failed on attempt {attempt+1}/{max_retries} "
+                f"({e!r}), sleeping {wait}s then retrying..."
+            )
+            time.sleep(wait)
+    else:
+        # Shouldn't actually reach here because we either break or raise
+        if last_err is not None:
+            raise last_err
+        raise RuntimeError("Unexpected error in fetch_city_daily_history")
+
+    # If we reach this point, j is populated with JSON
     daily = j["daily"]
     times = pd.to_datetime(daily["time"])
 
@@ -331,8 +376,8 @@ def derive_monthly_climatologies(ds_daily: xr.Dataset) -> tuple[xr.DataArray | N
         f"past={past_start}–{past_end}, recent={recent_start}–{recent_end}"
     )
 
-    # Monthly means from daily
-    da_mon = da.resample(time="M").mean()  # monthly means at end-of-month
+    # Monthly means from daily – use 'ME' to avoid xarray FutureWarning
+    da_mon = da.resample(time="ME").mean()
 
     # Past climatology: mean by calendar month over the past window
     mask_past = (da_mon["time"].dt.year >= past_start) & (da_mon["time"].dt.year <= past_end)
@@ -452,7 +497,7 @@ def precompute_for_location(loc: dict, target_end: date):
     lat = float(loc["lat"])
     lon = float(loc["lon"])
 
-    out_path = DATA_DIR / f"clim_{slug}_{START_YEAR}_{target_end.year}.nc"
+    out_path = DATA_DIR / f"clim_{slug}.nc"
 
     if out_path.exists():
         print(f"[check] {slug}: found existing {out_path}")
