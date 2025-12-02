@@ -442,16 +442,24 @@ if step == "Zoom out":
     time_all = pd.to_datetime(da_daily["time"].values)
     temp_all = da_daily.values
 
-    # Take the last 365 days in the dataset (typically the last full year)
-    if len(time_all) > 365:
-        end_time = time_all.max()
-        start_time = end_time - pd.Timedelta(days=365)
-        mask = (time_all >= start_time)
-        time_last = time_all[mask]
-        temp_last = temp_all[mask]
-    else:
-        time_last = time_all
-        temp_last = temp_all
+    da_daily = ds["t2m_daily_mean_c"]  # (time)
+    time_all = pd.to_datetime(da_daily["time"].values)
+    temp_all = da_daily.values
+
+    # Take the last 12 FULL calendar months in the dataset
+    last_day = time_all.max()
+    # First day of last month in dataset
+    end_month_start = last_day.replace(day=1)
+    # First day 11 months earlier (gives 12 months total)
+    start_month_start = (end_month_start - pd.DateOffset(months=11)).normalize()
+
+    mask = (time_all >= start_month_start) & (time_all <= last_day)
+    time_last = time_all[mask]
+    temp_last = temp_all[mask]
+
+    # Labels for axis / text
+    start_label = start_month_start.strftime("%b %Y")
+    end_label = last_day.strftime("%b %Y")
 
     year_label = time_last.max().year
 
@@ -500,7 +508,7 @@ if step == "Zoom out":
         )
     )
 
-    # Annotations for extremes (no extra markers, just text near the curve)
+   # Annotations for extremes (no extra markers, just text near the curve)
     fig_last_year.add_annotation(
         x=t_max,
         y=v_max,
@@ -509,10 +517,11 @@ if step == "Zoom out":
         arrowhead=2,
         ax=40,
         ay=-30,
-        bgcolor="rgba(255,255,255,0.8)",
-        bordercolor="rgba(220,50,47,0.8)",
+        bgcolor="#f5f5f5",  # light but not pure white
+        bordercolor="rgba(220,50,47,0.9)",
         borderwidth=1,
-        font=dict(size=11),
+        font=dict(size=11, color="#111111"),  # force dark text for both themes
+        arrowcolor="rgba(220,50,47,0.9)",
     )
 
     fig_last_year.add_annotation(
@@ -523,16 +532,17 @@ if step == "Zoom out":
         arrowhead=2,
         ax=-40,
         ay=30,
-        bgcolor="rgba(255,255,255,0.8)",
-        bordercolor="rgba(38,139,210,0.8)",
+        bgcolor="#f5f5f5",
+        bordercolor="rgba(38,139,210,0.9)",
         borderwidth=1,
-        font=dict(size=11),
+        font=dict(size=11, color="#111111"),
+        arrowcolor="rgba(38,139,210,0.9)",
     )
 
     fig_last_year.update_layout(
         height=400,
         margin=dict(l=40, r=20, t=30, b=40),
-        xaxis_title=f"Date (last year in dataset: {year_label})",
+        xaxis_title=f"Date (last 12 months in dataset: {start_label} – {end_label})",
         yaxis_title="Temperature (°C)",
         showlegend=True,
     )
@@ -545,12 +555,11 @@ if step == "Zoom out":
 
     # Optional explanatory text (you can tweak the copy)
     st.markdown(
-        f"""
-    Over the most recent full year in the dataset ({year_label}), you can see the
-    day-to-day ups and downs riding on top of the slower march of the seasons in **{loc_name}**.
-    The grey curve shows each day's mean temperature, and the blue line smooths this
-    into a 7-day average so the seasonal pattern is easier to see.
-    """
+        """
+        Over a full year you can clearly see the seasonal cycle: the rise into the hottest
+        months and the slide back down. Climate change adds a slow upward shift on top of
+        this familiar pattern.
+        """
     )
 
     st.caption(
