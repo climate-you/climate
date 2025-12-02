@@ -50,17 +50,14 @@ import xarray as xr
 # Configuration
 # -----------------------
 
-OUT_DIR = Path("story_climatology")
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR = Path("story_climatology")
 
 # ERA5 is conventionally used from 1979 onwards
 START_YEAR = 1979
-END_YEAR = 2024  # fix to a specific year for reproducibility
 
-# Climatology windows (make sure they are inside [START_YEAR, END_YEAR])
-# You can tweak these later if you like.
-PAST_START, PAST_END = 1980, 1999
-RECENT_START, RECENT_END = 2005, 2024
+# Define window sizes instead of fixed years
+PAST_CLIM_YEARS = 10     # e.g. 10 earliest years
+RECENT_CLIM_YEARS = 10   # e.g. 10 most recent years
 
 # Locations registry
 # slug is used in file names and as a stable identifier
@@ -96,6 +93,37 @@ LOCATIONS = [
         "kind": "city",
     },
 ]
+
+# -----------------------
+# Date helper
+# -----------------------
+
+def last_full_quarter_end(today: date | None = None) -> date:
+    """Return the last fully completed calendar quarter end date.
+
+    Examples:
+      - 2025-12-01 -> 2025-09-30 (Q3 2025)
+      - 2026-01-02 -> 2025-12-31 (Q4 2025)
+      - 2025-04-10 -> 2025-03-31 (Q1 2025)
+    """
+    if today is None:
+        today = date.today()
+
+    y = today.year
+    m = today.month
+
+    if m <= 3:
+        # Q1 not finished → last full quarter is Q4 previous year
+        return date(y - 1, 12, 31)
+    elif m <= 6:
+        # Q2 in progress → Q1 complete
+        return date(y, 3, 31)
+    elif m <= 9:
+        # Q3 in progress → Q2 complete
+        return date(y, 6, 30)
+    else:
+        # Q4 in progress → Q3 complete
+        return date(y, 9, 30)
 
 
 # -----------------------
@@ -205,30 +233,40 @@ def fetch_openmeteo_daily_block(
     raise last_err
 
 
-def fetch_city_daily_history(
-    lat: float,
-    lon: float,
-    start_year: int = START_YEAR,
-    end_year: int = END_YEAR,
-    block_size: int = 5,
-) -> xr.Dataset:
+def fetch_city_daily_history(lat: float, lon: float, start_date: date, end_date: date) -> xr.Dataset:
+    """Fetch daily mean/min/max 2m temperature from Open-Meteo ERA5 archive
+    for a single point and a given date range.
     """
-    Fetch daily ERA5 (via Open-Meteo) for a location for all years in [start_year, end_year],
-    in multi-year blocks to keep responses small and be kinder to the API.
-    """
-    blocks = []
-    for y0 in range(start_year, end_year + 1, block_size):
-        y1 = min(y0 + block_size - 1, end_year)
-        start_date = date(y0, 1, 1)
-        end_date = date(y1, 12, 31)
-        print(f"  - fetching {y0}-{y1}")
-        ds_block = fetch_openmeteo_daily_block(lat, lon, start_date, end_date)
-        blocks.append(ds_block)
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "daily": ["temperature_2m_mean", "temperature_2m_max", "temperature_2m_min"],
+        "timezone": "UTC",
+    }
 
-    ds_all = xr.concat(blocks, dim="time").sortby("time")
-    # Drop any duplicate timestamps (just in case)
-    ds_all = ds_all.sel(time=~ds_all.indexes["time"].duplicated())
-    return ds_all
+    url = "https://archive-api.open-meteo.com/v1/era5"
+    r = requests.get(url, params=params, timeout=60)
+    r.raise_for_status()
+    j = r.json()
+
+    daily = j["daily"]
+    times = pd.to_datetime(daily["time"])
+
+    tmean = np.array(daily["temperature_2m_mean"], dtype="float32")
+    tmax = np.array(daily["temperature_2m_max"], dtype="float32")
+    tmin = np.array(daily["temperature_2m_min"], dtype="float32")
+
+    ds = xr.Dataset(
+        data_vars=dict(
+            t2m_daily_mean_c=(["time"], tmean),
+            t2m_daily_max_c=(["time"], tmax),
+            t2m_daily_min_c=(["time"], tmin),
+        ),
+        coords=dict(time=times),
+    )
+    return ds
 
 
 # -----------------------
@@ -258,39 +296,80 @@ def derive_monthly_and_yearly(ds_daily: xr.Dataset):
     return monthly_mean, monthly_min, monthly_max, yearly_mean
 
 
-def derive_monthly_climatologies(ds_daily: xr.Dataset):
-    """
-    Compute monthly climatologies (per calendar month) for two periods:
-        - PAST_START..PAST_END
-        - RECENT_START..RECENT_END
+def derive_monthly_climatologies(ds_daily: xr.Dataset) -> tuple[xr.DataArray | None, xr.DataArray | None]:
+    """Compute past vs recent monthly climatology for daily mean temperature.
 
-    Returns two DataArrays with dimension 'month' (1..12):
-        past_clim_mean, recent_clim_mean
-    """
-    years = ds_daily["time"].dt.year
+    - "Past" = first PAST_CLIM_YEARS years in the record.
+    - "Recent" = last RECENT_CLIM_YEARS years in the record.
 
-    def climatology_for_period(start, end):
-        mask = (years >= start) & (years <= end)
-        if not bool(mask.any()):
-            return None
-        return (
-            ds_daily["t2m_daily_mean_c"]
-            .sel(time=mask)
-            .groupby("time.month")
-            .mean("time")
-            .rename(month="month")
+    If there isn't enough data to form both windows, returns (None, None).
+    """
+    da = ds_daily["t2m_daily_mean_c"]
+    years = da["time"].dt.year
+
+    min_year = int(years.min().item())
+    max_year = int(years.max().item())
+    n_years = max_year - min_year + 1
+
+    # Require at least PAST + RECENT years + a small buffer (optional)
+    min_needed = PAST_CLIM_YEARS + RECENT_CLIM_YEARS
+    if n_years < min_needed:
+        print(
+            f"  [warn] record too short for climatologies: "
+            f"{n_years} years, need at least {min_needed}"
         )
+        return None, None
 
-    past_clim = climatology_for_period(PAST_START, PAST_END)
-    recent_clim = climatology_for_period(RECENT_START, RECENT_END)
+    past_start = min_year
+    past_end = min_year + PAST_CLIM_YEARS - 1
+
+    recent_end = max_year
+    recent_start = max_year - RECENT_CLIM_YEARS + 1
+
+    print(
+        f"  [info] climatology windows: "
+        f"past={past_start}–{past_end}, recent={recent_start}–{recent_end}"
+    )
+
+    # Monthly means from daily
+    da_mon = da.resample(time="M").mean()  # monthly means at end-of-month
+
+    # Past climatology: mean by calendar month over the past window
+    mask_past = (da_mon["time"].dt.year >= past_start) & (da_mon["time"].dt.year <= past_end)
+    mon_past = da_mon.where(mask_past, drop=True)
+
+    if mon_past.time.size == 0:
+        past_clim = None
+    else:
+        past_clim = mon_past.groupby("time.month").mean("time")
+        past_clim = past_clim.rename(month="month")
+        past_clim = past_clim.assign_coords(month=np.arange(1, 13))
+
+    # Recent climatology
+    mask_recent = (da_mon["time"].dt.year >= recent_start) & (da_mon["time"].dt.year <= recent_end)
+    mon_recent = da_mon.where(mask_recent, drop=True)
+
+    if mon_recent.time.size == 0:
+        recent_clim = None
+    else:
+        recent_clim = mon_recent.groupby("time.month").mean("time")
+        recent_clim = recent_clim.rename(month="month")
+        recent_clim = recent_clim.assign_coords(month=np.arange(1, 13))
+
     return past_clim, recent_clim
+
 
 # -----------------------
 # Check existing files
 # -----------------------
 
-def is_existing_file_complete(path: Path, slug: str) -> bool:
-    """Return True if an existing NetCDF file looks complete for this slug & config."""
+def is_existing_file_up_to_date(path: Path, slug: str, target_end: date) -> bool:
+    """Return True if an existing NetCDF file is up-to-date for this slug
+    and already covers data up to at least target_end.
+
+    Also checks that the required variables are present, and that the
+    stored metadata (slug/start_year) matches expectations.
+    """
     if not path.exists():
         return False
 
@@ -302,44 +381,64 @@ def is_existing_file_complete(path: Path, slug: str) -> bool:
 
     try:
         attrs = ds.attrs
-        # Check slug
-        if attrs.get("location_slug") != slug:
-            print(f"  [info] {path} slug mismatch (found {attrs.get('location_slug')}, expected {slug})")
-            return False
 
-        # Check time span attributes
-        start_year_attr = int(attrs.get("start_year", -1))
-        end_year_attr = int(attrs.get("end_year", -1))
-        if start_year_attr != START_YEAR or end_year_attr != END_YEAR:
+        # 1. Check slug
+        if attrs.get("location_slug") != slug:
             print(
-                f"  [info] {path} year span mismatch "
-                f"({start_year_attr}-{end_year_attr} != {START_YEAR}-{END_YEAR})"
+                f"  [info] {path} slug mismatch "
+                f"(found {attrs.get('location_slug')}, expected {slug})"
             )
             return False
 
-        # Check required variables exist
-        required_vars = [
+        # 2. Check start_year
+        start_year_attr = int(attrs.get("start_year", -1))
+        if start_year_attr != START_YEAR:
+            print(
+                f"  [info] {path} start_year mismatch "
+                f"(found {start_year_attr}, expected {START_YEAR})"
+            )
+            return False
+
+        # 3. Check required variables exist
+        required_vars = {
             "t2m_daily_mean_c",
             "t2m_daily_min_c",
             "t2m_daily_max_c",
             "t2m_monthly_mean_c",
+            "t2m_monthly_min_c",
+            "t2m_monthly_max_c",
             "t2m_yearly_mean_c",
-        ]
-        for v in required_vars:
-            if v not in ds:
-                print(f"  [info] {path} missing variable {v}")
-                return False
+        }
+        missing = [v for v in required_vars if v not in ds.variables]
+        if missing:
+            print(f"  [info] {path} missing required variables: {missing}")
+            return False
 
-        # Optional: check that daily series actually covers the span
-        years = pd.to_datetime(ds["t2m_daily_mean_c"]["time"].values).year
-        if years.min() > START_YEAR or years.max() < END_YEAR:
+        # 4. Check coverage up to target_end using attrs["data_end_date"]
+        data_end_str = attrs.get("data_end_date")
+        if not data_end_str:
+            print(f"  [info] {path} missing data_end_date attr")
+            return False
+
+        try:
+            existing_end = datetime.fromisoformat(data_end_str).date()
+        except Exception:
+            print(f"  [info] {path} has invalid data_end_date={data_end_str!r}")
+            return False
+
+        if existing_end >= target_end:
             print(
-                f"  [info] {path} daily coverage {years.min()}–{years.max()} "
-                f"does not fully cover {START_YEAR}–{END_YEAR}"
+                f"  [info] {path} already covers up to {existing_end}, "
+                f"which is >= target_end={target_end}, no update needed"
+            )
+            return True
+        else:
+            print(
+                f"  [info] {path} only covers up to {existing_end}, "
+                f"but target_end={target_end}, will recompute"
             )
             return False
 
-        return True
     finally:
         ds.close()
 
@@ -348,55 +447,57 @@ def is_existing_file_complete(path: Path, slug: str) -> bool:
 # Precompute per location
 # -----------------------
 
-def precompute_for_location(loc: dict):
+def precompute_for_location(loc: dict, target_end: date):
     slug = loc["slug"]
     lat = float(loc["lat"])
     lon = float(loc["lon"])
 
-    out_path = OUT_DIR / f"clim_{slug}_{START_YEAR}_{END_YEAR}.nc"
+    out_path = DATA_DIR / f"clim_{slug}_{START_YEAR}_{target_end.year}.nc"
+
     if out_path.exists():
         print(f"[check] {slug}: found existing {out_path}")
-        if is_existing_file_complete(out_path, slug):
-            print(f"[skip] {slug}: existing file looks complete, skipping\n")
+        if is_existing_file_up_to_date(out_path, slug, target_end):
+            print(f"[skip] {slug}: already up-to-date\n")
             return
         else:
-            print(f"[recompute] {slug}: existing file incomplete/mismatched, will overwrite\n")
+            print(f"[recompute] {slug}: existing file is older, will overwrite\n")
 
-    print(f"[city] {loc['name_long']} ({slug}) at lat={lat}, lon={lon}")
+    print(
+        f"[city] {loc['name_long']} ({slug}) at "
+        f"lat={lat}, lon={lon}, target_end={target_end}"
+    )
 
-    # 1. Fetch daily history
-    ds_daily = fetch_city_daily_history(lat, lon, START_YEAR, END_YEAR)
+    start_date = date(START_YEAR, 1, 1)
+    end_date = target_end
 
-    # 2. Derive monthly / yearly
+    # 1. Fetch daily history 1979-01-01 → target_end
+    ds_daily = fetch_city_daily_history(lat, lon, start_date, end_date)
+
+    # 2. Derive monthly/yearly
     m_mean, m_min, m_max, y_mean = derive_monthly_and_yearly(ds_daily)
 
-    # 3. Climatologies
+    # 3. Dynamic past/recent climatologies
     past_clim, recent_clim = derive_monthly_climatologies(ds_daily)
 
     # 4. Build output dataset
     ds_out = xr.Dataset()
 
-    # Daily variables
     ds_out["t2m_daily_mean_c"] = ds_daily["t2m_daily_mean_c"]
     ds_out["t2m_daily_min_c"] = ds_daily["t2m_daily_min_c"]
     ds_out["t2m_daily_max_c"] = ds_daily["t2m_daily_max_c"]
 
-    # Monthly variables (time_monthly dimension)
     ds_out["t2m_monthly_mean_c"] = m_mean
     ds_out["t2m_monthly_min_c"] = m_min
     ds_out["t2m_monthly_max_c"] = m_max
 
-    # Yearly variables (time_yearly dimension)
     ds_out["t2m_yearly_mean_c"] = y_mean
 
-    # Monthly climatologies
-    # Only add if they exist (e.g. if window fully or partly inside [START_YEAR, END_YEAR])
     if past_clim is not None:
         ds_out["t2m_monthly_clim_past_mean_c"] = past_clim
     if recent_clim is not None:
         ds_out["t2m_monthly_clim_recent_mean_c"] = recent_clim
 
-    # Metadata / attributes
+    # 5. Metadata / attrs
     ds_out.attrs.update(
         location_slug=slug,
         name_short=loc["name_short"],
@@ -409,9 +510,7 @@ def precompute_for_location(loc: dict):
         source="Open-Meteo ERA5 archive (daily mean/min/max 2m_temperature)",
         created_utc=datetime.utcnow().isoformat() + "Z",
         start_year=START_YEAR,
-        end_year=END_YEAR,
-        past_period=f"{PAST_START}-{PAST_END}",
-        recent_period=f"{RECENT_START}-{RECENT_END}",
+        data_end_date=end_date.isoformat(),  # key for up-to-date check
     )
 
     print(f"  -> writing {out_path}")
@@ -420,14 +519,13 @@ def precompute_for_location(loc: dict):
 
 
 def main():
-    print(f"Output directory: {OUT_DIR.resolve()}")
-    print(f"Years: {START_YEAR}-{END_YEAR}")
-    print(f"Past climatology window:   {PAST_START}-{PAST_END}")
-    print(f"Recent climatology window: {RECENT_START}-{RECENT_END}")
+    print(f"Output directory: {DATA_DIR.resolve()}")
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    target_end = last_full_quarter_end()
+    print(f"Target end date for this run: {target_end.isoformat()}")
     print()
-
     for loc in LOCATIONS:
-        precompute_for_location(loc)
+        precompute_for_location(loc, target_end)
 
 
 if __name__ == "__main__":
