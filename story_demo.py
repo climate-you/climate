@@ -152,7 +152,7 @@ with st.sidebar:
     else:
         lat, lon = 51.5074, -0.1278
 
-    st.markdown("### Story step")
+    st.subheader("Story step")
     step = st.radio(
         "Go to",
         [
@@ -310,10 +310,13 @@ if step == "Intro":
 # STEP: ZOOM OUT
 # -----------------------------------------------------------
 if step == "Zoom out":
+    ds = load_city_climatology(DEFAULT_SLUG)
+    loc_name = ds.attrs.get("name_long", "this location")
+
     st.header("1. Zooming out: from days to decades")
 
     # 1A. Last 7 days — hourly + daily mean
-    st.markdown("### Last week — hourly temperature and daily mean")
+    st.subheader("Last week — hourly temperature and daily mean")
 
     last_week_hourly = last_n_days(local_hourly,7)
     if last_week_hourly.empty:
@@ -376,7 +379,7 @@ if step == "Zoom out":
             )
 
     # 1B. Last 30 days — daily + 3-day mean + min/max
-    st.markdown("### Last month — daily temperatures")
+    st.subheader("Last month — daily temperatures")
 
     last_30 = last_n_days(local_daily,30)
     if last_30.empty:
@@ -433,64 +436,130 @@ if step == "Zoom out":
         )
 
     # 1C. Last year — the seasonal cycle
-    st.markdown("### Last year — the seasonal cycle")
+    st.subheader("Last year — the seasonal cycle")
 
-    last_365 = last_n_days(local_daily,365)
-    if last_365.empty:
-        st.warning("No daily data available for last year.")
+    da_daily = ds["t2m_daily_mean_c"]  # (time)
+    time_all = pd.to_datetime(da_daily["time"].values)
+    temp_all = da_daily.values
+
+    # Take the last 365 days in the dataset (typically the last full year)
+    if len(time_all) > 365:
+        end_time = time_all.max()
+        start_time = end_time - pd.Timedelta(days=365)
+        mask = (time_all >= start_time)
+        time_last = time_all[mask]
+        temp_last = temp_all[mask]
     else:
-        smooth_365 = last_365.rolling(7, center=True).mean()
+        time_last = time_all
+        temp_last = temp_all
 
-        fig365 = go.Figure()
-        fig365.add_trace(
-            go.Scatter(
-                x=last_365.index.to_pydatetime(),
-                y=last_365.values,
-                mode="lines",
-                name="Daily mean",
-                line=dict(
-                    color="rgba(150,150,150,0.7)",
-                    width=1,
-                    shape="spline",
-                ),
-            )
-        )
-        fig365.add_trace(
-            go.Scatter(
-                x=smooth_365.index.to_pydatetime(),
-                y=smooth_365.values,
-                mode="lines",
-                name="7-day mean",
-                line=dict(
-                    color="#1f77b4",
-                    width=2,
-                    shape="spline",
-                ),
-            )
-        )
+    year_label = time_last.max().year
 
-        min365, max365 = annotate_minmax_on_series(
-            fig365, last_365.index.to_pydatetime(), last_365.values
-        )
+    # --- 2. Build daily + 7-day mean series ---
+    s_daily = pd.Series(temp_last, index=time_last)
+    s_smooth = s_daily.rolling(window=7, center=True, min_periods=2).mean()
 
-        fig365.update_layout(
-            height=260,
-            margin=dict(l=40, r=20, t=20, b=40),
-            yaxis_title="°C",
-            xaxis_title=f"Last 12 months",
-        )
-        st.plotly_chart(fig365, width="stretch", config={"displayModeBar": False})
+    # --- 3. Find min / max over this last year ---
+    imax = int(np.nanargmax(s_daily.values))
+    imin = int(np.nanargmin(s_daily.values))
+    t_max = s_daily.index[imax]
+    t_min = s_daily.index[imin]
+    v_max = float(s_daily.values[imax])
+    v_min = float(s_daily.values[imin])
 
-        st.markdown(
-            """
-            Over a full year you can clearly see the **seasonal cycle**: the rise into
-            the hottest months and the slide back down. Climate change adds a slow
-            upward shift on top of this familiar pattern.
-            """
+    # --- 4. Build the figure (keep the old look: grey daily, blue 7-day mean) ---
+    fig_last_year = go.Figure()
+
+    # Daily curve — light grey fine wiggles
+    fig_last_year.add_trace(
+        go.Scatter(
+            x=time_last,
+            y=s_daily.values,
+            mode="lines",
+            name="Daily mean",
+            line=dict(
+                color="rgba(180,180,180,0.7)",
+                width=1,
+                shape="spline",
+            ),
         )
+    )
+
+    # 7-day mean — smoother blue curve
+    fig_last_year.add_trace(
+        go.Scatter(
+            x=time_last,
+            y=s_smooth.values,
+            mode="lines",
+            name="7-day mean",
+            line=dict(
+                color="rgba(38,139,210,0.9)",
+                width=3,
+                shape="spline",
+            ),
+        )
+    )
+
+    # Annotations for extremes (no extra markers, just text near the curve)
+    fig_last_year.add_annotation(
+        x=t_max,
+        y=v_max,
+        text=f"max {v_max:.1f}°C",
+        showarrow=True,
+        arrowhead=2,
+        ax=40,
+        ay=-30,
+        bgcolor="rgba(255,255,255,0.8)",
+        bordercolor="rgba(220,50,47,0.8)",
+        borderwidth=1,
+        font=dict(size=11),
+    )
+
+    fig_last_year.add_annotation(
+        x=t_min,
+        y=v_min,
+        text=f"min {v_min:.1f}°C",
+        showarrow=True,
+        arrowhead=2,
+        ax=-40,
+        ay=30,
+        bgcolor="rgba(255,255,255,0.8)",
+        bordercolor="rgba(38,139,210,0.8)",
+        borderwidth=1,
+        font=dict(size=11),
+    )
+
+    fig_last_year.update_layout(
+        height=400,
+        margin=dict(l=40, r=20, t=30, b=40),
+        xaxis_title=f"Date (last year in dataset: {year_label})",
+        yaxis_title="Temperature (°C)",
+        showlegend=True,
+    )
+
+    st.plotly_chart(
+        fig_last_year,
+        width="stretch",
+        config={"displayModeBar": False},
+    )
+
+    # Optional explanatory text (you can tweak the copy)
+    st.markdown(
+        f"""
+    Over the most recent full year in the dataset ({year_label}), you can see the
+    day-to-day ups and downs riding on top of the slower march of the seasons in **{loc_name}**.
+    The grey curve shows each day's mean temperature, and the blue line smooths this
+    into a 7-day average so the seasonal pattern is easier to see.
+    """
+    )
+
+    st.caption(
+        f"Last-year extremes in {loc_name}: "
+        f"maximum daily mean ≈ **{v_max:.1f}°C**, minimum daily mean ≈ **{v_min:.1f}°C**."
+    )
 
     # 1D. Last 5 years — 7-day mean and monthly mean
-    st.markdown("### Last 5 years — smoothing the seasons")
+    st.subheader("Last 5 years — smoothing the seasons")
 
     five_years_ago = local_daily.index.max() - pd.DateOffset(years=5)
     last_5y = local_daily[local_daily.index >= five_years_ago]
@@ -545,12 +614,9 @@ if step == "Zoom out":
         )
 
     # 1E. Last ~50 years — monthly averages and trend
-    st.markdown("### Last 50 years — monthly averages and trend")
+    st.subheader("Last 50 years — monthly averages and trend")
 
     # --- 1. Load real data for this location ---
-    ds = load_city_climatology(DEFAULT_SLUG)
-    loc_name = ds.attrs.get("name_long", "this location")
-
     da_mon = ds["t2m_monthly_mean_c"]  # (time_monthly)
     time_mon = pd.to_datetime(da_mon["time_monthly"].values)
     temp_mon = da_mon.values
@@ -717,7 +783,7 @@ if step == "Zoom out":
         )
 
     # 1F. A simple 25-year projection, assuming the same trend continues
-    st.markdown("### Looking 25 years ahead (simple trend extension)")
+    st.subheader("Looking 25 years ahead (simple trend extension)")
 
     local_yearly = data["local_yearly"]
     years = local_yearly.index.year.values.astype(float)
@@ -907,7 +973,7 @@ if step == "Seasons then vs now":
     st.plotly_chart(fig_seasons, width="stretch", config={"displayModeBar": False})
 
     # 2B. Min–max envelopes for early vs recent climates
-    st.markdown("### How the range of monthly temperatures has changed")
+    st.subheader("How the range of monthly temperatures has changed")
 
     # Build daily masks for early vs recent decades
     years_daily = local_daily.index.year
