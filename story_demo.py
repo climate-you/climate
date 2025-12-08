@@ -4,26 +4,211 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
-from datetime import datetime
+from datetime import date, datetime, timedelta
+import requests
 import folium
 from streamlit_folium import st_folium
 
 st.set_page_config(page_title="Your Climate Story", layout="wide")
-
-STORY_START_YEAR = 1979
-STORY_END_YEAR = 2024
 
 DATA_DIR = Path("story_climatology")
 
 # Hardcode Port Louis
 DEFAULT_SLUG = "city_mu_port_louis"
 
+# -----------------------------------------------------------
+# Helpers to load precomputed caches
+# -----------------------------------------------------------
+
 @st.cache_data
 def load_city_climatology(slug: str) -> xr.Dataset:
     """Load precomputed climatology NetCDF for a given location slug."""
-    path = DATA_DIR / f"clim_{slug}_{STORY_START_YEAR}_{STORY_END_YEAR}.nc"
+    path = DATA_DIR / f"clim_{slug}.nc"
     ds = xr.load_dataset(path)
     return ds
+
+def dataset_coverage_text(ds: xr.Dataset) -> str:
+    """Return a short caption like 'Data from 1979 to Sep 2025'."""
+    start_year = ds.attrs.get("start_year")
+    end_str = ds.attrs.get("data_end_date")
+
+    if not start_year or not end_str:
+        return ""
+
+    try:
+        end_date = datetime.fromisoformat(str(end_str)).date()
+    except Exception:
+        # Fallback if the date is weird, but don't crash the UI
+        return f"Data starting {start_year}"
+
+    # Example: "Sep 2025"
+    end_label = end_date.strftime("%b %Y")
+    return f"Data from {start_year} to {end_label}"
+
+
+# -----------------------------------------------------------
+# Helpers to fetch recent data from OpenMeteo
+# -----------------------------------------------------------
+
+@st.cache_data(show_spinner=False)
+def fetch_recent_7d(slug: str, lat: float, lon: float, end_date_str: str) -> xr.Dataset:
+    """
+    Fetch last 7 full days of hourly + daily temps from Open-Meteo ERA5 archive.
+    end_date_str is ISO string of the last full day included (YYYY-MM-DD).
+    Cached per (slug, end_date_str).
+    """
+    end_date = date.fromisoformat(end_date_str)
+    start_date = end_date - timedelta(days=6)
+
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "hourly": ["temperature_2m"],
+        "daily": ["temperature_2m_mean", "temperature_2m_max", "temperature_2m_min"],
+        "timezone": "auto",
+    }
+    url = "https://archive-api.open-meteo.com/v1/era5"
+
+    r = requests.get(url, params=params, timeout=30)
+    r.raise_for_status()
+    j = r.json()
+
+    # Hourly
+    h = j["hourly"]
+    t_h = pd.to_datetime(h["time"])
+    temp_h = np.array(h["temperature_2m"], dtype="float32")
+
+    # Daily
+    d = j["daily"]
+    t_d = pd.to_datetime(d["time"])
+    tmean_d = np.array(d["temperature_2m_mean"], dtype="float32")
+    tmax_d = np.array(d["temperature_2m_max"], dtype="float32")
+    tmin_d = np.array(d["temperature_2m_min"], dtype="float32")
+
+    ds = xr.Dataset(
+        data_vars=dict(
+            t_hourly=("time_hourly", temp_h),
+            t_daily_mean=("time_daily", tmean_d),
+            t_daily_max=("time_daily", tmax_d),
+            t_daily_min=("time_daily", tmin_d),
+        ),
+        coords=dict(
+            time_hourly=("time_hourly", t_h),
+            time_daily=("time_daily", t_d),
+        ),
+        attrs={"range": f"{start_date.isoformat()} to {end_date.isoformat()}"},
+    )
+    return ds
+
+
+@st.cache_data(show_spinner=False)
+def fetch_recent_30d(slug: str, lat: float, lon: float, end_date_str: str) -> xr.Dataset:
+    """
+    Fetch last 30 full days of daily temps from Open-Meteo ERA5 archive.
+    Cached per (slug, end_date_str).
+    """
+    end_date = date.fromisoformat(end_date_str)
+    start_date = end_date - timedelta(days=29)
+
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "daily": ["temperature_2m_mean", "temperature_2m_max", "temperature_2m_min"],
+        "timezone": "auto",
+    }
+    url = "https://archive-api.open-meteo.com/v1/era5"
+
+    r = requests.get(url, params=params, timeout=30)
+    r.raise_for_status()
+    j = r.json()
+
+    d = j["daily"]
+    t_d = pd.to_datetime(d["time"])
+    tmean_d = np.array(d["temperature_2m_mean"], dtype="float32")
+    tmax_d = np.array(d["temperature_2m_max"], dtype="float32")
+    tmin_d = np.array(d["temperature_2m_min"], dtype="float32")
+
+    ds = xr.Dataset(
+        data_vars=dict(
+            t_daily_mean=("time_daily", tmean_d),
+            t_daily_max=("time_daily", tmax_d),
+            t_daily_min=("time_daily", tmin_d),
+        ),
+        coords=dict(
+            time_daily=("time_daily", t_d),
+        ),
+        attrs={"range": f"{start_date.isoformat()} to {end_date.isoformat()}"},
+    )
+    return ds
+
+
+# -----------------------------------------------------------
+# Helpers to detect trends
+# -----------------------------------------------------------
+
+def estimate_30d_trend(dates: pd.DatetimeIndex, temps: np.ndarray) -> float:
+    """
+    Rough linear trend over the period, in °C per 30 days.
+    Returns np.nan if not enough data.
+    """
+    if len(dates) < 5:
+        return np.nan
+    # x in days since start
+    x = (dates - dates[0]).days.astype(float)
+    y = np.asarray(temps, dtype="float64")
+    if np.all(np.isnan(y)):
+        return np.nan
+
+    # Mask nans
+    mask = ~np.isnan(y)
+    if mask.sum() < 5:
+        return np.nan
+
+    x = x[mask]
+    y = y[mask]
+
+    # Simple linear fit
+    slope, intercept = np.polyfit(x, y, 1)
+    total_span_days = float(x[-1] - x[0]) if x[-1] != x[0] else 0.0
+    if total_span_days <= 0:
+        return 0.0
+
+    # Trend over 30 days
+    trend_30d = slope * 30.0
+    return trend_30d
+
+
+def season_phrase(lat: float, ref_date: pd.Timestamp) -> str:
+    """
+    Very rough seasonal label for storytelling purposes.
+    """
+    north = lat >= 0
+    m = ref_date.month
+   
+    if north:
+         if m in (12, 1, 2):
+             return "mid-winter"
+         elif m in (3, 4, 5):
+             return "spring heading into summer"
+         elif m in (6, 7, 8):
+             return "mid-summer"
+         else:  # 9,10,11
+             return "autumn heading into winter"
+    else:
+         # Southern hemisphere seasons are flipped
+         if m in (12, 1, 2):
+             return "mid-summer"
+         elif m in (3, 4, 5):
+             return "autumn heading into winter"
+         elif m in (6, 7, 8):
+             return "mid-winter"
+         else:  # 9,10,11
+             return "spring heading into summer"
+
 
 # -----------------------------------------------------------
 # 1. Fake data generator (we'll later replace with real data)
@@ -205,6 +390,40 @@ st.markdown(
 # Small helper: annotate min/max on a curve
 # -----------------------------------------------------------
 
+def add_trace(figure, x, y, name, hovertemplate=""): 
+    """
+    Add trace to figure.
+    """
+    figure.add_trace(
+        go.Scatter(
+            x=x,
+            y=y,
+            mode="lines",
+            name=name,
+            line=dict(color="rgba(180,180,180,0.7)", width=1.5, shape="spline"),
+            marker=dict(size=3),
+            hovertemplate=hovertemplate,
+        )
+    )
+
+def add_mean_trace(figure, x, y, name, showmarkers=False, hovertemplate=""): 
+    """
+    Add mean trace to figure.
+    """
+    figure.add_trace(
+            go.Scatter(
+                x=x,
+                y=y,
+                mode="lines+markers" if showmarkers else "lines",
+                name=name,
+                line=dict(
+                    color="rgba(38,139,210,0.9)",
+                    width=3,
+                    shape="spline",
+                ),
+                hovertemplate=hovertemplate,
+            )
+        )
 
 def annotate_minmax_on_series(fig, x, y, label_prefix=""):
     """
@@ -221,29 +440,44 @@ def annotate_minmax_on_series(fig, x, y, label_prefix=""):
     x_min = x[idx_min]
     x_max = x[idx_max]
 
-    # Max annotation
-    fig.add_annotation(
-        x=x_max,
-        y=max_val,
-        xref="x",
-        yref="y",
-        text=f"{label_prefix}max {max_val:.1f}°C",
-        showarrow=False,
-        font=dict(color="rgba(220,50,47,1.0)", size=13),
-        yshift=10,
-    )
     # Min annotation
+    if idx_min <= len(y_arr) / 10:
+        shift_min_x = 40
+    else:
+        shift_min_x = -40
     fig.add_annotation(
         x=x_min,
         y=min_val,
         xref="x",
         yref="y",
         text=f"{label_prefix}min {min_val:.1f}°C",
-        showarrow=False,
+        showarrow=True,
+        arrowhead=2,
+        ax=shift_min_x,
+        ay=30,
         font=dict(color="rgba(38,139,210,1.0)", size=13),
-        yshift=-10,
+        arrowcolor="rgba(38,139,210,0.9)",
     )
 
+    # Max annotation
+    if idx_max >= len(y_arr) * 0.9:
+        shift_max_x = -40
+    else:
+        shift_max_x = 40
+    fig.add_annotation(
+        x=x_max,
+        y=max_val,
+        xref="x",
+        yref="y",
+        text=f"{label_prefix}max {max_val:.1f}°C",
+        showarrow=True,
+        arrowhead=2,
+        ax=shift_max_x,
+        ay=-30,
+        font=dict(color="rgba(220,50,47,1.0)", size=13),
+        arrowcolor="rgba(220,50,47,0.9)",
+    )
+    
     return min_val, max_val
 
 def last_n_days(series: pd.Series, n: int):
@@ -318,122 +552,141 @@ if step == "Zoom out":
     # 1A. Last 7 days — hourly + daily mean
     st.subheader("Last week — hourly temperature and daily mean")
 
-    last_week_hourly = last_n_days(local_hourly,7)
-    if last_week_hourly.empty:
-        st.warning("No (fake) hourly data available for last 7 days.")
-    else:
-        week_daily_mean = last_week_hourly.resample("D").mean()
+    # Use last full day as the endpoint (yesterday)
+    today = date.today()
+    end_7d = today - timedelta(days=1)
+    end_7d_str = end_7d.isoformat()
 
-        fig7 = go.Figure()
-        # Hourly curve
-        fig7.add_trace(
-            go.Scatter(
-                x=last_week_hourly.index.to_pydatetime(),
-                y=last_week_hourly.values,
-                mode="lines",
-                name="Hourly temperature",
-                line=dict(
-                    color="rgba(120,120,120,0.6)",
-                    width=1,
-                    shape="spline",
-                ),
-            )
-        )
-        # Daily mean
-        fig7.add_trace(
-            go.Scatter(
-                x=week_daily_mean.index.to_pydatetime(),
-                y=week_daily_mean.values,
-                mode="lines+markers",
-                name="Daily mean",
-                line=dict(
-                    color="#1f77b4",
-                    width=2,
-                    shape="spline",
-                ),
-                marker=dict(size=6),
-            )
-        )
+    ds_7d = fetch_recent_7d(DEFAULT_SLUG, lat, lon, end_7d_str)
 
-        min_val, max_val = annotate_minmax_on_series(
-            fig7,
-            last_week_hourly.index.to_pydatetime(),
-            last_week_hourly.values,
-        )
+    t_hourly = pd.to_datetime(ds_7d["time_hourly"].values)
+    temp_hourly = ds_7d["t_hourly"].values
 
-        fig7.update_layout(
-            height=260,
-            margin=dict(l=40, r=20, t=20, b=40),
-            yaxis_title="°C",
-            xaxis_title="Last 7 days",
-        )
-        st.plotly_chart(fig7, width="stretch", config={"displayModeBar": False})
+    t_daily_mid = pd.to_datetime(ds_7d["time_daily"].values) + pd.Timedelta(hours=12)
+    temp_daily = ds_7d["t_daily_mean"].values
 
-        if min_val is not None and max_val is not None:
-            st.markdown(
-                f"""
-                Over the last week in **{loc_choice}**, the air temperature has oscillated
-                between about **{min_val:.1f}°C** at the coolest moments of the night and
-                **{max_val:.1f}°C** at the warmest parts of the day.
-                """
-            )
+    fig_7d = go.Figure()
+
+    # Hourly temp (light grey)
+    add_trace(fig_7d, t_hourly, temp_hourly, "Hourly", hovertemplate="%{x|%Y-%m-%d %H:%M}<br>%{y:.1f}°C<extra></extra>")
+
+    # Daily mean (blue-ish)
+    add_mean_trace(fig_7d, t_daily_mid, temp_daily, "Daily mean", showmarkers=True, hovertemplate="%{x|%Y-%m-%d}<br>Daily mean: %{y:.1f}°C<extra></extra>")
+
+    # Simple min/max annotation on hourly values
+    h_max_idx = int(np.nanargmax(temp_hourly))
+    h_min_idx = int(np.nanargmin(temp_hourly))
+    h_max_t = t_hourly[h_max_idx]
+    h_min_t = t_hourly[h_min_idx]
+    h_max_v = float(temp_hourly[h_max_idx])
+    h_min_v = float(temp_hourly[h_min_idx])
+
+    annotate_minmax_on_series(fig_7d, t_hourly, temp_hourly, label_prefix="")
+
+    fig_7d.update_layout(
+        margin=dict(l=0, r=0, t=10, b=40),
+        height=320,
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1.0,
+            xanchor="left",
+            x=1.02,
+        ),
+        xaxis=dict(
+            title="Date",
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+        ),
+        yaxis=dict(
+            title="°C",
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+        ),
+    )
+
+    st.plotly_chart(fig_7d, width="stretch", config={"displayModeBar": False})
+
+    st.caption(f"Range: {ds_7d.attrs.get('range', end_7d_str)}")
+
+    st.markdown(
+        """
+    Over a single week you can still see the **heartbeat of days and nights**: temperatures
+    rise during the day, fall at night, and swing with passing weather systems.
+    """
+    )
 
     # 1B. Last 30 days — daily + 3-day mean + min/max
     st.subheader("Last month — daily temperatures")
 
-    last_30 = last_n_days(local_daily,30)
-    if last_30.empty:
-        st.warning("No daily data available for last 30 days.")
-    else:
-        smooth_30 = last_30.rolling(3, center=True).mean()
+    end_30d = today - timedelta(days=1)
+    end_30d_str = end_30d.isoformat()
 
-        fig30 = go.Figure()
-        fig30.add_trace(
-            go.Scatter(
-                x=last_30.index.to_pydatetime(),
-                y=last_30.values,
-                mode="lines",
-                name="Daily mean temperature",
-                line=dict(
-                    color="rgba(150,150,150,0.7)",
-                    width=1,
-                    shape="spline",
-                ),
-            )
-        )
-        fig30.add_trace(
-            go.Scatter(
-                x=smooth_30.index.to_pydatetime(),
-                y=smooth_30.values,
-                mode="lines",
-                name="3-day mean",
-                line=dict(
-                    color="#1f77b4",
-                    width=2,
-                    shape="spline",
-                ),
-            )
+    ds_30d = fetch_recent_30d(DEFAULT_SLUG, lat, lon, end_30d_str)
+
+    t_daily_30 = pd.to_datetime(ds_30d["time_daily"].values)
+    tmean_30 = ds_30d["t_daily_mean"].values
+
+    trend_30d = estimate_30d_trend(t_daily_30, tmean_30)
+    trend_sentence = ""
+
+    if not np.isnan(trend_30d) and abs(trend_30d) >= 0.5:
+        # threshold: ≈ ±0.5°C over 30 days to be "noticeable"
+        direction = "rising" if trend_30d > 0 else "falling"
+        sign_word = "warmer" if trend_30d > 0 else "cooler"
+        season = season_phrase(lat, t_daily_30[-1])
+        trend_sentence = (
+            f" Over this 30-day window, daily averages have been **{direction}** "
+            f"by about {trend_30d:+.1f}°C, consistent with {season}."
         )
 
-        min30, max30 = annotate_minmax_on_series(
-            fig30, last_30.index.to_pydatetime(), last_30.values
-        )
+    # 3-day rolling mean
+    mean_3d = pd.Series(tmean_30, index=t_daily_30).rolling(window=3, center=True).mean().values
 
-        fig30.update_layout(
-            height=260,
-            margin=dict(l=40, r=20, t=20, b=40),
-            yaxis_title="°C",
-            xaxis_title="Last 30 days",
-        )
-        st.plotly_chart(fig30, width="stretch", config={"displayModeBar": False})
+    fig_30d = go.Figure()
 
-        st.markdown(
-            """
-            Over a month, the jagged ups and downs reflect **passing weather systems**:
-            short warm spells, cooler snaps, and the background shift between seasons.
-            Here we’re looking at **daily averages**, not the full day–night cycle.
-            """
-        )
+    add_trace(fig_30d, t_daily_30, tmean_30, "Daily mean", "%{x|%Y-%m-%d}<br>Daily mean: %{y:.1f}°C<extra></extra>"), 
+
+    # 3-day mean (blue)
+    add_mean_trace(fig_30d, t_daily_30, mean_3d, "3-day mean", hovertemplate="%{x|%Y-%m-%d}<br>3-day mean: %{y:.1f}°C<extra></extra>")
+
+    annotate_minmax_on_series(fig_30d, t_daily_30, tmean_30, label_prefix="")
+
+    fig_30d.update_layout(
+        margin=dict(l=0, r=0, t=10, b=40),
+        height=320,
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1.0,
+            xanchor="left",
+            x=1.02,
+        ),
+        xaxis=dict(
+            title="Date",
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+        ),
+        yaxis=dict(
+            title="°C",
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+        ),
+    )
+
+    st.plotly_chart(fig_30d, width="stretch", config={"displayModeBar": False})
+
+    st.caption(f"Range: {ds_30d.attrs.get('range', end_30d_str)}")
+
+    base_text = """
+    Over a month, the jagged ups and downs reflect **passing weather systems**:
+    short warm spells, cooler snaps, and the background shift between seasons.
+    Here we’re looking at **daily averages**, not the full day–night cycle.
+    """
+
+    st.markdown(base_text + ("" if not trend_sentence else "\n\n" + trend_sentence))
 
     # 1C. Last year — the seasonal cycle
     st.subheader("Last year — the seasonal cycle")
@@ -479,65 +732,13 @@ if step == "Zoom out":
     fig_last_year = go.Figure()
 
     # Daily curve — light grey fine wiggles
-    fig_last_year.add_trace(
-        go.Scatter(
-            x=time_last,
-            y=s_daily.values,
-            mode="lines",
-            name="Daily mean",
-            line=dict(
-                color="rgba(180,180,180,0.7)",
-                width=1,
-                shape="spline",
-            ),
-        )
-    )
-
+    add_trace(fig_last_year, time_last, s_daily.values, "Daily mean")
+    
     # 7-day mean — smoother blue curve
-    fig_last_year.add_trace(
-        go.Scatter(
-            x=time_last,
-            y=s_smooth.values,
-            mode="lines",
-            name="7-day mean",
-            line=dict(
-                color="rgba(38,139,210,0.9)",
-                width=3,
-                shape="spline",
-            ),
-        )
-    )
+    add_mean_trace(fig_last_year, time_last, s_smooth.values, "7-day mean")
 
-   # Annotations for extremes (no extra markers, just text near the curve)
-    fig_last_year.add_annotation(
-        x=t_max,
-        y=v_max,
-        text=f"max {v_max:.1f}°C",
-        showarrow=True,
-        arrowhead=2,
-        ax=40,
-        ay=-30,
-        bgcolor="#f5f5f5",  # light but not pure white
-        bordercolor="rgba(220,50,47,0.9)",
-        borderwidth=1,
-        font=dict(size=11, color="#111111"),  # force dark text for both themes
-        arrowcolor="rgba(220,50,47,0.9)",
-    )
-
-    fig_last_year.add_annotation(
-        x=t_min,
-        y=v_min,
-        text=f"min {v_min:.1f}°C",
-        showarrow=True,
-        arrowhead=2,
-        ax=-40,
-        ay=30,
-        bgcolor="#f5f5f5",
-        bordercolor="rgba(38,139,210,0.9)",
-        borderwidth=1,
-        font=dict(size=11, color="#111111"),
-        arrowcolor="rgba(38,139,210,0.9)",
-    )
+    # Annotations for extremes (no extra markers, just text near the curve)
+    annotate_minmax_on_series(fig_last_year, time_last, s_daily.values, label_prefix="")
 
     fig_last_year.update_layout(
         height=400,
@@ -568,59 +769,86 @@ if step == "Zoom out":
     )
 
     # 1D. Last 5 years — 7-day mean and monthly mean
-    st.subheader("Last 5 years — smoothing the seasons")
+    st.subheader("Last 5 years — zoom from seasons to climate")
 
-    five_years_ago = local_daily.index.max() - pd.DateOffset(years=5)
-    last_5y = local_daily[local_daily.index >= five_years_ago]
+    # Daily mean temperature (precomputed), with explicit 'time' coord
+    da_daily = ds["t2m_daily_mean_c"]
+    time_daily = pd.to_datetime(da_daily["time"].values)
 
-    if last_5y.empty:
-        st.warning("No daily data available for the last 5 years.")
-    else:
-        smooth_7d_5y = last_5y.rolling(7, center=True).mean()
-        monthly_5y = last_5y.resample("MS").mean()
+    # End of record = last timestamp in daily series
+    end_date = time_daily[-1].normalize()
 
-        fig5y = go.Figure()
-        fig5y.add_trace(
-            go.Scatter(
-                x=smooth_7d_5y.index.to_pydatetime(),
-                y=smooth_7d_5y.values,
-                mode="lines",
-                name="7-day mean",
-                line=dict(
-                    color="rgba(150,150,150,0.7)",
-                    width=1,
-                    shape="spline",
-                ),
-            )
-        )
-        fig5y.add_trace(
-            go.Scatter(
-                x=monthly_5y.index.to_pydatetime(),
-                y=monthly_5y.values,
-                mode="lines+markers",
-                name="Monthly mean",
-                line=dict(
-                    color="#d95f02",
-                    width=2,
-                    shape="spline",
-                ),
-                marker=dict(size=4),
-            )
-        )
-        fig5y.update_layout(
-            height=260,
-            margin=dict(l=40, r=20, t=20, b=40),
-            yaxis_title="°C",
-            xaxis_title="Last 5 years",
-        )
-        st.plotly_chart(fig5y, width="stretch", config={"displayModeBar": False})
+    # Start 5 years earlier
+    start_5y = end_date - pd.DateOffset(years=5)
 
-        st.markdown(
-            """
-            Over several years, the individual days blur into a smoother picture:
-            we start to think in terms of **typical months** rather than daily swings.
-            """
-        )
+    # If the record is shorter than 5 years for some reason, just use full range
+    if time_daily[0] > start_5y:
+        start_5y = time_daily[0]
+
+    # Slice daily data to last ~5 years
+    daily_5y = da_daily.sel(time=slice(start_5y, end_date))
+
+    # 7-day rolling mean (centered)
+    weekly_5y = daily_5y.rolling(time=7, center=True).mean()
+
+    # Monthly mean series (precomputed, but we don't assume coord is named 'time')
+    da_mon = ds["t2m_monthly_mean_c"]
+
+    # Use first dimension and its coord as the monthly time axis, whatever it's called
+    mon_dim = da_mon.dims[0]                      # e.g. "time" or "valid_time" or "month"
+    mon_coord = pd.to_datetime(da_mon[mon_dim].values)
+
+    # Mask to last ~5 years
+    mon_mask = (mon_coord >= start_5y) & (mon_coord <= end_date)
+    monthly_5y = da_mon.isel({mon_dim: mon_mask})
+    x_month = mon_coord[mon_mask]
+
+    fig_5y = go.Figure()
+
+    # 7-day mean (grey, light)
+    add_trace(
+        fig_5y,
+        pd.to_datetime(weekly_5y.time.values),
+        weekly_5y.values,
+        "7-day mean",
+        hovertemplate="%{x|%Y-%m-%d}<br>7-day mean: %{y:.1f}°C<extra></extra>"
+    )
+
+    # Monthly mean (warmer color, thicker)
+    add_mean_trace(fig_5y, x_month, monthly_5y.values, "Monthly mean", hovertemplate="%{x|%Y-%m}<br>Monthly mean: %{y:.1f}°C<extra></extra>")
+
+    fig_5y.update_layout(
+        margin=dict(l=0, r=0, t=10, b=40),
+        height=320,
+        showlegend=True,
+        xaxis=dict(
+            title="Year",
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+        ),
+        yaxis=dict(
+            title="°C",
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+        ),
+    )
+
+    st.plotly_chart(fig_5y, width="stretch", config={"displayModeBar": False})
+
+    # Reuse the small coverage caption if you like
+    cov = dataset_coverage_text(ds)
+    if cov:
+        st.caption(cov)
+
+    st.markdown(
+        """
+    Over the last five years, the **shorter-term wiggles** (the 7-day mean) sit on top of a
+    **smoother monthly pattern**. As you zoom out, weather becomes noise and you start to
+    see the underlying climate: which seasons are warming the most, and how often the line
+    pushes into new territory.
+    """
+    )
+   
 
     # 1E. Last ~50 years — monthly averages and trend
     st.subheader("Last 50 years — monthly averages and trend")
@@ -669,36 +897,16 @@ if step == "Zoom out":
     fig_50 = go.Figure()
 
     # Monthly mean (thin grey spline)
-    fig_50.add_trace(
-        go.Scatter(
-            x=time_mon,
-            y=temp_mon,
-            mode="lines",
-            name="Monthly mean",
-            line=dict(
-                color="rgba(150,150,150,0.7)",
-                width=1,
-                shape="spline",
-            ),
-        )
-    )
+    add_trace(fig_50, time_mon, temp_mon, "Monthly mean")
 
     # 5-year mean (thick orange spline)
     if np.isfinite(t_smooth).any():
         x_smooth = [datetime(int(y), 1, 1) for y in years_smooth]
-        fig_50.add_trace(
-            go.Scatter(
-                x=x_smooth,
-                y=t_smooth,
-                mode="lines",
-                name="5-year mean",
-                line=dict(
-                    color="#d95f02",
-                    width=3,
-                    shape="spline",
-                ),
-            )
-        )
+        add_mean_trace(
+            fig_50,
+            x_smooth,
+            t_smooth,
+            "5-year mean")
 
     # Coldest-month trend (blue dotted spline)
     if cold_trend is not None:
@@ -745,7 +953,11 @@ if step == "Zoom out":
     )
 
     st.plotly_chart(fig_50, width="stretch", config={"displayModeBar": False})
-    
+
+    cov = dataset_coverage_text(ds)
+    if cov:
+        st.caption(cov)
+       
     # --- 5. Text: “zoom out” narrative + sign-sensitive wording ---
 
     # Use the 5-year mean to describe overall change, if available
@@ -794,66 +1006,96 @@ if step == "Zoom out":
     # 1F. A simple 25-year projection, assuming the same trend continues
     st.subheader("Looking 25 years ahead (simple trend extension)")
 
-    local_yearly = data["local_yearly"]
-    years = local_yearly.index.year.values.astype(float)
-    temps = local_yearly.values.astype(float)
+    # Use real yearly means from the climatology
+    # From precompute_story_cities.py:
+    #   - variable: t2m_yearly_mean_c
+    #   - coord   : time_yearly (yearly timestamps)
+    da_year = ds["t2m_yearly_mean_c"]
+    time_yearly = pd.to_datetime(ds["time_yearly"].values)
 
-    # Simple linear fit over all years
-    coeffs = np.polyfit(years, temps, 1)
-    a, b = coeffs  # temp ≈ a * year + b
+    years = time_yearly.year.astype(float)
+    temps = np.asarray(da_year.values, dtype="float64")
 
-    future_years = np.arange(years.max() + 1, years.max() + 26)
-    future_temps = a * future_years + b
+    # Fit simple linear trend on the historical years
+    mask = np.isfinite(temps)
+    if mask.sum() >= 5:
+        x = years[mask]
+        y = temps[mask]
 
-    fig_future = go.Figure()
-    fig_future.add_trace(
-        go.Scatter(
-            x=years,
-            y=temps,
-            mode="lines+markers",
-            name="Observed yearly mean",
-            line=dict(
-                color="#1f78b4",
-                width=2,
-                shape="spline",
-            ),
-            marker=dict(size=4),
+        slope, intercept = np.polyfit(x, y, 1)
+
+        first_year = int(x.min())
+        last_year = int(x.max())
+        horizon = 25  # years ahead
+
+        # Historical trend values
+        hist_trend_years = x
+        hist_trend_vals = intercept + slope * hist_trend_years
+
+        # Straight-line extension into the future
+        future_years = np.arange(last_year + 1, last_year + horizon + 1, dtype=float)
+        future_trend_vals = intercept + slope * future_years
+
+        fig_future = go.Figure()
+
+        # Yearly mean (grey)
+        add_trace(fig_future, years, temps, "Yearly mean", hovertemplate="Year %{x:.0f}<br>%{y:.1f}°C<extra></extra>")
+
+        # Trend over the past (solid orange)
+        fig_future.add_trace(
+            go.Scatter(
+                x=hist_trend_years,
+                y=hist_trend_vals,
+                mode="lines",
+                name="Trend (past)",
+                line=dict(color="#d95f02", width=3, shape="spline"),
+                hovertemplate="Trend %{x:.0f}<br>%{y:.1f}°C<extra></extra>",
+            )
         )
-    )
-    fig_future.add_trace(
-        go.Scatter(
-            x=future_years,
-            y=future_temps,
-            mode="lines",
-            name="Linear projection",
-            line=dict(
-                color="#e31a1c",
-                width=2,
-                dash="dash",
-                shape="spline",
+
+        # Straight-line extension into the future (dashed orange)
+        fig_future.add_trace(
+            go.Scatter(
+                x=future_years,
+                y=future_trend_vals,
+                mode="lines",
+                name="Straight-line extension",
+                line=dict(color="#d95f02", width=3, dash="dash", shape="spline"),
+                hovertemplate="Extension %{x:.0f}<br>%{y:.1f}°C<extra></extra>",
+            )
+        )
+
+        fig_future.update_layout(
+            margin=dict(l=0, r=0, t=10, b=40),
+            height=320,
+            showlegend=True,
+            xaxis=dict(
+                title="Year",
+                showgrid=True,
+                gridcolor="rgba(200,200,200,0.3)",
+            ),
+            yaxis=dict(
+                title="°C",
+                showgrid=True,
+                gridcolor="rgba(200,200,200,0.3)",
             ),
         )
-    )
-    fig_future.update_layout(
-        height=280,
-        margin=dict(l=40, r=20, t=20, b=40),
-        yaxis_title="°C",
-        xaxis_title="Year",
-    )
-    st.plotly_chart(fig_future, width="stretch", config={"displayModeBar": False})
 
-    delta_future = float(future_temps[-1] - temps[0])
-    st.markdown(
-        f"""
-        This simple line just extends the **past trend** into the future.  
-        If warming continued at the same pace, a typical year in the late
-        {int(future_years[-1])}s would be about **{delta_future:.1f}°C** warmer than
-        the earliest years in this record.
+        st.plotly_chart(fig_future, width="stretch", config={"displayModeBar": False})
 
-        In a real version of this page, we would replace this simple line with
-        **actual projections** from climate models.
-        """
-    )
+        # How much warmer/cooler would the straight line put us in +25 years?
+        warming_25 = float(future_trend_vals[-1] - hist_trend_vals[-1])
+        direction_word = "warmer" if warming_25 >= 0 else "cooler"
+
+        st.caption(
+            f"This **simple straight-line extension** of the past trend (not a forecast) "
+            f"would put this location about {warming_25:+.1f}°C {direction_word} by around "
+            f"{int(future_years[-1])}, if the linear trend continued unchanged."
+        )
+
+    else:
+        st.info("Not enough years of data to draw a simple trend extension here.")
+
 
 # -----------------------------------------------------------
 # STEP: SEASONS THEN VS NOW
