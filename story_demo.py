@@ -871,10 +871,11 @@ if step == "Zoom out":
     t_year = yearly_mean.values
 
     # 5-year running mean on yearly series
-    yr_series = pd.Series(t_year, index=pd.Index(years, name="year"))
-    yr_smooth = yr_series.rolling(window=5, center=True, min_periods=2).mean()
-    years_smooth = yr_smooth.index.values
-    t_smooth = yr_smooth.values
+
+    da_year = ds["t2m_yearly_mean_c"]
+    time_year = pd.to_datetime(ds["time_yearly"].values)
+    #years = time_year.year.astype(float)
+    temps_year = np.asarray(da_year.values, dtype="float64")
 
     # --- 3. Coldest & warmest months per year and their linear trends ---
     cold_by_year = monthly_da.groupby("time_monthly.year").min("time_monthly")
@@ -899,14 +900,48 @@ if step == "Zoom out":
     # Monthly mean (thin grey spline)
     add_trace(fig_50, time_mon, temp_mon, "Monthly mean")
 
-    # 5-year mean (thick orange spline)
-    if np.isfinite(t_smooth).any():
-        x_smooth = [datetime(int(y), 1, 1) for y in years_smooth]
-        add_mean_trace(
-            fig_50,
-            x_smooth,
-            t_smooth,
-            "5-year mean")
+    add_mean_trace(
+        fig_50,
+        x=time_year,
+        y=temps_year,
+        name="Yearly mean",
+        showmarkers=True,
+        hovertemplate="Year %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
+    )
+
+    # Linear trend
+    mask = np.isfinite(temps_year)
+    if mask.sum() >= 5:
+        x = years[mask]
+        y = temps_year[mask]
+        # Linear trend on yearly means (red) – as a true straight line in time
+        slope, intercept = np.polyfit(x, y, 1)
+
+        # Continuous year grid
+        trend_years = np.linspace(x.min(), x.max(), 200)
+        # Map fractional years -> datetimes (approximate using 365.25 days per year)
+        ref_start = pd.Timestamp(f"{int(x.min())}-01-01")
+        trend_dates = ref_start + pd.to_timedelta((trend_years - x.min()) * 365.25, unit="D")
+        trend_vals = intercept + slope * trend_years
+
+        fig_50.add_trace(
+            go.Scatter(
+                x=trend_dates,
+                y=trend_vals,
+                mode="lines",
+                name="Trend (yearly mean)",
+                line=dict(color="rgba(220,50,47,0.9)", width=3, shape="linear"),
+                hovertemplate="Trend %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
+            )
+        )
+
+        # For caption later
+        total_span_years = int(x.max() - x.min())
+        total_warming = float(trend_vals[-1] - trend_vals[0])
+    else:
+        trend_years = None
+        total_span_years = None
+        total_warming = None
 
     # Coldest-month trend (blue dotted spline)
     if cold_trend is not None:
@@ -960,44 +995,36 @@ if step == "Zoom out":
        
     # --- 5. Text: “zoom out” narrative + sign-sensitive wording ---
 
-    # Use the 5-year mean to describe overall change, if available
-    mask = np.isfinite(t_smooth)
-    if mask.any():
-        ys = years_smooth[mask]
-        vs = t_smooth[mask]
-        delta = float(vs[-1] - vs[0])
-        start_year = int(ys[0])
-        end_year = int(ys[-1])
-
-        if abs(delta) < 0.15:
+    if total_span_years is not None and total_span_years > 0:
+        if abs(total_warming) < 0.15:
             # ~flat
             change_text = (
                 f"has changed very little — the long-term average is almost the same "
-                f"now as it was in the late {start_year}s."
+                f"now as it was at the start of the record."
             )
-        elif delta > 0:
+        elif total_warming > 0:
             # warmer
             change_text = (
-                f"is now roughly **{delta:.1f}°C warmer on average** than it was "
-                f"in the late {start_year}s."
+                f"is now roughly **{total_warming:.1f}°C warmer on average** than it was "
+                f"at the start of the record."
             )
         else:
             # cooler
             change_text = (
-                f"is now roughly **{abs(delta):.1f}°C cooler on average** than it was "
-                f"in the late {start_year}s — a smaller change than in many places."
+                f"is now roughly **{abs(total_warming):.1f}°C cooler on average** than it was "
+                f"at the start of the record — a smaller change than in many places."
             )
 
         st.markdown(
             f"""
-    When you zoom all the way out over the last few decades, the year-to-year noise
+    When you zoom out over about **{total_span_years} years**, the year-to-year noise
     fades and a clear pattern emerges. In **{loc_name}**, the climate {change_text}
             """
         )
     else:
         st.markdown(
             f"""
-    When you zoom all the way out over the last few decades, the year-to-year noise
+    When you zoom out over about **{total_span_years} years**, the year-to-year noise
     fades and a clearer pattern would normally emerge — but here the data window is too short
     to say much yet for **{loc_name}**.
             """
@@ -1006,63 +1033,97 @@ if step == "Zoom out":
     # 1F. A simple 25-year projection, assuming the same trend continues
     st.subheader("Looking 25 years ahead (simple trend extension)")
 
-    # Use real yearly means from the climatology
-    # From precompute_story_cities.py:
-    #   - variable: t2m_yearly_mean_c
-    #   - coord   : time_yearly (yearly timestamps)
     da_year = ds["t2m_yearly_mean_c"]
     time_yearly = pd.to_datetime(ds["time_yearly"].values)
 
     years = time_yearly.year.astype(float)
     temps = np.asarray(da_year.values, dtype="float64")
 
-    # Fit simple linear trend on the historical years
     mask = np.isfinite(temps)
     if mask.sum() >= 5:
         x = years[mask]
         y = temps[mask]
 
-        slope, intercept = np.polyfit(x, y, 1)
-
-        first_year = int(x.min())
-        last_year = int(x.max())
-        horizon = 25  # years ahead
-
-        # Historical trend values
-        hist_trend_years = x
-        hist_trend_vals = intercept + slope * hist_trend_years
-
-        # Straight-line extension into the future
-        future_years = np.arange(last_year + 1, last_year + horizon + 1, dtype=float)
-        future_trend_vals = intercept + slope * future_years
-
+        # Base: yearly mean
         fig_future = go.Figure()
 
-        # Yearly mean (grey)
-        add_trace(fig_future, years, temps, "Yearly mean", hovertemplate="Year %{x:.0f}<br>%{y:.1f}°C<extra></extra>")
+        add_trace(
+            fig_future,
+            x=time_yearly,
+            y=temps,
+            name="Yearly mean",
+            hovertemplate="Year %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
+        )
 
-        # Trend over the past (solid orange)
+        # 5-year rolling mean (blue smoothing)
+        df_year = pd.DataFrame({"year": years, "temp": temps}).set_index("year")
+        smooth5 = (
+            df_year["temp"].rolling(window=5, center=True, min_periods=3).mean().values
+        )
+
+        add_mean_trace(
+            fig_future,
+            x=time_yearly,
+            y=smooth5,
+            name="5-year mean",
+            showmarkers=False,
+            hovertemplate="Year %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
+        )
+
+        # Linear trend on yearly means (red)
+        slope, intercept = np.polyfit(x, y, 1)
+
+        first_year = float(x.min())
+        last_year = float(x.max())
+        horizon = 25.0
+
+        # Build a continuous year axis from first year through future
+        full_years = np.linspace(first_year, last_year + horizon, 300)
+        trend_vals_full = intercept + slope * full_years
+
+        # Map fractional years to datetimes
+        ref_start = pd.Timestamp(f"{int(first_year)}-01-01")
+        full_dates = ref_start + pd.to_timedelta((full_years - first_year) * 365.25, unit="D")
+
+        # Split into historical vs future segments
+        past_mask = full_years <= (last_year + 1e-6)
+        future_mask = full_years > (last_year + 1e-6)
+
+        # Plot past trend (solid red)
         fig_future.add_trace(
             go.Scatter(
-                x=hist_trend_years,
-                y=hist_trend_vals,
+                x=full_dates[past_mask],
+                y=trend_vals_full[past_mask],
                 mode="lines",
-                name="Trend (past)",
-                line=dict(color="#d95f02", width=3, shape="spline"),
-                hovertemplate="Trend %{x:.0f}<br>%{y:.1f}°C<extra></extra>",
+                name="Trend (yearly mean)",
+                line=dict(color="rgba(220,50,47,0.9)", width=3, shape="linear"),
+                hovertemplate="Trend %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
             )
         )
 
-        # Straight-line extension into the future (dashed orange)
+        # Plot future extension (dashed red)
         fig_future.add_trace(
             go.Scatter(
-                x=future_years,
-                y=future_trend_vals,
+                x=full_dates[future_mask],
+                y=trend_vals_full[future_mask],
                 mode="lines",
                 name="Straight-line extension",
-                line=dict(color="#d95f02", width=3, dash="dash", shape="spline"),
-                hovertemplate="Extension %{x:.0f}<br>%{y:.1f}°C<extra></extra>",
+                line=dict(
+                    color="rgba(220,50,47,0.9)", width=3, dash="dash", shape="linear"
+                ),
+                hovertemplate="Extension %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
             )
+        )
+
+        # Shade future region based on last_year
+        last_year_int = int(round(last_year))
+        future_end_year_int = int(round(last_year + horizon))
+        fig_future.add_vrect(
+            x0=pd.Timestamp(f"{last_year_int+1}-01-01"),
+            x1=pd.Timestamp(f"{future_end_year_int}-12-31"),
+            fillcolor="rgba(220,50,47,0.06)",
+            line_width=0,
+            layer="below",
         )
 
         fig_future.update_layout(
@@ -1083,18 +1144,23 @@ if step == "Zoom out":
 
         st.plotly_chart(fig_future, width="stretch", config={"displayModeBar": False})
 
-        # How much warmer/cooler would the straight line put us in +25 years?
-        warming_25 = float(future_trend_vals[-1] - hist_trend_vals[-1])
-        direction_word = "warmer" if warming_25 >= 0 else "cooler"
-
+       # Story numbers
+        hist_warming = float(trend_vals_full[past_mask][-1] - trend_vals_full[past_mask][0])
+        extra_25 = float(trend_vals_full[future_mask][-1] - trend_vals_full[past_mask][-1])
+        total_span_years = last_year - first_year
+        direction_hist = "warmer" if hist_warming >= 0 else "cooler"
+        direction_future = "warmer" if extra_25 >= 0 else "cooler"
+        
         st.caption(
-            f"This **simple straight-line extension** of the past trend (not a forecast) "
-            f"would put this location about {warming_25:+.1f}°C {direction_word} by around "
-            f"{int(future_years[-1])}, if the linear trend continued unchanged."
+            f"Over the observed **{total_span_years:.0f} years**, the straight-line trend in yearly "
+            f"temperatures suggests this location has become about {hist_warming:+.1f}°C "
+            f"{direction_hist}. If that linear trend simply continued, another 25 years "
+            f"would add roughly {extra_25:+.1f}°C, reaching the dashed line around "
+            f"{future_end_year_int}. This is a **what-if extrapolation**, not a forecast."
         )
 
     else:
-        st.info("Not enough years of data to draw a simple trend extension here.")
+        st.info("Not enough yearly data to draw a simple trend extension here.")
 
 
 # -----------------------------------------------------------
