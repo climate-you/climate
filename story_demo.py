@@ -7,6 +7,8 @@ import plotly.graph_objs as go
 from datetime import date, datetime, timedelta
 import requests
 import folium
+from dataclasses import dataclass
+from typing import Optional
 from streamlit_folium import st_folium
 
 st.set_page_config(page_title="Your Climate Story", layout="wide")
@@ -43,7 +45,7 @@ def dataset_coverage_text(ds: xr.Dataset) -> str:
 
     # Example: "Sep 2025"
     end_label = end_date.strftime("%b %Y")
-    return f"Data from {start_year} to {end_label}"
+    return f"Range: {start_year} - {end_label}"
 
 
 # -----------------------------------------------------------
@@ -487,6 +489,96 @@ def last_n_days(series: pd.Series, n: int):
     return series.loc[series.index >= cutoff]
 
 # -----------------------------------------------------------
+# Compute global facts
+# -----------------------------------------------------------
+
+@dataclass
+class StoryFacts:
+    data_start_year: int
+    data_end_year: int
+    total_warming_50y: Optional[float]
+    recent_warming_10y: Optional[float]
+    last_year_anomaly: Optional[float]
+    hemisphere: str
+
+
+def compute_story_facts(ds, lat: Optional[float] = None) -> StoryFacts:
+    """
+    Derive a few high-level 'story' numbers from the yearly series.
+
+    Uses:
+      - t2m_yearly_mean_c  (dim: time_yearly)
+    """
+    da_year = ds["t2m_yearly_mean_c"]
+    time_year = pd.to_datetime(ds["time_yearly"].values)
+    years = time_year.year.astype(float)
+    temps = np.asarray(da_year.values, dtype="float64")
+
+    mask = np.isfinite(temps)
+    if mask.sum() < 6:
+        # Not enough data to say much, return mostly Nones
+        return StoryFacts(
+            data_start_year=int(years.min()),
+            data_end_year=int(years.max()),
+            total_warming_50y=None,
+            recent_warming_10y=None,
+            last_year_anomaly=None,
+            hemisphere="north" if (lat or 0.0) >= 0 else "south",
+        )
+
+    x = years[mask]
+    y = temps[mask]
+
+    # Long-term trend over full record
+    slope, intercept = np.polyfit(x, y, 1)
+    trend = intercept + slope * x
+    total_warming_50y = float(trend[-1] - trend[0])
+
+    # "Recent" ~10-year trend, estimated over last ~20 years to reduce noise
+    if len(x) >= 12:
+        recent_window_start = x.max() - 20.0
+        recent_mask = x >= recent_window_start
+        xr = x[recent_mask]
+        yr = y[recent_mask]
+        if xr.size >= 6:
+            s10, i10 = np.polyfit(xr, yr, 1)
+            recent_warming_10y = float(s10 * 10.0)
+        else:
+            recent_warming_10y = None
+    else:
+        recent_warming_10y = None
+
+    # Last-year anomaly vs a baseline (prefer 1981–2010 if available)
+    base_mask = (x >= 1981.0) & (x <= 2010.0)
+    if base_mask.sum() >= 10:
+        baseline = float(y[base_mask].mean())
+    else:
+        baseline = float(y.mean())
+    last_year_anomaly = float(y[-1] - baseline)
+
+    # Hemisphere: from lat argument if given, else from dataset attrs, else default north
+    if lat is None:
+        lat_attr = ds.attrs.get("latitude", None)
+        if lat_attr is not None:
+            try:
+                lat = float(lat_attr)
+            except Exception:
+                lat = 0.0
+        else:
+            lat = 0.0
+
+    hemisphere = "north" if lat >= 0 else "south"
+
+    return StoryFacts(
+        data_start_year=int(x.min()),
+        data_end_year=int(x.max()),
+        total_warming_50y=total_warming_50y,
+        recent_warming_10y=recent_warming_10y,
+        last_year_anomaly=last_year_anomaly,
+        hemisphere=hemisphere,
+    )
+
+# -----------------------------------------------------------
 # STEP: INTRO
 # -----------------------------------------------------------
 if step == "Intro":
@@ -546,11 +638,14 @@ if step == "Intro":
 if step == "Zoom out":
     ds = load_city_climatology(DEFAULT_SLUG)
     loc_name = ds.attrs.get("name_long", "this location")
+    
+    # After loading ds and knowing the location lat
+    facts = compute_story_facts(ds, lat=lat)
 
     st.header("1. Zooming out: from days to decades")
 
     # 1A. Last 7 days — hourly + daily mean
-    st.subheader("Last week — hourly temperature and daily mean")
+    st.subheader("Last week — the daily cycle")
 
     # Use last full day as the endpoint (yesterday)
     today = date.today()
@@ -681,9 +776,9 @@ if step == "Zoom out":
     st.caption(f"Range: {ds_30d.attrs.get('range', end_30d_str)}")
 
     base_text = """
+    Here we’re looking at **daily averages**, not the full day–night cycle.
     Over a month, the jagged ups and downs reflect **passing weather systems**:
     short warm spells, cooler snaps, and the background shift between seasons.
-    Here we’re looking at **daily averages**, not the full day–night cycle.
     """
 
     st.markdown(base_text + ("" if not trend_sentence else "\n\n" + trend_sentence))
@@ -743,7 +838,7 @@ if step == "Zoom out":
     fig_last_year.update_layout(
         height=400,
         margin=dict(l=40, r=20, t=30, b=40),
-        xaxis_title=f"Date (last 12 months in dataset: {start_label} – {end_label})",
+        xaxis_title=f"Date",
         yaxis_title="Temperature (°C)",
         showlegend=True,
     )
@@ -754,19 +849,39 @@ if step == "Zoom out":
         config={"displayModeBar": False},
     )
 
-    # Optional explanatory text (you can tweak the copy)
-    st.markdown(
-        """
-        Over a full year you can clearly see the seasonal cycle: the rise into the hottest
-        months and the slide back down. Climate change adds a slow upward shift on top of
-        this familiar pattern.
-        """
-    )
+    st.caption(f"Range: last 12 months in dataset ({start_label} – {end_label})")
 
-    st.caption(
-        f"Last-year extremes in {loc_name}: "
-        f"maximum daily mean ≈ **{v_max:.1f}°C**, minimum daily mean ≈ **{v_min:.1f}°C**."
+    # Optional explanatory text (you can tweak the copy)
+    base_text = (
+        "Over a full year you can clearly see the **seasonal cycle**: the rise into the "
+        "hottest months and the slide back down. Climate change adds a slow upward "
+        "shift on top of this familiar pattern."
     )
+    extra = ""
+    if facts.last_year_anomaly is not None:
+        anom = facts.last_year_anomaly
+        if anom > 0.8:
+            extra = (
+                f" This particular year was about **{anom:.1f}°C warmer** than the "
+                "long-term average for this location."
+            )
+        elif anom > 0.3:
+            extra = (
+                f" This particular year was **slightly warmer than usual**, roughly "
+                f"{anom:.1f}°C above the long-term average."
+            )
+        elif anom < -0.8:
+            extra = (
+                f" This particular year was about **{abs(anom):.1f}°C cooler** than the "
+                "long-term average here."
+            )
+        elif anom < -0.3:
+            extra = (
+                f" This particular year ran **a bit cooler than usual**, around "
+                f"{abs(anom):.1f}°C below the long-term average."
+            )
+
+    st.markdown(base_text + extra)
 
     # 1D. Last 5 years — 7-day mean and monthly mean
     st.subheader("Last 5 years — zoom from seasons to climate")
@@ -840,14 +955,33 @@ if step == "Zoom out":
     if cov:
         st.caption(cov)
 
-    st.markdown(
-        """
-    Over the last five years, the **shorter-term wiggles** (the 7-day mean) sit on top of a
-    **smoother monthly pattern**. As you zoom out, weather becomes noise and you start to
-    see the underlying climate: which seasons are warming the most, and how often the line
-    pushes into new territory.
-    """
+    base_5y = (
+        "Over the last five years, the shorter-term wiggles (the 7-day mean) sit on top of a smoother monthly pattern."
+        "As you zoom out, weather becomes noise and you start to see the underlying climate: which seasons are warming "
+        "the most, and how often the line pushes into new territory."
     )
+
+    extra_5y = ""
+    if facts.recent_warming_10y is not None and facts.total_warming_50y is not None:
+        short = facts.recent_warming_10y
+        long_ = facts.total_warming_50y
+
+        if abs(short) < 0.3 and abs(long_) > 0.8:
+            # Short-term trend is subtle, but long-term is clear
+            extra_5y = (
+                " At this scale, the warming is **subtle** – these recent years only hint "
+                "at a change. The bigger shift really jumps out when you zoom all the way "
+                "out to the full record below."
+            )
+        elif abs(short) >= 0.3:
+            direction = "warmer" if short >= 0 else "cooler"
+            extra_5y = (
+                f" Even over just these recent years, the smoothed curve points to a change "
+                f"equivalent to about {short:+.1f}°C per decade. That trend connects directly "
+                "to the longer-term shift you’ll see in the 50-year view."
+        )
+
+    st.markdown(base_5y + extra_5y)
    
 
     # 1E. Last ~50 years — monthly averages and trend
@@ -1126,6 +1260,21 @@ if step == "Zoom out":
             layer="below",
         )
 
+        # --- Choose a sane y-axis range so year-to-year bumps aren't exaggerated ---
+        y_all = np.concatenate([np.asarray(temps, dtype="float64"),
+                                np.asarray(trend_vals_full, dtype="float64")])
+
+        y_min = float(np.nanmin(y_all))
+        y_max = float(np.nanmax(y_all))
+
+        # Enforce at least ~2°C span
+        span = max(y_max - y_min, 2.0)
+        pad = span * 0.1  # 10% padding top/bottom
+
+        y_center = 0.5 * (y_min + y_max)
+        y0 = y_center - span / 2.0 - pad
+        y1 = y_center + span / 2.0 + pad
+
         fig_future.update_layout(
             margin=dict(l=0, r=0, t=10, b=40),
             height=320,
@@ -1136,9 +1285,10 @@ if step == "Zoom out":
                 gridcolor="rgba(200,200,200,0.3)",
             ),
             yaxis=dict(
-                title="°C",
+                title="Temperature (°C)",
                 showgrid=True,
                 gridcolor="rgba(200,200,200,0.3)",
+                range=[y0, y1],
             ),
         )
 
@@ -1151,7 +1301,7 @@ if step == "Zoom out":
         direction_hist = "warmer" if hist_warming >= 0 else "cooler"
         direction_future = "warmer" if extra_25 >= 0 else "cooler"
         
-        st.caption(
+        st.markdown(
             f"Over the observed **{total_span_years:.0f} years**, the straight-line trend in yearly "
             f"temperatures suggests this location has become about {hist_warming:+.1f}°C "
             f"{direction_hist}. If that linear trend simply continued, another 25 years "
