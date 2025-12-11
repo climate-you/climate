@@ -1,3 +1,5 @@
+import glob
+import os
 from pathlib import Path
 import xarray as xr
 import streamlit as st
@@ -15,12 +17,56 @@ st.set_page_config(page_title="Your Climate Story", layout="wide")
 
 DATA_DIR = Path("story_climatology")
 
-# Hardcode Port Louis
-DEFAULT_SLUG = "city_mu_port_louis"
 
 # -----------------------------------------------------------
 # Helpers to load precomputed caches
 # -----------------------------------------------------------
+
+def discover_locations(clim_dir: str = "story_climatology") -> dict:
+    """
+    Scan story_climatology/clim_*.nc and build a dict:
+      slug -> {slug, label, lat, lon, path}
+    Expects precompute_story_cities.py to have stored latitude/longitude and
+    optional city_name/country_name in ds.attrs.
+    """
+    locations = {}
+    pattern = os.path.join(clim_dir, "clim_*.nc")
+    for path in glob.glob(pattern):
+        fname = os.path.basename(path)
+        # "clim_<slug>.nc" -> <slug>
+        if not fname.startswith("clim_") or not fname.endswith(".nc"):
+            continue
+        slug = fname[len("clim_") : -len(".nc")]
+
+        try:
+            ds_meta = xr.open_dataset(path)
+            city_name = ds_meta.attrs.get("name_short", slug)
+            country_name = ds_meta.attrs.get("country", "")
+            lat_attr = ds_meta.attrs.get("latitude", np.nan)
+            lon_attr = ds_meta.attrs.get("longitude", np.nan)
+            lat = float(lat_attr) if lat_attr is not None else np.nan
+            lon = float(lon_attr) if lon_attr is not None else np.nan
+            ds_meta.close()
+        except Exception:
+            city_name = slug
+            country_name = ""
+            lat = np.nan
+            lon = np.nan
+
+        if country_name:
+            label = f"{city_name}, {country_name}"
+        else:
+            label = city_name
+
+        locations[slug] = {
+            "slug": slug,
+            "label": label,
+            "lat": lat,
+            "lon": lon,
+            "path": path,
+        }
+
+    return locations
 
 @st.cache_data
 def load_city_climatology(slug: str) -> xr.Dataset:
@@ -210,183 +256,6 @@ def season_phrase(lat: float, ref_date: pd.Timestamp) -> str:
              return "mid-winter"
          else:  # 9,10,11
              return "spring heading into summer"
-
-
-# -----------------------------------------------------------
-# 1. Fake data generator (we'll later replace with real data)
-# -----------------------------------------------------------
-
-
-def make_fake_daily_series(
-    years: int = 50,
-    baseline: float = 23.0,
-    trend_per_decade: float = 0.3,
-    noise: float = 1.0,
-) -> pd.Series:
-    """
-    Return a DAILY time series over `years` with:
-    - a simple seasonal cycle
-    - a linear warming trend
-    """
-    days = years * 365
-    start_date = datetime(1975, 1, 1)
-    time = pd.date_range(start_date, periods=days, freq="D")
-    t = np.arange(days)
-
-    # Seasonal cycle
-    seasonal = 5.0 * np.sin(2 * np.pi * t / 365.0 - 0.5)
-
-    # Linear warming trend (°C per decade)
-    trend = trend_per_decade / 10.0 * (t / 365.0)
-
-    data = baseline + seasonal + trend + np.random.normal(0.0, noise, size=days)
-    return pd.Series(data, index=time, name="temp")
-
-
-def make_fake_hourly_from_daily(daily: pd.Series) -> pd.Series:
-    """
-    Build a HOURLY series from a daily mean series, adding a diurnal cycle.
-
-    This is just for demo purposes. For real data we would query hourly ERA5
-    directly and derive daily means/min/max.
-    """
-    # Hourly index spanning the same date range
-    start = daily.index[0]
-    end = daily.index[-1] + pd.Timedelta(days=1) - pd.Timedelta(hours=1)
-    hourly_index = pd.date_range(start, end, freq="h")
-
-    # Interpolate daily mean onto hourly grid
-    x_daily = daily.index.view("int64")
-    x_hourly = hourly_index.view("int64")
-    base = np.interp(x_hourly, x_daily, daily.values)
-
-    # Add a simple diurnal cycle (max mid-afternoon, min pre-dawn)
-    hours = np.arange(len(hourly_index))
-    hour_of_day = hours % 24
-    diurnal = 4.0 * np.sin(2 * np.pi * (hour_of_day - 15) / 24.0)  # peak ~15:00
-
-    # Small extra noise
-    noise = np.random.normal(0.0, 0.5, size=len(hourly_index))
-
-    data = base + diurnal + noise
-    return pd.Series(data, index=hourly_index, name="temp_hourly")
-
-
-def fake_local_and_global(location: str = "mauritius"):
-    """
-    Provide fake 'local' and 'global' daily series,
-    plus precomputed annual & monthly means and anomalies.
-    """
-    if location == "mauritius":
-        baseline = 24.0
-        trend = 0.35  # °C / decade
-    else:  # london
-        baseline = 11.0
-        trend = 0.25
-
-    # Local daily series
-    local_daily = make_fake_daily_series(baseline=baseline, trend_per_decade=trend)
-
-    # A fake global series with smaller warming
-    global_daily = make_fake_daily_series(
-        baseline=14.0, trend_per_decade=0.2, noise=0.7
-    )
-
-    # Local hourly series for recent weeks/months
-    local_hourly = make_fake_hourly_from_daily(local_daily)
-
-    # Aggregate to monthly and yearly means
-    local_monthly = local_daily.resample("MS").mean()
-    global_monthly = global_daily.resample("MS").mean()
-
-    local_yearly = local_daily.resample("YS").mean()
-    global_yearly = global_daily.resample("YS").mean()
-
-    # anomalies vs 1979–1990 mean (roughly a "pre-warming" baseline)
-    ref_period = slice("1979-01-01", "1990-12-31")
-    local_ref = local_monthly[ref_period].mean()
-    global_ref = global_monthly[ref_period].mean()
-
-    local_anom = local_monthly - local_ref
-    global_anom = global_monthly - global_ref
-
-    return {
-        "local_daily": local_daily,
-        "local_hourly": local_hourly,
-        "global_daily": global_daily,
-        "local_monthly": local_monthly,
-        "global_monthly": global_monthly,
-        "local_yearly": local_yearly,
-        "global_yearly": global_yearly,
-        "local_anom": local_anom,
-        "global_anom": global_anom,
-        "local_ref": float(local_ref),
-        "global_ref": float(global_ref),
-    }
-
-
-# -----------------------------------------------------------
-# 2. Sidebar: location + stepper
-# -----------------------------------------------------------
-
-with st.sidebar:
-    st.header("Settings")
-    loc_choice = st.radio("Location", ["Mauritius", "London"])
-    loc_key = "mauritius" if loc_choice == "Mauritius" else "london"
-
-    if loc_key == "mauritius":
-        lat, lon = -20.2, 57.5
-    else:
-        lat, lon = 51.5074, -0.1278
-
-    st.subheader("Story step")
-    step = st.radio(
-        "Go to",
-        [
-            "Intro",
-            "Zoom out",
-            "Seasons then vs now",
-            "You vs the world",
-            "World map (idea)",
-        ],
-    )
-
-data = fake_local_and_global(loc_key)
-
-now_year = data["local_yearly"].index.year.max()
-past_year = data["local_yearly"].index.year.min()
-warming_local = data["local_yearly"].iloc[-1] - data["local_yearly"].iloc[0]
-warming_global = data["global_yearly"].iloc[-1] - data["global_yearly"].iloc[0]
-
-local_daily = data["local_daily"]
-local_hourly = data["local_hourly"]
-local_monthly = data["local_monthly"]
-
-# -----------------------------------------------------------
-# Common CSS
-# -----------------------------------------------------------
-
-st.markdown(
-    """
-    <style>
-    .hero-title {
-        font-size: 2.6rem;
-        font-weight: 800;
-        margin-bottom: 0.2rem;
-    }
-    .hero-subtitle {
-        font-size: 1.15rem;
-        color: #555;
-        margin-bottom: 0.5rem;
-    }
-    .hero-metric {
-        font-size: 1.1rem;
-        font-weight: 600;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
 
 # -----------------------------------------------------------
 # Small helper: annotate min/max on a curve
@@ -579,6 +448,531 @@ def compute_story_facts(ds, lat: Optional[float] = None) -> StoryFacts:
     )
 
 # -----------------------------------------------------------
+# 1. Fake data generator (we'll later replace with real data)
+# -----------------------------------------------------------
+
+def make_fake_daily_series(
+    years: int = 50,
+    baseline: float = 23.0,
+    trend_per_decade: float = 0.3,
+    noise: float = 1.0,
+) -> pd.Series:
+    """
+    Return a DAILY time series over `years` with:
+    - a simple seasonal cycle
+    - a linear warming trend
+    """
+    days = years * 365
+    start_date = datetime(1975, 1, 1)
+    time = pd.date_range(start_date, periods=days, freq="D")
+    t = np.arange(days)
+
+    # Seasonal cycle
+    seasonal = 5.0 * np.sin(2 * np.pi * t / 365.0 - 0.5)
+
+    # Linear warming trend (°C per decade)
+    trend = trend_per_decade / 10.0 * (t / 365.0)
+
+    data = baseline + seasonal + trend + np.random.normal(0.0, noise, size=days)
+    return pd.Series(data, index=time, name="temp")
+
+
+def make_fake_hourly_from_daily(daily: pd.Series) -> pd.Series:
+    """
+    Build a HOURLY series from a daily mean series, adding a diurnal cycle.
+
+    This is just for demo purposes. For real data we would query hourly ERA5
+    directly and derive daily means/min/max.
+    """
+    # Hourly index spanning the same date range
+    start = daily.index[0]
+    end = daily.index[-1] + pd.Timedelta(days=1) - pd.Timedelta(hours=1)
+    hourly_index = pd.date_range(start, end, freq="h")
+
+    # Interpolate daily mean onto hourly grid
+    x_daily = daily.index.view("int64")
+    x_hourly = hourly_index.view("int64")
+    base = np.interp(x_hourly, x_daily, daily.values)
+
+    # Add a simple diurnal cycle (max mid-afternoon, min pre-dawn)
+    hours = np.arange(len(hourly_index))
+    hour_of_day = hours % 24
+    diurnal = 4.0 * np.sin(2 * np.pi * (hour_of_day - 15) / 24.0)  # peak ~15:00
+
+    # Small extra noise
+    noise = np.random.normal(0.0, 0.5, size=len(hourly_index))
+
+    data = base + diurnal + noise
+    return pd.Series(data, index=hourly_index, name="temp_hourly")
+
+
+def fake_local_and_global(location: str = "mauritius"):
+    """
+    Provide fake 'local' and 'global' daily series,
+    plus precomputed annual & monthly means and anomalies.
+    """
+    if location == "mauritius":
+        baseline = 24.0
+        trend = 0.35  # °C / decade
+    else:  # london
+        baseline = 11.0
+        trend = 0.25
+
+    # Local daily series
+    local_daily = make_fake_daily_series(baseline=baseline, trend_per_decade=trend)
+
+    # A fake global series with smaller warming
+    global_daily = make_fake_daily_series(
+        baseline=14.0, trend_per_decade=0.2, noise=0.7
+    )
+
+    # Local hourly series for recent weeks/months
+    local_hourly = make_fake_hourly_from_daily(local_daily)
+
+    # Aggregate to monthly and yearly means
+    local_monthly = local_daily.resample("MS").mean()
+    global_monthly = global_daily.resample("MS").mean()
+
+    local_yearly = local_daily.resample("YS").mean()
+    global_yearly = global_daily.resample("YS").mean()
+
+    # anomalies vs 1979–1990 mean (roughly a "pre-warming" baseline)
+    ref_period = slice("1979-01-01", "1990-12-31")
+    local_ref = local_monthly[ref_period].mean()
+    global_ref = global_monthly[ref_period].mean()
+
+    local_anom = local_monthly - local_ref
+    global_anom = global_monthly - global_ref
+
+    return {
+        "local_daily": local_daily,
+        "local_hourly": local_hourly,
+        "global_daily": global_daily,
+        "local_monthly": local_monthly,
+        "global_monthly": global_monthly,
+        "local_yearly": local_yearly,
+        "global_yearly": global_yearly,
+        "local_anom": local_anom,
+        "global_anom": global_anom,
+        "local_ref": float(local_ref),
+        "global_ref": float(global_ref),
+    }
+
+
+# -----------------------------------------------------------
+# 2. Sidebar: location + stepper
+# -----------------------------------------------------------
+
+# Discover all available locations from precomputed files
+LOCATIONS = discover_locations(clim_dir=DATA_DIR)
+
+if not LOCATIONS:
+    st.error("No climatology files found in story_climatology/. "
+             "Run precompute_story_cities.py first.")
+    st.stop()
+
+# Sort slugs to have stable ordering
+slug_list = sorted(LOCATIONS.keys())
+labels = [LOCATIONS[s]["label"] for s in slug_list]
+
+# Optional: if you still want a default slug, keep this
+DEFAULT_SLUG = "city_mu_port_louis"
+
+default_index = 0
+if DEFAULT_SLUG in slug_list:
+    default_index = slug_list.index(DEFAULT_SLUG)
+
+with st.sidebar:
+    st.header("Location")
+    chosen_label = st.radio(
+        "Choose a city:",
+        options=labels,
+        index=default_index,
+    )
+
+    st.subheader("Story step")
+    step = st.radio(
+        "Go to",
+        [
+            "Intro",
+            "Zoom out",
+            "Seasons then vs now",
+            "You vs the world",
+            "World map (idea)",
+        ],
+    )
+
+# Map label back to slug + meta
+chosen_idx = labels.index(chosen_label)
+slug = slug_list[chosen_idx]
+loc_meta = LOCATIONS[slug]
+
+location_label = loc_meta["label"]
+location_lat = loc_meta["lat"]
+location_lon = loc_meta["lon"]
+clim_path = loc_meta["path"]
+
+# Load dataset for this location
+ds = xr.open_dataset(clim_path)
+
+# Compute high-level facts once
+facts = compute_story_facts(ds, lat=location_lat)
+
+fake_data = fake_local_and_global("mauritius")
+
+now_year = fake_data["local_yearly"].index.year.max()
+past_year = fake_data["local_yearly"].index.year.min()
+warming_local = fake_data["local_yearly"].iloc[-1] - fake_data["local_yearly"].iloc[0]
+warming_global = fake_data["global_yearly"].iloc[-1] - fake_data["global_yearly"].iloc[0]
+
+local_daily = fake_data["local_daily"]
+local_hourly = fake_data["local_hourly"]
+local_monthly = fake_data["local_monthly"]
+
+# -----------------------------------------------------------
+# Common CSS
+# -----------------------------------------------------------
+
+st.markdown(
+    """
+    <style>
+    .hero-title {
+        font-size: 2.6rem;
+        font-weight: 800;
+        margin-bottom: 0.2rem;
+    }
+    .hero-subtitle {
+        font-size: 1.15rem;
+        color: #555;
+        margin-bottom: 0.5rem;
+    }
+    .hero-metric {
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# -----------------------------------------------------------
+# Compute last year data, graph and captions
+# -----------------------------------------------------------
+
+def build_last_year_data(ds: xr.Dataset) -> dict:
+    """
+    Prepare the data needed for the 'Last year — the seasonal cycle' panel.
+
+    Uses:
+      - time_daily
+      - t2m_daily_mean_c
+    Returns a dict so it's easy to plug into other front-ends later.
+    """
+    t_daily = ds["t2m_daily_mean_c"]  # (time)
+    time_all = pd.to_datetime(t_daily["time"].values)
+    temp_all = t_daily.values
+
+    # Take the last 12 FULL calendar months in the dataset
+    last_day = time_all.max()
+    # First day of last month in dataset
+    end_month_start = last_day.replace(day=1)
+    # First day 11 months earlier (gives 12 months total)
+    start_month_start = (end_month_start - pd.DateOffset(months=11)).normalize()
+
+    mask = (time_all >= start_month_start) & (time_all <= last_day)
+    time_last = time_all[mask]
+    temp_last = temp_all[mask]
+
+    s_daily = pd.Series(temp_last, index=time_last)
+    s_smooth = s_daily.rolling(window=7, center=True, min_periods=2).mean()
+
+    # --- 3. Find min / max over this last year ---
+    imax = int(np.nanargmax(s_daily.values))
+    imin = int(np.nanargmin(s_daily.values))
+    t_max = s_daily.index[imax]
+    t_min = s_daily.index[imin]
+    v_max = float(s_daily.values[imax])
+    v_min = float(s_daily.values[imin])
+
+    return {
+        "time_daily": time_last,
+        "temp_daily_mean": s_daily.values,
+        "temp_7d": s_smooth.values,
+        "last_day": last_day,
+        "start_month": start_month_start,
+    }
+
+
+def build_last_year_figure(data: dict) -> (go.Figure, str):
+    """
+    Build the Plotly figure for the last-year seasonal cycle.
+
+    Styling is consistent with other panels:
+      - grey noisy curve (daily)
+      - blue smooth curve (7-day mean)
+      - min/max annotations via annotate_minmax_on_series()
+    """
+    fig = go.Figure()
+
+    time_daily = data["time_daily"]
+    t_daily = data["temp_daily_mean"]
+    t_7d = data["temp_7d"]
+
+    # Noisy base curve
+    add_trace(
+        fig,
+        x=time_daily,
+        y=t_daily,
+        name="Daily mean",
+        hovertemplate="%{x|%d %b %Y}<br>Daily mean: %{y:.1f}°C<extra></extra>",
+    )
+
+    # Smooth curve
+    add_mean_trace(
+        fig,
+        x=time_daily,
+        y=t_7d,
+        name="7-day mean",
+        showmarkers=False,
+        hovertemplate="%{x|%d %b %Y}<br>7-day mean: %{y:.1f}°C<extra></extra>",
+    )
+
+    # Min/max annotations on the smooth curve
+    annotate_minmax_on_series(fig, time_daily, t_daily, label_prefix="")
+
+    fig.update_layout(
+        height=400,
+        xaxis=dict(
+            title="Date",
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+        ),
+        yaxis=dict(
+            title="Temperature (°C)",
+            zeroline=False,
+        ),
+        margin=dict(l=40, r=20, t=30, b=40),
+        showlegend=True,
+    )
+
+    start_label = data["start_month"].strftime("%b %Y")
+    end_label = data["last_day"].strftime("%b %Y")
+    caption = f"Source: OpenMeteo | Range: last 12 months in dataset ({start_label} – {end_label})"
+
+    return fig, caption
+
+def last_year_caption(facts: StoryFacts) -> str:
+    """
+    Generate the markdown caption for the last-year panel
+    using StoryFacts (so it's easy to reuse elsewhere).
+    """
+    base_text = (
+        "Over a full year you can clearly see the **seasonal cycle**: the rise into the "
+        "hottest months and the slide back down. Climate change adds a slow upward "
+        "shift on top of this familiar pattern."
+    )
+
+    extra = ""
+    if facts.last_year_anomaly is not None:
+        anom = facts.last_year_anomaly
+        if anom > 0.8:
+            extra = (
+                f" This particular year was about **{anom:.1f}°C warmer** than the "
+                "long-term average for this location."
+            )
+        elif anom > 0.3:
+            extra = (
+                f" This particular year was **slightly warmer than usual**, roughly "
+                f"{anom:.1f}°C above the long-term average."
+            )
+        elif anom < -0.8:
+            extra = (
+                f" This particular year was about **{abs(anom):.1f}°C cooler** than the "
+                "long-term average here."
+            )
+        elif anom < -0.3:
+            extra = (
+                f" This particular year ran **a bit cooler than usual**, around "
+                f"{abs(anom):.1f}°C below the long-term average."
+            )
+
+    return base_text + extra
+
+# -----------------------------------------------------------
+# Compute seasons data, graph and captions
+# -----------------------------------------------------------
+
+def build_seasons_then_now_data(ds: xr.Dataset) -> dict:
+    """
+    Prepare data for the 'How your seasons have shifted' panel.
+
+    Uses monthly climatologies:
+      - t2m_monthly_clim_past_mean_c   (month: 1..12)
+      - t2m_monthly_clim_recent_mean_c (month: 1..12)
+    """
+    if "t2m_monthly_clim_past_mean_c" not in ds or "t2m_monthly_clim_recent_mean_c" not in ds:
+        return {}
+
+    past = np.asarray(ds["t2m_monthly_clim_past_mean_c"].values, dtype="float64")
+    recent = np.asarray(ds["t2m_monthly_clim_recent_mean_c"].values, dtype="float64")
+
+    # Expect length 12; if not, bail out gracefully
+    if past.size != 12 or recent.size != 12:
+        return {}
+
+    # Use a dummy year just for nice month labels
+    month_index = pd.date_range("2000-01-01", periods=12, freq="MS")
+    month_names = [d.strftime("%b") for d in month_index]
+
+    delta = recent - past  # positive => recent is warmer
+
+    return {
+        "month_index": month_index,
+        "month_names": month_names,
+        "temp_past": past,
+        "temp_recent": recent,
+        "delta": delta,
+    }
+
+def build_seasons_then_now_figure(data: dict, location_label: str) -> go.Figure:
+    """
+    Build overlay figure: monthly climatology past vs recent.
+    """
+    month_index = data["month_index"]
+    past = data["temp_past"]
+    recent = data["temp_recent"]
+    delta = data["delta"]
+
+    fig = go.Figure()
+
+    # Past climatology – in blue
+    fig.add_trace(
+        go.Scatter(
+            x=month_index,
+            y=past,
+            mode="lines+markers",
+            name="Earlier climate",
+            line=dict(color="rgba(38,139,210,0.9)", width=2, shape="spline"),
+            marker=dict(size=6),
+            hovertemplate="%{x|%b}<br>Earlier: %{y:.1f}°C<extra></extra>",
+        )
+    )
+
+    # Recent climatology – in red
+    fig.add_trace(
+        go.Scatter(
+            x=month_index,
+            y=recent,
+            mode="lines+markers",
+            name="Recent climate",
+            line=dict(color="rgba(217,95,2,0.9)", width=2, shape="spline"),
+            marker=dict(size=6),
+            hovertemplate="%{x|%b}<br>Recent: %{y:.1f}°C<extra></extra>",
+        )
+    )
+
+    # Make y-axis span sensible between both curves
+    y_all = np.concatenate([past, recent])
+    y_min = float(np.nanmin(y_all))
+    y_max = float(np.nanmax(y_all))
+    span = max(y_max - y_min, 5.0)  # at least about 5°C span
+    pad = span * 0.1
+    y_center = 0.5 * (y_min + y_max)
+    y0 = y_center - span / 2.0 - pad
+    y1 = y_center + span / 2.0 + pad
+
+    fig.update_layout(
+        title=f"How your seasons have shifted – {location_label}",
+        xaxis=dict(
+            title="Month",
+            tickmode="array",
+            tickvals=month_index,
+            ticktext=[d.strftime("%b") for d in month_index],
+            showgrid=True,
+            gridcolor="rgba(220,220,220,0.3)",
+        ),
+        yaxis=dict(
+            title="Typical monthly temperature (°C)",
+            range=[y0, y1],
+        ),
+        margin=dict(l=40, r=160, t=60, b=40),
+        legend=dict(
+            orientation="v",
+            x=1.02,
+            xanchor="left",
+            y=1.0,
+        ),
+    )
+
+    return fig
+
+def seasons_then_now_caption(facts: StoryFacts, data: dict) -> str:
+    """
+    Generate caption for the 'Seasons then vs now' panel.
+    Uses StoryFacts + the month-by-month deltas.
+    """
+    base = (
+        "Here we compare a **typical year in the earlier climate** (grey) to a "
+        "**typical year in the recent climate** (blue). Each point is the average "
+        "monthly temperature over its period."
+    )
+
+    if not data:
+        return base
+
+    delta = data["delta"]
+    month_names = data["month_names"]
+    mean_delta = float(np.nanmean(delta))
+
+    # Find month with strongest positive shift
+    imax = int(np.nanargmax(delta))
+    max_month = month_names[imax]
+    max_delta = float(delta[imax])
+
+    # Short paragraph about how big the shift is
+    extra = ""
+    if mean_delta > 0.8:
+        extra += (
+            f" On average, the recent climate here is about **{mean_delta:.1f}°C warmer** "
+            "throughout the year."
+        )
+    elif mean_delta > 0.3:
+        extra += (
+            f" On average, the recent climate is about **{mean_delta:.1f}°C warmer** "
+            "— a subtle but persistent shift."
+        )
+    elif mean_delta < -0.8:
+        extra += (
+            f" Surprisingly, the recent climate here comes out about **{abs(mean_delta):.1f}°C cooler** "
+            "on average than the earlier period."
+        )
+    elif mean_delta < -0.3:
+        extra += (
+            f" On average, the recent climate is about **{abs(mean_delta):.1f}°C cooler** "
+            "than the earlier period."
+        )
+
+    # If warming is uneven, call out the biggest seasonal change
+    if max_delta > 0.4:
+        extra += (
+            f" The biggest seasonal shift shows up in **{max_month}**, "
+            f"which is now around **{max_delta:.1f}°C warmer** than it used to be."
+        )
+
+    # Optionally tie back to long-term 50y fact
+    if facts.total_warming_50y is not None and abs(facts.total_warming_50y) > 0.3:
+        extra += (
+            f" These monthly changes are one way that the roughly "
+            f"**{facts.total_warming_50y:.1f}°C** long-term warming at this spot "
+            "shows up in everyday seasons."
+        )
+
+    return base + extra
+
+
+
+
+# -----------------------------------------------------------
 # STEP: INTRO
 # -----------------------------------------------------------
 if step == "Intro":
@@ -594,9 +988,9 @@ if step == "Intro":
 
     with col_map:
         st.write("")
-        m = folium.Map(location=[lat, lon], zoom_start=4, tiles="CartoDB positron")
+        m = folium.Map(location=[location_lat, location_lon], zoom_start=4, tiles="CartoDB positron")
         folium.CircleMarker(
-            location=[lat, lon],
+            location=[location_lat, location_lon],
             radius=8,
             color="#d73027",
             fill=True,
@@ -605,11 +999,12 @@ if step == "Intro":
         st_folium(m, width="stretch", height=420)
 
     with col_text:
+        loc_name = ds.attrs.get("name_long", "this location")
         st.markdown(
             f"""
             <p class="hero-metric">
             Since the mid-{past_year}s, the typical yearly temperature in
-            <strong>{loc_choice}</strong> has warmed by about
+            <strong>{loc_name}</strong> has warmed by about
             <strong>{warming_local:.1f}°C</strong>.
             </p>
             """,
@@ -636,11 +1031,11 @@ if step == "Intro":
 # STEP: ZOOM OUT
 # -----------------------------------------------------------
 if step == "Zoom out":
-    ds = load_city_climatology(DEFAULT_SLUG)
+    #ds = load_city_climatology(DEFAULT_SLUG)
     loc_name = ds.attrs.get("name_long", "this location")
     
     # After loading ds and knowing the location lat
-    facts = compute_story_facts(ds, lat=lat)
+    # facts = compute_story_facts(ds, lat=lat)
 
     st.header("1. Zooming out: from days to decades")
 
@@ -652,7 +1047,7 @@ if step == "Zoom out":
     end_7d = today - timedelta(days=1)
     end_7d_str = end_7d.isoformat()
 
-    ds_7d = fetch_recent_7d(DEFAULT_SLUG, lat, lon, end_7d_str)
+    ds_7d = fetch_recent_7d(DEFAULT_SLUG, location_lat, location_lon, end_7d_str)
 
     t_hourly = pd.to_datetime(ds_7d["time_hourly"].values)
     temp_hourly = ds_7d["t_hourly"].values
@@ -667,14 +1062,6 @@ if step == "Zoom out":
 
     # Daily mean (blue-ish)
     add_mean_trace(fig_7d, t_daily_mid, temp_daily, "Daily mean", showmarkers=True, hovertemplate="%{x|%Y-%m-%d}<br>Daily mean: %{y:.1f}°C<extra></extra>")
-
-    # Simple min/max annotation on hourly values
-    h_max_idx = int(np.nanargmax(temp_hourly))
-    h_min_idx = int(np.nanargmin(temp_hourly))
-    h_max_t = t_hourly[h_max_idx]
-    h_min_t = t_hourly[h_min_idx]
-    h_max_v = float(temp_hourly[h_max_idx])
-    h_min_v = float(temp_hourly[h_min_idx])
 
     annotate_minmax_on_series(fig_7d, t_hourly, temp_hourly, label_prefix="")
 
@@ -707,7 +1094,7 @@ if step == "Zoom out":
 
     st.markdown(
         """
-    Over a single week you can still see the **heartbeat of days and nights**: temperatures
+    Over a single week you can see the **heartbeat of days and nights**: temperatures
     rise during the day, fall at night, and swing with passing weather systems.
     """
     )
@@ -718,7 +1105,7 @@ if step == "Zoom out":
     end_30d = today - timedelta(days=1)
     end_30d_str = end_30d.isoformat()
 
-    ds_30d = fetch_recent_30d(DEFAULT_SLUG, lat, lon, end_30d_str)
+    ds_30d = fetch_recent_30d(DEFAULT_SLUG, location_lat, location_lon, end_30d_str)
 
     t_daily_30 = pd.to_datetime(ds_30d["time_daily"].values)
     tmean_30 = ds_30d["t_daily_mean"].values
@@ -730,7 +1117,7 @@ if step == "Zoom out":
         # threshold: ≈ ±0.5°C over 30 days to be "noticeable"
         direction = "rising" if trend_30d > 0 else "falling"
         sign_word = "warmer" if trend_30d > 0 else "cooler"
-        season = season_phrase(lat, t_daily_30[-1])
+        season = season_phrase(location_lat, t_daily_30[-1])
         trend_sentence = (
             f" Over this 30-day window, daily averages have been **{direction}** "
             f"by about {trend_30d:+.1f}°C, consistent with {season}."
@@ -785,104 +1172,15 @@ if step == "Zoom out":
 
     # 1C. Last year — the seasonal cycle
     st.subheader("Last year — the seasonal cycle")
-
-    da_daily = ds["t2m_daily_mean_c"]  # (time)
-    time_all = pd.to_datetime(da_daily["time"].values)
-    temp_all = da_daily.values
-
-    da_daily = ds["t2m_daily_mean_c"]  # (time)
-    time_all = pd.to_datetime(da_daily["time"].values)
-    temp_all = da_daily.values
-
-    # Take the last 12 FULL calendar months in the dataset
-    last_day = time_all.max()
-    # First day of last month in dataset
-    end_month_start = last_day.replace(day=1)
-    # First day 11 months earlier (gives 12 months total)
-    start_month_start = (end_month_start - pd.DateOffset(months=11)).normalize()
-
-    mask = (time_all >= start_month_start) & (time_all <= last_day)
-    time_last = time_all[mask]
-    temp_last = temp_all[mask]
-
-    # Labels for axis / text
-    start_label = start_month_start.strftime("%b %Y")
-    end_label = last_day.strftime("%b %Y")
-
-    year_label = time_last.max().year
-
-    # --- 2. Build daily + 7-day mean series ---
-    s_daily = pd.Series(temp_last, index=time_last)
-    s_smooth = s_daily.rolling(window=7, center=True, min_periods=2).mean()
-
-    # --- 3. Find min / max over this last year ---
-    imax = int(np.nanargmax(s_daily.values))
-    imin = int(np.nanargmin(s_daily.values))
-    t_max = s_daily.index[imax]
-    t_min = s_daily.index[imin]
-    v_max = float(s_daily.values[imax])
-    v_min = float(s_daily.values[imin])
-
-    # --- 4. Build the figure (keep the old look: grey daily, blue 7-day mean) ---
-    fig_last_year = go.Figure()
-
-    # Daily curve — light grey fine wiggles
-    add_trace(fig_last_year, time_last, s_daily.values, "Daily mean")
-    
-    # 7-day mean — smoother blue curve
-    add_mean_trace(fig_last_year, time_last, s_smooth.values, "7-day mean")
-
-    # Annotations for extremes (no extra markers, just text near the curve)
-    annotate_minmax_on_series(fig_last_year, time_last, s_daily.values, label_prefix="")
-
-    fig_last_year.update_layout(
-        height=400,
-        margin=dict(l=40, r=20, t=30, b=40),
-        xaxis_title=f"Date",
-        yaxis_title="Temperature (°C)",
-        showlegend=True,
-    )
-
-    st.plotly_chart(
-        fig_last_year,
-        width="stretch",
-        config={"displayModeBar": False},
-    )
-
-    st.caption(f"Range: last 12 months in dataset ({start_label} – {end_label})")
-
-    # Optional explanatory text (you can tweak the copy)
-    base_text = (
-        "Over a full year you can clearly see the **seasonal cycle**: the rise into the "
-        "hottest months and the slide back down. Climate change adds a slow upward "
-        "shift on top of this familiar pattern."
-    )
-    extra = ""
-    if facts.last_year_anomaly is not None:
-        anom = facts.last_year_anomaly
-        if anom > 0.8:
-            extra = (
-                f" This particular year was about **{anom:.1f}°C warmer** than the "
-                "long-term average for this location."
-            )
-        elif anom > 0.3:
-            extra = (
-                f" This particular year was **slightly warmer than usual**, roughly "
-                f"{anom:.1f}°C above the long-term average."
-            )
-        elif anom < -0.8:
-            extra = (
-                f" This particular year was about **{abs(anom):.1f}°C cooler** than the "
-                "long-term average here."
-            )
-        elif anom < -0.3:
-            extra = (
-                f" This particular year ran **a bit cooler than usual**, around "
-                f"{abs(anom):.1f}°C below the long-term average."
-            )
-
-    st.markdown(base_text + extra)
-
+    last_year_data = build_last_year_data(ds)
+    if last_year_data:
+        fig_year, fig_year_caption = build_last_year_figure(last_year_data)
+        st.plotly_chart(fig_year, width="stretch", config={"displayModeBar": False})
+        st.caption(fig_year_caption)       
+        st.markdown(last_year_caption(facts))
+    else:
+        st.info("Not enough recent daily data available to show the last year for this location.")
+        
     # 1D. Last 5 years — 7-day mean and monthly mean
     st.subheader("Last 5 years — zoom from seasons to climate")
 
@@ -956,7 +1254,7 @@ if step == "Zoom out":
         st.caption(cov)
 
     base_5y = (
-        "Over the last five years, the shorter-term wiggles (the 7-day mean) sit on top of a smoother monthly pattern."
+        "Over the last five years, the shorter-term wiggles (the 7-day mean) sit on top of a smoother monthly pattern. "
         "As you zoom out, weather becomes noise and you start to see the underlying climate: which seasons are warming "
         "the most, and how often the line pushes into new territory."
     )
@@ -1132,8 +1430,9 @@ if step == "Zoom out":
     if total_span_years is not None and total_span_years > 0:
         if abs(total_warming) < 0.15:
             # ~flat
+            total_warming_sign = "+" if total_warming>0 else "-"
             change_text = (
-                f"has changed very little — the long-term average is almost the same "
+                f"has changed very little **({total_warming_sign}{total_warming:.1f}°C)** — the long-term average is almost the same "
                 f"now as it was at the start of the record."
             )
         elif total_warming > 0:
@@ -1305,8 +1604,8 @@ if step == "Zoom out":
             f"Over the observed **{total_span_years:.0f} years**, the straight-line trend in yearly "
             f"temperatures suggests this location has become about {hist_warming:+.1f}°C "
             f"{direction_hist}. If that linear trend simply continued, another 25 years "
-            f"would add roughly {extra_25:+.1f}°C, reaching the dashed line around "
-            f"{future_end_year_int}. This is a **what-if extrapolation**, not a forecast."
+            f"would add roughly {extra_25:+.1f}°C. This is a **what-if extrapolation**, "
+            " not a forecast."
         )
 
     else:
@@ -1319,128 +1618,37 @@ if step == "Zoom out":
 if step == "Seasons then vs now":
     st.header("2. How your seasons have shifted")
 
-    # 2A. Monthly mean in early vs recent decades
+    seasons_data = build_seasons_then_now_data(ds)
+
+    if seasons_data:
+        fig_seasons = build_seasons_then_now_figure(seasons_data, location_label)
+        st.plotly_chart(fig_seasons, width="stretch", config={"displayModeBar": False})
+
+        st.markdown(seasons_then_now_caption(facts, seasons_data))
+
+        # Optional: small caption under the graph with data periods
+        st.caption(
+            f"Earlier climate: {facts.data_start_year}–{facts.data_start_year + 9}, "
+            f"recent climate: {facts.data_end_year - 9}–{facts.data_end_year} "
+            "(based on daily ERA5 2m temperature via Open-Meteo)."
+        )
+    else:
+        st.info("Monthly climatologies are not available for this location.")
+        
+    # 2B. Min–max envelopes for early vs recent climates
+    st.subheader("How the range of monthly temperatures has changed")
+
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     years_all = local_monthly.index.year
     recent_mask = years_all >= (years_all.max() - 9)
     early_mask = years_all <= (years_all.min() + 9)
-
     recent_clim = local_monthly[recent_mask].groupby(
         local_monthly[recent_mask].index.month
     ).mean()
     past_clim = local_monthly[early_mask].groupby(
         local_monthly[early_mask].index.month
     ).mean()
-
-    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
-    fig_seasons = go.Figure()
-    fig_seasons.add_trace(
-        go.Scatter(
-            x=months,
-            y=past_clim.values,
-            mode="lines+markers",
-            name=f"Early decade (around {years_all.min()}s)",
-            line=dict(
-                color="rgba(150,150,150,1.0)",
-                width=2,
-                shape="spline",
-            ),
-            marker=dict(size=6),
-        )
-    )
-    fig_seasons.add_trace(
-        go.Scatter(
-            x=months,
-            y=recent_clim.values,
-            mode="lines+markers",
-            name=f"Recent decade (around {years_all.max()}s)",
-            line=dict(
-                color="#d95f02",
-                width=3,
-                shape="spline",
-            ),
-            marker=dict(size=6),
-        )
-    )
-
-    fig_seasons.add_trace(
-        go.Scatter(
-            x=[None],
-            y=[None],
-            mode="lines+markers+text",
-            name="ΔT (month highlight)",
-            line=dict(color="rgba(117,107,177,0.9)", width=3),
-            marker=dict(size=10),
-            text=[""],
-            showlegend=False,
-        )
-    )
-
-    # Build frames: for each month, draw a vertical segment between past & recent
-    frames = []
-    for i, m in enumerate(months):
-        y_p = float(past_clim.values[i])
-        y_r = float(recent_clim.values[i])
-        delta = y_r - y_p
-        mid_y = 0.5 * (y_p + y_r)
-
-        frames.append(
-            go.Frame(
-                name=f"month_{i}",
-                data=[
-                    {},  # trace 0 (past) unchanged
-                    {},  # trace 1 (recent) unchanged
-                    go.Scatter(
-                        x=[m, m],
-                        y=[y_p, y_r],
-                        mode="lines+markers+text",
-                        line=dict(color="rgba(117,107,177,0.9)", width=3),
-                        marker=dict(size=10),
-                        text=[None, f"{delta:+.1f}°C"],
-                        textposition="top right",
-                        showlegend=False,
-                    ),
-                ],
-            )
-        )
-
-    fig_seasons.frames = frames
-
-    fig_seasons.update_layout(
-        xaxis_title="Month",
-        yaxis_title="Monthly mean temperature (°C)",
-        margin=dict(l=40, r=20, t=60, b=60),
-        sliders=[
-            dict(
-                active=0,
-                x=0.0,
-                y=-0.15,
-                xanchor="left",
-                yanchor="top",
-                currentvalue={"visible": True, "prefix": "Month: "},
-                steps=[
-                    dict(
-                        label=months[i],
-                        method="animate",
-                        args=[
-                            [f"month_{i}"],
-                            {
-                                "frame": {"duration": 0, "redraw": True},
-                                "mode": "immediate",
-                                "transition": {"duration": 0},
-                            },
-                        ],
-                    )
-                    for i in range(len(months))
-                ],
-            )
-        ],
-    )
-    st.plotly_chart(fig_seasons, width="stretch", config={"displayModeBar": False})
-
-    # 2B. Min–max envelopes for early vs recent climates
-    st.subheader("How the range of monthly temperatures has changed")
 
     # Build daily masks for early vs recent decades
     years_daily = local_daily.index.year
@@ -1584,6 +1792,7 @@ if step == "Seasons then vs now":
         )
 
     # 2C. Summary text
+    loc_key = "mauritius"
     if loc_key == "mauritius":
         summer_months = [1, 2, 3]
         winter_months = [7, 8, 9]
@@ -1600,7 +1809,7 @@ if step == "Seasons then vs now":
 
     st.markdown(
         f"""
-        In **{loc_choice}**, the typical year has shifted:
+        In **{location_label}**, the typical year has shifted:
 
         * **Summer months** are about **{summer_delta:.1f}°C** warmer than they were
           in the {years_all.min()}s.
@@ -1690,7 +1899,7 @@ if step == "World map (idea)":
 
     m2 = folium.Map(location=[20, 0], zoom_start=2, tiles="CartoDB positron")
     folium.CircleMarker(
-        location=[lat, lon],
+        location=[location_lat, location_lon],
         radius=6,
         color="#d73027",
         fill=True,
