@@ -799,6 +799,787 @@ def last_year_caption(facts: StoryFacts) -> str:
     return base_text + extra
 
 # -----------------------------------------------------------
+# Compute last five year data, graph and captions
+# -----------------------------------------------------------
+
+def build_five_year_data(ds: xr.Dataset) -> dict:
+    """
+    Prepare the data needed for the 'Last 5 years — zoom from seasons to climate' panel.
+
+    Uses:
+      - time_daily
+      - t2m_daily_mean_c
+      - t2m_monthly_mean_c
+    Returns a dict so it's easy to plug into other front-ends later.
+    """
+
+    # Daily mean temperature (precomputed), with explicit 'time' coord
+    da_daily = ds["t2m_daily_mean_c"]
+    time_daily = pd.to_datetime(da_daily["time"].values)
+
+    # End of record = last timestamp in daily series
+    end_date = time_daily[-1].normalize()
+
+    # Start 5 years earlier
+    start_5y = end_date - pd.DateOffset(years=5)
+
+    # If the record is shorter than 5 years for some reason, just use full range
+    if time_daily[0] > start_5y:
+        start_5y = time_daily[0]
+
+    # Slice daily data to last ~5 years
+    daily_5y = da_daily.sel(time=slice(start_5y, end_date))
+
+    # 7-day rolling mean (centered)
+    weekly_5y = daily_5y.rolling(time=7, center=True).mean()
+
+    # Monthly mean series (precomputed, but we don't assume coord is named 'time')
+    da_mon = ds["t2m_monthly_mean_c"]
+
+    # Use first dimension and its coord as the monthly time axis, whatever it's called
+    mon_dim = da_mon.dims[0]                      # e.g. "time" or "valid_time" or "month"
+    mon_coord = pd.to_datetime(da_mon[mon_dim].values)
+
+    # Mask to last ~5 years
+    mon_mask = (mon_coord >= start_5y) & (mon_coord <= end_date)
+    monthly_5y = da_mon.isel({mon_dim: mon_mask})
+    x_month = mon_coord[mon_mask]
+
+    return {
+        "time_weekly": pd.to_datetime(weekly_5y.time.values),
+        "temp_weekly": weekly_5y.values,
+        "time_monthly": x_month,
+        "temp_monthly": monthly_5y.values,
+    }
+
+def build_five_year_figure(data: dict) -> (go.Figure, str):
+    """
+    Build the Plotly figure for the last-five-year seasonal cycle.
+
+    Styling is consistent with other panels:
+      - grey noisy curve (daily)
+      - blue smooth curve (7-day mean)
+      - min/max annotations via annotate_minmax_on_series()
+    """
+    fig = go.Figure()
+
+    # 7-day mean (grey, light)
+    add_trace(
+        fig,
+        data["time_weekly"],
+        data["temp_weekly"],
+        "7-day mean",
+        hovertemplate="%{x|%Y-%m-%d}<br>7-day mean: %{y:.1f}°C<extra></extra>"
+    )
+
+    # Monthly mean (warmer color, thicker)
+    add_mean_trace(fig, data["time_monthly"], data["temp_monthly"], "Monthly mean", hovertemplate="%{x|%Y-%m}<br>Monthly mean: %{y:.1f}°C<extra></extra>")
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=10, b=40),
+        height=320,
+        showlegend=True,
+        xaxis=dict(
+            title="Year",
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+        ),
+        yaxis=dict(
+            title="°C",
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+        ),
+    )
+
+    caption = "Source: OpenMeteo"
+    cov = dataset_coverage_text(ds)
+    if cov:
+        caption += f" | {cov}"
+
+    return fig, caption
+
+def five_year_caption(facts: StoryFacts) -> str:
+    """
+    Generate the markdown caption for the last-five-year panel
+    using StoryFacts (so it's easy to reuse elsewhere).
+    """
+    base_5y = (
+        "Over the last five years, the shorter-term wiggles (the 7-day mean) sit on top of a smoother monthly pattern. "
+        "As you zoom out, weather becomes noise and you start to see the underlying climate: which seasons are warming "
+        "the most, and how often the line pushes into new territory."
+    )
+
+    extra_5y = ""
+    if facts.recent_warming_10y is not None and facts.total_warming_50y is not None:
+        short = facts.recent_warming_10y
+        long_ = facts.total_warming_50y
+
+        if abs(short) < 0.3 and abs(long_) > 0.8:
+            # Short-term trend is subtle, but long-term is clear
+            extra_5y = (
+                " At this scale, the warming is **subtle** – these recent years only hint "
+                "at a change. The bigger shift really jumps out when you zoom all the way "
+                "out to the full record below."
+            )
+        elif abs(short) >= 0.3:
+            direction = "warmer" if short >= 0 else "cooler"
+            extra_5y = (
+                f" Even over just these recent years, the smoothed curve points to a change "
+                f"equivalent to about {short:+.1f}°C per decade. That trend connects directly "
+                "to the longer-term shift you’ll see in the 50-year view."
+        )
+
+    return base_5y + extra_5y
+
+# -----------------------------------------------------------
+# Compute fifty year data, graph and captions
+# -----------------------------------------------------------
+
+def build_fifty_year_data(ds: xr.Dataset) -> dict:
+    """
+    Prepare the data needed for the 'Last 50 years — monthly averages and trend' panel.
+
+    Uses:
+      - time_monthly
+      - t2m_monthly_mean_c
+      - time_yearly
+      - t2m_yearly_mean_c
+    Returns a dict so it's easy to plug into other front-ends later.
+    """
+        # --- 1. Load real data for this location ---
+    da_mon = ds["t2m_monthly_mean_c"]  # (time_monthly)
+    time_mon = pd.to_datetime(da_mon["time_monthly"].values)
+    temp_mon = da_mon.values
+
+    # --- 2. Yearly mean and 5-year running mean (from the monthly series) ---
+    monthly_da = xr.DataArray(
+        temp_mon,
+        coords={"time_monthly": time_mon},
+        dims=["time_monthly"],
+        name="t2m_monthly_mean_c",
+    )
+
+    yearly_mean = monthly_da.groupby("time_monthly.year").mean("time_monthly")
+    years = yearly_mean["year"].values.astype(float)
+    t_year = yearly_mean.values
+
+    # 5-year running mean on yearly series
+
+    da_year = ds["t2m_yearly_mean_c"]
+    time_year = pd.to_datetime(ds["time_yearly"].values)
+    #years = time_year.year.astype(float)
+    temps_year = np.asarray(da_year.values, dtype="float64")
+
+    # --- 3. Coldest & warmest months per year and their linear trends ---
+    cold_by_year = monthly_da.groupby("time_monthly.year").min("time_monthly")
+    warm_by_year = monthly_da.groupby("time_monthly.year").max("time_monthly")
+
+    cold_years = cold_by_year["year"].values.astype(float)
+    warm_years = warm_by_year["year"].values.astype(float)
+    cold_vals = cold_by_year.values
+    warm_vals = warm_by_year.values
+
+    cold_trend = warm_trend = None
+    if len(cold_years) >= 2:
+        coef_cold = np.polyfit(cold_years, cold_vals, 1)
+        cold_trend = np.polyval(coef_cold, cold_years)
+    if len(warm_years) >= 2:
+        coef_warm = np.polyfit(warm_years, warm_vals, 1)
+        warm_trend = np.polyval(coef_warm, warm_years)
+
+    # Linear trend
+    mask = np.isfinite(temps_year)
+    if mask.sum() >= 5:
+        x = years[mask]
+        y = temps_year[mask]
+        # Linear trend on yearly means (red) – as a true straight line in time
+        slope, intercept = np.polyfit(x, y, 1)
+
+        # Continuous year grid
+        trend_years = np.linspace(x.min(), x.max(), 200)
+        # Map fractional years -> datetimes (approximate using 365.25 days per year)
+        ref_start = pd.Timestamp(f"{int(x.min())}-01-01")
+        trend_dates = ref_start + pd.to_timedelta((trend_years - x.min()) * 365.25, unit="D")
+        trend_vals = intercept + slope * trend_years
+        
+        # For caption later
+        total_span_years = int(x.max() - x.min())
+        total_warming = float(trend_vals[-1] - trend_vals[0])
+    else:
+        trend_dates = None
+        trend_vals = None
+        total_span_years = None
+        total_warming = None
+
+    return {
+        "time_monthly" : time_mon,
+        "temp_monthly" : temp_mon,
+        "time_yearly" : time_year,
+        "temp_yearly" : temps_year,
+        "cold_years" : cold_years,
+        "cold_trend" : cold_trend,
+        "warm_years" : warm_years,
+        "warm_trend" : warm_trend,
+        "time_trend" : trend_dates,
+        "temp_trend" : trend_vals,
+        "total_span_years" : total_span_years,
+        "total_warming" : total_warming
+    }
+
+
+def build_fifty_year_figure(data: dict) -> (go.Figure, str):
+    """
+    Build the Plotly figure for the last-fifty-years cycle.
+
+    Styling is consistent with other panels:
+      - grey noisy curve (daily)
+      - blue smooth curve (7-day mean)
+      - min/max annotations via annotate_minmax_on_series()
+    """
+    # --- 4. Build the figure using your original styling ---
+    fig = go.Figure()
+
+    # Monthly mean (thin grey spline)
+    add_trace(fig, data["time_monthly"], data["temp_monthly"], "Monthly mean")
+
+    add_mean_trace(
+        fig,
+        x=data["time_yearly"],
+        y=data["temp_yearly"],
+        name="Yearly mean",
+        showmarkers=True,
+        hovertemplate="Year %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
+    )
+
+    # Linear trend
+    if data["temp_trend"] is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=data["time_trend"],
+                y=data["temp_trend"],
+                mode="lines",
+                name="Trend (yearly mean)",
+                line=dict(color="rgba(220,50,47,0.9)", width=3, shape="linear"),
+                hovertemplate="Trend %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
+            )
+        )
+
+    # Coldest-month trend (blue dotted spline)
+    if data["cold_trend"] is not None:
+        x_cold = [datetime(int(y), 1, 1) for y in data["cold_years"]]
+        fig.add_trace(
+            go.Scatter(
+                x=x_cold,
+                y=data["cold_trend"],
+                mode="lines",
+                name="Coldest-month trend",
+                line=dict(
+                    color="rgba(38,139,210,0.9)",
+                    width=2,
+                    dash="dot",
+                    shape="spline",
+                ),
+            )
+        )
+
+    # Warmest-month trend (red dotted spline)
+    if data["warm_trend"] is not None:
+        x_warm = [datetime(int(y), 7, 1) for y in data["warm_years"]]
+        fig.add_trace(
+            go.Scatter(
+                x=x_warm,
+                y=data["warm_trend"],
+                mode="lines",
+                name="Warmest-month trend",
+                line=dict(
+                    color="rgba(220,50,47,0.9)",
+                    width=2,
+                    dash="dot",
+                    shape="spline",
+                ),
+            )
+        )
+
+    fig.update_layout(
+        height=400,
+        margin=dict(l=40, r=20, t=30, b=40),
+        xaxis_title="Year",
+        yaxis_title="Temperature (°C)",
+        showlegend=True,
+    )
+
+    caption = "Source: OpenMeteo"
+    cov = dataset_coverage_text(ds)
+    if cov:
+        caption += f" | {cov}"
+
+    return fig, caption
+
+def fifty_year_caption(data: dict, facts: StoryFacts) -> str:
+    """
+    Generate the markdown caption for the last-fifty-year panel
+    using StoryFacts (so it's easy to reuse elsewhere).
+    """
+    total_span_years = data["total_span_years"]
+    total_warming = data["total_warming"]
+    if total_span_years is not None and total_span_years > 0:
+        if abs(total_warming) < 0.15:
+            # ~flat
+            total_warming_sign = "+" if total_warming>0 else "-"
+            change_text = (
+                f"has changed very little **({total_warming_sign}{total_warming:.1f}°C)** — the long-term average is almost the same "
+                f"now as it was at the start of the record."
+            )
+        elif total_warming > 0:
+            # warmer
+            change_text = (
+                f"is now roughly **{total_warming:.1f}°C warmer on average** than it was "
+                f"at the start of the record."
+            )
+        else:
+            # cooler
+            change_text = (
+                f"is now roughly **{abs(total_warming):.1f}°C cooler on average** than it was "
+                f"at the start of the record — a smaller change than in many places."
+            )
+
+        caption = f"""
+    When you zoom out over about **{total_span_years} years**, the year-to-year noise
+    fades and a clear pattern emerges. In **{loc_name}**, the climate {change_text}
+            """
+    else:
+        caption = f"""
+    When you zoom out over about **{total_span_years} years**, the year-to-year noise
+    fades and a clearer pattern would normally emerge — but here the data window is too short
+    to say much yet for **{loc_name}**.
+        """
+    
+    return caption
+
+# -----------------------------------------------------------
+# Compute last week data, graph and captions
+# -----------------------------------------------------------
+
+def build_last_week_data(ds: xr.Dataset) -> dict:
+    """
+    Prepare the data needed for the 'Last week' panel.
+
+    Uses:
+      - time_hourly
+      - t_hourly
+      - time_daily
+      - t_daily_mean
+    Returns a dict so it's easy to plug into other front-ends later.
+    """
+    # Use last full day as the endpoint (yesterday)
+    today = date.today()
+    end_7d = today - timedelta(days=1)
+    end_7d_str = end_7d.isoformat()
+
+    ds_7d = fetch_recent_7d(DEFAULT_SLUG, location_lat, location_lon, end_7d_str)
+
+    t_hourly = pd.to_datetime(ds_7d["time_hourly"].values)
+    temp_hourly = ds_7d["t_hourly"].values
+
+    t_daily_mid = pd.to_datetime(ds_7d["time_daily"].values) + pd.Timedelta(hours=12)
+    temp_daily = ds_7d["t_daily_mean"].values
+
+    range = ds_7d.attrs.get('range', end_7d_str)
+
+    return {
+        "time_hourly" : t_hourly,
+        "temp_hourly" : temp_hourly,
+        "time_daily" : t_daily_mid,
+        "temp_daily" : temp_daily,
+        "range" : range,
+    }
+
+def build_last_week_figure(data: dict) -> (go.Figure, str):
+    """
+    Build the Plotly figure for the last-week.
+
+    Styling is consistent with other panels:
+      - grey noisy curve (daily)
+      - blue smooth curve (7-day mean)
+      - min/max annotations via annotate_minmax_on_series()
+    """
+    fig = go.Figure()
+
+    # Hourly temp (light grey)
+    add_trace(fig, data["time_hourly"], data["temp_hourly"], "Hourly", hovertemplate="%{x|%Y-%m-%d %H:%M}<br>%{y:.1f}°C<extra></extra>")
+
+    # Daily mean (blue-ish)
+    add_mean_trace(fig, data["time_daily"], data["temp_daily"], "Daily mean", showmarkers=True, hovertemplate="%{x|%Y-%m-%d}<br>Daily mean: %{y:.1f}°C<extra></extra>")
+
+    annotate_minmax_on_series(fig, data["time_hourly"], data["temp_hourly"], label_prefix="")
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=10, b=40),
+        height=320,
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1.0,
+            xanchor="left",
+            x=1.02,
+        ),
+        xaxis=dict(
+            title="Date",
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+        ),
+        yaxis=dict(
+            title="°C",
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+        ),
+    )
+
+    range = data["range"]
+    caption = f"Range: {range}"
+
+    return fig, caption
+
+def last_week_caption(facts: StoryFacts) -> str:
+    """
+    Generate the markdown caption for the last-week panel
+    using StoryFacts (so it's easy to reuse elsewhere).
+    """
+    return """
+    Over a single week you can see the **heartbeat of days and nights**: temperatures
+    rise during the day, fall at night, and swing with passing weather systems.
+    """
+
+# -----------------------------------------------------------
+# Compute last month data, graph and captions
+# -----------------------------------------------------------
+
+def build_last_month_data(ds: xr.Dataset) -> dict:
+    """
+    Prepare the data needed for the 'Last month' panel.
+
+    Uses:
+      - time-daily
+      - t_daily_mean
+    Returns a dict so it's easy to plug into other front-ends later.
+    """
+    today = date.today()
+    end_30d = today - timedelta(days=1)
+    end_30d_str = end_30d.isoformat()
+
+    ds_30d = fetch_recent_30d(DEFAULT_SLUG, location_lat, location_lon, end_30d_str)
+
+    t_daily_30 = pd.to_datetime(ds_30d["time_daily"].values)
+    tmean_30 = ds_30d["t_daily_mean"].values
+
+    trend_30d = estimate_30d_trend(t_daily_30, tmean_30)
+    trend_sentence = ""
+
+    if not np.isnan(trend_30d) and abs(trend_30d) >= 0.5:
+        # threshold: ≈ ±0.5°C over 30 days to be "noticeable"
+        direction = "rising" if trend_30d > 0 else "falling"
+        sign_word = "warmer" if trend_30d > 0 else "cooler"
+        season = season_phrase(location_lat, t_daily_30[-1])
+        trend_sentence = (
+            f" Over this 30-day window, daily averages have been **{direction}** "
+            f"by about {trend_30d:+.1f}°C, consistent with {season}."
+        )
+
+    # 3-day rolling mean
+    mean_3d = pd.Series(tmean_30, index=t_daily_30).rolling(window=3, center=True).mean().values
+
+    return {
+        "time_daily" : t_daily_30,
+        "temp_daily" : tmean_30,
+        "temp_3d_mean" : mean_3d,
+        "trend_sentence" : trend_sentence,
+        "range" : ds_30d.attrs.get('range', end_30d_str),
+    }
+
+def build_last_month_figure(data: dict) -> (go.Figure, str):
+    """
+    Build the Plotly figure for the last-month seasonal cycle.
+
+    Styling is consistent with other panels:
+      - grey noisy curve (daily)
+      - blue smooth curve (7-day mean)
+      - min/max annotations via annotate_minmax_on_series()
+    """
+    fig = go.Figure()
+
+    add_trace(fig, data["time_daily"], data["temp_daily"], "Daily mean", "%{x|%Y-%m-%d}<br>Daily mean: %{y:.1f}°C<extra></extra>"), 
+
+    # 3-day mean (blue)
+    add_mean_trace(fig, data["time_daily"], data["temp_3d_mean"], "3-day mean", hovertemplate="%{x|%Y-%m-%d}<br>3-day mean: %{y:.1f}°C<extra></extra>")
+
+    annotate_minmax_on_series(fig, data["time_daily"], data["temp_daily"], label_prefix="")
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=10, b=40),
+        height=320,
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1.0,
+            xanchor="left",
+            x=1.02,
+        ),
+        xaxis=dict(
+            title="Date",
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+        ),
+        yaxis=dict(
+            title="°C",
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+        ),
+    )
+
+    range = data["range"]
+    caption = f"Range: {range}"
+    return fig, caption
+
+def last_month_caption(data: dict, facts: StoryFacts) -> str:
+    """
+    Generate the markdown caption for the last-month panel
+    using StoryFacts (so it's easy to reuse elsewhere).
+    """
+    trend_sentence = data["trend_sentence"]
+    base_text = """
+    Here we’re looking at **daily averages**, not the full day–night cycle.
+    Over a month, the jagged ups and downs reflect **passing weather systems**:
+    short warm spells, cooler snaps, and the background shift between seasons.
+    """
+
+    return base_text + ("" if not trend_sentence else "\n\n" + trend_sentence)
+
+# -----------------------------------------------------------
+# Compute XXX data, graph and captions
+# -----------------------------------------------------------
+
+def build_twenty_five_years_data(ds: xr.Dataset) -> dict:
+    """
+    Prepare the data needed for the '25 years ahead' panel.
+
+    Uses:
+      - time_yearly
+      - t2m_yearly_mean_c
+    Returns a dict so it's easy to plug into other front-ends later.
+    """
+    da_year = ds["t2m_yearly_mean_c"]
+    time_yearly = pd.to_datetime(ds["time_yearly"].values)
+
+    years = time_yearly.year.astype(float)
+    temps = np.asarray(da_year.values, dtype="float64")
+
+    mask = np.isfinite(temps)
+    if mask.sum() < 5:
+        return None
+
+    df_year = pd.DataFrame({"year": years, "temp": temps}).set_index("year")
+    smooth5 = (
+        df_year["temp"].rolling(window=5, center=True, min_periods=3).mean().values
+    )
+
+    # Linear trend on yearly means
+    x = years[mask]
+    y = temps[mask]
+    slope, intercept = np.polyfit(x, y, 1)
+
+    first_year = float(x.min())
+    last_year = float(x.max())
+    horizon = 25.0
+
+    # Build a continuous year axis from first year through future
+    full_years = np.linspace(first_year, last_year + horizon, 300)
+    trend_vals_full = intercept + slope * full_years
+
+    # Map fractional years to datetimes
+    ref_start = pd.Timestamp(f"{int(first_year)}-01-01")
+    full_dates = ref_start + pd.to_timedelta((full_years - first_year) * 365.25, unit="D")
+
+    # Split into historical vs future segments
+    past_mask = full_years <= (last_year + 1e-6)
+    future_mask = full_years > (last_year + 1e-6)
+
+    # Story numbers
+    hist_warming = float(trend_vals_full[past_mask][-1] - trend_vals_full[past_mask][0])
+    extra_25 = float(trend_vals_full[future_mask][-1] - trend_vals_full[past_mask][-1])
+    total_span_years = last_year - first_year
+    direction_hist = "warmer" if hist_warming >= 0 else "cooler"
+    # direction_future = "warmer" if extra_25 >= 0 else "cooler"
+
+    return {
+        "time_yearly" : time_yearly,
+        "temp_yearly" : temps,
+        "temp_5_yearly": smooth5,
+        "time_past_trend" : full_dates[past_mask],
+        "temp_past_trend" : trend_vals_full[past_mask],
+        "time_future_trend" : full_dates[future_mask],
+        "temp_future_trend" : trend_vals_full[future_mask],
+        "last_year" : float(x.max()),
+        "hist_warming" : hist_warming,
+        "extra_25" : extra_25,
+        "total_span_years" : total_span_years,
+        "direction_hist" : direction_hist,
+    }
+    
+
+def build_twenty_five_years_figure(data: dict) -> (go.Figure, str):
+    """
+    Build the Plotly figure for the 25 years ahead trend.
+
+    Styling is consistent with other panels:
+      - grey noisy curve (daily)
+      - blue smooth curve (7-day mean)
+      - min/max annotations via annotate_minmax_on_series()
+    """
+    # Base: yearly mean
+    fig = go.Figure()
+
+    add_trace(
+        fig,
+        x=data["time_yearly"],
+        y=data["temp_yearly"],
+        name="Yearly mean",
+        hovertemplate="Year %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
+    )
+
+    add_mean_trace(
+        fig,
+        x=data["time_yearly"],
+        y=data["temp_5_yearly"],
+        name="5-year mean",
+        showmarkers=False,
+        hovertemplate="Year %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
+    )
+        
+    # Plot past trend (solid red)
+    fig.add_trace(
+        go.Scatter(
+            x=data["time_past_trend"],
+            y=data["temp_past_trend"],
+            mode="lines",
+            name="Trend (yearly mean)",
+            line=dict(color="rgba(220,50,47,0.9)", width=3, shape="linear"),
+            hovertemplate="Trend %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
+        )
+    )
+
+    # Plot future extension (dashed red)
+    fig.add_trace(
+        go.Scatter(
+            x=data["time_future_trend"],
+            y=data["temp_future_trend"],
+            mode="lines",
+            name="Straight-line extension",
+            line=dict(
+                color="rgba(220,50,47,0.9)", width=3, dash="dash", shape="linear"
+            ),
+            hovertemplate="Extension %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
+        )
+    )
+
+    # Shade future region based on last_year
+    horizon = 25.0
+    last_year = data["last_year"]
+    last_year_int = int(round(last_year))
+    future_end_year_int = int(round(last_year + horizon))
+    fig.add_vrect(
+        x0=pd.Timestamp(f"{last_year_int+1}-01-01"),
+        x1=pd.Timestamp(f"{future_end_year_int}-12-31"),
+        fillcolor="rgba(220,50,47,0.06)",
+        line_width=0,
+        layer="below",
+    )
+
+    # --- Choose a sane y-axis range so year-to-year bumps aren't exaggerated ---
+    y_all = np.concatenate([np.asarray(data["temp_yearly"], dtype="float64"),
+                            np.asarray(data["temp_past_trend"], dtype="float64"),
+                            np.asarray(data["temp_future_trend"], dtype="float64")])
+
+    y_min = float(np.nanmin(y_all))
+    y_max = float(np.nanmax(y_all))
+
+    # Enforce at least ~2°C span
+    span = max(y_max - y_min, 2.0)
+    pad = span * 0.1  # 10% padding top/bottom
+
+    y_center = 0.5 * (y_min + y_max)
+    y0 = y_center - span / 2.0 - pad
+    y1 = y_center + span / 2.0 + pad
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=10, b=40),
+        height=320,
+        showlegend=True,
+        xaxis=dict(
+            title="Year",
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+        ),
+        yaxis=dict(
+            title="Temperature (°C)",
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+            range=[y0, y1],
+        ),
+    )
+
+    caption = ""
+    return fig, caption
+
+def twenty_five_years_caption(data: dict, facts: StoryFacts) -> str:
+    """
+    Generate the markdown caption for the 25 years ahead panel
+    using StoryFacts (so it's easy to reuse elsewhere).
+    """       
+    hist_warming = data["hist_warming"]
+    extra_25 = data["extra_25"]
+    total_span_years = data["total_span_years"]
+    direction_hist = data["direction_hist"] 
+    caption = f"""Over the observed **{total_span_years:.0f} years**, the straight-line trend in yearly
+        temperatures suggests this location has become about {hist_warming:+.1f}°C
+        {direction_hist}. If that linear trend simply continued, another 25 years
+        would add roughly {extra_25:+.1f}°C. This is a **what-if extrapolation**,
+        not a forecast."""
+    return caption
+
+# -----------------------------------------------------------
+# Compute XXX data, graph and captions
+# -----------------------------------------------------------
+
+# def build_last_year_data(ds: xr.Dataset) -> dict:
+#     """
+#     Prepare the data needed for the 'Last year — the seasonal cycle' panel.
+
+#     Uses:
+#       - time_daily
+#       - t2m_daily_mean_c
+#       - t2m_monthly_mean_c
+#     Returns a dict so it's easy to plug into other front-ends later.
+#     """
+
+# def build_last_year_figure(data: dict) -> (go.Figure, str):
+#     """
+#     Build the Plotly figure for the last-year seasonal cycle.
+
+#     Styling is consistent with other panels:
+#       - grey noisy curve (daily)
+#       - blue smooth curve (7-day mean)
+#       - min/max annotations via annotate_minmax_on_series()
+#     """
+
+# def last_year_caption(facts: StoryFacts) -> str:
+#     """
+#     Generate the markdown caption for the last-year panel
+#     using StoryFacts (so it's easy to reuse elsewhere).
+#     """
+
+# -----------------------------------------------------------
 # Compute seasons data, graph and captions
 # -----------------------------------------------------------
 
@@ -1039,137 +1820,33 @@ if step == "Zoom out":
 
     st.header("1. Zooming out: from days to decades")
 
+    # ################################################################################
     # 1A. Last 7 days — hourly + daily mean
     st.subheader("Last week — the daily cycle")
+    last_week_data = build_last_week_data(ds)
+    if last_week_data:
+        fig_week, fig_week_caption = build_last_week_figure(last_week_data)
+        st.plotly_chart(fig_week, width="stretch", config={"displayModeBar": False})
+        st.caption(fig_week_caption)       
+        st.markdown(last_week_caption(facts))
+    else:
+        st.info("Not enough recent daily data available to show the last week for this location.")
+    # ################################################################################
 
-    # Use last full day as the endpoint (yesterday)
-    today = date.today()
-    end_7d = today - timedelta(days=1)
-    end_7d_str = end_7d.isoformat()
-
-    ds_7d = fetch_recent_7d(DEFAULT_SLUG, location_lat, location_lon, end_7d_str)
-
-    t_hourly = pd.to_datetime(ds_7d["time_hourly"].values)
-    temp_hourly = ds_7d["t_hourly"].values
-
-    t_daily_mid = pd.to_datetime(ds_7d["time_daily"].values) + pd.Timedelta(hours=12)
-    temp_daily = ds_7d["t_daily_mean"].values
-
-    fig_7d = go.Figure()
-
-    # Hourly temp (light grey)
-    add_trace(fig_7d, t_hourly, temp_hourly, "Hourly", hovertemplate="%{x|%Y-%m-%d %H:%M}<br>%{y:.1f}°C<extra></extra>")
-
-    # Daily mean (blue-ish)
-    add_mean_trace(fig_7d, t_daily_mid, temp_daily, "Daily mean", showmarkers=True, hovertemplate="%{x|%Y-%m-%d}<br>Daily mean: %{y:.1f}°C<extra></extra>")
-
-    annotate_minmax_on_series(fig_7d, t_hourly, temp_hourly, label_prefix="")
-
-    fig_7d.update_layout(
-        margin=dict(l=0, r=0, t=10, b=40),
-        height=320,
-        showlegend=True,
-        legend=dict(
-            orientation="v",
-            yanchor="top",
-            y=1.0,
-            xanchor="left",
-            x=1.02,
-        ),
-        xaxis=dict(
-            title="Date",
-            showgrid=True,
-            gridcolor="rgba(200,200,200,0.3)",
-        ),
-        yaxis=dict(
-            title="°C",
-            showgrid=True,
-            gridcolor="rgba(200,200,200,0.3)",
-        ),
-    )
-
-    st.plotly_chart(fig_7d, width="stretch", config={"displayModeBar": False})
-
-    st.caption(f"Range: {ds_7d.attrs.get('range', end_7d_str)}")
-
-    st.markdown(
-        """
-    Over a single week you can see the **heartbeat of days and nights**: temperatures
-    rise during the day, fall at night, and swing with passing weather systems.
-    """
-    )
-
+    # ################################################################################
     # 1B. Last 30 days — daily + 3-day mean + min/max
     st.subheader("Last month — daily temperatures")
+    last_month_data = build_last_month_data(ds)
+    if last_month_data:
+        fig_month, fig_month_caption = build_last_month_figure(last_month_data)
+        st.plotly_chart(fig_month, width="stretch", config={"displayModeBar": False})
+        st.caption(fig_month_caption)       
+        st.markdown(last_month_caption(last_month_data, facts))
+    else:
+        st.info("Not enough recent daily data available to show the last month for this location.")
+    # ################################################################################
 
-    end_30d = today - timedelta(days=1)
-    end_30d_str = end_30d.isoformat()
-
-    ds_30d = fetch_recent_30d(DEFAULT_SLUG, location_lat, location_lon, end_30d_str)
-
-    t_daily_30 = pd.to_datetime(ds_30d["time_daily"].values)
-    tmean_30 = ds_30d["t_daily_mean"].values
-
-    trend_30d = estimate_30d_trend(t_daily_30, tmean_30)
-    trend_sentence = ""
-
-    if not np.isnan(trend_30d) and abs(trend_30d) >= 0.5:
-        # threshold: ≈ ±0.5°C over 30 days to be "noticeable"
-        direction = "rising" if trend_30d > 0 else "falling"
-        sign_word = "warmer" if trend_30d > 0 else "cooler"
-        season = season_phrase(location_lat, t_daily_30[-1])
-        trend_sentence = (
-            f" Over this 30-day window, daily averages have been **{direction}** "
-            f"by about {trend_30d:+.1f}°C, consistent with {season}."
-        )
-
-    # 3-day rolling mean
-    mean_3d = pd.Series(tmean_30, index=t_daily_30).rolling(window=3, center=True).mean().values
-
-    fig_30d = go.Figure()
-
-    add_trace(fig_30d, t_daily_30, tmean_30, "Daily mean", "%{x|%Y-%m-%d}<br>Daily mean: %{y:.1f}°C<extra></extra>"), 
-
-    # 3-day mean (blue)
-    add_mean_trace(fig_30d, t_daily_30, mean_3d, "3-day mean", hovertemplate="%{x|%Y-%m-%d}<br>3-day mean: %{y:.1f}°C<extra></extra>")
-
-    annotate_minmax_on_series(fig_30d, t_daily_30, tmean_30, label_prefix="")
-
-    fig_30d.update_layout(
-        margin=dict(l=0, r=0, t=10, b=40),
-        height=320,
-        showlegend=True,
-        legend=dict(
-            orientation="v",
-            yanchor="top",
-            y=1.0,
-            xanchor="left",
-            x=1.02,
-        ),
-        xaxis=dict(
-            title="Date",
-            showgrid=True,
-            gridcolor="rgba(200,200,200,0.3)",
-        ),
-        yaxis=dict(
-            title="°C",
-            showgrid=True,
-            gridcolor="rgba(200,200,200,0.3)",
-        ),
-    )
-
-    st.plotly_chart(fig_30d, width="stretch", config={"displayModeBar": False})
-
-    st.caption(f"Range: {ds_30d.attrs.get('range', end_30d_str)}")
-
-    base_text = """
-    Here we’re looking at **daily averages**, not the full day–night cycle.
-    Over a month, the jagged ups and downs reflect **passing weather systems**:
-    short warm spells, cooler snaps, and the background shift between seasons.
-    """
-
-    st.markdown(base_text + ("" if not trend_sentence else "\n\n" + trend_sentence))
-
+    # ################################################################################
     # 1C. Last year — the seasonal cycle
     st.subheader("Last year — the seasonal cycle")
     last_year_data = build_last_year_data(ds)
@@ -1180,437 +1857,46 @@ if step == "Zoom out":
         st.markdown(last_year_caption(facts))
     else:
         st.info("Not enough recent daily data available to show the last year for this location.")
-        
+    # ################################################################################
+
+    # ################################################################################
     # 1D. Last 5 years — 7-day mean and monthly mean
     st.subheader("Last 5 years — zoom from seasons to climate")
+    last_five_year_data = build_five_year_data(ds)
+    if last_five_year_data:
+        fig_five_year, fig_five_year_caption = build_five_year_figure(last_five_year_data)
+        st.plotly_chart(fig_five_year, width="stretch", config={"displayModeBar": False})
+        st.caption(fig_five_year_caption)
+        st.markdown(five_year_caption(facts))
+    else:
+        st.info("Not enough recent daily data available to show the last five years for this location.")
+    # ################################################################################
 
-    # Daily mean temperature (precomputed), with explicit 'time' coord
-    da_daily = ds["t2m_daily_mean_c"]
-    time_daily = pd.to_datetime(da_daily["time"].values)
-
-    # End of record = last timestamp in daily series
-    end_date = time_daily[-1].normalize()
-
-    # Start 5 years earlier
-    start_5y = end_date - pd.DateOffset(years=5)
-
-    # If the record is shorter than 5 years for some reason, just use full range
-    if time_daily[0] > start_5y:
-        start_5y = time_daily[0]
-
-    # Slice daily data to last ~5 years
-    daily_5y = da_daily.sel(time=slice(start_5y, end_date))
-
-    # 7-day rolling mean (centered)
-    weekly_5y = daily_5y.rolling(time=7, center=True).mean()
-
-    # Monthly mean series (precomputed, but we don't assume coord is named 'time')
-    da_mon = ds["t2m_monthly_mean_c"]
-
-    # Use first dimension and its coord as the monthly time axis, whatever it's called
-    mon_dim = da_mon.dims[0]                      # e.g. "time" or "valid_time" or "month"
-    mon_coord = pd.to_datetime(da_mon[mon_dim].values)
-
-    # Mask to last ~5 years
-    mon_mask = (mon_coord >= start_5y) & (mon_coord <= end_date)
-    monthly_5y = da_mon.isel({mon_dim: mon_mask})
-    x_month = mon_coord[mon_mask]
-
-    fig_5y = go.Figure()
-
-    # 7-day mean (grey, light)
-    add_trace(
-        fig_5y,
-        pd.to_datetime(weekly_5y.time.values),
-        weekly_5y.values,
-        "7-day mean",
-        hovertemplate="%{x|%Y-%m-%d}<br>7-day mean: %{y:.1f}°C<extra></extra>"
-    )
-
-    # Monthly mean (warmer color, thicker)
-    add_mean_trace(fig_5y, x_month, monthly_5y.values, "Monthly mean", hovertemplate="%{x|%Y-%m}<br>Monthly mean: %{y:.1f}°C<extra></extra>")
-
-    fig_5y.update_layout(
-        margin=dict(l=0, r=0, t=10, b=40),
-        height=320,
-        showlegend=True,
-        xaxis=dict(
-            title="Year",
-            showgrid=True,
-            gridcolor="rgba(200,200,200,0.3)",
-        ),
-        yaxis=dict(
-            title="°C",
-            showgrid=True,
-            gridcolor="rgba(200,200,200,0.3)",
-        ),
-    )
-
-    st.plotly_chart(fig_5y, width="stretch", config={"displayModeBar": False})
-
-    # Reuse the small coverage caption if you like
-    cov = dataset_coverage_text(ds)
-    if cov:
-        st.caption(cov)
-
-    base_5y = (
-        "Over the last five years, the shorter-term wiggles (the 7-day mean) sit on top of a smoother monthly pattern. "
-        "As you zoom out, weather becomes noise and you start to see the underlying climate: which seasons are warming "
-        "the most, and how often the line pushes into new territory."
-    )
-
-    extra_5y = ""
-    if facts.recent_warming_10y is not None and facts.total_warming_50y is not None:
-        short = facts.recent_warming_10y
-        long_ = facts.total_warming_50y
-
-        if abs(short) < 0.3 and abs(long_) > 0.8:
-            # Short-term trend is subtle, but long-term is clear
-            extra_5y = (
-                " At this scale, the warming is **subtle** – these recent years only hint "
-                "at a change. The bigger shift really jumps out when you zoom all the way "
-                "out to the full record below."
-            )
-        elif abs(short) >= 0.3:
-            direction = "warmer" if short >= 0 else "cooler"
-            extra_5y = (
-                f" Even over just these recent years, the smoothed curve points to a change "
-                f"equivalent to about {short:+.1f}°C per decade. That trend connects directly "
-                "to the longer-term shift you’ll see in the 50-year view."
-        )
-
-    st.markdown(base_5y + extra_5y)
-   
-
+    # ################################################################################
     # 1E. Last ~50 years — monthly averages and trend
     st.subheader("Last 50 years — monthly averages and trend")
-
-    # --- 1. Load real data for this location ---
-    da_mon = ds["t2m_monthly_mean_c"]  # (time_monthly)
-    time_mon = pd.to_datetime(da_mon["time_monthly"].values)
-    temp_mon = da_mon.values
-
-    # --- 2. Yearly mean and 5-year running mean (from the monthly series) ---
-    monthly_da = xr.DataArray(
-        temp_mon,
-        coords={"time_monthly": time_mon},
-        dims=["time_monthly"],
-        name="t2m_monthly_mean_c",
-    )
-
-    yearly_mean = monthly_da.groupby("time_monthly.year").mean("time_monthly")
-    years = yearly_mean["year"].values.astype(float)
-    t_year = yearly_mean.values
-
-    # 5-year running mean on yearly series
-
-    da_year = ds["t2m_yearly_mean_c"]
-    time_year = pd.to_datetime(ds["time_yearly"].values)
-    #years = time_year.year.astype(float)
-    temps_year = np.asarray(da_year.values, dtype="float64")
-
-    # --- 3. Coldest & warmest months per year and their linear trends ---
-    cold_by_year = monthly_da.groupby("time_monthly.year").min("time_monthly")
-    warm_by_year = monthly_da.groupby("time_monthly.year").max("time_monthly")
-
-    cold_years = cold_by_year["year"].values.astype(float)
-    warm_years = warm_by_year["year"].values.astype(float)
-    cold_vals = cold_by_year.values
-    warm_vals = warm_by_year.values
-
-    cold_trend = warm_trend = None
-    if len(cold_years) >= 2:
-        coef_cold = np.polyfit(cold_years, cold_vals, 1)
-        cold_trend = np.polyval(coef_cold, cold_years)
-    if len(warm_years) >= 2:
-        coef_warm = np.polyfit(warm_years, warm_vals, 1)
-        warm_trend = np.polyval(coef_warm, warm_years)
-
-    # --- 4. Build the figure using your original styling ---
-    fig_50 = go.Figure()
-
-    # Monthly mean (thin grey spline)
-    add_trace(fig_50, time_mon, temp_mon, "Monthly mean")
-
-    add_mean_trace(
-        fig_50,
-        x=time_year,
-        y=temps_year,
-        name="Yearly mean",
-        showmarkers=True,
-        hovertemplate="Year %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
-    )
-
-    # Linear trend
-    mask = np.isfinite(temps_year)
-    if mask.sum() >= 5:
-        x = years[mask]
-        y = temps_year[mask]
-        # Linear trend on yearly means (red) – as a true straight line in time
-        slope, intercept = np.polyfit(x, y, 1)
-
-        # Continuous year grid
-        trend_years = np.linspace(x.min(), x.max(), 200)
-        # Map fractional years -> datetimes (approximate using 365.25 days per year)
-        ref_start = pd.Timestamp(f"{int(x.min())}-01-01")
-        trend_dates = ref_start + pd.to_timedelta((trend_years - x.min()) * 365.25, unit="D")
-        trend_vals = intercept + slope * trend_years
-
-        fig_50.add_trace(
-            go.Scatter(
-                x=trend_dates,
-                y=trend_vals,
-                mode="lines",
-                name="Trend (yearly mean)",
-                line=dict(color="rgba(220,50,47,0.9)", width=3, shape="linear"),
-                hovertemplate="Trend %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
-            )
-        )
-
-        # For caption later
-        total_span_years = int(x.max() - x.min())
-        total_warming = float(trend_vals[-1] - trend_vals[0])
+    last_fifty_year_data = build_fifty_year_data(ds)
+    if last_fifty_year_data:
+        fig_fifty_year, fig_fifty_year_caption = build_fifty_year_figure(last_fifty_year_data)
+        st.plotly_chart(fig_fifty_year, width="stretch", config={"displayModeBar": False})
+        st.caption(fig_fifty_year_caption)
+        st.markdown(fifty_year_caption(last_fifty_year_data, facts))
     else:
-        trend_years = None
-        total_span_years = None
-        total_warming = None
+        st.info("Not enough recent daily data available to show the last fifty years for this location.")
+    # ################################################################################
 
-    # Coldest-month trend (blue dotted spline)
-    if cold_trend is not None:
-        x_cold = [datetime(int(y), 1, 1) for y in cold_years]
-        fig_50.add_trace(
-            go.Scatter(
-                x=x_cold,
-                y=cold_trend,
-                mode="lines",
-                name="Coldest-month trend",
-                line=dict(
-                    color="rgba(38,139,210,0.9)",
-                    width=2,
-                    dash="dot",
-                    shape="spline",
-                ),
-            )
-        )
-
-    # Warmest-month trend (red dotted spline)
-    if warm_trend is not None:
-        x_warm = [datetime(int(y), 7, 1) for y in warm_years]
-        fig_50.add_trace(
-            go.Scatter(
-                x=x_warm,
-                y=warm_trend,
-                mode="lines",
-                name="Warmest-month trend",
-                line=dict(
-                    color="rgba(220,50,47,0.9)",
-                    width=2,
-                    dash="dot",
-                    shape="spline",
-                ),
-            )
-        )
-
-    fig_50.update_layout(
-        height=400,
-        margin=dict(l=40, r=20, t=30, b=40),
-        xaxis_title="Year",
-        yaxis_title="Temperature (°C)",
-        showlegend=True,
-    )
-
-    st.plotly_chart(fig_50, width="stretch", config={"displayModeBar": False})
-
-    cov = dataset_coverage_text(ds)
-    if cov:
-        st.caption(cov)
-       
-    # --- 5. Text: “zoom out” narrative + sign-sensitive wording ---
-
-    if total_span_years is not None and total_span_years > 0:
-        if abs(total_warming) < 0.15:
-            # ~flat
-            total_warming_sign = "+" if total_warming>0 else "-"
-            change_text = (
-                f"has changed very little **({total_warming_sign}{total_warming:.1f}°C)** — the long-term average is almost the same "
-                f"now as it was at the start of the record."
-            )
-        elif total_warming > 0:
-            # warmer
-            change_text = (
-                f"is now roughly **{total_warming:.1f}°C warmer on average** than it was "
-                f"at the start of the record."
-            )
-        else:
-            # cooler
-            change_text = (
-                f"is now roughly **{abs(total_warming):.1f}°C cooler on average** than it was "
-                f"at the start of the record — a smaller change than in many places."
-            )
-
-        st.markdown(
-            f"""
-    When you zoom out over about **{total_span_years} years**, the year-to-year noise
-    fades and a clear pattern emerges. In **{loc_name}**, the climate {change_text}
-            """
-        )
-    else:
-        st.markdown(
-            f"""
-    When you zoom out over about **{total_span_years} years**, the year-to-year noise
-    fades and a clearer pattern would normally emerge — but here the data window is too short
-    to say much yet for **{loc_name}**.
-            """
-        )
-
+    # ################################################################################
     # 1F. A simple 25-year projection, assuming the same trend continues
     st.subheader("Looking 25 years ahead (simple trend extension)")
-
-    da_year = ds["t2m_yearly_mean_c"]
-    time_yearly = pd.to_datetime(ds["time_yearly"].values)
-
-    years = time_yearly.year.astype(float)
-    temps = np.asarray(da_year.values, dtype="float64")
-
-    mask = np.isfinite(temps)
-    if mask.sum() >= 5:
-        x = years[mask]
-        y = temps[mask]
-
-        # Base: yearly mean
-        fig_future = go.Figure()
-
-        add_trace(
-            fig_future,
-            x=time_yearly,
-            y=temps,
-            name="Yearly mean",
-            hovertemplate="Year %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
-        )
-
-        # 5-year rolling mean (blue smoothing)
-        df_year = pd.DataFrame({"year": years, "temp": temps}).set_index("year")
-        smooth5 = (
-            df_year["temp"].rolling(window=5, center=True, min_periods=3).mean().values
-        )
-
-        add_mean_trace(
-            fig_future,
-            x=time_yearly,
-            y=smooth5,
-            name="5-year mean",
-            showmarkers=False,
-            hovertemplate="Year %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
-        )
-
-        # Linear trend on yearly means (red)
-        slope, intercept = np.polyfit(x, y, 1)
-
-        first_year = float(x.min())
-        last_year = float(x.max())
-        horizon = 25.0
-
-        # Build a continuous year axis from first year through future
-        full_years = np.linspace(first_year, last_year + horizon, 300)
-        trend_vals_full = intercept + slope * full_years
-
-        # Map fractional years to datetimes
-        ref_start = pd.Timestamp(f"{int(first_year)}-01-01")
-        full_dates = ref_start + pd.to_timedelta((full_years - first_year) * 365.25, unit="D")
-
-        # Split into historical vs future segments
-        past_mask = full_years <= (last_year + 1e-6)
-        future_mask = full_years > (last_year + 1e-6)
-
-        # Plot past trend (solid red)
-        fig_future.add_trace(
-            go.Scatter(
-                x=full_dates[past_mask],
-                y=trend_vals_full[past_mask],
-                mode="lines",
-                name="Trend (yearly mean)",
-                line=dict(color="rgba(220,50,47,0.9)", width=3, shape="linear"),
-                hovertemplate="Trend %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
-            )
-        )
-
-        # Plot future extension (dashed red)
-        fig_future.add_trace(
-            go.Scatter(
-                x=full_dates[future_mask],
-                y=trend_vals_full[future_mask],
-                mode="lines",
-                name="Straight-line extension",
-                line=dict(
-                    color="rgba(220,50,47,0.9)", width=3, dash="dash", shape="linear"
-                ),
-                hovertemplate="Extension %{x|%Y}<br>%{y:.1f}°C<extra></extra>",
-            )
-        )
-
-        # Shade future region based on last_year
-        last_year_int = int(round(last_year))
-        future_end_year_int = int(round(last_year + horizon))
-        fig_future.add_vrect(
-            x0=pd.Timestamp(f"{last_year_int+1}-01-01"),
-            x1=pd.Timestamp(f"{future_end_year_int}-12-31"),
-            fillcolor="rgba(220,50,47,0.06)",
-            line_width=0,
-            layer="below",
-        )
-
-        # --- Choose a sane y-axis range so year-to-year bumps aren't exaggerated ---
-        y_all = np.concatenate([np.asarray(temps, dtype="float64"),
-                                np.asarray(trend_vals_full, dtype="float64")])
-
-        y_min = float(np.nanmin(y_all))
-        y_max = float(np.nanmax(y_all))
-
-        # Enforce at least ~2°C span
-        span = max(y_max - y_min, 2.0)
-        pad = span * 0.1  # 10% padding top/bottom
-
-        y_center = 0.5 * (y_min + y_max)
-        y0 = y_center - span / 2.0 - pad
-        y1 = y_center + span / 2.0 + pad
-
-        fig_future.update_layout(
-            margin=dict(l=0, r=0, t=10, b=40),
-            height=320,
-            showlegend=True,
-            xaxis=dict(
-                title="Year",
-                showgrid=True,
-                gridcolor="rgba(200,200,200,0.3)",
-            ),
-            yaxis=dict(
-                title="Temperature (°C)",
-                showgrid=True,
-                gridcolor="rgba(200,200,200,0.3)",
-                range=[y0, y1],
-            ),
-        )
-
-        st.plotly_chart(fig_future, width="stretch", config={"displayModeBar": False})
-
-       # Story numbers
-        hist_warming = float(trend_vals_full[past_mask][-1] - trend_vals_full[past_mask][0])
-        extra_25 = float(trend_vals_full[future_mask][-1] - trend_vals_full[past_mask][-1])
-        total_span_years = last_year - first_year
-        direction_hist = "warmer" if hist_warming >= 0 else "cooler"
-        direction_future = "warmer" if extra_25 >= 0 else "cooler"
-        
-        st.markdown(
-            f"Over the observed **{total_span_years:.0f} years**, the straight-line trend in yearly "
-            f"temperatures suggests this location has become about {hist_warming:+.1f}°C "
-            f"{direction_hist}. If that linear trend simply continued, another 25 years "
-            f"would add roughly {extra_25:+.1f}°C. This is a **what-if extrapolation**, "
-            " not a forecast."
-        )
-
+    twenty_five_years_data = build_twenty_five_years_data(ds)
+    if twenty_five_years_data:
+        fig_twenty_five_years, fig_twenty_five_years_caption = build_twenty_five_years_figure(twenty_five_years_data)
+        st.plotly_chart(fig_twenty_five_years, width="stretch", config={"displayModeBar": False})
+        st.caption(fig_twenty_five_years_caption)
+        st.markdown(twenty_five_years_caption(twenty_five_years_data, facts))
     else:
         st.info("Not enough yearly data to draw a simple trend extension here.")
-
+    # ################################################################################
 
 # -----------------------------------------------------------
 # STEP: SEASONS THEN VS NOW
