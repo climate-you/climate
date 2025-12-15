@@ -98,31 +98,73 @@ def dataset_coverage_text(ds: xr.Dataset) -> str:
 # Helpers to fetch recent data from OpenMeteo
 # -----------------------------------------------------------
 
-@st.cache_data(show_spinner=False)
-def fetch_recent_7d(slug: str, lat: float, lon: float, end_date_str: str) -> xr.Dataset:
-    """
-    Fetch last 7 full days of hourly + daily temps from Open-Meteo ERA5 archive.
-    end_date_str is ISO string of the last full day included (YYYY-MM-DD).
-    Cached per (slug, end_date_str).
-    """
-    end_date = date.fromisoformat(end_date_str)
-    start_date = end_date - timedelta(days=6)
+OPENMETEO_TIMEOUT = 30  # seconds
 
+@st.cache_data(show_spinner=False)
+def fetch_openmeteo_window(
+    kind: str,
+    lat: float,
+    lon: float,
+    start_date : datetime.date,
+    end_date: datetime.date,
+) -> dict | None:
+    """
+    Fetch a window of data from Open-Meteo.
+
+    kind: "hourly_7d" or "daily_30d" etc.
+    start/end_date: we only keep the *dates* in the cache key,
+                    so multiple reruns in the same day reuse the same response.
+
+    Returns parsed JSON dict, or None if we hit 429 / network errors.
+    """
+    # Build Open-Meteo URL – adapt this to your existing params
+    base = "https://archive-api.open-meteo.com/v1/era5"
     params = {
         "latitude": lat,
         "longitude": lon,
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
-        "hourly": ["temperature_2m"],
-        "daily": ["temperature_2m_mean", "temperature_2m_max", "temperature_2m_min"],
         "timezone": "auto",
     }
-    url = "https://archive-api.open-meteo.com/v1/era5"
 
-    r = requests.get(url, params=params, timeout=30)
-    r.raise_for_status()
-    j = r.json()
+    if kind == "hourly_7d":
+        params["hourly"] = ["temperature_2m"]
+        params["daily"] = [
+            "temperature_2m_mean",
+        ]
+    elif kind == "daily_30d":
+        params["daily"] = [
+            "temperature_2m_mean",
+        ]
+    else:
+        raise ValueError(f"Unknown Open-Meteo kind: {kind}")
 
+    try:
+        r = requests.get(base, params=params, timeout=OPENMETEO_TIMEOUT)
+        if r.status_code == 429:
+            # Soft failure: log and return None
+            st.warning(
+                "Live data from Open-Meteo is temporarily rate-limited "
+                "(HTTP 429). Recent-window graphs may not be available right now."
+            )
+            return None
+        r.raise_for_status()
+        return r.json()
+    except requests.RequestException as e:
+        st.warning(f"Could not fetch live data right now ({e}).")
+        return None
+
+
+def fetch_recent_7d(slug: str, lat: float, lon: float, end_date: datetime.date) -> xr.Dataset | None:
+    """
+    Fetch last 7 full days of hourly + daily temps from Open-Meteo ERA5 archive.
+    end_date_str is ISO string of the last full day included (YYYY-MM-DD).
+    """
+    start_date = end_date - timedelta(days=6)
+    j = fetch_openmeteo_window("hourly_7d", lat, lon, start_date, end_date)
+    if j is None:
+        return None
+    
     # Hourly
     h = j["hourly"]
     t_h = pd.to_datetime(h["time"])
@@ -132,15 +174,11 @@ def fetch_recent_7d(slug: str, lat: float, lon: float, end_date_str: str) -> xr.
     d = j["daily"]
     t_d = pd.to_datetime(d["time"])
     tmean_d = np.array(d["temperature_2m_mean"], dtype="float32")
-    tmax_d = np.array(d["temperature_2m_max"], dtype="float32")
-    tmin_d = np.array(d["temperature_2m_min"], dtype="float32")
 
     ds = xr.Dataset(
         data_vars=dict(
             t_hourly=("time_hourly", temp_h),
             t_daily_mean=("time_daily", tmean_d),
-            t_daily_max=("time_daily", tmax_d),
-            t_daily_min=("time_daily", tmin_d),
         ),
         coords=dict(
             time_hourly=("time_hourly", t_h),
@@ -151,40 +189,22 @@ def fetch_recent_7d(slug: str, lat: float, lon: float, end_date_str: str) -> xr.
     return ds
 
 
-@st.cache_data(show_spinner=False)
-def fetch_recent_30d(slug: str, lat: float, lon: float, end_date_str: str) -> xr.Dataset:
+def fetch_recent_30d(slug: str, lat: float, lon: float, end_date: datetime.date) -> xr.Dataset | None:
     """
     Fetch last 30 full days of daily temps from Open-Meteo ERA5 archive.
-    Cached per (slug, end_date_str).
     """
-    end_date = date.fromisoformat(end_date_str)
     start_date = end_date - timedelta(days=29)
-
-    params = {
-        "latitude": lat,
-        "longitude": lon,
-        "start_date": start_date.isoformat(),
-        "end_date": end_date.isoformat(),
-        "daily": ["temperature_2m_mean", "temperature_2m_max", "temperature_2m_min"],
-        "timezone": "auto",
-    }
-    url = "https://archive-api.open-meteo.com/v1/era5"
-
-    r = requests.get(url, params=params, timeout=30)
-    r.raise_for_status()
-    j = r.json()
+    j = fetch_openmeteo_window("daily_30d", lat, lon, start_date, end_date)
+    if j is None:
+        return None
 
     d = j["daily"]
     t_d = pd.to_datetime(d["time"])
     tmean_d = np.array(d["temperature_2m_mean"], dtype="float32")
-    tmax_d = np.array(d["temperature_2m_max"], dtype="float32")
-    tmin_d = np.array(d["temperature_2m_min"], dtype="float32")
 
     ds = xr.Dataset(
         data_vars=dict(
             t_daily_mean=("time_daily", tmean_d),
-            t_daily_max=("time_daily", tmax_d),
-            t_daily_min=("time_daily", tmin_d),
         ),
         coords=dict(
             time_daily=("time_daily", t_d),
@@ -369,6 +389,8 @@ class StoryFacts:
     recent_warming_10y: Optional[float]
     last_year_anomaly: Optional[float]
     hemisphere: str
+    coldest_month_trend_50y: float | None = None
+    warmest_month_trend_50y: float | None = None
 
 
 def compute_story_facts(ds, lat: Optional[float] = None) -> StoryFacts:
@@ -602,6 +624,13 @@ with st.sidebar:
         ],
     )
 
+    st.subheader("Time snapshot")
+    today = st.date_input(
+        "Pretend 'today' is:",
+        value=date.today(),
+        help="Use this to see how the page would look in a different season.",
+    )
+
 # Map label back to slug + meta
 chosen_idx = labels.index(chosen_label)
 slug = slug_list[chosen_idx]
@@ -674,6 +703,9 @@ def build_last_year_data(ds: xr.Dataset) -> dict:
 
     # Take the last 12 FULL calendar months in the dataset
     last_day = time_all.max()
+    if pd.Timestamp(today) < last_day:
+        last_day = pd.Timestamp(today)
+
     # First day of last month in dataset
     end_month_start = last_day.replace(day=1)
     # First day 11 months earlier (gives 12 months total)
@@ -761,17 +793,36 @@ def build_last_year_figure(data: dict) -> (go.Figure, str):
 
     return fig, caption
 
-def last_year_caption(facts: StoryFacts) -> str:
+def last_year_caption(data: dict, facts: StoryFacts) -> str:
     """
     Generate the markdown caption for the last-year panel
     using StoryFacts (so it's easy to reuse elsewhere).
     """
-    base_text = (
-        "Over a full year you can clearly see the **seasonal cycle**: the rise into the "
-        "hottest months and the slide back down. Climate change adds a slow upward "
-        "shift on top of this familiar pattern."
-    )
-
+    mean7 = np.asarray(data["temp_7d"], dtype="float64")
+    amp = float(np.nanmax(mean7) - np.nanmin(mean7))
+    
+    if amp >= 8.0:
+        # strong winters/summers – classic temperate
+        base_text = (
+            "Over a full year you can clearly see the **seasonal cycle**: the rise into the "
+            "hottest months and the slide back down into the coolest ones. Climate change adds a slow upward "
+            "shift on top of this familiar pattern."
+        )
+    elif amp >= 4.0:
+        # moderate seasons
+        base_text = (
+            "Here the seasonal cycle is visible but fairly gentle: the 7-day mean temperature "
+            "nudges up into a warmer part of the year, then back down again, without dramatic swings. "
+            "Climate change adds a slow upward shift on top of this pattern."
+        )
+    else:
+        # almost flat year-round (e.g. Singapore)
+        base_text = (
+            "Over a full year the 7-day mean stays in a narrow band – **seasons are weak** here. "
+            "Rather than sharp winters and summers, most days sit in roughly the same temperature range. "
+            "Climate change adds a slow upward shift on top of this pattern."
+        )
+    
     extra = ""
     if facts.last_year_anomaly is not None:
         anom = facts.last_year_anomaly
@@ -796,7 +847,7 @@ def last_year_caption(facts: StoryFacts) -> str:
                 f"{abs(anom):.1f}°C below the long-term average."
             )
 
-    return base_text + extra
+    return base_text + "\n" + extra
 
 # -----------------------------------------------------------
 # Compute last five year data, graph and captions
@@ -819,6 +870,8 @@ def build_five_year_data(ds: xr.Dataset) -> dict:
 
     # End of record = last timestamp in daily series
     end_date = time_daily[-1].normalize()
+    if pd.Timestamp(today) < end_date:
+        end_date = pd.Timestamp(today)
 
     # Start 5 years earlier
     start_5y = end_date - pd.DateOffset(years=5)
@@ -898,7 +951,7 @@ def build_five_year_figure(data: dict) -> (go.Figure, str):
 
     return fig, caption
 
-def five_year_caption(facts: StoryFacts) -> str:
+def five_year_caption(data: dict, facts: StoryFacts) -> str:
     """
     Generate the markdown caption for the last-five-year panel
     using StoryFacts (so it's easy to reuse elsewhere).
@@ -917,19 +970,19 @@ def five_year_caption(facts: StoryFacts) -> str:
         if abs(short) < 0.3 and abs(long_) > 0.8:
             # Short-term trend is subtle, but long-term is clear
             extra_5y = (
-                " At this scale, the warming is **subtle** – these recent years only hint "
+                "At this scale, the warming is **subtle** – these recent years only hint "
                 "at a change. The bigger shift really jumps out when you zoom all the way "
                 "out to the full record below."
             )
         elif abs(short) >= 0.3:
             direction = "warmer" if short >= 0 else "cooler"
             extra_5y = (
-                f" Even over just these recent years, the smoothed curve points to a change "
+                f"Even over just these recent years, the smoothed curve points to a change "
                 f"equivalent to about {short:+.1f}°C per decade. That trend connects directly "
                 "to the longer-term shift you’ll see in the 50-year view."
         )
 
-    return base_5y + extra_5y
+    return base_5y + " " + extra_5y
 
 # -----------------------------------------------------------
 # Compute fifty year data, graph and captions
@@ -946,7 +999,7 @@ def build_fifty_year_data(ds: xr.Dataset) -> dict:
       - t2m_yearly_mean_c
     Returns a dict so it's easy to plug into other front-ends later.
     """
-        # --- 1. Load real data for this location ---
+    # --- 1. Load real data for this location ---
     da_mon = ds["t2m_monthly_mean_c"]  # (time_monthly)
     time_mon = pd.to_datetime(da_mon["time_monthly"].values)
     temp_mon = da_mon.values
@@ -964,10 +1017,8 @@ def build_fifty_year_data(ds: xr.Dataset) -> dict:
     t_year = yearly_mean.values
 
     # 5-year running mean on yearly series
-
     da_year = ds["t2m_yearly_mean_c"]
     time_year = pd.to_datetime(ds["time_yearly"].values)
-    #years = time_year.year.astype(float)
     temps_year = np.asarray(da_year.values, dtype="float64")
 
     # --- 3. Coldest & warmest months per year and their linear trends ---
@@ -986,6 +1037,10 @@ def build_fifty_year_data(ds: xr.Dataset) -> dict:
     if len(warm_years) >= 2:
         coef_warm = np.polyfit(warm_years, warm_vals, 1)
         warm_trend = np.polyval(coef_warm, warm_years)
+
+    # Update facts 
+    facts.coldest_month_trend_50y = float(cold_trend[-1] - cold_trend[0])
+    facts.warmest_month_trend_50y = float(warm_trend[-1] - warm_trend[0])
 
     # Linear trend
     mask = np.isfinite(temps_year)
@@ -1081,6 +1136,14 @@ def build_fifty_year_figure(data: dict) -> (go.Figure, str):
                 ),
             )
         )
+        fig.add_annotation(
+            x=x_cold[-1], y=float(data["cold_trend"][-1]),
+            showarrow=False,
+            text=f"{facts.coldest_month_trend_50y:+.1f}°C over {facts.data_end_year - facts.data_start_year}y",
+            font=dict(color="rgba(38,139,210,0.9)", size=11),
+            xanchor="left",
+            yanchor="top",
+        )
 
     # Warmest-month trend (red dotted spline)
     if data["warm_trend"] is not None:
@@ -1099,7 +1162,38 @@ def build_fifty_year_figure(data: dict) -> (go.Figure, str):
                 ),
             )
         )
+        fig.add_annotation(
+            x=x_warm[-1], y=float(data["warm_trend"][-1]),
+            showarrow=False,
+            text=f"{facts.warmest_month_trend_50y:+.1f}°C over {facts.data_end_year - facts.data_start_year}y",
+            font=dict(color="rgba(220,50,47,0.9)", size=11),
+            xanchor="left",
+            yanchor="bottom",
+        )
 
+
+    # if facts.coldest_month_trend_50y is not None:
+    #     fig.add_annotation(
+    #         x=x_years_all[-1] + 1,
+    #         y=y_cold_trend[-1],
+    #         text=f"{facts.coldest_month_trend_50y:+.1f}°C over {facts.data_end_year - facts.data_start_year}y",
+    #         showarrow=False,
+    #         font=dict(color="rgba(38,139,210,0.9)", size=10),
+    #         xanchor="left",
+    #         yanchor="middle",
+    #     )
+
+    # if facts.warmest_month_trend_50y is not None:
+    #     fig.add_annotation(
+    #         x=x_years_all[-1] + 1,
+    #         y=y_warm_trend[-1],
+    #         text=f"{facts.warmest_month_trend_50y:+.1f}°C over {facts.data_end_year - facts.data_start_year}y",
+    #         showarrow=False,
+    #         font=dict(color="rgba(220,50,47,0.9)", size=10),
+    #         xanchor="left",
+    #         yanchor="middle",
+    #     )
+    
     fig.update_layout(
         height=400,
         margin=dict(l=40, r=20, t=30, b=40),
@@ -1123,6 +1217,7 @@ def fifty_year_caption(data: dict, facts: StoryFacts) -> str:
     total_span_years = data["total_span_years"]
     total_warming = data["total_warming"]
     if total_span_years is not None and total_span_years > 0:
+        extra = ""
         if abs(total_warming) < 0.15:
             # ~flat
             total_warming_sign = "+" if total_warming>0 else "-"
@@ -1143,10 +1238,27 @@ def fifty_year_caption(data: dict, facts: StoryFacts) -> str:
                 f"at the start of the record — a smaller change than in many places."
             )
 
+        extra = ""
+        if facts.coldest_month_trend_50y is not None and facts.warmest_month_trend_50y is not None:
+            cold = facts.coldest_month_trend_50y
+            warm = facts.warmest_month_trend_50y
+
+            extra += " The dashed lines show how the **coldest** and **warmest** typical months behave:"
+
+            def describe(label: str, val: float) -> str:
+                if val > 0.3:
+                    return f" the {label} month is about **{val:.1f}°C warmer**."
+                if val < -0.3:
+                    return f" the {label} month is about **{abs(val):.1f}°C cooler**."
+                return f" the {label} month has changed by only about **{val:+.1f}°C**."
+
+            extra += describe("coldest", cold)
+            extra += describe("warmest", warm)
+
         caption = f"""
     When you zoom out over about **{total_span_years} years**, the year-to-year noise
     fades and a clear pattern emerges. In **{loc_name}**, the climate {change_text}
-            """
+            """ + " " + extra
     else:
         caption = f"""
     When you zoom out over about **{total_span_years} years**, the year-to-year noise
@@ -1172,11 +1284,11 @@ def build_last_week_data(ds: xr.Dataset) -> dict:
     Returns a dict so it's easy to plug into other front-ends later.
     """
     # Use last full day as the endpoint (yesterday)
-    today = date.today()
     end_7d = today - timedelta(days=1)
-    end_7d_str = end_7d.isoformat()
 
-    ds_7d = fetch_recent_7d(DEFAULT_SLUG, location_lat, location_lon, end_7d_str)
+    ds_7d = fetch_recent_7d(DEFAULT_SLUG, location_lat, location_lon, end_7d)
+    if ds_7d is None:
+        return None
 
     t_hourly = pd.to_datetime(ds_7d["time_hourly"].values)
     temp_hourly = ds_7d["t_hourly"].values
@@ -1184,7 +1296,7 @@ def build_last_week_data(ds: xr.Dataset) -> dict:
     t_daily_mid = pd.to_datetime(ds_7d["time_daily"].values) + pd.Timedelta(hours=12)
     temp_daily = ds_7d["t_daily_mean"].values
 
-    range = ds_7d.attrs.get('range', end_7d_str)
+    range = ds_7d.attrs.get('range', end_7d.isoformat())
 
     return {
         "time_hourly" : t_hourly,
@@ -1241,7 +1353,7 @@ def build_last_week_figure(data: dict) -> (go.Figure, str):
 
     return fig, caption
 
-def last_week_caption(facts: StoryFacts) -> str:
+def last_week_caption(data:dict, facts: StoryFacts) -> str:
     """
     Generate the markdown caption for the last-week panel
     using StoryFacts (so it's easy to reuse elsewhere).
@@ -1264,11 +1376,11 @@ def build_last_month_data(ds: xr.Dataset) -> dict:
       - t_daily_mean
     Returns a dict so it's easy to plug into other front-ends later.
     """
-    today = date.today()
     end_30d = today - timedelta(days=1)
-    end_30d_str = end_30d.isoformat()
 
-    ds_30d = fetch_recent_30d(DEFAULT_SLUG, location_lat, location_lon, end_30d_str)
+    ds_30d = fetch_recent_30d(DEFAULT_SLUG, location_lat, location_lon, end_30d)
+    if ds_30d is None:
+        return None
 
     t_daily_30 = pd.to_datetime(ds_30d["time_daily"].values)
     tmean_30 = ds_30d["t_daily_mean"].values
@@ -1294,7 +1406,7 @@ def build_last_month_data(ds: xr.Dataset) -> dict:
         "temp_daily" : tmean_30,
         "temp_3d_mean" : mean_3d,
         "trend_sentence" : trend_sentence,
-        "range" : ds_30d.attrs.get('range', end_30d_str),
+        "range" : ds_30d.attrs.get('range', end_30d.isoformat()),
     }
 
 def build_last_month_figure(data: dict) -> (go.Figure, str):
@@ -1308,7 +1420,7 @@ def build_last_month_figure(data: dict) -> (go.Figure, str):
     """
     fig = go.Figure()
 
-    add_trace(fig, data["time_daily"], data["temp_daily"], "Daily mean", "%{x|%Y-%m-%d}<br>Daily mean: %{y:.1f}°C<extra></extra>"), 
+    add_trace(fig, data["time_daily"], data["temp_daily"], "Daily mean", "%{x|%Y-%m-%d}<br>Daily mean: %{y:.1f}°C<extra></extra>")
 
     # 3-day mean (blue)
     add_mean_trace(fig, data["time_daily"], data["temp_3d_mean"], "3-day mean", hovertemplate="%{x|%Y-%m-%d}<br>3-day mean: %{y:.1f}°C<extra></extra>")
@@ -1405,12 +1517,30 @@ def build_twenty_five_years_data(ds: xr.Dataset) -> dict:
     past_mask = full_years <= (last_year + 1e-6)
     future_mask = full_years > (last_year + 1e-6)
 
+    # #################################################################
     # Story numbers
-    hist_warming = float(trend_vals_full[past_mask][-1] - trend_vals_full[past_mask][0])
-    extra_25 = float(trend_vals_full[future_mask][-1] - trend_vals_full[past_mask][-1])
-    total_span_years = last_year - first_year
-    direction_hist = "warmer" if hist_warming >= 0 else "cooler"
-    # direction_future = "warmer" if extra_25 >= 0 else "cooler"
+    # hist_warming = float(trend_vals_full[past_mask][-1] - trend_vals_full[past_mask][0])
+    # extra_25 = float(trend_vals_full[future_mask][-1] - trend_vals_full[past_mask][-1])
+    # total_span_years = last_year - first_year
+    # direction_hist = "warmer" if hist_warming >= 0 else "cooler"
+    years = ds["time_yearly"].dt.year.values.astype(int)
+    year_mean = ds["t2m_yearly_mean_c"].values.astype(float)
+
+    x1 = years
+    y1 = year_mean
+
+    # simple linear regression
+    slope1, intercept1 = np.polyfit(x1, y1, 1)
+    trend_all = intercept1 + slope1 * x1
+
+    last_year = int(x1[-1])
+    target_year = last_year + 25
+    x_future = np.arange(last_year, target_year + 1)
+    trend_future = intercept1 + slope1 * x_future
+
+    current_level = float(trend_all[-1])
+    future_level = float(trend_future[-1])
+    # #################################################################
 
     return {
         "time_yearly" : time_yearly,
@@ -1421,12 +1551,15 @@ def build_twenty_five_years_data(ds: xr.Dataset) -> dict:
         "time_future_trend" : full_dates[future_mask],
         "temp_future_trend" : trend_vals_full[future_mask],
         "last_year" : float(x.max()),
-        "hist_warming" : hist_warming,
-        "extra_25" : extra_25,
-        "total_span_years" : total_span_years,
-        "direction_hist" : direction_hist,
+        # "hist_warming" : hist_warming,
+        # "extra_25" : extra_25,
+        # "total_span_years" : total_span_years,
+        # "direction_hist" : direction_hist,
+        "current_level": current_level,
+        "future_level": future_level,
+        "last_year": last_year,
+        "target_year": target_year,
     }
-    
 
 def build_twenty_five_years_figure(data: dict) -> (go.Figure, str):
     """
@@ -1532,7 +1665,7 @@ def build_twenty_five_years_figure(data: dict) -> (go.Figure, str):
     caption = ""
     return fig, caption
 
-def twenty_five_years_caption(data: dict, facts: StoryFacts) -> str:
+def twenty_five_years_caption_old(data: dict, facts: StoryFacts) -> str:
     """
     Generate the markdown caption for the 25 years ahead panel
     using StoryFacts (so it's easy to reuse elsewhere).
@@ -1548,6 +1681,41 @@ def twenty_five_years_caption(data: dict, facts: StoryFacts) -> str:
         not a forecast."""
     return caption
 
+def twenty_five_years_caption(data: dict, facts: StoryFacts) -> str:
+    curr = data["current_level"]
+    fut = data["future_level"]
+    last_year = data["last_year"]
+    target_year = data["target_year"]
+
+    delta = fut - curr
+
+    base = (
+        f"This panel takes the long-term trend from the last few decades and extends it "
+        f"forward by 25 years."
+    )
+
+    if abs(delta) < 0.2:
+        change_txt = (
+            f" If that trend held steady, the yearly mean temperature would still hover "
+            f"around **{curr:.1f}°C** in {target_year}, not very different from today "
+            f"({last_year})."
+        )
+    else:
+        direction = "warmer" if delta > 0 else "cooler"
+        change_txt = (
+            f" In the historical data, the yearly mean oscillates around "
+            f"**{curr:.1f}°C** in {last_year}. If the same linear trend continues, it would "
+            f"oscillate around **{fut:.1f}°C** by {target_year} – about "
+            f"**{abs(delta):.1f}°C {direction}**."
+        )
+
+    segue = (
+        " Of course, people experience this not as a single number but as changing "
+        "seasons and extremes. In the next section we zoom back in to see how those "
+        "shifts show up month by month."
+    )
+
+    return base + change_txt + segue
 # -----------------------------------------------------------
 # Compute XXX data, graph and captions
 # -----------------------------------------------------------
@@ -1573,7 +1741,7 @@ def twenty_five_years_caption(data: dict, facts: StoryFacts) -> str:
 #       - min/max annotations via annotate_minmax_on_series()
 #     """
 
-# def last_year_caption(facts: StoryFacts) -> str:
+# def last_year_caption(data: dict, facts: StoryFacts) -> str:
 #     """
 #     Generate the markdown caption for the last-year panel
 #     using StoryFacts (so it's easy to reuse elsewhere).
@@ -1617,46 +1785,77 @@ def build_seasons_then_now_data(ds: xr.Dataset) -> dict:
 
 def build_seasons_then_now_figure(data: dict, location_label: str) -> go.Figure:
     """
-    Build overlay figure: monthly climatology past vs recent.
+    Build overlay figure: monthly climatology past vs recent,
+    rotated so the warmest recent month is in the center.
     """
     month_index = data["month_index"]
+    month_names = data["month_names"]
     past = data["temp_past"]
     recent = data["temp_recent"]
+
+    # Find hottest recent month – that becomes the visual "center"
+    ihot = int(np.nanargmax(recent))
+    center_pos = 6  # middle of 12 ticks
+    shift = center_pos - ihot
+
+    def roll(arr):
+        return np.roll(arr, shift)
+
+    x = np.arange(12)
+    past_r = roll(past)
+    recent_r = roll(recent)
+    names_r = [month_names[(i - shift) % 12] for i in range(12)]
+
     delta = data["delta"]
+    delta_r = roll(delta)
+    custom = np.stack([past_r, recent_r, delta_r], axis=1)  # shape (12,3)
 
     fig = go.Figure()
 
-    # Past climatology – in blue
+    # Earlier climate – blue
     fig.add_trace(
         go.Scatter(
-            x=month_index,
-            y=past,
+            x=x,
+            y=past_r,
             mode="lines+markers",
             name="Earlier climate",
             line=dict(color="rgba(38,139,210,0.9)", width=2, shape="spline"),
             marker=dict(size=6),
-            hovertemplate="%{x|%b}<br>Earlier: %{y:.1f}°C<extra></extra>",
+            customdata=custom,
+            text=names_r,
+            hovertemplate=(
+                "%{text}: %{customdata[2]:+.1f}°C<br>"
+                "Earlier: %{customdata[0]:.1f}°C<br>"
+                "Recent: %{customdata[1]:.1f}°C"
+                "<extra></extra>"
+            ),
         )
     )
 
-    # Recent climatology – in red
+    # Recent climate – red
     fig.add_trace(
         go.Scatter(
-            x=month_index,
-            y=recent,
+            x=x,
+            y=recent_r,
             mode="lines+markers",
             name="Recent climate",
             line=dict(color="rgba(217,95,2,0.9)", width=2, shape="spline"),
             marker=dict(size=6),
-            hovertemplate="%{x|%b}<br>Recent: %{y:.1f}°C<extra></extra>",
+            customdata=custom,
+            text=names_r,
+            hovertemplate=(
+                "%{text}: %{customdata[2]:+.1f}°C<br>"
+                "Recent: %{customdata[1]:.1f}°C<br>"
+                "Earlier: %{customdata[0]:.1f}°C"
+                "<extra></extra>"
+            ),
         )
     )
 
-    # Make y-axis span sensible between both curves
-    y_all = np.concatenate([past, recent])
+    y_all = np.concatenate([past_r, recent_r])
     y_min = float(np.nanmin(y_all))
     y_max = float(np.nanmax(y_all))
-    span = max(y_max - y_min, 5.0)  # at least about 5°C span
+    span = max(y_max - y_min, 5.0)
     pad = span * 0.1
     y_center = 0.5 * (y_min + y_max)
     y0 = y_center - span / 2.0 - pad
@@ -1667,8 +1866,8 @@ def build_seasons_then_now_figure(data: dict, location_label: str) -> go.Figure:
         xaxis=dict(
             title="Month",
             tickmode="array",
-            tickvals=month_index,
-            ticktext=[d.strftime("%b") for d in month_index],
+            tickvals=x,
+            ticktext=names_r,
             showgrid=True,
             gridcolor="rgba(220,220,220,0.3)",
         ),
@@ -1687,70 +1886,119 @@ def build_seasons_then_now_figure(data: dict, location_label: str) -> go.Figure:
 
     return fig
 
-def seasons_then_now_caption(facts: StoryFacts, data: dict) -> str:
+
+def seasons_then_now_caption(data: dict, facts: StoryFacts) -> str:
     """
     Generate caption for the 'Seasons then vs now' panel.
     Uses StoryFacts + the month-by-month deltas.
     """
     base = (
-        "Here we compare a **typical year in the earlier climate** (grey) to a "
-        "**typical year in the recent climate** (blue). Each point is the average "
-        "monthly temperature over its period."
+        "Here we compare a **typical year in the earlier climate** (blue) to a "
+        "**typical year in the recent climate** (red)."
     )
 
     if not data:
         return base
 
     delta = data["delta"]
+    recent = data["temp_recent"]
     month_names = data["month_names"]
+
     mean_delta = float(np.nanmean(delta))
+    max_delta = float(np.nanmax(delta))
+    min_delta = float(np.nanmin(delta))
 
-    # Find month with strongest positive shift
+    # Month with strongest warming
     imax = int(np.nanargmax(delta))
-    max_month = month_names[imax]
-    max_delta = float(delta[imax])
+    warmest_shift_month = month_names[imax]
+    warmest_shift_value = float(delta[imax])
 
-    # Short paragraph about how big the shift is
-    extra = ""
+    # Month with strongest cooling (if any)
+    imin = int(np.nanargmin(delta))
+    coolest_shift_month = month_names[imin]
+    coolest_shift_value = float(delta[imin])
+
+    # Hottest month in the recent climate – “summer”
+    ihot = int(np.nanargmax(recent))
+    summer_month = month_names[ihot]
+    summer_delta = float(delta[ihot])
+
+    extra_parts: list[str] = []
+
+    # Overall offset
     if mean_delta > 0.8:
-        extra += (
-            f" On average, the recent climate here is about **{mean_delta:.1f}°C warmer** "
+        extra_parts.append(
+            f" On average, the recent climate is about **{mean_delta:.1f}°C warmer** "
             "throughout the year."
         )
     elif mean_delta > 0.3:
-        extra += (
-            f" On average, the recent climate is about **{mean_delta:.1f}°C warmer** "
-            "— a subtle but persistent shift."
-        )
-    elif mean_delta < -0.8:
-        extra += (
-            f" Surprisingly, the recent climate here comes out about **{abs(mean_delta):.1f}°C cooler** "
-            "on average than the earlier period."
-        )
-    elif mean_delta < -0.3:
-        extra += (
-            f" On average, the recent climate is about **{abs(mean_delta):.1f}°C cooler** "
+        extra_parts.append(
+            f" Overall, the recent climate runs about **{mean_delta:.1f}°C warmer** "
             "than the earlier period."
         )
-
-    # If warming is uneven, call out the biggest seasonal change
-    if max_delta > 0.4:
-        extra += (
-            f" The biggest seasonal shift shows up in **{max_month}**, "
-            f"which is now around **{max_delta:.1f}°C warmer** than it used to be."
+    elif mean_delta < -0.8:
+        extra_parts.append(
+            f" Surprisingly, the recent climate here is about "
+            f"**{abs(mean_delta):.1f}°C cooler** on average than the earlier period."
+        )
+    elif mean_delta < -0.3:
+        extra_parts.append(
+            f" On average, the recent climate is about **{abs(mean_delta):.1f}°C cooler** "
+            "than it used to be."
+        )
+    else:
+        # Very small overall shift
+        extra_parts.append(
+            " Overall, the **seasonal pattern hasn't changed much** – any differences "
+            "are small compared with year-to-year weather noise."
         )
 
-    # Optionally tie back to long-term 50y fact
+    # Always say something season-specific
+    if abs(summer_delta) >= 0.3:
+        if summer_delta > 0:
+            extra_parts.append(
+                f" In **{summer_month}**, which is typically one of the warmest months, "
+                f"the recent climate is about **{summer_delta:.1f}°C warmer** than before."
+            )
+        else:
+            extra_parts.append(
+                f" In **{summer_month}**, one of the warmest months, the recent climate is "
+                f"actually about **{abs(summer_delta):.1f}°C cooler** than the earlier period."
+            )
+    else:
+        # Summer barely changed – try the largest monthly shift
+        max_abs = max(abs(max_delta), abs(min_delta))
+        if max_abs >= 0.3:
+            if abs(max_delta) >= abs(min_delta):
+                m = warmest_shift_month
+                v = warmest_shift_value
+            else:
+                m = coolest_shift_month
+                v = coolest_shift_value
+            extra_parts.append(
+                f" The largest monthly shift is in **{m}**, at about **{v:+.1f}°C** compared "
+                "to the earlier climate."
+            )
+        else:
+            extra_parts.append(
+                " Month by month, the earlier and recent curves sit almost on top of each other "
+                "(differences are within a few tenths of a degree)."
+            )
+
+    # Tie back to long-term warming if available
     if facts.total_warming_50y is not None and abs(facts.total_warming_50y) > 0.3:
-        extra += (
-            f" These monthly changes are one way that the roughly "
-            f"**{facts.total_warming_50y:.1f}°C** long-term warming at this spot "
-            "shows up in everyday seasons."
+        extra_parts.append(
+            f" These seasonal changes are one way that the roughly "
+            f"**{facts.total_warming_50y:.1f}°C** long-term warming at this location "
+            "shows up in everyday weather."
+        )
+    elif facts.total_warming_50y is not None and abs(facts.total_warming_50y) <= 0.3:
+        extra_parts.append(
+            " The long-term trend we saw in the 50-year graph is very small here, so it's "
+            "not surprising that the typical seasons look almost unchanged."
         )
 
-    return base + extra
-
-
+    return base + " " + " ".join(extra_parts)
 
 
 # -----------------------------------------------------------
@@ -1828,7 +2076,7 @@ if step == "Zoom out":
         fig_week, fig_week_caption = build_last_week_figure(last_week_data)
         st.plotly_chart(fig_week, width="stretch", config={"displayModeBar": False})
         st.caption(fig_week_caption)       
-        st.markdown(last_week_caption(facts))
+        st.markdown(last_week_caption(last_week_data, facts))
     else:
         st.info("Not enough recent daily data available to show the last week for this location.")
     # ################################################################################
@@ -1840,7 +2088,7 @@ if step == "Zoom out":
     if last_month_data:
         fig_month, fig_month_caption = build_last_month_figure(last_month_data)
         st.plotly_chart(fig_month, width="stretch", config={"displayModeBar": False})
-        st.caption(fig_month_caption)       
+        st.caption(fig_month_caption)
         st.markdown(last_month_caption(last_month_data, facts))
     else:
         st.info("Not enough recent daily data available to show the last month for this location.")
@@ -1854,7 +2102,7 @@ if step == "Zoom out":
         fig_year, fig_year_caption = build_last_year_figure(last_year_data)
         st.plotly_chart(fig_year, width="stretch", config={"displayModeBar": False})
         st.caption(fig_year_caption)       
-        st.markdown(last_year_caption(facts))
+        st.markdown(last_year_caption(last_year_data, facts))
     else:
         st.info("Not enough recent daily data available to show the last year for this location.")
     # ################################################################################
@@ -1867,7 +2115,7 @@ if step == "Zoom out":
         fig_five_year, fig_five_year_caption = build_five_year_figure(last_five_year_data)
         st.plotly_chart(fig_five_year, width="stretch", config={"displayModeBar": False})
         st.caption(fig_five_year_caption)
-        st.markdown(five_year_caption(facts))
+        st.markdown(five_year_caption(last_five_year_data, facts))
     else:
         st.info("Not enough recent daily data available to show the last five years for this location.")
     # ################################################################################
@@ -1910,7 +2158,7 @@ if step == "Seasons then vs now":
         fig_seasons = build_seasons_then_now_figure(seasons_data, location_label)
         st.plotly_chart(fig_seasons, width="stretch", config={"displayModeBar": False})
 
-        st.markdown(seasons_then_now_caption(facts, seasons_data))
+        st.markdown(seasons_then_now_caption(seasons_data, facts))
 
         # Optional: small caption under the graph with data periods
         st.caption(
