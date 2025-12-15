@@ -100,6 +100,31 @@ def dataset_coverage_text(ds: xr.Dataset) -> str:
 
 OPENMETEO_TIMEOUT = 30  # seconds
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_openmeteo_current_temp_c(lat: float, lon: float) -> tuple[float | None, str | None]:
+    """
+    Returns (temperature_c, iso_time) or (None, None) if unavailable.
+    Cached by location for ~1 hour.
+    """
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "current_weather": True,
+        "temperature_unit": "celsius",
+        "timezone": "auto",
+    }
+    try:
+        r = requests.get(url, params=params, timeout=20)
+        if r.status_code == 429:
+            return None, None
+        r.raise_for_status()
+        j = r.json()
+        cw = j.get("current_weather") or {}
+        return cw.get("temperature"), cw.get("time")
+    except Exception:
+        return None, None
+
 @st.cache_data(show_spinner=False)
 def fetch_openmeteo_window(
     kind: str,
@@ -370,12 +395,6 @@ def annotate_minmax_on_series(fig, x, y, label_prefix=""):
     )
     
     return min_val, max_val
-
-def last_n_days(series: pd.Series, n: int):
-    if series.empty:
-        return series
-    cutoff = series.index.max() - pd.Timedelta(days=n)
-    return series.loc[series.index >= cutoff]
 
 # -----------------------------------------------------------
 # Compute global facts
@@ -683,6 +702,82 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+# -----------------------------------------------------------
+# Compute intro data and captions
+# -----------------------------------------------------------
+
+def build_intro_data(ds: xr.Dataset) -> dict:
+    """
+    Prepare the data needed for the 'Intro' panel.
+
+    Uses:
+    - 
+    Returns a dict so it's easy to plug into other front-ends later.
+    """
+    temp_now_c, temp_now_time = fetch_openmeteo_current_temp_c(location_lat, location_lon)
+
+    # Local warming from facts (already computed from your real ds)
+    local_delta = float(facts.total_warming_50y)
+
+    # Keep global as a placeholder for now (swap later when we have a real global series)
+    global_delta = 1.0
+
+    return {
+        "temp_now_c" : temp_now_c,
+        "temp_now_time" : temp_now_time,
+        "local_delta" : local_delta,
+        "global_delta" : global_delta,
+    }
+
+def intro_caption(data:dict, facts: StoryFacts) -> str:
+    """
+    Generate the markdown caption for the intro panel
+    using StoryFacts (so it's easy to reuse elsewhere).
+    """
+    def _warming_phrase(d):
+        if d > 0.15:
+            return f"warmed by about **{d:.1f}°C**"
+        if d < -0.15:
+            return f"cooled by about **{abs(d):.1f}°C**"
+        return "changed very little"
+
+    def _compare_local_global(local_d, global_d):
+        # handle negative / near-zero cleanly
+        if abs(local_d) < 0.15:
+            return "Your local climate is changing **much more slowly** than the global average."
+        if local_d < 0:
+            return "Your local climate has **cooled slightly**, unlike the world overall which has warmed."
+        if local_d > global_d + 0.2:
+            return "Your local climate is warming **faster** than the global average."
+        if local_d < global_d - 0.2:
+            return "Your local climate is warming **more slowly** than the global average."
+        return "Your local warming is **broadly similar** to the global average."
+
+    temp_now_c = data["temp_now_c"]
+    temp_now_time = data["temp_now_time"]
+    local_delta = data["local_delta"]
+    global_delta = data["global_delta"]
+
+    now_line = ""
+    if temp_now_c is not None:
+        now_line = f"It is currently **{temp_now_c:.1f}°C** in {location_label} (latest reading: {temp_now_time})."
+    else:
+        now_line = f"Current temperature is temporarily unavailable for {location_label} (rate limited or network issue)."
+
+    caption = (f"""
+        {now_line}
+
+        Since **{facts.data_start_year}**, the typical yearly temperature in **{location_label}** has {_warming_phrase(local_delta)}.
+
+        Globally, the average warming over the same period is around **{global_delta:.1f}°C**.
+        {_compare_local_global(local_delta, global_delta)}
+
+        Use the steps in the sidebar to **zoom out from last week’s weather to decades of climate**, then see how those long-term shifts show up in your **seasons**.
+        """)
+    
+    return caption
+    
 
 # -----------------------------------------------------------
 # Compute last year data, graph and captions
@@ -1170,29 +1265,6 @@ def build_fifty_year_figure(data: dict) -> (go.Figure, str):
             xanchor="left",
             yanchor="bottom",
         )
-
-
-    # if facts.coldest_month_trend_50y is not None:
-    #     fig.add_annotation(
-    #         x=x_years_all[-1] + 1,
-    #         y=y_cold_trend[-1],
-    #         text=f"{facts.coldest_month_trend_50y:+.1f}°C over {facts.data_end_year - facts.data_start_year}y",
-    #         showarrow=False,
-    #         font=dict(color="rgba(38,139,210,0.9)", size=10),
-    #         xanchor="left",
-    #         yanchor="middle",
-    #     )
-
-    # if facts.warmest_month_trend_50y is not None:
-    #     fig.add_annotation(
-    #         x=x_years_all[-1] + 1,
-    #         y=y_warm_trend[-1],
-    #         text=f"{facts.warmest_month_trend_50y:+.1f}°C over {facts.data_end_year - facts.data_start_year}y",
-    #         showarrow=False,
-    #         font=dict(color="rgba(220,50,47,0.9)", size=10),
-    #         xanchor="left",
-    #         yanchor="middle",
-    #     )
     
     fig.update_layout(
         height=400,
@@ -2094,8 +2166,11 @@ if step == "Intro":
         unsafe_allow_html=True,
     )
 
-    col_map, col_text = st.columns([2.2, 1.3])
+    # Generate data and captions
+    intro_data = build_intro_data(ds)
+    intro_caption = intro_caption(intro_data, facts)
 
+    col_map, col_text = st.columns([2.2, 1.3])
     with col_map:
         st.write("")
         m = folium.Map(location=[location_lat, location_lon], zoom_start=4, tiles="CartoDB positron")
@@ -2109,33 +2184,7 @@ if step == "Intro":
         st_folium(m, width="stretch", height=420)
 
     with col_text:
-        loc_name = ds.attrs.get("name_long", "this location")
-        st.markdown(
-            f"""
-            <p class="hero-metric">
-            Since the mid-{past_year}s, the typical yearly temperature in
-            <strong>{loc_name}</strong> has warmed by about
-            <strong>{warming_local:.1f}°C</strong>.
-            </p>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        st.markdown(
-            f"""
-            Globally, the average warming over the same period is around
-            <strong>{warming_global:.1f}°C</strong>. Your local climate is warming
-            <strong>{'faster' if warming_local > warming_global else 'slower'}</strong>
-            than the global average.
-            """
-        )
-
-        st.markdown(
-            """
-            Use the steps in the sidebar to zoom out from last week’s weather
-            to the last fifty years of climate, and see how your seasons have shifted.
-            """
-        )
+        st.markdown(intro_caption, unsafe_allow_html=True)
 
 # -----------------------------------------------------------
 # STEP: ZOOM OUT
@@ -2144,9 +2193,6 @@ if step == "Zoom out":
     #ds = load_city_climatology(DEFAULT_SLUG)
     loc_name = ds.attrs.get("name_long", "this location")
     
-    # After loading ds and knowing the location lat
-    # facts = compute_story_facts(ds, lat=lat)
-
     st.header("1. Zooming out: from days to decades")
 
     # ################################################################################
@@ -2233,8 +2279,9 @@ if step == "Zoom out":
 if step == "Seasons then vs now":
     st.header("2. How your seasons have shifted")
 
+    # ################################################################################
+    # 2A. Recent
     seasons_data = build_seasons_then_now_data(ds)
-
     if seasons_data:
         fig_seasons, fig_seasons_caption = build_seasons_then_now_figure(seasons_data, location_label)
         st.plotly_chart(fig_seasons, width="stretch", config={"displayModeBar": False})
@@ -2242,7 +2289,9 @@ if step == "Seasons then vs now":
         st.markdown(seasons_then_now_caption(seasons_data, facts))
     else:
         st.info("Monthly climatologies are not available for this location.")
-        
+    # ################################################################################
+
+    # ################################################################################
     # 2B. Min–max envelopes for early vs recent climates
     st.subheader("How the range of monthly temperatures has changed")
 
@@ -2435,8 +2484,8 @@ if step == "Seasons then vs now":
 if step == "You vs the world":
     st.header("3. Your warming vs global warming")
 
-    local_anom = data["local_anom"]
-    global_anom = data["global_anom"]
+    local_anom = fake_data["local_anom"]
+    global_anom = fake_data["global_anom"]
 
     def anomaly_bars(series, label):
         x = series.index.year + (series.index.month - 0.5) / 12.0
@@ -2463,7 +2512,7 @@ if step == "You vs the world":
     col_local, col_global = st.columns(2)
     with col_local:
         st.plotly_chart(
-            anomaly_bars(local_anom, f"{loc_choice} — monthly anomalies"),
+            anomaly_bars(local_anom, f"{location_label} — monthly anomalies"),
             width="stretch",
             config={"displayModeBar": False},
         )
