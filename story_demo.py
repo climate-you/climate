@@ -1755,25 +1755,89 @@ def build_seasons_then_now_data(ds: xr.Dataset) -> dict:
     """
     Prepare data for the 'How your seasons have shifted' panel.
 
-    Uses monthly climatologies:
-      - t2m_monthly_clim_past_mean_c   (month: 1..12)
-      - t2m_monthly_clim_recent_mean_c (month: 1..12)
+    Preferred method (more stable):
+      - Fit a linear trend for each calendar month across all years using:
+          * t2m_monthly_mean_c (time_monthly)
+      - Evaluate that trend at an "early" reference year and a "late" reference year.
+
+    Fallback:
+      - Use the precomputed 10y climatologies:
+          * t2m_monthly_clim_past_mean_c
+          * t2m_monthly_clim_recent_mean_c
     """
+    # ---------------------------
+    # 1) Trend-evaluated seasons
+    # ---------------------------
+    if "t2m_monthly_mean_c" in ds and "time_monthly" in ds.coords:
+        temps = np.asarray(ds["t2m_monthly_mean_c"].values, dtype="float64")
+        t = pd.to_datetime(ds["time_monthly"].values)
+
+        # Need enough data to fit month-by-month trends
+        if temps.size == t.size and temps.size >= 24:
+            years = t.year.astype(float)
+            months = t.month.astype(int)
+
+            min_year = int(np.nanmin(years))
+            max_year = int(np.nanmax(years))
+
+            # Evaluate at the midpoints of the first/last decades (more "typical")
+            early_eval = min_year + 4.5
+            late_eval = max_year - 4.5
+
+            past = np.full(12, np.nan, dtype="float64")
+            recent = np.full(12, np.nan, dtype="float64")
+
+            for m in range(1, 13):
+                mask = (months == m) & np.isfinite(temps) & np.isfinite(years)
+                if mask.sum() < 8:
+                    continue
+
+                x = years[mask]
+                y = temps[mask]
+
+                # simple linear fit: y = a*x + b
+                a, b = np.polyfit(x, y, 1)
+
+                y_early = a * early_eval + b
+                y_late = a * late_eval + b
+
+                past[m - 1] = float(y_early)
+                recent[m - 1] = float(y_late)
+
+            # If we managed to populate most months, use this method
+            if np.isfinite(past).sum() >= 10 and np.isfinite(recent).sum() >= 10:
+                month_index = pd.date_range("2000-01-01", periods=12, freq="MS")
+                month_names = [d.strftime("%b") for d in month_index]
+                delta = recent - past
+
+                return {
+                    "month_index": month_index,
+                    "month_names": month_names,
+                    "temp_past": past,
+                    "temp_recent": recent,
+                    "delta": delta,
+                    "method": "trend_eval",
+                    "early_label": f"{min_year}–{min_year+9}",
+                    "recent_label": f"{max_year-9}–{max_year}",
+                    "early_eval_year": early_eval,
+                    "recent_eval_year": late_eval,
+                }
+
+    # ---------------------------
+    # 2) Fallback: climatologies
+    # ---------------------------
     if "t2m_monthly_clim_past_mean_c" not in ds or "t2m_monthly_clim_recent_mean_c" not in ds:
         return {}
 
     past = np.asarray(ds["t2m_monthly_clim_past_mean_c"].values, dtype="float64")
     recent = np.asarray(ds["t2m_monthly_clim_recent_mean_c"].values, dtype="float64")
 
-    # Expect length 12; if not, bail out gracefully
     if past.size != 12 or recent.size != 12:
         return {}
 
-    # Use a dummy year just for nice month labels
     month_index = pd.date_range("2000-01-01", periods=12, freq="MS")
     month_names = [d.strftime("%b") for d in month_index]
-
-    delta = recent - past  # positive => recent is warmer
+    delta = recent - past
 
     return {
         "month_index": month_index,
@@ -1781,17 +1845,18 @@ def build_seasons_then_now_data(ds: xr.Dataset) -> dict:
         "temp_past": past,
         "temp_recent": recent,
         "delta": delta,
+        "method": "climatology_10y",
     }
 
-def build_seasons_then_now_figure(data: dict, location_label: str) -> go.Figure:
+def build_seasons_then_now_figure(data: dict, location_label: str) -> (go.Figure, str):
     """
     Build overlay figure: monthly climatology past vs recent,
     rotated so the warmest recent month is in the center.
     """
-    month_index = data["month_index"]
     month_names = data["month_names"]
-    past = data["temp_past"]
-    recent = data["temp_recent"]
+    past = np.asarray(data["temp_past"], dtype="float64")
+    recent = np.asarray(data["temp_recent"], dtype="float64")
+    delta = np.asarray(data["delta"], dtype="float64")
 
     # Find hottest recent month – that becomes the visual "center"
     ihot = int(np.nanargmax(recent))
@@ -1804,11 +1869,20 @@ def build_seasons_then_now_figure(data: dict, location_label: str) -> go.Figure:
     x = np.arange(12)
     past_r = roll(past)
     recent_r = roll(recent)
-    names_r = [month_names[(i - shift) % 12] for i in range(12)]
-
-    delta = data["delta"]
     delta_r = roll(delta)
-    custom = np.stack([past_r, recent_r, delta_r], axis=1)  # shape (12,3)
+
+    # Roll month labels consistently
+    names_r = list(np.roll(np.array(month_names, dtype=object), shift))
+
+    # Robust hover formatting: pre-format delta string with sign and 2 decimals
+    delta_str_r = np.array([f"{d:+.2f}" if np.isfinite(d) else "" for d in delta_r], dtype=object)
+
+    # customdata columns:
+    #   0: past temp
+    #   1: recent temp
+    #   2: numeric delta (kept in case you want it later)
+    #   3: delta string (for hover)
+    custom = np.column_stack([past_r, recent_r, delta_r, delta_str_r])
 
     fig = go.Figure()
 
@@ -1824,7 +1898,7 @@ def build_seasons_then_now_figure(data: dict, location_label: str) -> go.Figure:
             customdata=custom,
             text=names_r,
             hovertemplate=(
-                "%{text}: %{customdata[2]:+.1f}°C<br>"
+                "%{text}: %{customdata[3]}°C<br>"
                 "Earlier: %{customdata[0]:.1f}°C<br>"
                 "Recent: %{customdata[1]:.1f}°C"
                 "<extra></extra>"
@@ -1844,7 +1918,7 @@ def build_seasons_then_now_figure(data: dict, location_label: str) -> go.Figure:
             customdata=custom,
             text=names_r,
             hovertemplate=(
-                "%{text}: %{customdata[2]:+.1f}°C<br>"
+                "%{text}: %{customdata[3]}°C<br>"
                 "Recent: %{customdata[1]:.1f}°C<br>"
                 "Earlier: %{customdata[0]:.1f}°C"
                 "<extra></extra>"
@@ -1884,7 +1958,14 @@ def build_seasons_then_now_figure(data: dict, location_label: str) -> go.Figure:
         ),
     )
 
-    return fig
+    label_early = data.get("early_label", f"{facts.data_start_year}–{facts.data_start_year + 9}")
+    label_recent = data.get("recent_label", f"{facts.data_end_year - 9}–{facts.data_end_year}")
+    caption = (
+        f"Earlier climate: {label_early}, recent climate: {label_recent} "
+        "(based on ERA5 2m temperature via Open-Meteo)."
+    )
+
+    return fig, caption
 
 
 def seasons_then_now_caption(data: dict, facts: StoryFacts) -> str:
@@ -2155,17 +2236,10 @@ if step == "Seasons then vs now":
     seasons_data = build_seasons_then_now_data(ds)
 
     if seasons_data:
-        fig_seasons = build_seasons_then_now_figure(seasons_data, location_label)
+        fig_seasons, fig_seasons_caption = build_seasons_then_now_figure(seasons_data, location_label)
         st.plotly_chart(fig_seasons, width="stretch", config={"displayModeBar": False})
-
+        st.caption(fig_seasons_caption)
         st.markdown(seasons_then_now_caption(seasons_data, facts))
-
-        # Optional: small caption under the graph with data periods
-        st.caption(
-            f"Earlier climate: {facts.data_start_year}–{facts.data_start_year + 9}, "
-            f"recent climate: {facts.data_end_year - 9}–{facts.data_end_year} "
-            "(based on daily ERA5 2m temperature via Open-Meteo)."
-        )
     else:
         st.info("Monthly climatologies are not available for this location.")
         
