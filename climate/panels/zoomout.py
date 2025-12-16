@@ -99,7 +99,7 @@ def build_last_week_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
     return fig, caption
 
 
-def last_week_caption(ctx: StoryContext, facts: StoryFacts, data:dict) -> str:
+def last_week_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
     """
     Generate the markdown caption for the last-week panel
     using StoryFacts (so it's easy to reuse elsewhere).
