@@ -1,19 +1,9 @@
 #!/usr/bin/env python
 """
-Precompute multi-decade climate time series for a small set of locations
+Precompute multi-decade climate time series for a set of locations
 using the Open-Meteo ERA5 archive API.
 
-For each location we create a NetCDF file:
-
-    story_climatology/clim_<slug>_<START_YEAR>_<END_YEAR>.nc
-
-Example:
-
-    clim_city_mu_port_louis_1979_2024.nc
-    clim_city_gb_london_1979_2024.nc
-    clim_city_us_new_york_1979_2024.nc
-
-Each file contains:
+Each output file contains:
 
     - Daily series (time: daily)
         * t2m_daily_mean_c
@@ -36,21 +26,26 @@ Temperatures are in °C (Open-Meteo ERA5 archive already returns °C,
 we just keep that and make it explicit in the variable names).
 """
 
+import argparse
+import csv
 import os
-import time
+import time, random
 from datetime import datetime, date
 from pathlib import Path
+from collections import Counter
 
 import numpy as np
 import pandas as pd
 import requests
 import xarray as xr
+from tqdm import tqdm
 
 # -----------------------
 # Configuration
 # -----------------------
 
-DATA_DIR = Path("story_climatology")
+# Prefer your new repo layout if present
+_DEFAULT_DATA_DIR = Path("data/story_climatology") if Path("data/story_climatology").exists() else Path("story_climatology")
 
 # ERA5 is conventionally used from 1979 onwards
 START_YEAR = 1979
@@ -59,113 +54,13 @@ START_YEAR = 1979
 PAST_CLIM_YEARS = 10     # e.g. 10 earliest years
 RECENT_CLIM_YEARS = 10   # e.g. 10 most recent years
 
-# Locations registry
-# slug is used in file names and as a stable identifier
-LOCATIONS = [
-    {
-        "slug": "city_mu_port_louis",
-        "name_short": "Port Louis",
-        "name_long": "Port Louis, Mauritius",
-        "country": "Mauritius",
-        "country_code": "MU",
-        "lat": -20.16,
-        "lon": 57.50,
-        "kind": "city",
-    },
-    {
-        "slug": "city_jp_tokyo",
-        "name_short": "Tokyo",
-        "name_long": "Tokyo, Japan",
-        "country": "Japan",
-        "country_code": "JP",
-        "lat": 35.6764,
-        "lon": 139.6500,
-        "kind": "city",
-    },
-    {
-        "slug": "city_is_reykjavik",
-        "name_short": "Reykjavik",
-        "name_long": "Reykjavik, Iceland",
-        "country": "Iceland",
-        "country_code": "IS",
-        "lat": 64.1470,
-        "lon": -21.9408,
-        "kind": "city",
-    },
-    {
-        "slug": "city_sg_singapore",
-        "name_short": "Singapore",
-        "name_long": "Singapore",
-        "country": "Singapore",
-        "country_code": "SG",
-        "lat": 1.3521,
-        "lon": 103.8198,
-        "kind": "city",
-    },
-    {
-        "slug": "city_in_jaisalmer",
-        "name_short": "Jaisalmer",
-        "name_long": "Jaisalmer, India",
-        "country": "India",
-        "country_code": "IN",
-        "lat": 26.9157,
-        "lon": 70.9083,
-        "kind": "city",
-    },
-    {
-        "slug": "city_mu_tamarin",
-        "name_short": "Tamarin",
-        "name_long": "Tamarin, Mauritius",
-        "country": "Mauritius",
-        "country_code": "MU",
-        "lat": -20.33,
-        "lon": 57.37,
-        "kind": "city",
-    },
-        {
-        "slug": "city_ke_nairobi",
-        "name_short": "Nairobi",
-        "name_long": "Nairobi, Kenya",
-        "country": "Kenya",
-        "country_code": "KE",
-        "lat": -1.2833,
-        "lon": 38.8167,
-        "kind": "city",
-    },
-    {
-        "slug": "city_gb_london",
-        "name_short": "London",
-        "name_long": "London, United Kingdom",
-        "country": "United Kingdom",
-        "country_code": "GB",
-        "lat": 51.5074,
-        "lon": -0.1278,
-        "kind": "city",
-    },
-    {
-        "slug": "city_us_new_york",
-        "name_short": "New York",
-        "name_long": "New York City, United States",
-        "country": "United States",
-        "country_code": "US",
-        "lat": 40.7128,
-        "lon": -74.0060,
-        "kind": "city",
-    },
-]
 
 # -----------------------
 # Date helper
 # -----------------------
 
 def last_full_quarter_end(today: date | None = None) -> date:
-    """Return the last fully completed calendar quarter end date.
-
-    Examples:
-      - 2025-12-01 -> 2025-09-30 (Q3 2025)
-      - 2026-01-02 -> 2025-12-31 (Q4 2025)
-      - 2025-04-10 -> 2025-03-31 (Q1 2025)
-    """
+    """Return the last fully completed calendar quarter end date."""
     if today is None:
         today = date.today()
 
@@ -173,22 +68,146 @@ def last_full_quarter_end(today: date | None = None) -> date:
     m = today.month
 
     if m <= 3:
-        # Q1 not finished → last full quarter is Q4 previous year
         return date(y - 1, 12, 31)
     elif m <= 6:
-        # Q2 in progress → Q1 complete
         return date(y, 3, 31)
     elif m <= 9:
-        # Q3 in progress → Q2 complete
         return date(y, 6, 30)
     else:
-        # Q4 in progress → Q3 complete
         return date(y, 9, 30)
+
+
+def parse_yyyy_mm_dd(s: str) -> date:
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"Expected YYYY-MM-DD, got {s!r}") from e
+
+
+# -----------------------
+# Locations loading
+# -----------------------
+
+def load_locations_csv(path: Path) -> list[dict]:
+    """
+    Load locations from locations.csv.
+
+    Expected columns (minimum):
+      - slug
+      - city_name
+      - country_name
+      - country_code
+      - lat
+      - lon
+
+    Optional:
+      - label (used as name_long if present)
+      - kind  (defaults to "city")
+    """
+    if not path.exists():
+        raise FileNotFoundError(f"locations csv not found: {path}")
+
+    out: list[dict] = []
+    with path.open("r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames is None:
+            raise RuntimeError(f"{path} has no header row")
+
+        required = {"slug", "city_name", "country_name", "country_code", "lat", "lon"}
+        missing = required - set(reader.fieldnames)
+        if missing:
+            raise RuntimeError(f"{path} missing required columns: {sorted(missing)}")
+
+        for row in reader:
+            slug = (row.get("slug") or "").strip()
+            if not slug:
+                continue
+
+            city = (row.get("city_name") or "").strip()
+            country = (row.get("country_name") or "").strip()
+            cc = (row.get("country_code") or "").strip().upper()
+            label = (row.get("label") or "").strip()
+            kind = (row.get("kind") or "city").strip()
+
+            try:
+                lat = float(row.get("lat"))
+                lon = float(row.get("lon"))
+            except Exception:
+                print(f"[warn] skipping {slug}: invalid lat/lon")
+                continue
+
+            loc = {
+                "slug": slug,
+                "name_short": city or slug,
+                "name_long": label or (f"{city}, {country}" if city and country else slug),
+                "country": country or cc,
+                "country_code": cc or "",
+                "lat": lat,
+                "lon": lon,
+                "kind": kind,
+            }
+            out.append(loc)
+
+    return out
+
+
+def load_favorites_file(path: Path) -> set[str]:
+    """
+    favorites.txt: one slug per line, allow blank lines and '#' comments.
+    """
+    if not path.exists():
+        return set()
+
+    slugs: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        slugs.add(line)
+    return slugs
+
+
+def filter_locations(
+    locs: list[dict],
+    *,
+    only_favorites: bool,
+    favorites: set[str],
+    slugs: list[str] | None,
+    country_codes: list[str] | None,
+    limit: int | None,
+) -> list[dict]:
+    out = locs
+
+    if only_favorites:
+        out = [l for l in out if l["slug"] in favorites]
+
+    if slugs:
+        wanted = set(slugs)
+        out = [l for l in out if l["slug"] in wanted]
+
+    if country_codes:
+        ccset = {c.upper() for c in country_codes}
+        out = [l for l in out if (l.get("country_code") or "").upper() in ccset]
+
+    # stable ordering (so reruns are predictable)
+    out = sorted(out, key=lambda d: d["slug"])
+
+    if limit is not None and limit > 0:
+        out = out[:limit]
+
+    return out
 
 
 # -----------------------
 # Open-Meteo helper
 # -----------------------
+
+def _log_retry_after(r: requests.Response, prefix: str = "  ") -> None:
+    """Log Retry-After when present (we do NOT enforce it, just print it)."""
+    ra = r.headers.get("Retry-After")
+    if ra is None:
+        return
+    print(f"{prefix}[info] Retry-After header: {ra} (not enforced)")
 
 def fetch_openmeteo_daily_block(
     lat: float,
@@ -200,26 +219,6 @@ def fetch_openmeteo_daily_block(
 ) -> xr.Dataset:
     """
     Fetch a daily block (mean/min/max 2m temperature) from the Open-Meteo ERA5 archive.
-
-    Parameters
-    ----------
-    lat, lon : float
-        Location coordinates.
-    start_date, end_date : datetime.date
-        Inclusive block boundaries.
-    retries : int
-        Number of retries on errors.
-    sleep : int
-        Base sleep in seconds for simple backoff.
-
-    Returns
-    -------
-    xarray.Dataset
-        Dataset with variables:
-            - t2m_daily_mean_c
-            - t2m_daily_min_c
-            - t2m_daily_max_c
-        and 'time' coordinate (daily).
     """
     base_url = "https://archive-api.open-meteo.com/v1/era5"
     params = {
@@ -236,7 +235,7 @@ def fetch_openmeteo_daily_block(
         try:
             r = requests.get(base_url, params=params, timeout=60)
             if r.status_code == 429:
-                # Rate limit: simple exponential backoff
+                _log_retry_after(r, prefix="    ")
                 wait = sleep * (k + 1)
                 print(f"    [warn] 429 Too Many Requests, backing off {wait}s...")
                 time.sleep(wait)
@@ -251,38 +250,17 @@ def fetch_openmeteo_daily_block(
                 raise RuntimeError("Unexpected Open-Meteo response structure (no 'daily' key)")
 
             dates = pd.to_datetime(daily["time"])
-            # Open-Meteo ERA5 already returns °C
             mean_vals = np.array(daily["temperature_2m_mean"], dtype=float)
             min_vals = np.array(daily["temperature_2m_min"], dtype=float)
             max_vals = np.array(daily["temperature_2m_max"], dtype=float)
 
-            da_mean = xr.DataArray(
-                mean_vals,
-                coords={"time": dates},
-                dims=["time"],
-                name="t2m_daily_mean_c",
-            )
-            da_min = xr.DataArray(
-                min_vals,
-                coords={"time": dates},
-                dims=["time"],
-                name="t2m_daily_min_c",
-            )
-            da_max = xr.DataArray(
-                max_vals,
-                coords={"time": dates},
-                dims=["time"],
-                name="t2m_daily_max_c",
-            )
+            da_mean = xr.DataArray(mean_vals, coords={"time": dates}, dims=["time"], name="t2m_daily_mean_c")
+            da_min = xr.DataArray(min_vals, coords={"time": dates}, dims=["time"], name="t2m_daily_min_c")
+            da_max = xr.DataArray(max_vals, coords={"time": dates}, dims=["time"], name="t2m_daily_max_c")
 
-            ds = xr.Dataset(
-                {
-                    "t2m_daily_mean_c": da_mean,
-                    "t2m_daily_min_c": da_min,
-                    "t2m_daily_max_c": da_max,
-                }
+            return xr.Dataset(
+                {"t2m_daily_mean_c": da_mean, "t2m_daily_min_c": da_min, "t2m_daily_max_c": da_max}
             )
-            return ds
 
         except Exception as e:
             last_err = e
@@ -295,8 +273,7 @@ def fetch_openmeteo_daily_block(
 
 def fetch_city_daily_history(lat: float, lon: float, start_date: date, end_date: date) -> xr.Dataset:
     """Fetch daily mean/min/max 2m temperature from Open-Meteo ERA5 archive
-    for a single point and a given date range, with simple retry/backoff
-    on 429 and transient HTTP errors.
+    for a single point and a given date range, with simple retry/backoff.
     """
     params = {
         "latitude": lat,
@@ -310,16 +287,15 @@ def fetch_city_daily_history(lat: float, lon: float, start_date: date, end_date:
     url = "https://archive-api.open-meteo.com/v1/era5"
 
     max_retries = 5
-    base_sleep = 10  # seconds (we'll back off from here)
+    base_sleep = 10
 
     last_err: Exception | None = None
 
     for attempt in range(max_retries):
         try:
             r = requests.get(url, params=params, timeout=60)
-
-            # Explicit handling for rate limiting
             if r.status_code == 429:
+                _log_retry_after(r, prefix="  ")
                 wait = base_sleep * (2 ** attempt)
                 print(
                     f"  [warn] 429 Too Many Requests from Open-Meteo "
@@ -329,13 +305,11 @@ def fetch_city_daily_history(lat: float, lon: float, start_date: date, end_date:
                 last_err = requests.HTTPError("429 Too Many Requests", response=r)
                 continue
 
-            # For other non-OK statuses, raise here
             r.raise_for_status()
             j = r.json()
-            break  # success → exit retry loop
+            break
 
         except requests.RequestException as e:
-            # Any network / HTTP error ends up here
             last_err = e
             if attempt == max_retries - 1:
                 print(
@@ -350,12 +324,10 @@ def fetch_city_daily_history(lat: float, lon: float, start_date: date, end_date:
             )
             time.sleep(wait)
     else:
-        # Shouldn't actually reach here because we either break or raise
         if last_err is not None:
             raise last_err
         raise RuntimeError("Unexpected error in fetch_city_daily_history")
 
-    # If we reach this point, j is populated with JSON
     daily = j["daily"]
     times = pd.to_datetime(daily["time"])
 
@@ -363,7 +335,7 @@ def fetch_city_daily_history(lat: float, lon: float, start_date: date, end_date:
     tmax = np.array(daily["temperature_2m_max"], dtype="float32")
     tmin = np.array(daily["temperature_2m_min"], dtype="float32")
 
-    ds = xr.Dataset(
+    return xr.Dataset(
         data_vars=dict(
             t2m_daily_mean_c=(["time"], tmean),
             t2m_daily_max_c=(["time"], tmax),
@@ -371,7 +343,6 @@ def fetch_city_daily_history(lat: float, lon: float, start_date: date, end_date:
         ),
         coords=dict(time=times),
     )
-    return ds
 
 
 # -----------------------
@@ -379,22 +350,15 @@ def fetch_city_daily_history(lat: float, lon: float, start_date: date, end_date:
 # -----------------------
 
 def derive_monthly_and_yearly(ds_daily: xr.Dataset):
-    """
-    From daily dataset, derive monthly and yearly mean series
-    (based on t2m_daily_mean_c, t2m_daily_min_c, t2m_daily_max_c).
-    """
-
-    # Monthly aggregation (calendar months, at month start)
+    """From daily dataset, derive monthly and yearly mean series."""
     monthly_mean = ds_daily["t2m_daily_mean_c"].resample(time="MS").mean()
     monthly_min = ds_daily["t2m_daily_min_c"].resample(time="MS").mean()
     monthly_max = ds_daily["t2m_daily_max_c"].resample(time="MS").mean()
 
-    # Rename dimension so monthly data uses time_monthly
     monthly_mean = monthly_mean.rename(time="time_monthly")
     monthly_min = monthly_min.rename(time="time_monthly")
     monthly_max = monthly_max.rename(time="time_monthly")
 
-    # Yearly aggregation (calendar years, at year start)
     yearly_mean = ds_daily["t2m_daily_mean_c"].resample(time="YS").mean()
     yearly_mean = yearly_mean.rename(time="time_yearly")
 
@@ -402,13 +366,7 @@ def derive_monthly_and_yearly(ds_daily: xr.Dataset):
 
 
 def derive_monthly_climatologies(ds_daily: xr.Dataset) -> tuple[xr.DataArray | None, xr.DataArray | None]:
-    """Compute past vs recent monthly climatology for daily mean temperature.
-
-    - "Past" = first PAST_CLIM_YEARS years in the record.
-    - "Recent" = last RECENT_CLIM_YEARS years in the record.
-
-    If there isn't enough data to form both windows, returns (None, None).
-    """
+    """Compute past vs recent monthly climatology for daily mean temperature."""
     da = ds_daily["t2m_daily_mean_c"]
     years = da["time"].dt.year
 
@@ -416,13 +374,9 @@ def derive_monthly_climatologies(ds_daily: xr.Dataset) -> tuple[xr.DataArray | N
     max_year = int(years.max().item())
     n_years = max_year - min_year + 1
 
-    # Require at least PAST + RECENT years + a small buffer (optional)
     min_needed = PAST_CLIM_YEARS + RECENT_CLIM_YEARS
     if n_years < min_needed:
-        print(
-            f"  [warn] record too short for climatologies: "
-            f"{n_years} years, need at least {min_needed}"
-        )
+        print(f"  [warn] record too short for climatologies: {n_years} years, need at least {min_needed}")
         return None, None
 
     past_start = min_year
@@ -431,15 +385,11 @@ def derive_monthly_climatologies(ds_daily: xr.Dataset) -> tuple[xr.DataArray | N
     recent_end = max_year
     recent_start = max_year - RECENT_CLIM_YEARS + 1
 
-    print(
-        f"  [info] climatology windows: "
-        f"past={past_start}–{past_end}, recent={recent_start}–{recent_end}"
-    )
+    print(f"  [info] climatology windows: past={past_start}–{past_end}, recent={recent_start}–{recent_end}")
 
-    # Monthly means from daily – use 'ME' to avoid xarray FutureWarning
+    # Monthly means from daily – 'ME' to avoid xarray warning
     da_mon = da.resample(time="ME").mean()
 
-    # Past climatology: mean by calendar month over the past window
     mask_past = (da_mon["time"].dt.year >= past_start) & (da_mon["time"].dt.year <= past_end)
     mon_past = da_mon.where(mask_past, drop=True)
 
@@ -447,10 +397,8 @@ def derive_monthly_climatologies(ds_daily: xr.Dataset) -> tuple[xr.DataArray | N
         past_clim = None
     else:
         past_clim = mon_past.groupby("time.month").mean("time")
-        past_clim = past_clim.rename(month="month")
-        past_clim = past_clim.assign_coords(month=np.arange(1, 13))
+        past_clim = past_clim.rename(month="month").assign_coords(month=np.arange(1, 13))
 
-    # Recent climatology
     mask_recent = (da_mon["time"].dt.year >= recent_start) & (da_mon["time"].dt.year <= recent_end)
     mon_recent = da_mon.where(mask_recent, drop=True)
 
@@ -458,8 +406,7 @@ def derive_monthly_climatologies(ds_daily: xr.Dataset) -> tuple[xr.DataArray | N
         recent_clim = None
     else:
         recent_clim = mon_recent.groupby("time.month").mean("time")
-        recent_clim = recent_clim.rename(month="month")
-        recent_clim = recent_clim.assign_coords(month=np.arange(1, 13))
+        recent_clim = recent_clim.rename(month="month").assign_coords(month=np.arange(1, 13))
 
     return past_clim, recent_clim
 
@@ -469,12 +416,7 @@ def derive_monthly_climatologies(ds_daily: xr.Dataset) -> tuple[xr.DataArray | N
 # -----------------------
 
 def is_existing_file_up_to_date(path: Path, slug: str, target_end: date) -> bool:
-    """Return True if an existing NetCDF file is up-to-date for this slug
-    and already covers data up to at least target_end.
-
-    Also checks that the required variables are present, and that the
-    stored metadata (slug/start_year) matches expectations.
-    """
+    """Return True if an existing NetCDF file is up-to-date and complete."""
     if not path.exists():
         return False
 
@@ -487,24 +429,15 @@ def is_existing_file_up_to_date(path: Path, slug: str, target_end: date) -> bool
     try:
         attrs = ds.attrs
 
-        # 1. Check slug
         if attrs.get("location_slug") != slug:
-            print(
-                f"  [info] {path} slug mismatch "
-                f"(found {attrs.get('location_slug')}, expected {slug})"
-            )
+            print(f"  [info] {path} slug mismatch (found {attrs.get('location_slug')}, expected {slug})")
             return False
 
-        # 2. Check start_year
         start_year_attr = int(attrs.get("start_year", -1))
         if start_year_attr != START_YEAR:
-            print(
-                f"  [info] {path} start_year mismatch "
-                f"(found {start_year_attr}, expected {START_YEAR})"
-            )
+            print(f"  [info] {path} start_year mismatch (found {start_year_attr}, expected {START_YEAR})")
             return False
 
-        # 3. Check required variables exist
         required_vars = {
             "t2m_daily_mean_c",
             "t2m_daily_min_c",
@@ -519,7 +452,6 @@ def is_existing_file_up_to_date(path: Path, slug: str, target_end: date) -> bool
             print(f"  [info] {path} missing required variables: {missing}")
             return False
 
-        # 4. Check coverage up to target_end using attrs["data_end_date"]
         data_end_str = attrs.get("data_end_date")
         if not data_end_str:
             print(f"  [info] {path} missing data_end_date attr")
@@ -532,17 +464,10 @@ def is_existing_file_up_to_date(path: Path, slug: str, target_end: date) -> bool
             return False
 
         if existing_end >= target_end:
-            print(
-                f"  [info] {path} already covers up to {existing_end}, "
-                f"which is >= target_end={target_end}, no update needed"
-            )
             return True
-        else:
-            print(
-                f"  [info] {path} only covers up to {existing_end}, "
-                f"but target_end={target_end}, will recompute"
-            )
-            return False
+
+        print(f"  [info] {path} only covers up to {existing_end}, need {target_end}, will recompute")
+        return False
 
     finally:
         ds.close()
@@ -552,41 +477,37 @@ def is_existing_file_up_to_date(path: Path, slug: str, target_end: date) -> bool
 # Precompute per location
 # -----------------------
 
-def precompute_for_location(loc: dict, target_end: date):
+def precompute_for_location(loc: dict, target_end: date, data_dir: Path, *, skip_check: bool = True) -> tuple[str, str]:
+    """
+    Returns (status, detail) where status is one of:
+      - "skip"      (already up-to-date)
+      - "write"     (computed and wrote a file)
+      - "recompute" (overwrote an older file)
+    """
     slug = loc["slug"]
     lat = float(loc["lat"])
     lon = float(loc["lon"])
 
-    out_path = DATA_DIR / f"clim_{slug}.nc"
+    out_path = data_dir / f"clim_{slug}.nc"
+    status = "write"
 
-    if out_path.exists():
-        print(f"[check] {slug}: found existing {out_path}")
+    if skip_check and out_path.exists():
         if is_existing_file_up_to_date(out_path, slug, target_end):
-            print(f"[skip] {slug}: already up-to-date\n")
-            return
-        else:
-            print(f"[recompute] {slug}: existing file is older, will overwrite\n")
+            return "skip", "up-to-date"
+        status = "recompute"
+    elif out_path.exists():
+        status = "recompute"
 
-    print(
-        f"[city] {loc['name_long']} ({slug}) at "
-        f"lat={lat}, lon={lon}, target_end={target_end}"
-    )
 
     start_date = date(START_YEAR, 1, 1)
     end_date = target_end
 
-    # 1. Fetch daily history 1979-01-01 → target_end
     ds_daily = fetch_city_daily_history(lat, lon, start_date, end_date)
 
-    # 2. Derive monthly/yearly
     m_mean, m_min, m_max, y_mean = derive_monthly_and_yearly(ds_daily)
-
-    # 3. Dynamic past/recent climatologies
     past_clim, recent_clim = derive_monthly_climatologies(ds_daily)
 
-    # 4. Build output dataset
     ds_out = xr.Dataset()
-
     ds_out["t2m_daily_mean_c"] = ds_daily["t2m_daily_mean_c"]
     ds_out["t2m_daily_min_c"] = ds_daily["t2m_daily_min_c"]
     ds_out["t2m_daily_max_c"] = ds_daily["t2m_daily_max_c"]
@@ -602,35 +523,147 @@ def precompute_for_location(loc: dict, target_end: date):
     if recent_clim is not None:
         ds_out["t2m_monthly_clim_recent_mean_c"] = recent_clim
 
-    # 5. Metadata / attrs
     ds_out.attrs.update(
         location_slug=slug,
-        name_short=loc["name_short"],
-        name_long=loc["name_long"],
-        country=loc["country"],
-        country_code=loc["country_code"],
+        name_short=loc.get("name_short", slug),
+        name_long=loc.get("name_long", slug),
+        country=loc.get("country", ""),
+        country_code=loc.get("country_code", ""),
         latitude=lat,
         longitude=lon,
-        kind=loc["kind"],
+        kind=loc.get("kind", "city"),
         source="Open-Meteo ERA5 archive (daily mean/min/max 2m_temperature)",
         created_utc=datetime.utcnow().isoformat() + "Z",
         start_year=START_YEAR,
-        data_end_date=end_date.isoformat(),  # key for up-to-date check
+        data_end_date=end_date.isoformat(),
     )
 
-    print(f"  -> writing {out_path}")
-    ds_out.to_netcdf(out_path, mode="w")
-    print(f"  -> done {slug}\n")
+    tmp_path = out_path.with_suffix(".nc.tmp")
+    ds_out.to_netcdf(tmp_path, mode="w")
+    os.replace(tmp_path, out_path)
+
+    return status, f"wrote {out_path.name}"
+
+
+# -----------------------
+# CLI
+# -----------------------
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description="Precompute story climatology NetCDFs from locations.csv")
+    p.add_argument("--locations-csv", type=Path, default=Path("locations/locations.csv"))
+    p.add_argument("--favorites-file", type=Path, default=Path("locations/favorites.txt"))
+
+    p.add_argument("--only-favorites", action="store_true", help="Only precompute slugs listed in favorites.txt")
+    p.add_argument("--slug", action="append", default=None, help="Precompute only this slug (repeatable)")
+    p.add_argument("--country", action="append", default=None, help="Filter by country code (repeatable), e.g. --country US")
+
+    p.add_argument("--limit", type=int, default=None, help="Limit number of locations (after filtering)")
+    p.add_argument("--out-dir", type=Path, default=_DEFAULT_DATA_DIR)
+
+    p.add_argument("--target-end", type=parse_yyyy_mm_dd, default=None, help="Override target end date (YYYY-MM-DD)")
+    p.add_argument("--dry-run", action="store_true", help="Print selected slugs and exit")
+
+    p.add_argument("--min-gap", type=float, default=2.0, help="Minimum seconds to wait between cities (helps avoid 429). Default: %(default)s")
+
+    return p
 
 
 def main():
-    print(f"Output directory: {DATA_DIR.resolve()}")
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    target_end = last_full_quarter_end()
-    print(f"Target end date for this run: {target_end.isoformat()}")
+    args = build_arg_parser().parse_args()
+
+    data_dir: Path = args.out_dir
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    target_end = args.target_end or last_full_quarter_end()
+
+    print(f"Locations CSV: {args.locations_csv}")
+    print(f"Output dir:    {data_dir.resolve()}")
+    print(f"Target end:    {target_end.isoformat()}  (last full quarter unless overridden)")
     print()
-    for loc in LOCATIONS:
-        precompute_for_location(loc, target_end)
+
+    locs = load_locations_csv(args.locations_csv)
+    favorites = load_favorites_file(args.favorites_file)
+
+    selected = filter_locations(
+        locs,
+        only_favorites=args.only_favorites,
+        favorites=favorites,
+        slugs=args.slug,
+        country_codes=args.country,
+        limit=args.limit,
+    )
+
+    if not selected:
+        print("[warn] no locations selected (check filters / favorites).")
+        return
+
+    if args.dry_run:
+        print(f"[dry-run] {len(selected)} locations selected:")
+        for l in selected:
+            print(f"  - {l['slug']}  ({l['name_long']})")
+        return
+
+    total = len(selected)
+    print(f"Will precompute {total} locations.\n")
+
+    start_t = time.time()
+
+    counts = Counter()
+    pbar = tqdm(
+        selected,
+        total=len(selected),
+        desc="precompute",
+        dynamic_ncols=True,
+        smoothing=0.05,
+    )
+
+    last_done = 0.0
+
+    for loc in pbar:
+        slug = loc.get("slug", "?")
+        out_path = data_dir / f"clim_{slug}.nc"
+
+        # Fast path: skip WITHOUT waiting if already up to date
+        try:
+            if out_path.exists() and is_existing_file_up_to_date(out_path, slug, target_end):
+                counts["skip"] += 1
+                pbar.set_postfix_str(
+                    f"{slug} | skip | skip={counts['skip']} write={counts['write']} rec={counts['recompute']} err={counts['error']}"
+                )
+                continue
+        except Exception as e:
+            # If the up-to-date check itself fails, fall back to recompute path
+            print(f"[warn] up-to-date check failed for {slug}: {e} (will recompute)")
+
+        # Only rate-limit when we're ACTUALLY about to process a slug
+        now = time.monotonic()
+        wait = args.min_gap - (now - last_done)
+        if wait > 0:
+            time.sleep(wait + random.uniform(0, 0.4))  # jitter helps avoid “thundering herd”
+
+        pbar.set_postfix_str(f"{slug}")
+
+        try:
+            status, detail = precompute_for_location(loc, target_end, data_dir, skip_check=False)
+            counts[status] += 1
+            pbar.set_postfix_str(
+                f"{slug} | {status} | skip={counts['skip']} write={counts['write']} rec={counts['recompute']} err={counts['error']}"
+            )
+        except Exception as e:
+            counts["error"] += 1
+            pbar.set_postfix_str(
+                f"{slug} | ERROR | skip={counts['skip']} write={counts['write']} rec={counts['recompute']} err={counts['error']}"
+            )
+            print(f"[error] {slug} failed: {e}")
+        finally:
+            # Update only after a real attempt (so skips don't “consume” the gap)
+            last_done = time.monotonic()
+    
+    pbar.close()
+
+    dt = time.time() - start_t
+    print(f"\nDone. Total wall time: {dt:.1f}s")
 
 
 if __name__ == "__main__":
