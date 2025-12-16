@@ -96,7 +96,6 @@ with st.sidebar:
         value=date.today(),
         help="Use this to see how the page would look in a different season.",
     )
-    print(repr(today))
 
 # Map label back to slug + meta
 chosen_idx = labels.index(chosen_label)
