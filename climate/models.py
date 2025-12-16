@@ -11,14 +11,13 @@ class StoryFacts:
     recent_warming_10y: Optional[float]
     last_year_anomaly: Optional[float]
     hemisphere: str
-    # coldest_month_trend_50y: float | None = None
-    # warmest_month_trend_50y: float | None = None
 
 @dataclass
 class StoryContext:
     today: date
     slug: str
     location_label: str
+    city_name : str
     location_lat: float
     location_lon: float
     unit: str

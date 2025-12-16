@@ -58,14 +58,14 @@ def intro_caption(ctx: StoryContext, facts: StoryFacts, data:dict) -> str:
 
     now_line = ""
     if temp_now_c is not None:
-        now_line = f"It is currently **{fmt_temp(temp_now_c, ctx.unit)}** in {ctx.location_label} (latest reading: {temp_now_time})."
+        now_line = f"It is currently **{fmt_temp(temp_now_c, ctx.unit)}** in {ctx.city_name} (latest reading: {temp_now_time})."
     else:
-        now_line = f"Current temperature is temporarily unavailable for {ctx.location_label} (rate limited or network issue)."
+        now_line = f"Current temperature is temporarily unavailable for {ctx.city_name} (rate limited or network issue)."
 
     caption = (f"""
         {now_line}
 
-        Since **{facts.data_start_year}**, the typical yearly temperature in **{ctx.location_label}** has {_warming_phrase(local_delta)}.
+        Since **{facts.data_start_year}**, the typical yearly temperature in **{ctx.city_name}** has {_warming_phrase(local_delta)}.
 
         Globally, the average warming over the same period is around **{fmt_delta(global_delta, ctx.unit)}**.
         {_compare_local_global(local_delta, global_delta)}

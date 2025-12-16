@@ -106,6 +106,7 @@ location_label = loc_meta["label"]
 location_lat = loc_meta["lat"]
 location_lon = loc_meta["lon"]
 clim_path = loc_meta["path"]
+city_name = loc_meta["city_name"]
 country_code = loc_meta["country_code"]
 
 # If user hasn't explicitly chosen units, auto-pick based on country
@@ -178,7 +179,7 @@ st.markdown(
 # -----------------------------------------------------------
 # STEP: INTRO
 # -----------------------------------------------------------
-ctx = StoryContext(today, slug, location_label, location_lat, location_lon, unit, ds)
+ctx = StoryContext(today, slug, location_label, city_name, location_lat, location_lon, unit, ds)
 
 if step == "Intro":
     st.markdown(

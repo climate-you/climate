@@ -47,12 +47,13 @@ def discover_locations(clim_dir: str) -> dict:
             label = city_name
 
         locations[slug] = {
-            "slug": slug,
-            "label": label,
-            "lat": lat,
-            "lon": lon,
-            "path": path,
-            "country_code" : country_code,
+            "slug": slug,                  # clim_city_gb_london
+            "lat": lat,                    # 51.5074,
+            "lon": lon,                    # -0.1278
+            "path": path,                  # clim_city_gb_london.nc
+            "label": label,                # London, United Kingdom
+            "city_name": city_name,        # London
+            "country_code" : country_code, # GB
         }
 
     return locations

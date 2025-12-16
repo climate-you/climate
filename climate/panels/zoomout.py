@@ -774,13 +774,13 @@ def fifty_year_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
 
         caption = f"""
     When you zoom out over about **{total_span_years} years**, the year-to-year noise
-    fades and a clear pattern emerges. In **{ctx.location_label}**, the climate {change_text}
+    fades and a clear pattern emerges. In **{ctx.city_name}**, the climate {change_text}
             """ + " " + extra
     else:
         caption = f"""
     When you zoom out over about **{total_span_years} years**, the year-to-year noise
     fades and a clearer pattern would normally emerge — but here the data window is too short
-    to say much yet for **{ctx.location_label}**.
+    to say much yet for **{ctx.city_name}**.
         """
     
     return caption

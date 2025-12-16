@@ -502,7 +502,7 @@ def seasons_then_now_separate_caption(ctx: StoryContext, facts: StoryFacts, data
     )
 
     return (
-        f"In **{ctx.location_label}**, the typical year has shifted:\n\n"
+        f"In **{ctx.city_name}**, the typical year has shifted:\n\n"
         f"{bullets}\n"
         f"{tail}"
     )
