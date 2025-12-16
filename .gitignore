@@ -1,2 +1,3 @@
 __pycache__
 data/story_climatology/*.nc
+.cache
