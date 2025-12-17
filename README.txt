@@ -8,11 +8,16 @@ key: XXXXXX
 
 2. Environment:
 $ export EARTHKIT_CACHE_HOME=/Users/benoit.leveau/Documents/Programming/Climate/ek-cache
+# export PYTHONPATH=`pwd`
 $ conda activate climate
 
-3. Precompute:
-$ python source/precompute.py  --area "-18 55 -22 59" --year-start 1975 --year-end 2024 --out data/era5_t2m_monthly_1975_2024_mauritius.nc
-$ python source/precompute.py --area "53 -2.5 50 1.5" --year-start 1975 --year-end 2024 --out data/era5_t2m_monthly_1975_2024_london.nc
+3. Generate city list:
+# Fill extra_locations.txt to include additional cities (tweak source if needed)
+$ python scripts/make_city_list.py --source cities500 --extra-file locations/extra_locations.txt --top-per-country=3
 
-4. Run web page:
-$ streamlit run source/zoom_temp.py
+4. Precompute:
+# Tweak favorites.txt
+$ python scripts/precompute_story_cities.py --only-favorites --limit 10 [--dry-run]
+
+5. Run web page:
+$ streamlit run app/story_demo.py
