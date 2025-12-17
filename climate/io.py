@@ -3,6 +3,7 @@ import xarray as xr
 import os
 import glob
 import numpy as np
+from datetime import datetime
 
 # -----------------------------------------------------------
 # Helpers to load precomputed caches
@@ -57,13 +58,6 @@ def discover_locations(clim_dir: str) -> dict:
         }
 
     return locations
-
-@st.cache_data
-def load_city_climatology(slug: str) -> xr.Dataset:
-    """Load precomputed climatology NetCDF for a given location slug."""
-    path = DATA_DIR / f"clim_{slug}.nc"
-    ds = xr.load_dataset(path)
-    return ds
 
 def dataset_coverage_text(ds: xr.Dataset) -> str:
     """Return a short caption like 'Data from 1979 to Sep 2025'."""
