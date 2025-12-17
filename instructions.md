@@ -224,6 +224,8 @@ A separate simple Streamlit tool (`view_locations_map.py`) was created to visual
 
 ## Key design decisions and rationale**
 
+- Conda environment is set up on user workstation (running MacOS)
+- Account is set up with CDS
 - Using **Open-Meteo ERA5** archive for precompute because CDS/ERA5 direct queries were slow and error-prone (CDS “no space left on device”, job failures). Open-Meteo is fast but rate-limited (429).
 - Precompute city history to avoid live heavy queries and to support many users.
 - Live Open-Meteo only for “fresh” windows (current temp, last week/month).
@@ -231,15 +233,15 @@ A separate simple Streamlit tool (`view_locations_map.py`) was created to visual
 - Code refactored into modules with clear “data → figure → caption” pipeline so it can later move to a front-end scrollytelling framework.
 - ERA5 “50 years” baseline starts at 1979 because ERA5 reanalysis coverage is conventionally used from 1979 onward.
 
----
-
 ## Current open questions / TODOs
 
 - Add **disk cache** (shared across process restarts) for Open-Meteo live windows to reduce 429s.
 - Improve app robustness: catch 429 and show “data temporarily unavailable, retry later” instead of crashing.
 - Dark mode styling for Plotly annotations (min/max boxes).
 
----
+## Instructions for code changes
+
+- for surgical patches, please print the code block (with befor/after is clearer) rather than uploading the whole file.
 
 ## Current short-term roadmap
 
