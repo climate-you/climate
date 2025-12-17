@@ -37,7 +37,11 @@ from climate.panels.seasons import (
     build_seasons_then_now_data, build_seasons_then_now_figure, build_seasons_then_now_separate_figures,
     seasons_then_now_caption, seasons_then_now_separate_caption 
 )
-# from climate.panels.world import 
+from climate.panels.world import (
+    build_you_vs_world_data,
+    build_you_vs_world_figures,
+    you_vs_world_caption,
+)
 
 # TO BE REMOVED
 from climate.fake import make_fake_daily_series, make_fake_hourly_from_daily, fake_local_and_global
@@ -349,7 +353,6 @@ if step == "Seasons then vs now":
     # ################################################################################
     # 2B. Min–max envelopes for early vs recent climates
     st.subheader("How the range of monthly temperatures has changed")
-
     fig_env_past, fig_env_recent = build_seasons_then_now_separate_figures(ctx, facts, seasons_data)
     c1, c2 = st.columns(2)
     with c1:
@@ -366,59 +369,16 @@ if step == "You vs the world":
     # ################################################################################
     # 3A. Local vs Global anomalies
     st.header("3. Your warming vs global warming")
-
-    import plotly.graph_objs as go
-
-    local_anom = fake_data["local_anom"]
-    global_anom = fake_data["global_anom"]
-
-    def anomaly_bars(series, label):
-        x = series.index.year + (series.index.month - 0.5) / 12.0
-        y = series.values
-        colors = np.where(
-            y >= 0, "rgba(180, 0, 120, 0.8)", "rgba(0, 130, 0, 0.8)"
-        )
-        fig = go.Figure(
-            go.Bar(
-                x=x,
-                y=y,
-                marker=dict(color=colors),
-            )
-        )
-        fig.update_layout(
-            height=260,
-            margin=dict(l=40, r=20, t=20, b=40),
-            xaxis_title="Year",
-            yaxis_title=f"Anomaly vs 1979–1990 (%s)" % unit,
-            title=label,
-        )
-        return fig
-
+    data = build_you_vs_world_data(ctx)
+    fig_local, fig_global, tiny = build_you_vs_world_figures(ctx, facts, data)
     col_local, col_global = st.columns(2)
     with col_local:
-        st.plotly_chart(
-            anomaly_bars(local_anom, f"{location_label} — monthly anomalies"),
-            width="stretch",
-            config={"displayModeBar": False},
-        )
+        st.plotly_chart(fig_local, width="stretch", config={"displayModeBar": False})
     with col_global:
-        st.plotly_chart(
-            anomaly_bars(global_anom, "Global average — monthly anomalies"),
-            width="stretch",
-            config={"displayModeBar": False},
-        )
-
-    st.markdown(
-        """
-        Here we compare your location to a simple **global average**.  
-        Both are measured relative to the same baseline (roughly 1979–1990).
-
-        In a full implementation, this section would use **real global datasets**
-        (for example, published global temperature indices) and the local record
-        from ERA5, so you can see exactly how much faster or slower your
-        region has warmed compared to the planet as a whole.
-        """
-    )
+        st.plotly_chart(fig_global, width="stretch", config={"displayModeBar": False})
+    st.caption(tiny)
+    st.markdown(you_vs_world_caption(ctx, facts, data))
+    # ################################################################################
 
 # -----------------------------------------------------------
 # STEP: WORLD MAP IDEA
