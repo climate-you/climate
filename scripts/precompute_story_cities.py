@@ -202,78 +202,50 @@ def filter_locations(
 # Open-Meteo helper
 # -----------------------
 
-def _log_retry_after(r: requests.Response, prefix: str = "  ") -> None:
-    """Log Retry-After when present (we do NOT enforce it, just print it)."""
-    ra = r.headers.get("Retry-After")
-    if ra is None:
-        return
-    print(f"{prefix}[info] Retry-After header: {ra} (not enforced)")
+def _log_rate_limit_headers(r: requests.Response, prefix: str = "") -> None:
+    """
+    Print any headers that look related to rate limiting / backoff.
+    If none are found, print a short note plus the available header keys.
+    """
+    want_substrings = (
+        "retry-after",
+        "ratelimit",
+        "rate-limit",
+        "x-ratelimit",
+        "x-rate-limit",
+        "x-rate",
+        "limit",
+        "remaining",
+        "reset",
+    )
 
-def fetch_openmeteo_daily_block(
+    hits: list[tuple[str, str]] = []
+    for k, v in r.headers.items():
+        kl = k.lower()
+        if any(s in kl for s in want_substrings):
+            hits.append((k, v))
+
+    if hits:
+        print(f"{prefix}[warn] 429 rate-limit headers:")
+        for k, v in sorted(hits, key=lambda kv: kv[0].lower()):
+            print(f"{prefix}    {k}: {v}")
+    else:
+        keys = ", ".join(sorted(r.headers.keys()))
+        print(f"{prefix}[warn] 429: no obvious rate-limit headers present. Headers keys: {keys}")
+
+
+def fetch_city_daily_history(
     lat: float,
     lon: float,
     start_date: date,
     end_date: date,
-    retries: int = 5,
-    sleep: int = 5,
+    *,
+    min_backoff_seconds: float = 0.0,
 ) -> xr.Dataset:
-    """
-    Fetch a daily block (mean/min/max 2m temperature) from the Open-Meteo ERA5 archive.
-    """
-    base_url = "https://archive-api.open-meteo.com/v1/era5"
-    params = {
-        "latitude": lat,
-        "longitude": lon,
-        "start_date": start_date.strftime("%Y-%m-%d"),
-        "end_date": end_date.strftime("%Y-%m-%d"),
-        "daily": "temperature_2m_mean,temperature_2m_min,temperature_2m_max",
-        "timezone": "UTC",
-    }
-
-    last_err = None
-    for k in range(retries):
-        try:
-            r = requests.get(base_url, params=params, timeout=60)
-            if r.status_code == 429:
-                _log_retry_after(r, prefix="    ")
-                wait = sleep * (k + 1)
-                print(f"    [warn] 429 Too Many Requests, backing off {wait}s...")
-                time.sleep(wait)
-                last_err = RuntimeError("429 Too Many Requests")
-                continue
-
-            r.raise_for_status()
-            j = r.json()
-
-            daily = j.get("daily")
-            if daily is None or "time" not in daily:
-                raise RuntimeError("Unexpected Open-Meteo response structure (no 'daily' key)")
-
-            dates = pd.to_datetime(daily["time"])
-            mean_vals = np.array(daily["temperature_2m_mean"], dtype=float)
-            min_vals = np.array(daily["temperature_2m_min"], dtype=float)
-            max_vals = np.array(daily["temperature_2m_max"], dtype=float)
-
-            da_mean = xr.DataArray(mean_vals, coords={"time": dates}, dims=["time"], name="t2m_daily_mean_c")
-            da_min = xr.DataArray(min_vals, coords={"time": dates}, dims=["time"], name="t2m_daily_min_c")
-            da_max = xr.DataArray(max_vals, coords={"time": dates}, dims=["time"], name="t2m_daily_max_c")
-
-            return xr.Dataset(
-                {"t2m_daily_mean_c": da_mean, "t2m_daily_min_c": da_min, "t2m_daily_max_c": da_max}
-            )
-
-        except Exception as e:
-            last_err = e
-            wait = sleep * (k + 1)
-            print(f"    [warn] Error fetching {start_date}–{end_date}: {e} (retrying in {wait}s)")
-            time.sleep(wait)
-
-    raise last_err
-
-
-def fetch_city_daily_history(lat: float, lon: float, start_date: date, end_date: date) -> xr.Dataset:
     """Fetch daily mean/min/max 2m temperature from Open-Meteo ERA5 archive
     for a single point and a given date range, with simple retry/backoff.
+
+    min_backoff_seconds acts as a floor for backoff sleeps (useful to align with --min-gap).
     """
     params = {
         "latitude": lat,
@@ -287,21 +259,27 @@ def fetch_city_daily_history(lat: float, lon: float, start_date: date, end_date:
     url = "https://archive-api.open-meteo.com/v1/era5"
 
     max_retries = 5
-    base_sleep = 10
+    base_sleep = 10.0
+
+    # IMPORTANT: backoff starts at least at min_backoff_seconds (e.g. --min-gap)
+    backoff_floor = max(base_sleep, float(min_backoff_seconds or 0.0))
 
     last_err: Exception | None = None
 
     for attempt in range(max_retries):
         try:
             r = requests.get(url, params=params, timeout=60)
+
             if r.status_code == 429:
-                _log_retry_after(r, prefix="  ")
-                wait = base_sleep * (2 ** attempt)
+                wait = backoff_floor * (2 ** attempt)
+                jitter = random.uniform(0.0, min(0.4, 0.10 * backoff_floor))
+                wait_j = wait + jitter
                 print(
                     f"  [warn] 429 Too Many Requests from Open-Meteo "
-                    f"(attempt {attempt+1}/{max_retries}), sleeping {wait}s..."
+                    f"(attempt {attempt+1}/{max_retries}), sleeping {wait_j:.1f}s "
+                    f"(base={wait:.1f}s, floor={backoff_floor:.1f}s)..."
                 )
-                time.sleep(wait)
+                time.sleep(wait_j)
                 last_err = requests.HTTPError("429 Too Many Requests", response=r)
                 continue
 
@@ -317,12 +295,14 @@ def fetch_city_daily_history(lat: float, lon: float, start_date: date, end_date:
                     f"for lat={lat}, lon={lon}, range={start_date}→{end_date}"
                 )
                 raise
-            wait = base_sleep * (2 ** attempt)
+            wait = backoff_floor * (2 ** attempt)
+            jitter = random.uniform(0.0, min(0.4, 0.10 * backoff_floor))
+            wait_j = wait + jitter
             print(
                 f"  [warn] request failed on attempt {attempt+1}/{max_retries} "
-                f"({e!r}), sleeping {wait}s then retrying..."
+                f"({e!r}), sleeping {wait_j:.1f}s then retrying..."
             )
-            time.sleep(wait)
+            time.sleep(wait_j)
     else:
         if last_err is not None:
             raise last_err
@@ -343,6 +323,7 @@ def fetch_city_daily_history(lat: float, lon: float, start_date: date, end_date:
         ),
         coords=dict(time=times),
     )
+
 
 
 # -----------------------
@@ -477,7 +458,7 @@ def is_existing_file_up_to_date(path: Path, slug: str, target_end: date) -> bool
 # Precompute per location
 # -----------------------
 
-def precompute_for_location(loc: dict, target_end: date, data_dir: Path, *, skip_check: bool = True) -> tuple[str, str]:
+def precompute_for_location(loc: dict, target_end: date, data_dir: Path, *, skip_check: bool = True, min_gap: float = 0.0) -> tuple[str, str]:
     """
     Returns (status, detail) where status is one of:
       - "skip"      (already up-to-date)
@@ -502,7 +483,7 @@ def precompute_for_location(loc: dict, target_end: date, data_dir: Path, *, skip
     start_date = date(START_YEAR, 1, 1)
     end_date = target_end
 
-    ds_daily = fetch_city_daily_history(lat, lon, start_date, end_date)
+    ds_daily = fetch_city_daily_history(lat, lon, start_date, end_date, min_backoff_seconds=min_gap)
 
     m_mean, m_min, m_max, y_mean = derive_monthly_and_yearly(ds_daily)
     past_clim, recent_clim = derive_monthly_climatologies(ds_daily)
@@ -614,8 +595,10 @@ def main():
         selected,
         total=len(selected),
         desc="precompute",
-        dynamic_ncols=True,
+        ncols=120,              # fixed width
+        dynamic_ncols=False,
         smoothing=0.05,
+        bar_format="{l_bar}{bar:30}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}] {postfix}",
     )
 
     last_done = 0.0
@@ -645,7 +628,7 @@ def main():
         pbar.set_postfix_str(f"{slug}")
 
         try:
-            status, detail = precompute_for_location(loc, target_end, data_dir, skip_check=False)
+            status, detail = precompute_for_location(loc, target_end, data_dir, skip_check=False, min_gap=args.min_gap)
             counts[status] += 1
             pbar.set_postfix_str(
                 f"{slug} | {status} | skip={counts['skip']} write={counts['write']} rec={counts['recompute']} err={counts['error']}"
