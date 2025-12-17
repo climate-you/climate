@@ -247,6 +247,7 @@ def fetch_city_daily_history(
         )
 
     def _request_json(s: date, e: date) -> dict:
+        consecutive_429 = 0
         p = dict(params)
         p["start_date"] = s.isoformat()
         p["end_date"] = e.isoformat()
@@ -259,10 +260,20 @@ def fetch_city_daily_history(
             try:
                 r = requests.get(url, params=p, timeout=60)
                 if r.status_code == 429:
+                    consecutive_429 += 1
+                    last_err = requests.HTTPError("429 Too Many Requests", response=r)
+                    if retry_after:
+                        try:
+                            time.sleep(float(retry_after))
+                            continue
+                        except ValueError:
+                            pass
                     wait = backoff_floor * (2 ** attempt)
                     jitter = random.uniform(0.0, min(0.4, 0.10 * backoff_floor))
                     time.sleep(wait + jitter)
-                    last_err = requests.HTTPError("429 Too Many Requests", response=r)
+                    if consecutive_429 >= 3:
+                        # global cooldown to let the bucket refill
+                        time.sleep(120)  # 2 minutes
                     continue
 
                 r.raise_for_status()
