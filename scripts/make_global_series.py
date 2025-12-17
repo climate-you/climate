@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+from datetime import datetime, timezone
 import json
 import re
 from pathlib import Path
@@ -200,6 +201,9 @@ def main() -> None:
         "retrieved_utc": dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
         "rows": int(len(df_out)),
         "columns": list(df_out.columns),
+        "generated_by": "scripts/make_global_series.py",
+        "source_name": "ECMWF C3S Climate Pulse / global temperature anomaly series (ERA5-based)",
+        "notes": "Monthly global mean 2m temperature anomaly series; app rebases anomalies to the chosen baseline.",
     }
     args.meta_out.parent.mkdir(parents=True, exist_ok=True)
     args.meta_out.write_text(json.dumps(meta, indent=2), encoding="utf-8")
