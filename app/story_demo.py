@@ -19,7 +19,7 @@ from streamlit_folium import st_folium
 # climate package
 from climate.models import StoryFacts, StoryContext
 from climate.units import default_unit_for_country, fmt_temp, fmt_delta
-from climate.io import discover_locations, load_city_climatology, dataset_coverage_text
+from climate.io import discover_locations, dataset_coverage_text
 from climate.openmeteo import fetch_openmeteo_current_temp_c, fetch_openmeteo_window, fetch_recent_7d, fetch_recent_30d
 from climate.analytics import estimate_30d_trend, season_phrase, compute_story_facts
 
@@ -46,7 +46,11 @@ from climate.fake import make_fake_daily_series, make_fake_hourly_from_daily, fa
 DATA_DIR = Path("data/story_climatology")
 
 # Discover all available locations from precomputed files
-LOCATIONS = discover_locations(clim_dir=DATA_DIR)
+@st.cache_data(ttl=30)  # keeps widget options stable while precompute is writing new files
+def _discover_cached(clim_dir: str):
+    return discover_locations(clim_dir)
+
+LOCATIONS = _discover_cached(clim_dir=DATA_DIR)
 
 if not LOCATIONS:
     st.error("No climatology files found in story_climatology/. "
@@ -61,21 +65,59 @@ st.set_page_config(page_title="Your Climate Story", layout="wide")
 
 # Sort slugs to have stable ordering
 slug_list = sorted(LOCATIONS.keys())
-labels = [LOCATIONS[s]["label"] for s in slug_list]
+labels_by_slug = {s: LOCATIONS[s]["label"] for s in slug_list}
+
+# Favorites (optional): put favorites at the top of the one selectbox
+FAVORITES_FILE = Path("locations/favorites.txt")
+favorites = []
+if FAVORITES_FILE.exists():
+    favorites = [
+        ln.strip() for ln in FAVORITES_FILE.read_text(encoding="utf-8").splitlines()
+        if ln.strip() and not ln.strip().startswith("#")
+    ]
+favorite_set = {s for s in favorites if s in labels_by_slug}
+
+# Build ordered list: favorites first (in favorites.txt order), then the rest by label
+fav_slugs = [s for s in favorites if s in favorite_set]
+nonfav_slugs = sorted([s for s in slug_list if s not in favorite_set], key=lambda s: labels_by_slug[s])
+ordered_slugs = fav_slugs + nonfav_slugs
 
 # Optional: if you still want a default slug, keep this
 DEFAULT_SLUG = "city_mu_port_louis"
 
 default_index = 0
-if DEFAULT_SLUG in slug_list:
-    default_index = slug_list.index(DEFAULT_SLUG)
+if DEFAULT_SLUG in ordered_slugs:
+    default_index = ordered_slugs.index(DEFAULT_SLUG)
+
+def _format_location_slug(slug: str) -> str:
+    star = "★ " if slug in favorite_set else ""
+    return star + labels_by_slug.get(slug, slug)
+
+def _on_location_change():
+    if not st.session_state["unit_locked"]:
+        st.session_state["unit"] = _default_unit_for_slug(st.session_state["location_slug"])
+
+def _default_unit_for_slug(slug: str) -> str:
+    # however you decide this (US -> °F, else °C)
+    cc = LOCATIONS[slug]["country_code"]
+    return default_unit_for_country(cc)
+
+def _on_unit_change():
+    st.session_state["unit_locked"] = True
+
+st.session_state.setdefault("unit_locked", False)
+st.session_state.setdefault("location_slug", DEFAULT_SLUG)
+st.session_state.setdefault("unit", _default_unit_for_slug(st.session_state["location_slug"]))
 
 with st.sidebar:
     st.header("Location")
-    chosen_label = st.radio(
+    chosen_slug = st.selectbox(
         "Choose a city:",
-        options=labels,
+        options=ordered_slugs,
         index=default_index,
+        format_func=_format_location_slug,
+        key="location_slug",
+        on_change=_on_location_change,
     )
 
     st.subheader("Story step")
@@ -97,9 +139,15 @@ with st.sidebar:
         help="Use this to see how the page would look in a different season.",
     )
 
+    unit = st.radio(
+        "Units",
+        ["°C", "°F"],
+        key="unit",
+        on_change=_on_unit_change,
+    )
+
 # Map label back to slug + meta
-chosen_idx = labels.index(chosen_label)
-slug = slug_list[chosen_idx]
+slug = chosen_slug
 loc_meta = LOCATIONS[slug]
 
 location_label = loc_meta["label"]
@@ -109,31 +157,15 @@ clim_path = loc_meta["path"]
 city_name = loc_meta["city_name"]
 country_code = loc_meta["country_code"]
 
-# If user hasn't explicitly chosen units, auto-pick based on country
-if "unit_locked" not in st.session_state:
-    st.session_state["unit_locked"] = False
-
-default_unit = default_unit_for_country(country_code)
-
-# If user hasn't locked units, keep following the default when they switch location
-if not st.session_state["unit_locked"]:
-    st.session_state["unit"] = default_unit
-else:
-    st.session_state.setdefault("unit", default_unit)
-
-def _on_unit_change():
-    st.session_state["unit_locked"] = True
-
-unit = st.sidebar.radio(
-    "Units",
-    ["°C", "°F"],
-    index=0 if st.session_state["unit"] == "°C" else 1,
-    key="unit",
-    on_change=_on_unit_change,
-)
-
 # Load dataset for this location
-ds = xr.open_dataset(clim_path)
+try:
+    ds = xr.open_dataset(clim_path)
+except Exception as e:
+    st.warning(
+        f"Couldn't load data for {slug_to_label.get(slug, slug)} yet "
+        f"(file may be updating). Please retry in a moment.\n\n{e!r}"
+    )
+    st.stop()
 
 # Compute high-level facts once
 facts = compute_story_facts(ds, lat=location_lat)
@@ -214,7 +246,6 @@ if step == "Intro":
 # STEP: ZOOM OUT
 # -----------------------------------------------------------
 if step == "Zoom out":
-    #ds = load_city_climatology(DEFAULT_SLUG)
     loc_name = ds.attrs.get("name_long", "this location")
     
     st.header("1. Zooming out: from days to decades")
