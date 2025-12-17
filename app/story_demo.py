@@ -42,6 +42,11 @@ from climate.panels.world import (
     build_you_vs_world_figures,
     you_vs_world_caption,
 )
+from climate.panels.worldmap import (
+    build_world_map_data,
+    build_world_map_figure,
+    world_map_caption,
+)
 
 # TO BE REMOVED
 from climate.fake import make_fake_daily_series, make_fake_hourly_from_daily, fake_local_and_global
@@ -132,7 +137,7 @@ with st.sidebar:
             "Zoom out",
             "Seasons then vs now",
             "You vs the world",
-            "World map (idea)",
+            "World map",
         ],
     )
 
@@ -383,28 +388,13 @@ if step == "You vs the world":
 # -----------------------------------------------------------
 # STEP: WORLD MAP IDEA
 # -----------------------------------------------------------
-if step == "World map (idea)":
-    st.header("4. Where you fit on the world map (idea stub)")
+if step == "World map":
+    st.header("4. Where you fit on the world map")
 
-    st.markdown(
-        """
-        This is a placeholder for a **world map of warming**, where each point or
-        grid cell shows how much the climate has warmed relative to a reference
-        period.
+    data = build_world_map_data(ctx)
+    m, tiny = build_world_map_figure(ctx, facts, data)
 
-        For now, we just show a base map and your location. In the future we can:
-        * Precompute a global map of warming (e.g. from ERA5).
-        * Colour each land region by its **local warming**.
-        * Highlight your location and nearby regions.
-        """
-    )
+    st.caption(tiny)
+    st.markdown(world_map_caption(ctx, facts, data))
 
-    m2 = folium.Map(location=[20, 0], zoom_start=2, tiles="CartoDB positron")
-    folium.CircleMarker(
-        location=[location_lat, location_lon],
-        radius=6,
-        color="#d73027",
-        fill=True,
-        fill_opacity=0.9,
-    ).add_to(m2)
-    st_folium(m2, width="stretch", height=420)
+    st_folium(m, width="stretch", height=520)
