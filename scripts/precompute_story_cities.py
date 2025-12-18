@@ -262,12 +262,6 @@ def fetch_city_daily_history(
                 if r.status_code == 429:
                     consecutive_429 += 1
                     last_err = requests.HTTPError("429 Too Many Requests", response=r)
-                    if retry_after:
-                        try:
-                            time.sleep(float(retry_after))
-                            continue
-                        except ValueError:
-                            pass
                     wait = backoff_floor * (2 ** attempt)
                     jitter = random.uniform(0.0, min(0.4, 0.10 * backoff_floor))
                     time.sleep(wait + jitter)
