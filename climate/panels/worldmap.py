@@ -17,6 +17,7 @@ import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 
 from climate.models import StoryContext, StoryFacts
+from climate.units import convert_delta_array_to_unit
 
 MERC_MAX_LAT = 85.05112878  # Web Mercator valid latitude limit
 
@@ -99,8 +100,11 @@ def build_world_map_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
     # Warp from Plate Carrée (regular lat spacing) to Web Mercator y spacing
     arr_w, lats_w = _warp_lat_to_mercator(arr, lats)
 
-    # Build RGBA image from values
-    rgba, vmin_used, vmax_used = _to_rgba(arr_w)
+    # Convert warming deltas to selected unit (Δ°F = Δ°C * 9/5)
+    arr_u = convert_delta_array_to_unit(arr_w, ctx.unit)
+
+    # Build RGBA image from values (in selected unit)
+    rgba, vmin_used, vmax_used = _to_rgba(arr_u)
     vmin_leg, vmax_leg = _nice_bounds(vmin_used, vmax_used)
     img = (rgba * 255).astype("uint8")
 
@@ -130,7 +134,7 @@ def build_world_map_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
     # Branca: keep gradient, override tick labels
     col.tick_labels = [f"{t:.0f}" for t in ticks]
     col.ticks = ticks
-    col.caption = f"Warming (ΔT, °C) — sequential scale"
+    col.caption = f"Warming (ΔT, {ctx.unit}) — sequential scale"
 
     col.add_to(m)
 
@@ -151,7 +155,7 @@ def build_world_map_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
     grid_txt = f" (grid: {grid}°)" if grid else ""
 
     if pa and pb:
-        tiny = f"ERA5 warming: {pb} vs {pa}{grid_txt}."
+        tiny = f"ERA5 warming: {pb} - {pa}{grid_txt}."
     else:
         tiny = f"ERA5 warming relative to a baseline period{grid_txt}."
 
@@ -165,7 +169,7 @@ def world_map_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
 
     if pa and pb:
         return (
-            f"This map shows how much each grid cell has warmed (**{pb} vs {pa}**) "
+            f"This map shows how much each grid cell has warmed (**{pb} - {pa}**) "
             "using ERA5 near-surface (2m) air temperature. Most places warmed; a few "
             "regions show slight cooling relative to the baseline and appear at the "
             "lightest end of the scale.\n\n"
@@ -204,6 +208,14 @@ def _normalize_longitude(da: xr.DataArray, lon_name: str) -> xr.DataArray:
         da = da.sortby(lon_name)
     return da
 
+def _is_fahrenheit(unit: str) -> bool:
+    return "F" in (unit or "").upper()
+
+def _convert_delta_c_to_unit(arr_c: np.ndarray, unit: str) -> np.ndarray:
+    """Convert a temperature *difference* from °C to the requested unit."""
+    if _is_fahrenheit(unit):
+        return np.asarray(arr_c, dtype="float64") * (9.0 / 5.0)
+    return np.asarray(arr_c, dtype="float64")
 
 def _fmt_period(p: dict | None) -> str | None:
     if not isinstance(p, dict):
