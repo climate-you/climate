@@ -5,12 +5,14 @@
   <title>Warming Globe Demo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    html, body { margin: 0; height: 100%; background: #0b1020; overflow: hidden; }
+    html, body { margin: 0; height: 100%; background: #ffffff; overflow: hidden; }
     #hud {
-      position: absolute; left: 12px; top: 12px; color: white; font: 14px/1.3 system-ui, sans-serif;
-      background: rgba(0,0,0,0.35); padding: 10px 12px; border-radius: 10px;
+      position: absolute; left: 12px; top: 12px; font: 14px/1.3 system-ui, sans-serif;
+      background: rgba(255,255,255,0.85); color: #111;
+      padding: 10px 12px; border-radius: 10px;
       max-width: 360px;
     }
+    #hud code { background: rgba(0,0,0,0.06); padding: 0 4px; border-radius: 4px; }
     #hud .row { margin-top: 8px; display: flex; gap: 8px; align-items: center; }
     #hud select { width: 100%; }
     #hud label { display: flex; gap: 8px; align-items: center; }
@@ -47,6 +49,7 @@
     const bordersToggle = document.getElementById("borders");
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setClearColor(0x000000, 0); // transparent
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
@@ -55,15 +58,15 @@
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
     camera.position.set(0, 0, 3.2);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-    dir.position.set(2, 1, 3);
-    scene.add(dir);
+    // scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    // const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    // dir.position.set(2, 1, 3);
+    // scene.add(dir);
 
     const geo = new THREE.SphereGeometry(1, 128, 128);
 
     // Base warming texture material
-    const warmingMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    const warmingMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const globe = new THREE.Mesh(geo, warmingMat);
     scene.add(globe);
 
@@ -77,6 +80,24 @@
     // const bordersPath = "../data/world/borders_4096x2048.png";
     const bordersPath = "../data/world/borders_8192x4096.png";
     const loader = new THREE.TextureLoader();
+
+    // In our lon->XYZ mapping, the camera-front (+Z) corresponds to lon = -90°.
+    // So we add +90° to make desiredLon face the camera.
+    const FRONT_LON_OFFSET_DEG = 90;
+
+    globe.rotation.set(0, 0, 0);
+    
+    // We want geographic lon ~ 15E to face the camera initially
+    const desiredLon = 15;
+
+    // Apply the offset so the visual matches geography
+    const startLon = desiredLon + FRONT_LON_OFFSET_DEG;
+
+    // Set initial view
+    globe.rotation.y = THREE.MathUtils.degToRad(-startLon);
+
+    // Keep borders aligned
+    bordersMesh.rotation.copy(globe.rotation);
 
     function loadTexture(path) {
       return new Promise((resolve, reject) => {
@@ -131,11 +152,15 @@
       }
     }
 
-    // Lat/Lon -> unit vector on sphere
+    const LON_SIGN = 1; // if result is mirrored, switch to -1
+
     function latLonToVec3(latDeg, lonDeg) {
       const lat = THREE.MathUtils.degToRad(latDeg);
-      const lon = THREE.MathUtils.degToRad(lonDeg);
-      // match the typical equirectangular mapping (lon increases east)
+      const lon = THREE.MathUtils.degToRad(LON_SIGN * lonDeg);
+
+      // This matches an equirectangular texture where:
+      // lon=0 is at the "center meridian" of the texture,
+      // increasing lon goes east.
       const x = Math.cos(lat) * Math.cos(lon);
       const y = Math.sin(lat);
       const z = -Math.cos(lat) * Math.sin(lon);
@@ -145,13 +170,64 @@
     // Camera fly
     let flyT = 0;
     let flyActive = false;
-    let camFrom = new THREE.Vector3();
-    let camTo = new THREE.Vector3();
 
-    function flyTo(lat, lon) {
-      const target = latLonToVec3(lat, lon).normalize();
-      camFrom.copy(camera.position);
-      camTo.copy(target).multiplyScalar(2.2);
+    let qFrom = new THREE.Quaternion();
+    let qTo = new THREE.Quaternion();
+    let zoomFrom = 0;
+    let zoomTo = 0;
+
+    const FRONT = new THREE.Vector3(0, 0, 1);
+    const UP = new THREE.Vector3(0, 1, 0);
+
+    // Given a quaternion q (globe orientation), compute the "north direction" at (lat, lon)
+    // in WORLD coords (tangent on the sphere).
+    function northTangentWorld(latDeg, lonDeg, qGlobe) {
+      // "north" in lat/lon terms = slightly higher latitude
+      const eps = 0.05; // degrees; small but not too small
+      const p = latLonToVec3(latDeg, lonDeg).normalize();
+      const pn = latLonToVec3(latDeg + eps, lonDeg).normalize();
+
+      // Tangent direction in globe-local coords:
+      const tLocal = pn.sub(p).normalize();
+
+      // Convert to world using globe rotation:
+      return tLocal.applyQuaternion(qGlobe).normalize();
+    }
+
+    function flyTo(latDeg, lonDeg) {
+      const targetLocal = latLonToVec3(latDeg, lonDeg).normalize();
+      const targetWorld = targetLocal.clone().applyQuaternion(globe.quaternion).normalize();
+
+      // A) Align target to the front
+      const qAlign = new THREE.Quaternion().setFromUnitVectors(targetWorld, FRONT);
+
+      // Apply to current globe orientation
+      const qA = qAlign.clone().multiply(globe.quaternion);
+
+      // B) Fix roll so local north points "up" on screen
+      // Compute where the "north tangent" points after qA
+      const northW = northTangentWorld(latDeg, lonDeg, qA);
+
+      // Remove any component along FRONT (we only care about screen plane)
+      const northPlane = northW.clone().sub(FRONT.clone().multiplyScalar(northW.dot(FRONT))).normalize();
+
+      // Compute angle to rotate around FRONT so northPlane aligns with UP
+      // Signed angle via atan2
+      const cross = new THREE.Vector3().crossVectors(northPlane, UP);
+      const sin = cross.dot(FRONT);
+      const cos = northPlane.dot(UP);
+      const angle = Math.atan2(sin, cos);
+
+      const qRoll = new THREE.Quaternion().setFromAxisAngle(FRONT, angle);
+      const qB = qRoll.multiply(qA);
+
+      // Animate from current to qB
+      qFrom.copy(globe.quaternion);
+      qTo.copy(qB);
+
+      zoomFrom = camera.position.length();
+      zoomTo = 2.1;
+
       flyT = 0;
       flyActive = true;
     }
@@ -184,21 +260,30 @@
 
     function animate() {
       requestAnimationFrame(animate);
-      globe.rotation.y += 0.0015;
-      bordersMesh.rotation.y = globe.rotation.y;
+      // Idle rotation only when not flying
+      if (!flyActive) {
+        globe.rotation.y += 0.0005;
+      }
+
+      bordersMesh.quaternion.copy(globe.quaternion);
 
       if (flyActive) {
         flyT += 0.02;
         const t = Math.min(flyT, 1);
         const e = t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2)/2;
-        camera.position.lerpVectors(camFrom, camTo, e);
-        camera.lookAt(0, 0, 0);
-        if (t >= 1) flyActive = false;
-      } else {
-        camera.lookAt(0, 0, 0);
+
+        // Slerp for smooth rotation
+        globe.quaternion.slerpQuaternions(qFrom, qTo, e);
+        bordersMesh.quaternion.copy(globe.quaternion);
+
+        const r = THREE.MathUtils.lerp(zoomFrom, zoomTo, e);
+        camera.position.setLength(r);
+
+        // if (t >= 1) flyActive = false;
       }
-      renderer.render(scene, camera);
-    }
+
+      camera.lookAt(0, 0, 0);
+      renderer.render(scene, camera);    }
     animate();
 
     window.addEventListener("resize", () => {
