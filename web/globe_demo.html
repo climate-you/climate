@@ -9,101 +9,187 @@
     #hud {
       position: absolute; left: 12px; top: 12px; color: white; font: 14px/1.3 system-ui, sans-serif;
       background: rgba(0,0,0,0.35); padding: 10px 12px; border-radius: 10px;
+      max-width: 360px;
     }
-    #hud button { margin-top: 8px; }
+    #hud .row { margin-top: 8px; display: flex; gap: 8px; align-items: center; }
+    #hud select { width: 100%; }
+    #hud label { display: flex; gap: 8px; align-items: center; }
+    #hud button { cursor: pointer; }
   </style>
 </head>
 <body>
   <div id="hud">
     <div><b>Warming globe (texture)</b></div>
     <div id="status">Loading…</div>
-    <button id="fly">Fly to London</button>
+
+    <div class="row">
+      <div style="flex:1">
+        <div style="font-size:12px; opacity:.85">Texture</div>
+        <select id="texSelect"></select>
+      </div>
+    </div>
+
+    <div class="row">
+      <label><input type="checkbox" id="borders" checked /> Borders overlay</label>
+      <button id="fly">Fly to London</button>
+    </div>
+
+    <div style="margin-top:8px; font-size:12px; opacity:.8">
+      Tip: run <code>python -m http.server</code> from repo root.
+    </div>
   </div>
 
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
 
     const statusEl = document.getElementById("status");
+    const texSelect = document.getElementById("texSelect");
+    const bordersToggle = document.getElementById("borders");
+
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
     camera.position.set(0, 0, 3.2);
 
-    // Lights
     scene.add(new THREE.AmbientLight(0xffffff, 0.8));
     const dir = new THREE.DirectionalLight(0xffffff, 0.8);
     dir.position.set(2, 1, 3);
     scene.add(dir);
 
-    // Globe
     const geo = new THREE.SphereGeometry(1, 128, 128);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-    const globe = new THREE.Mesh(geo, mat);
+
+    // Base warming texture material
+    const warmingMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    const globe = new THREE.Mesh(geo, warmingMat);
     scene.add(globe);
 
-    // Load texture (change path to your webp)
-    // const texturePath = "../data/world/warming_texture_1979-1988_to_2016-2025_grid1p0_4096x2048.webp";
-    const texturePath = "../data/world/warming_texture_1979-1988_to_2016-2025_grid0p25_4096x2048.webp";
-    // const texturePath = "../data/world/warming_texture_1979-1988_to_2016-2025_grid0p25_8192x4096.webp";
-    const loader = new THREE.TextureLoader();
-    loader.load(
-      texturePath,
-      (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.wrapS = THREE.RepeatWrapping;
-        tex.wrapT = THREE.ClampToEdgeWrapping;
-        mat.map = tex;
-        mat.needsUpdate = true;
-        statusEl.textContent = "Loaded texture ✓";
-      },
-      undefined,
-      (err) => {
-        console.error(err);
-        statusEl.textContent = "Failed to load texture (check path / run a local server)";
-      }
-    );
+    // Borders overlay: separate mesh slightly above the sphere to avoid z-fighting
+    const bordersMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false });
+    const bordersMesh = new THREE.Mesh(new THREE.SphereGeometry(1.001, 128, 128), bordersMat);
+    scene.add(bordersMesh);
 
-    // Lat/Lon to unit vector on sphere
+    // Load borders overlay texture (you’ll need to generate/provide this PNG)
+    // Expected: equirectangular PNG with transparent background and black borders.
+    // const bordersPath = "../data/world/borders_4096x2048.png";
+    const bordersPath = "../data/world/borders_8192x4096.png";
+    const loader = new THREE.TextureLoader();
+
+    function loadTexture(path) {
+      return new Promise((resolve, reject) => {
+        loader.load(path, (tex) => resolve(tex), undefined, reject);
+      });
+    }
+
+    function setTextureOnMaterial(tex, mat) {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
+      mat.map = tex;
+      mat.needsUpdate = true;
+    }
+
+    async function initBorders() {
+      try {
+        const tex = await loadTexture(bordersPath);
+        setTextureOnMaterial(tex, bordersMat);
+        statusEl.textContent = "Loaded texture ✓ (borders overlay ✓)";
+      } catch (e) {
+        console.warn("Borders overlay not found:", e);
+        statusEl.textContent = "Loaded texture ✓ (no borders overlay)";
+        bordersToggle.checked = false;
+        bordersMesh.visible = false;
+      }
+    }
+
+    // Load list of textures
+    async function initTextureList() {
+      const indexUrl = "../data/world/_textures_index.json";
+      const r = await fetch(indexUrl);
+      if (!r.ok) throw new Error("Could not load " + indexUrl);
+      const items = await r.json();
+      if (!Array.isArray(items) || items.length === 0) throw new Error("No textures in index");
+      return items;
+    }
+
+    let currentWarmingTex = null;
+
+    async function setWarmingTexture(path) {
+      statusEl.textContent = "Loading " + path + " …";
+      try {
+        const tex = await loadTexture("../" + path); // paths in index are like data/world/xxx.webp
+        if (currentWarmingTex) currentWarmingTex.dispose();
+        currentWarmingTex = tex;
+        setTextureOnMaterial(tex, warmingMat);
+        statusEl.textContent = "Loaded ✓ " + path.split("/").pop();
+      } catch (e) {
+        console.error(e);
+        statusEl.textContent = "Failed to load texture (check path)";
+      }
+    }
+
+    // Lat/Lon -> unit vector on sphere
     function latLonToVec3(latDeg, lonDeg) {
       const lat = THREE.MathUtils.degToRad(latDeg);
       const lon = THREE.MathUtils.degToRad(lonDeg);
+      // match the typical equirectangular mapping (lon increases east)
       const x = Math.cos(lat) * Math.cos(lon);
       const y = Math.sin(lat);
       const z = -Math.cos(lat) * Math.sin(lon);
       return new THREE.Vector3(x, y, z);
     }
 
-    // Simple camera “fly to” animation
+    // Camera fly
     let flyT = 0;
     let flyActive = false;
     let camFrom = new THREE.Vector3();
     let camTo = new THREE.Vector3();
+
     function flyTo(lat, lon) {
       const target = latLonToVec3(lat, lon).normalize();
-      // position the camera a bit away from the surface along that vector
       camFrom.copy(camera.position);
       camTo.copy(target).multiplyScalar(2.2);
       flyT = 0;
       flyActive = true;
     }
 
-    document.getElementById("fly").onclick = () => flyTo(51.5074, -0.1278); // London
+    document.getElementById("fly").onclick = () => flyTo(51.5074, -0.1278);
+
+    bordersToggle.onchange = () => {
+      bordersMesh.visible = bordersToggle.checked;
+    };
+
+    // Init
+    (async () => {
+      const textures = await initTextureList();
+      texSelect.innerHTML = "";
+      for (const p of textures) {
+        const opt = document.createElement("option");
+        opt.value = p;
+        opt.textContent = p.split("/").pop();
+        texSelect.appendChild(opt);
+      }
+
+      texSelect.onchange = () => setWarmingTexture(texSelect.value);
+
+      await setWarmingTexture(texSelect.value);
+      await initBorders();
+    })().catch(err => {
+      console.error(err);
+      statusEl.textContent = "Init failed: " + err.message;
+    });
 
     function animate() {
       requestAnimationFrame(animate);
-
-      // Slow rotation (idle)
       globe.rotation.y += 0.0015;
+      bordersMesh.rotation.y = globe.rotation.y;
 
       if (flyActive) {
-        flyT += 0.02; // speed
+        flyT += 0.02;
         const t = Math.min(flyT, 1);
-        // ease in-out
         const e = t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2)/2;
         camera.position.lerpVectors(camFrom, camTo, e);
         camera.lookAt(0, 0, 0);
@@ -111,7 +197,6 @@
       } else {
         camera.lookAt(0, 0, 0);
       }
-
       renderer.render(scene, camera);
     }
     animate();
