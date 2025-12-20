@@ -135,6 +135,7 @@ with st.sidebar:
             "Seasons then vs now",
             "You vs the world",
             "World map",
+            "Monte Carlo: how global warming is estimated",
         ],
     )
 
@@ -411,3 +412,93 @@ if step == "World map":
     st.caption(tiny_inset)
     st.plotly_chart(fig_inset, use_container_width=False, config={"displayModeBar": False})
     st.markdown(local_inset_caption(ctx, facts, inset_data))
+
+# -----------------------------------------------------------
+# STEP: MONTE CARLO
+# -----------------------------------------------------------
+if step == "Monte Carlo: how global warming is estimated":
+    st.header("5. Monte Carlo: estimating global warming by random sampling")
+
+    from climate.panels.montecarlo import (
+        build_montecarlo_data,
+        build_montecarlo_figures,
+        montecarlo_caption,
+    )
+    import time
+
+    # ---- UI controls (no slider)
+    col_a, col_b, col_c = st.columns([1, 1, 2])
+
+    if "mc_running" not in st.session_state:
+        st.session_state["mc_running"] = False
+    if "mc_n" not in st.session_state:
+        st.session_state["mc_n"] = 0
+    if "mc_experiment_id" not in st.session_state:
+        st.session_state["mc_experiment_id"] = 1
+
+    with col_a:
+        if st.button("Start" if not st.session_state["mc_running"] else "Pause", use_container_width=True):
+            st.session_state["mc_running"] = not st.session_state["mc_running"]
+
+    with col_b:
+        if st.button("Reset", use_container_width=True):
+            st.session_state["mc_running"] = False
+            st.session_state["mc_n"] = 0
+
+    with col_c:
+        exp_id = st.number_input("Experiment", min_value=1, max_value=99, value=st.session_state["mc_experiment_id"], step=1)
+        st.session_state["mc_experiment_id"] = int(exp_id)
+
+    # ---- Load data (cached at streamlit level)
+    @st.cache_data(show_spinner=False)
+    def _load_exp(experiment_id: int) -> dict:
+        return build_montecarlo_data(ctx, experiment_id=experiment_id)
+
+    base = _load_exp(st.session_state["mc_experiment_id"])
+    n_total = int(base["n_total"])
+
+    # ---- Progress / speed ramp
+    n = int(st.session_state["mc_n"])
+    n = max(0, min(n, n_total))
+
+    st.progress(n / max(1, n_total), text=f"{n} / {n_total} samples")
+
+    # Speed ramp (tweak freely)
+    if n < 50:
+        step_n = 1
+        tick_sleep = 0.25
+    elif n < 500:
+        step_n = 5
+        tick_sleep = 0.15
+    elif n < 2000:
+        step_n = 20
+        tick_sleep = 0.10
+    else:
+        step_n = 100
+        tick_sleep = 0.06
+
+    # ---- Build figures for current n
+    data = dict(base)
+    data["n"] = n
+
+    fig_map, fig_time, fig_mean, tiny = build_montecarlo_figures(ctx, facts, data)
+
+    st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig_time, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig_mean, use_container_width=True, config={"displayModeBar": False})
+
+    st.caption(tiny)
+    st.markdown(montecarlo_caption(ctx, facts, data))
+
+    # Optional: show details early
+    if n > 0:
+        df_first = base["df"][base["df"]["seq"] < min(n, 50)].copy()
+        df_first["time"] = pd.to_datetime(df_first["time"]).dt.strftime("%Y-%m-%d")
+        st.markdown("**First samples (details)**")
+        st.dataframe(df_first[["seq", "era", "time", "lat", "lon", "t_c"]], use_container_width=True)
+
+    # ---- Playback loop
+    if st.session_state["mc_running"] and n < n_total:
+        st.session_state["mc_n"] = min(n + step_n, n_total)
+        time.sleep(tick_sleep)
+        st.rerun()

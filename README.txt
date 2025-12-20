@@ -20,9 +20,12 @@ $ python scripts/make_city_list.py --source cities500 --extra-file locations/ext
 $ python scripts/precompute_story_cities.py --only-favorites --limit 10 [--dry-run]
 
 5. Precompute global series and maps:
+# For anomaly/world graphs:
 $ python scripts/make_global_series.py
 $ python scripts/make_latest_anomaly_map_assets.py
+# For 2d map:
 $ python scripts/make_warming_map_cds.py --grid-deg 0.5
+# For 3d maps:
 $ python scripts/make_warming_texture.py \
   --nc data/world/warming_map_1979-1988_to_2016-2025_grid0p25.nc \
   --out data/world/warming_texture_1979-1988_to_2016-2025_grid0p25_8192x4096 \
@@ -32,6 +35,10 @@ $ python scripts/make_borders_overlay.py \
   --size 8192x4096 \
   --scale 10m \
   --coast-lw 2.2 --borders-lw 1.4
+# For MonteCarlo:
+$ python scripts/download_era5_daily_t2m_cds.py --grid-deg 1.0 --timeout 300
+$ python scripts/make_montecarlo_experiment.py --grid-deg 1.0 --experiment-id 1 --seed 12345 --n-samples 50000
+
 
 5. Run web page:
 $ streamlit run app/story_demo.py
