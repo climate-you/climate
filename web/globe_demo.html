@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Warming Globe Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body { margin: 0; height: 100%; background: #0b1020; overflow: hidden; }
+    #hud {
+      position: absolute; left: 12px; top: 12px; color: white; font: 14px/1.3 system-ui, sans-serif;
+      background: rgba(0,0,0,0.35); padding: 10px 12px; border-radius: 10px;
+    }
+    #hud button { margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div><b>Warming globe (texture)</b></div>
+    <div id="status">Loading…</div>
+    <button id="fly">Fly to London</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+
+    const statusEl = document.getElementById("status");
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 0, 3.2);
+
+    // Lights
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    dir.position.set(2, 1, 3);
+    scene.add(dir);
+
+    // Globe
+    const geo = new THREE.SphereGeometry(1, 128, 128);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    const globe = new THREE.Mesh(geo, mat);
+    scene.add(globe);
+
+    // Load texture (change path to your webp)
+    // const texturePath = "../data/world/warming_texture_1979-1988_to_2016-2025_grid1p0_4096x2048.webp";
+    const texturePath = "../data/world/warming_texture_1979-1988_to_2016-2025_grid0p25_4096x2048.webp";
+    // const texturePath = "../data/world/warming_texture_1979-1988_to_2016-2025_grid0p25_8192x4096.webp";
+    const loader = new THREE.TextureLoader();
+    loader.load(
+      texturePath,
+      (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.ClampToEdgeWrapping;
+        mat.map = tex;
+        mat.needsUpdate = true;
+        statusEl.textContent = "Loaded texture ✓";
+      },
+      undefined,
+      (err) => {
+        console.error(err);
+        statusEl.textContent = "Failed to load texture (check path / run a local server)";
+      }
+    );
+
+    // Lat/Lon to unit vector on sphere
+    function latLonToVec3(latDeg, lonDeg) {
+      const lat = THREE.MathUtils.degToRad(latDeg);
+      const lon = THREE.MathUtils.degToRad(lonDeg);
+      const x = Math.cos(lat) * Math.cos(lon);
+      const y = Math.sin(lat);
+      const z = -Math.cos(lat) * Math.sin(lon);
+      return new THREE.Vector3(x, y, z);
+    }
+
+    // Simple camera “fly to” animation
+    let flyT = 0;
+    let flyActive = false;
+    let camFrom = new THREE.Vector3();
+    let camTo = new THREE.Vector3();
+    function flyTo(lat, lon) {
+      const target = latLonToVec3(lat, lon).normalize();
+      // position the camera a bit away from the surface along that vector
+      camFrom.copy(camera.position);
+      camTo.copy(target).multiplyScalar(2.2);
+      flyT = 0;
+      flyActive = true;
+    }
+
+    document.getElementById("fly").onclick = () => flyTo(51.5074, -0.1278); // London
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Slow rotation (idle)
+      globe.rotation.y += 0.0015;
+
+      if (flyActive) {
+        flyT += 0.02; // speed
+        const t = Math.min(flyT, 1);
+        // ease in-out
+        const e = t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2)/2;
+        camera.position.lerpVectors(camFrom, camTo, e);
+        camera.lookAt(0, 0, 0);
+        if (t >= 1) flyActive = false;
+      } else {
+        camera.lookAt(0, 0, 0);
+      }
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
