@@ -138,7 +138,8 @@ def main() -> None:
         "long_name": f"Warming: {bB.label()} minus {bA.label()} (ERA5 monthly means)",
     })
 
-    out_nc = args.out_dir / f"warming_map_{bA.label()}_to_{bB.label()}.nc"
+    grid_tag = str(args.grid_deg).replace(".", "p")  # 0.25 -> 0p25
+    out_nc = args.out_dir / f"warming_map_{bA.label()}_to_{bB.label()}_grid{grid_tag}.nc"
     out_nc.parent.mkdir(parents=True, exist_ok=True)
     warming.to_dataset().to_netcdf(out_nc)
 
@@ -167,7 +168,7 @@ def main() -> None:
         },
     }
 
-    out_manifest = args.out_dir / f"warming_map_{bA.label()}_to_{bB.label()}.manifest.json"
+    out_manifest = args.out_dir / f"warming_map_{bA.label()}_to_{bB.label()}_grid{grid_tag}.manifest.json"
     out_manifest.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
     print(f"Wrote {out_nc}")

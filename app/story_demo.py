@@ -38,14 +38,11 @@ from climate.panels.seasons import (
     seasons_then_now_caption, seasons_then_now_separate_caption 
 )
 from climate.panels.world import (
-    build_you_vs_world_data,
-    build_you_vs_world_figures,
-    you_vs_world_caption,
+    build_you_vs_world_data, build_you_vs_world_figures, you_vs_world_caption,
 )
 from climate.panels.worldmap import (
-    build_world_map_data,
-    build_world_map_figure,
-    world_map_caption,
+    build_world_map_data, build_world_map_figure, world_map_caption,
+    build_local_inset_data, build_local_inset_figure, local_inset_caption,
 )
 
 # TO BE REMOVED
@@ -153,6 +150,12 @@ with st.sidebar:
         ["°C", "°F"],
         key="unit",
         on_change=_on_unit_change,
+    )
+
+    grid_deg = st.radio(
+        "World Map Resolution",
+        ["0.25", "0.5", "1.0"],
+        key="grid_deg"
     )
 
 # Map label back to slug + meta
@@ -391,10 +394,20 @@ if step == "You vs the world":
 if step == "World map":
     st.header("4. Where you fit on the world map")
 
-    data = build_world_map_data(ctx)
-    m, tiny = build_world_map_figure(ctx, facts, data)
-
+    if grid_deg == "0.25":
+        grid_deg_f = 0.25
+    elif grid_deg == "0.5":
+        grid_deg_f = 0.5
+    else:
+        grid_deg_f = 1.0
+    world_data = build_world_map_data(ctx, grid_deg=grid_deg_f)
+    m, tiny = build_world_map_figure(ctx, facts, world_data)
     st.caption(tiny)
-    st.markdown(world_map_caption(ctx, facts, data))
-
+    st.markdown(world_map_caption(ctx, facts, world_data))
     st_folium(m, width="stretch", height=520)
+
+    inset_data = build_local_inset_data(ctx, world_data)
+    fig_inset, tiny_inset = build_local_inset_figure(ctx, facts, inset_data)
+    st.caption(tiny_inset)
+    st.plotly_chart(fig_inset, use_container_width=False, config={"displayModeBar": False})
+    st.markdown(local_inset_caption(ctx, facts, inset_data))

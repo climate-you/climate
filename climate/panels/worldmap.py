@@ -16,8 +16,10 @@ import branca.colormap as bcm
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 
+import plotly.graph_objects as go
+
 from climate.models import StoryContext, StoryFacts
-from climate.units import convert_delta_array_to_unit
+from climate.units import convert_delta_array_to_unit, is_fahrenheit
 
 MERC_MAX_LAT = 85.05112878  # Web Mercator valid latitude limit
 
@@ -26,7 +28,7 @@ MERC_MAX_LAT = 85.05112878  # Web Mercator valid latitude limit
 # Public API
 # -------------------------
 
-def build_world_map_data(ctx: StoryContext) -> dict:
+def build_world_map_data(ctx: StoryContext, *, grid_deg: float | None = None) -> dict:
     """
     Load latest warming map raster + manifest produced by scripts/make_warming_map_cds.py.
 
@@ -35,11 +37,24 @@ def build_world_map_data(ctx: StoryContext) -> dict:
       data/world/warming_map_*_to_*.manifest.json
     """
     data_dir = Path("data/world")
+
     nc_files = sorted(
-        data_dir.glob("warming_map_*_to_*.nc"),
+        data_dir.glob("warming_map_*_to_*_grid*.nc"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
+
+    if grid_deg is not None:
+        tag = str(grid_deg).replace(".", "p")
+        nc_files = [p for p in nc_files if f"_grid{tag}" in p.name]
+
+    # fallback to any warming_map if none matched
+    if not nc_files:
+        nc_files = sorted(
+            data_dir.glob("warming_map_*_to_*.nc"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
     if not nc_files:
         raise FileNotFoundError(
             "No warming_map_*.nc found in data/world. Run scripts/make_warming_map_cds.py first."
@@ -184,6 +199,240 @@ def world_map_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
     )
 
 
+def build_local_inset_data(
+    ctx: StoryContext,
+    world_data: dict,
+    *,
+    half_width_deg: float = 20.0,
+    half_height_deg: float = 20.0,
+    nearby_radius_cells: int = 2,
+) -> dict:
+    """
+    Prepare a cropped local window around the user's location from the world warming raster.
+
+    - Uses the same underlying world map DataArray (coarse 1° is fine for v1).
+    - Handles longitude wrap-around near the dateline.
+    - Computes simple neighborhood stats for dynamic captioning.
+    """
+    da: xr.DataArray = world_data["da"]
+    lat_name: str = world_data["lat_name"]
+    lon_name: str = world_data["lon_name"]
+
+    # Normalize user lon into same convention as the DA (typically [-180, 180))
+    lons = np.asarray(da[lon_name].values, dtype="float64")
+    if np.nanmin(lons) < 0:
+        user_lon = ((float(ctx.location_lon) + 180) % 360) - 180
+    else:
+        user_lon = float(ctx.location_lon) % 360
+
+    user_lat = float(ctx.location_lat)
+
+    # Crop latitude (easy; no wrap)
+    lat_min = max(-90.0, user_lat - half_height_deg)
+    lat_max = min(90.0, user_lat + half_height_deg)
+
+    lats = np.asarray(da[lat_name].values, dtype="float64")
+    lat_desc = lats[0] > lats[-1]
+    if lat_desc:
+        da_lat = da.sel({lat_name: slice(lat_max, lat_min)})
+    else:
+        da_lat = da.sel({lat_name: slice(lat_min, lat_max)})
+
+    # Crop longitude (handle wrap if window crosses -180/180)
+    lon_min = user_lon - half_width_deg
+    lon_max = user_lon + half_width_deg
+
+    if np.nanmin(lons) < 0:
+        # coords in [-180, 180)
+        if lon_min < -180 or lon_max > 180:
+            # split and concat
+            a_min = ((lon_min + 180) % 360) - 180
+            a_max = ((lon_max + 180) % 360) - 180
+            # Example: lon_min=170, lon_max=210 -> a_min=170, a_max=-150
+            left = da_lat.sel({lon_name: slice(a_min, 180.0)})
+            right = da_lat.sel({lon_name: slice(-180.0, a_max)})
+            da_win = xr.concat([left, right], dim=lon_name)
+        else:
+            da_win = da_lat.sel({lon_name: slice(lon_min, lon_max)})
+    else:
+        # coords in [0, 360)
+        lon_min2 = lon_min % 360
+        lon_max2 = lon_max % 360
+        if lon_min2 > lon_max2:
+            left = da_lat.sel({lon_name: slice(lon_min2, 360.0)})
+            right = da_lat.sel({lon_name: slice(0.0, lon_max2)})
+            da_win = xr.concat([left, right], dim=lon_name)
+        else:
+            da_win = da_lat.sel({lon_name: slice(lon_min2, lon_max2)})
+
+    # Convert to selected unit (Δ°F = Δ°C * 9/5)
+    arr_c = np.asarray(da_win.values, dtype="float64")
+    arr = convert_delta_array_to_unit(arr_c, ctx.unit)
+
+    # Find nearest cell to user for "nearby" stats
+    win_lats = np.asarray(da_win[lat_name].values, dtype="float64")
+    win_lons = np.asarray(da_win[lon_name].values, dtype="float64")
+
+    # choose nearest indices
+    i0 = int(np.argmin(np.abs(win_lats - user_lat)))
+    # lon distance with wrap-awareness in [-180,180) case
+    if np.nanmin(win_lons) < 0:
+        dlon = np.abs(((win_lons - user_lon + 180) % 360) - 180)
+    else:
+        dlon = np.abs((win_lons - (user_lon % 360)))
+    j0 = int(np.argmin(dlon))
+
+    r = int(max(1, nearby_radius_cells))
+    i1, i2 = max(0, i0 - r), min(arr.shape[0], i0 + r + 1)
+    j1, j2 = max(0, j0 - r), min(arr.shape[1], j0 + r + 1)
+    near = arr[i1:i2, j1:j2]
+
+    def _nan_stats(a: np.ndarray) -> dict:
+        a = a[np.isfinite(a)]
+        if a.size == 0:
+            return dict(mean=np.nan, std=np.nan, p10=np.nan, p90=np.nan, min=np.nan, max=np.nan)
+        return dict(
+            mean=float(np.mean(a)),
+            std=float(np.std(a)),
+            p10=float(np.quantile(a, 0.10)),
+            p90=float(np.quantile(a, 0.90)),
+            min=float(np.min(a)),
+            max=float(np.max(a)),
+        )
+
+    stats_near = _nan_stats(near)
+    stats_window = _nan_stats(arr)
+
+    return dict(
+        da_window=da_win,           # still in °C in values; unit conversion is in arr_window
+        arr_window=arr,             # numeric array in ctx.unit
+        lat_name=lat_name,
+        lon_name=lon_name,
+        unit=ctx.unit,
+        user_lat=user_lat,
+        user_lon=user_lon,
+        stats_near=stats_near,
+        stats_window=stats_window,
+        window_half_width_deg=half_width_deg,
+        window_half_height_deg=half_height_deg,
+        nearby_radius_cells=r,
+    )
+
+def build_local_inset_figure(
+    ctx: StoryContext,
+    facts: StoryFacts,
+    inset_data: dict,
+) -> tuple[go.Figure, str]:
+    da_win: xr.DataArray = inset_data["da_window"]
+    lat_name: str = inset_data["lat_name"]
+    lon_name: str = inset_data["lon_name"]
+    arr = inset_data["arr_window"]
+
+    lats = np.asarray(da_win[lat_name].values, dtype="float64")
+    lons = np.asarray(da_win[lon_name].values, dtype="float64")
+
+    # Make y axis increasing (south->north) for a conventional plot
+    if lats[0] > lats[-1]:
+        lats_plot = lats[::-1]
+        z_plot = arr[::-1, :]
+    else:
+        lats_plot = lats
+        z_plot = arr
+
+    # Robust colorscale bounds for local window contrast
+    finite = z_plot[np.isfinite(z_plot)]
+    if finite.size:
+        vmin = float(np.quantile(finite, 0.05))
+        vmax = float(np.quantile(finite, 0.98))
+        if vmin >= vmax:
+            vmin, vmax = float(np.min(finite)), float(np.max(finite))
+    else:
+        vmin, vmax = 0.0, 1.0
+
+    fig = go.Figure(
+        go.Heatmap(
+            x=lons,
+            y=lats_plot,
+            z=z_plot,
+            zmin=vmin,
+            zmax=vmax,
+            colorscale="YlOrRd",
+            colorbar=dict(title=f"ΔT ({ctx.unit})"),
+            hovertemplate="Lon %{x:.1f}°, Lat %{y:.1f}°<br>ΔT %{z:.2f}" + ctx.unit + "<extra></extra>",
+        )
+    )
+
+    # Mark user location
+    fig.add_trace(
+        go.Scatter(
+            x=[inset_data["user_lon"]],
+            y=[inset_data["user_lat"]],
+            mode="markers",
+            marker=dict(size=10, symbol="x"),
+            showlegend=False,
+            hovertemplate=f"{ctx.location_label}<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        width=320,
+        height=320,
+        margin=dict(l=50, r=20, t=40, b=40),
+        title=dict(text=f"<b>Local area around {ctx.location_label}</b>", x=0, xanchor="left"),
+    )
+    # Keep degrees square (no stretching)
+    fig.update_yaxes(
+        title_text="Latitude",
+        scaleanchor="x",
+        scaleratio=1,
+    )
+    fig.update_xaxes(title_text="Longitude")
+    fig.update_yaxes(title_text="Latitude")
+
+    tiny = (
+        f"Window: ±{inset_data['window_half_width_deg']:.0f}° lon, ±{inset_data['window_half_height_deg']:.0f}° lat "
+        f"around your location. Values in {ctx.unit}."
+    )
+    return fig, tiny
+
+def local_inset_caption(ctx: StoryContext, facts: StoryFacts, inset_data: dict) -> str:
+    s = inset_data["stats_near"]
+    w = inset_data["stats_window"]
+
+    def fmt(x: float) -> str:
+        return "n/a" if not np.isfinite(x) else f"{x:.2f}{ctx.unit}"
+
+    mean_near = s["mean"]
+    std_near = s["std"]
+    spread_near = (s["p90"] - s["p10"]) if (np.isfinite(s["p90"]) and np.isfinite(s["p10"])) else np.nan
+
+    # Heuristics (tweakable)
+    high_variance = np.isfinite(spread_near) and (spread_near > (1.0 if not is_fahrenheit(ctx.unit) else 1.8))
+    strong_warming = np.isfinite(mean_near) and (mean_near > (1.5 if not is_fahrenheit(ctx.unit) else 2.7))
+
+    lines = []
+    if np.isfinite(mean_near):
+        if strong_warming:
+            lines.append(f"Your surrounding region shows **strong warming**: about **{fmt(mean_near)}** on average nearby.")
+        else:
+            lines.append(f"Your surrounding region has warmed by about **{fmt(mean_near)}** on average nearby.")
+    else:
+        lines.append("We couldn’t estimate local warming around your location (missing data in this window).")
+
+    if high_variance:
+        lines.append(
+            f"Warming varies quite a bit within this window (nearby spread ~**{fmt(spread_near)}** between the 10th–90th percentiles), "
+            "which often happens near coasts, mountains, or strong ocean/land contrasts."
+        )
+    elif np.isfinite(std_near):
+        lines.append(f"Warming is fairly uniform locally (nearby variability ~**{fmt(std_near)}** standard deviation).")
+
+    # Optional: include window context (quietly)
+    if np.isfinite(w["mean"]):
+        lines.append(f"(In this whole local window, values range from **{fmt(w['min'])}** to **{fmt(w['max'])}**.)")
+
+    return "\n\n".join(lines)
+
 # -------------------------
 # Helpers
 # -------------------------
@@ -207,15 +456,6 @@ def _normalize_longitude(da: xr.DataArray, lon_name: str) -> xr.DataArray:
     else:
         da = da.sortby(lon_name)
     return da
-
-def _is_fahrenheit(unit: str) -> bool:
-    return "F" in (unit or "").upper()
-
-def _convert_delta_c_to_unit(arr_c: np.ndarray, unit: str) -> np.ndarray:
-    """Convert a temperature *difference* from °C to the requested unit."""
-    if _is_fahrenheit(unit):
-        return np.asarray(arr_c, dtype="float64") * (9.0 / 5.0)
-    return np.asarray(arr_c, dtype="float64")
 
 def _fmt_period(p: dict | None) -> str | None:
     if not isinstance(p, dict):
