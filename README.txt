@@ -15,9 +15,24 @@ $ conda activate climate
 # Fill extra_locations.txt to include additional cities (tweak source if needed)
 $ python scripts/make_city_list.py --source cities500 --extra-file locations/extra_locations.txt --top-per-country=3
 
-4. Precompute:
+4. Precompute cities climatology:
 # Tweak favorites.txt
 $ python scripts/precompute_story_cities.py --only-favorites --limit 10 [--dry-run]
 
+5. Precompute global series and maps:
+$ python scripts/make_global_series.py
+$ python scripts/make_latest_anomaly_map_assets.py
+$ python scripts/make_warming_map_cds.py --grid-deg 0.5
+$ python scripts/make_warming_texture.py \
+  --nc data/world/warming_map_1979-1988_to_2016-2025_grid0p25.nc \
+  --out data/world/warming_texture_1979-1988_to_2016-2025_grid0p25_8192x4096 \
+  --size 8192x4096
+$ python scripts/make_borders_overlay.py \ 
+  --out data/world/borders_8192x4096.png \
+  --size 8192x4096 \
+  --scale 10m \
+  --coast-lw 2.2 --borders-lw 1.4
+
 5. Run web page:
 $ streamlit run app/story_demo.py
+# python -m http.server 8000
