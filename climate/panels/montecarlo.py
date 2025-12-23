@@ -268,7 +268,10 @@ def montecarlo_caption(ctx: StoryContext, facts: StoryFacts, data: Dict) -> str:
     if n <= 0:
         return (
             "We’ll estimate the average warming by sampling random points across the globe and across time. "
-            "As we add samples, the average temperature for each era becomes more stable."
+            "As we add samples, the average temperature for each era becomes more stable. "
+            "We’re estimating the global mean near-surface (2m) air temperature by sampling random points on Earth and random days in each era. "
+            "To make it a true global mean, each draw represents an equal patch of Earth’s surface — we sample more often near the equator (where the grid cells cover more area) and less often near the poles. "
+            "We repeat this for both periods and compare the two running averages; the gap between them is the estimated warming between 1979–1988 and 2016–2025."
         )
 
     df_first = df[df["seq"] < n].copy()
