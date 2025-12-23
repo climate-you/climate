@@ -6,7 +6,7 @@ from datetime import date #, datetime, timedelta
 import folium
 
 #import glob
-#import pandas as pd
+import pandas as pd
 #import plotly.graph_objs as go
 #import requests
 #from dataclasses import dataclass
@@ -44,9 +44,6 @@ from climate.panels.worldmap import (
     build_world_map_data, build_world_map_figure, world_map_caption,
     build_local_inset_data, build_local_inset_figure, local_inset_caption,
 )
-
-# TO BE REMOVED
-from climate.fake import make_fake_daily_series, make_fake_hourly_from_daily, fake_local_and_global
 
 # 
 DATA_DIR = Path("data/story_climatology")
@@ -182,17 +179,6 @@ except Exception as e:
 
 # Compute high-level facts once
 facts = compute_story_facts(ds, lat=location_lat)
-
-fake_data = fake_local_and_global("mauritius")
-
-now_year = fake_data["local_yearly"].index.year.max()
-past_year = fake_data["local_yearly"].index.year.min()
-warming_local = fake_data["local_yearly"].iloc[-1] - fake_data["local_yearly"].iloc[0]
-warming_global = fake_data["global_yearly"].iloc[-1] - fake_data["global_yearly"].iloc[0]
-
-local_daily = fake_data["local_daily"]
-local_hourly = fake_data["local_hourly"]
-local_monthly = fake_data["local_monthly"]
 
 # -----------------------------------------------------------
 # Common CSS
