@@ -1,53 +1,49 @@
-# Handoff Summary
+# Climate Story — Handoff Summary (instructions.md)
 
-## Project goal
+This repo builds a **climate scrollytelling experience**. Today it’s primarily prototyped in **Streamlit** (`app/story_demo.py`), but the long-term plan is a **separate front-end scrollytelling site** that reuses the same Python backend outputs (data files, figures, captions).
 
-Build a **public-facing climate “story”** web page that works worldwide. It should feel like scrollytelling (eventually front-end), but for now it’s implemented in Streamlit with a stepper-style UI and Plotly charts.
+The project is organized around a consistent pattern for panels:
+- `build_*_data(ctx, facts) -> dict`
+- `build_*_figure(ctx, facts, data) -> figure(s)`
+- `*_caption(ctx, facts, data) -> str`
+
+Panels live under `climate/panels/`. Scripts to generate datasets and assets live under `scripts/`. Outputs go to `data/`.
+
+## Story
 
 The page teaches:
 - what climate change looks like **locally** (day/night cycle → month → year → 50 years → trend into future),
 - how **seasons shifted** (recent vs earlier climate),
 - how local warming compares to **global warming** (“You vs the world”),
 - a world map showing **warming relative to a baseline**,
-- later: a **Monte Carlo sampling** visualization that explains the “+1.5°C global warming” idea (currently a standalone demo with fake data).
+- a **Monte Carlo sampling** visualization that explains the “+1.5°C global warming” idea (currently a standalone demo with fake data).
 
 Non-goals for v1: heatwave detection (parked), “typical year daily then vs now” at global scale (may be revisited later).
 
-## Current repo structure (already refactored)
+---
 
-```
-.
-├── app
-│   └── story_demo.py                # streamlit app entrypoint
-├── climate
-│   ├── __init__.py
-│   ├── analytics.py                 # compute facts, trends, helpers
-│   ├── fake.py                      # fake data generator (to be removed after world pages are real)
-│   ├── io.py                        # load locations, load climatology datasets, small IO helpers
-│   ├── models.py                    # dataclasses StoryFacts, StoryContext, etc.
-│   ├── openmeteo.py                 # Open-Meteo request helpers + caching wrappers
-│   ├── panels
-│   │   ├── __init__.py
-│   │   ├── helpers.py               # shared chart style helpers, annotations, etc.
-│   │   ├── intro.py                 # Intro panel (real data)
-│   │   ├── seasons.py               # Seasons panels (real data)
-│   │   ├── world.py                 # placeholder (to implement)
-│   │   └── zoomout.py               # Zoom-out panels (real data)
-│   └── units.py                     # Celsius/Fahrenheit conversions, formatting helpers
-├── data
-│   └── story_climatology
-│       ├── clim_city_*.nc           # precomputed city climatology files (Open-Meteo ERA5 archive)
-├── draft
-│   └── monte_carlo_demo.py          # standalone Monte Carlo demo (fake data)
-├── locations
-│   ├── favorites.txt
-│   └── locations.csv
-├── scripts
-│   ├── make_city_list.py            # generates locations.csv from GeoNames + extras
-│   └── precompute_story_cities.py   # precomputes clim_city_*.nc for all locations.csv
-```
+## Current “story” structure
 
-## Data model
+### Streamlit prototype
+- Entry point: `story_demo.py`
+- Panels now include:
+  - **Seasons then vs now** (existing)
+  - **You vs the world** (now uses real data; was fake in early prototype)
+  - **World map** warming layer (now uses real ERA5-based warming map; was fake)
+  - **Monte Carlo** global-mean experiment (now uses real ERA5 daily mean data from CDS; was fake)
+
+### Front-end plan (future)
+- Keep Streamlit as a fast iteration / prototyping tool.
+- When a panel is “ready”, port it 1:1 into a front-end “step” (scrollytelling).
+- Python continues to generate:
+  - precomputed data files (CSV/NetCDF/Parquet)
+  - textures (webp/png) + manifests
+  - captions / derived “facts” blobs
+
+---
+
+## Key datasets & outputs
+
 ### Dataclasses
 ```python
 @dataclass
@@ -79,49 +75,60 @@ def build_x_data(ctx: StoryContext) -> dict
 def build_x_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> (go.Figure, str)   # returns (figure, tiny caption like “Source/range”)
 def x_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str
 ```
-
 Goal: keep Streamlit layer thin; later can reuse same data/fig/caption builders in a JS frontend.
 
-## Precomputed city climatology files (data/story_climatology/clim_{slug}.nc)
+### Global temperature series (for “You vs the world”)
+- Script: `scripts/make_global_series.py`
+- Outputs:
+  - `data/world/global_series.csv`
+  - `data/world/global_series.meta.json`
+- Used by: “You vs the world” panel (global anomalies chart).
 
-Generated from Open-Meteo ERA5 archive API.
+### World warming map (2D Leaflet/Folium overlay)
+- Script: `scripts/make_warming_map.py`
+- Outputs:
+  - `data/world/warming_map_....nc`
+  - `data/world/warming_map_....manifest.json`
+- Panel: `climate/panels/worldmap.py` (Folium-based interactive map)
+- Notes:
+  - NetCDF grid is typically `(latitude, longitude)` with:
+    - lat descending: 90..-90
+    - lon 0..359
+  - Rendering had issues earlier (upside-down / offset / no repeat). Fixed by:
+    - correct lat orientation
+    - correct bounds
+    - correct lon handling (0..360 vs -180..180)
+    - optional longitude rolling for centering.
 
-Each file contains:
-- **Daily** (dimension `time` daily):
-  - `t2m_daily_mean_c`
-  - `t2m_daily_min_c`
-  - `t2m_daily_max_c`
-- **Monthly** (dimension `time_monthly` monthly):
-  - `t2m_monthly_mean_c` (mean of daily mean)
-  - `t2m_monthly_min_c` (mean of daily min)
-  - `t2m_monthly_max_c` (mean of daily max)
-- **Yearly** (dimension `time_yearly` yearly):
-  - `t2m_yearly_mean_c`
-- **Monthly climatology** (dimension month 1..12):
-  - `t2m_monthly_clim_past_mean_c`
-  - `t2m_monthly_clim_recent_mean_c`
-  - plus (after recent changes) min/max climatology for side-by-side envelopes (if implemented): `t2m_monthly_clim_past_min_c`, `t2m_monthly_clim_past_max_c`, `t2m_monthly_clim_recent_min_c`, `t2m_monthly_clim_recent_max_c`
+### World warming texture (for 3D globe)
+- Script: `scripts/make_warming_texture.py`
+- Outputs:
+  - `data/world/warming_texture_*.webp`
+  - `data/world/warming_texture_*.manifest.json`
+- This produces a single equirectangular texture (global) suitable for a globe mesh.
+- There is a helper in the script to roll lon 0..360 → -180..180 to center Greenwich; this affects how the JS globe needs to set its initial longitude.
 
-**Time coverage strategy:**
-- Start year: **1979** (ERA5 standard).
-- End date: last full quarter relative to “today” (e.g., if today is Dec 2025, end is Sep 30 2025).
-- The app shows subtle “Data from 1979 to Sep 2025” captions.
+### Borders overlay texture (coastlines + country borders)
+- Script: `scripts/make_borders_overlay.py`
+- Outputs:
+  - `data/world/borders_<WxH>.png`
+- Used by: globe prototype as a transparent overlay.
+- Raster looks great zoomed out; for very deep zoom you’ll eventually want vector or tiled raster.
 
-Filenames now **do not include year**, to avoid duplicates and disk bloat.
+### Monte Carlo experiment (ERA5 daily mean, global mean warming)
+- Download script (CDS): `scripts/download_era5_daily_t2m_cds.py`
+- Experiment script: `scripts/make_montecarlo_experiment.py`
+- Outputs:
+  - Input NetCDFs in `data/mc/`:
+    - `era5_daily_t2m_<YEAR>_gridX.nc` (+ meta)
+  - Experiment sample parquet (optional):
+    - `data/mc/experiment_XX_samples.parquet` (+ meta)
+  - Experiment curve images (optional visualisation mode):
+    - convergence curves plot
+    - delta plot (difference over samples)
+- Panel: `climate/panels/montecarlo.py`
 
-## Live (non-precomputed) data
-
-Even with precomputed city history, the page still needs “fresh”:
-- **Current temperature** (for Intro), and
-- **Last week / last month** series (to show the day/night oscillation and recent daily rhythm), because precomputes stop at last full quarter.
-
-These are fetched live from Open-Meteo and cached:
-- cached via `@st.cache_data` (in-memory per process) + some local discipline (cache key normalized to day granularity; also optional disk caching is under consideration)
-- rate limits (429) were a recurring issue; scripts now do backoff. App should also handle 429 gracefully.
-
-Timezone issue fixed: show temperatures in local time (Open-Meteo timezone handling) and put daily mean points at midday instead of 00:00.
-
-There is an ability to “time travel” (override today date in sidebar) to test how the page looks at different time of the year, this will be kept only in test page, not the final world-visible page.
+---
 
 ## Units
 
@@ -141,79 +148,9 @@ Global toggle **Celsius vs Fahrenheit** is implemented and used across real-data
 - Plotly rendering:
   - use `st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})` to avoid Streamlit deprecation warnings.
 
-## Scripts
-`scripts/make_city_list.py`
-
-- Generates `locations/locations.csv` from GeoNames dump (cities500/1000/etc).
-- Supports:
-  - `--source` (e.g., cities500 vs cities1000)
-  - `--extra` (add specific “City,Country” pairs)
-  - `--extra-file` (file with extra city+country lines)
-- Favorites file writing is optional (e.g. `--write-favorites`) to avoid overwriting manual favorites.
-
-A separate simple Streamlit tool (`view_locations_map.py`) was created to visualize `locations.csv` on a world map (helpful for distribution sanity check).
-
-`scripts/precompute_story_cities.py`
-- Now reads `locations.csv` (not hardcoded cities).
-- Can filter to favorites or subset.
-- Uses progress bar (`tqdm`). Terminal output is expected to show multiple lines; it’s not a single-line refresh in some environments.
-- Key requirements already added:
-  - skips slugs if existing file is up-to-date (`is_existing_file_up_to_date(path, slug, target_end)` checks existence, variables present, and end-date)
-  - Rate limiting:
-    - A min gap between processed slugs (`--min-gap`) to avoid Open-Meteo 429s (when skipping already computed slugs, no wait is done)
-    - On 429, backoff starts at `>= min-gap` and increases (with jitter).
-    - Logs “rate-limit-ish” headers; Open-Meteo often does not send Retry-After.
-  
-## What works today (v1-ready-ish)
-
-✅ Intro (real data + current temp + localized warming comparison placeholder)
-
-✅ Zoom-out page with real data:
-- last week (hourly + daily mean + min/max annotations)
-- last month (daily + mean + min/max)
-- last year (daily + smoothing + min/max arrow boxes; beware dark-mode annotation bg)
-- last 5 years
-- last 50 years (monthly, yearly mean, trend lines including coldest/warmest-month trend)
-- 25 years ahead (trend extension; y-axis range adjusted to avoid exaggeration)
-
-✅ Seasons page with real data:
-- seasons then vs now (recent vs earlier)
-- hover templates show “Month: +Δ°C” formatted correctly
-- curves rotated so warmest month is centered (hemisphere-friendly)
-- separate side-by-side envelope plots (min/mean/max with blue/red fills) are being wired; captions need to avoid “0.0°C warmer” awkwardness
-
-✅ Location selection:
-- now driven from disk: user can pick any precomputed city file (favorites to be added on top + dropdown)
-
-✅ Error handling improvements:
-
-- many previous Streamlit issues fixed (duplicate keys, streamlit.debug, deprecated params, etc.)
-- 429 in the app still needs graceful handling + possibly disk caching.
-
 ---
 
-## What is NOT implemented yet (next big tasks)
-
-### World pages (to make real, no fake)
-
-1. **Global anomaly series** generation:
-- write script to compute `data/world/global_series.csv` (e.g. global mean temperature anomaly vs baseline; likely use ERA5 / reanalysis-based global average)
-- then implement “You vs the world” panel:
-  - local series already computed from city climatology (yearly mean etc.)
-  - compare to global series
-  - show both curves and explain “local faster/slower than global”.
-2. **World warming map raster**:
-- write script to generate a global grid raster (png/tif/zarr) of warming between baseline periods (e.g. 1979–1988 vs 2016–2025 or other) using ERA5 2m temperature
-- store along with a JSON manifest (projection, bounds, min/max, baseline definitions)
-- “World map” panel loads raster + highlights current location dot.
-
-### Monte Carlo demo integration (currently standalone fake data)
-
-- Monte Carlo idea: sample (lat, lon, time) points in two eras, show convergence of mean difference.
-- Current `draft/monte_carlo_demo.py` uses fake data and has improved mean-line behavior (horizontal mean line that moves as samples increase).
-- Want eventually: more animation-friendly front-end (React/Three) rather than Streamlit, but keep prototype.
-
-### Admin/maintenance pages (future but planned)
+## Admin/maintenance pages (future but planned)
 
 - cache size, disk space, number of precomputed locations
 - monitor Open-Meteo/CDS request counts and failures
@@ -232,33 +169,156 @@ A separate simple Streamlit tool (`view_locations_map.py`) was created to visual
 - Precompute end date set to **last full quarter** to keep data fresh but reduce compute frequency (quarterly update).
 - Code refactored into modules with clear “data → figure → caption” pipeline so it can later move to a front-end scrollytelling framework.
 - ERA5 “50 years” baseline starts at 1979 because ERA5 reanalysis coverage is conventionally used from 1979 onward.
+- temperatures are shown in local time (Open-Meteo timezone handling) and put daily mean points at midday instead of 00:00.
+- There is an ability to “time travel” (override today date in sidebar) to test how the page looks at different time of the year, this will be kept only in test page, not the final world-visible page.
 
-## Current open questions / TODOs
+---
 
-- Add **disk cache** (shared across process restarts) for Open-Meteo live windows to reduce 429s.
-- Improve app robustness: catch 429 and show “data temporarily unavailable, retry later” instead of crashing.
-- Dark mode styling for Plotly annotations (min/max boxes).
+## JS globe prototype (scrollytelling “v1” visual target)
+
+### Prototype file(s)
+- Minimal globe demo page: `scripts/globe_demo.html` (or similar static HTML)
+- Loads:
+  - warming texture webp
+  - borders overlay png
+
+### Rendering choice
+- Use `MeshBasicMaterial` (no lights) to match “flat” Guardian-like look.
+- Use a white page background (CSS + renderer clear color if needed).
+
+### Notes / gotchas
+- If the texture is rolled/shifted in Python (lon rolling), then “startLon” in JS may need adjustment.
+- “Fly to London” issues:
+  - If rotation is applied incrementally from current orientation, you get offsets.
+  - Fix by computing absolute target orientation and tweening to it.
+  - Maintaining north-up in view needs careful camera/rotation handling (avoid introducing roll).
+
+---
+
+## Open-Meteo precompute pipeline (cities)
+
+### Current state
+- There is a `scripts/precompute_story_cities.py` that precomputes city histories via Open-Meteo ERA5 archive.
+- We implemented:
+  - chunked fallback on `timeoutReached` (e.g., 5-year chunks)
+  - reduced unnecessary waits between chunk requests
+  - skip-if-up-to-date fast path
+  - view map improvements: bigger map + state breakdown bar
+
+### Rate limiting reality (429s)
+- Open-Meteo free tier counts “long-range” queries (>2 weeks, many years) as **multiple calls**.
+- Precomputing 40–50 years per city can cost hundreds of “call units” per city.
+- You can hit limits quickly (minutely/hourly/daily/monthly).
+
+### Strategy options (still under discussion)
+A) **Open-Meteo subscription bootstrap**
+- Pay for 1 month, bulk precompute (e.g., 2k+ cities)
+- Then cancel and do small periodic updates.
+
+B) **CDS backfill + Open-Meteo incremental**
+- Use CDS to download global gridded data once per era / per year
+- Extract city point time series locally (no 429s)
+- Use Open-Meteo only for “live-ish” short windows (last week/month).
+
+C) **All CDS for backfill + incremental**
+- Each quarter/month: download new CDS year or month blocks and append locally.
+- Most freedom (no Open-Meteo limits), but heavier pipeline and local storage.
+
+Key tradeoff: CDS gives stable reproducibility + unlimited local extraction, but you manage more data.
+
+---
+
+## File map (what matters most)
+
+### Panels
+- `climate/panels/world.py`  
+  “You vs the world” (local anomalies vs global anomalies). Uses:
+  - local: precomputed ERA5 (Open-Meteo) city files
+  - global: `data/world/global_series.csv`
+
+- `climate/panels/worldmap.py`  
+  “World map” (Folium/Leaflet overlay of warming + local inset caption logic)
+
+- `climate/panels/montecarlo.py`  
+  Monte Carlo experiment panel (playback loop in Streamlit; uses precomputed experiment data)
+
+### Scripts
+- `scripts/make_global_series.py`
+- `scripts/make_warming_map.py`
+- `scripts/make_warming_texture.py`
+- `scripts/make_borders_overlay.py`
+- `scripts/globe_demo.html`
+- `scripts/download_era5_daily_t2m_cds.py`
+- `scripts/make_montecarlo_experiment.py`
+- `scripts/precompute_story_cities.py`
+- `scripts/make_city_list.py` (needs rewrite / smarter selection)
+
+---
+
+## Monte Carlo “sampling” model (current intended default)
+Goal: estimate change in **global mean near-surface air temperature** between eras.
+
+Recommended default choices for v1:
+- **Space sampling**: “area-weighted” (cos(latitude) correction) so each unit area contributes equally.
+- **Time sampling**: monthly stratification (easier story) or day-of-year stratification (optional).
+
+Important: Without proper area weighting, experiments can converge to noticeably different deltas because high latitudes get overrepresented.
+
+---
+
+## Known issues / work in progress
+
+### Monte Carlo
+- Large N (10M–50M) runs show some drift/run-to-run variance; likely remaining sampling variance + implementation details.
+- We added options to skip writing full sample parquet for huge N to avoid memory blowups.
+
+### City list / precompute strategy
+- `make_city_list.py` currently selects poorly (e.g., small territories get same slots as large countries).
+- Need a new selection scheme: population-weighted, region-balanced, and “likely user origins”.
+
+### CDS vs Open-Meteo integration
+- Decide primary “backfill” source:
+  - Open-Meteo subscription vs CDS download-and-extract workflow.
+
+---
+
+## Immediate next tasks (for future chats)
+1) Rewrite `make_city_list.py` to produce a better city set:
+   - prioritize expected users (UK/Europe/US) + global coverage
+   - avoid 3-per-country naive rule
+   - cap tiny territories
+
+2) Rewrite `precompute_story_cities.py` around the chosen strategy:
+   - ideally append-only updates
+   - possibly CDS-backed extraction for long history
+   - Open-Meteo only for short “live” windows
+
+3) Front-end integration:
+   - keep Streamlit as a panel prototyping environment
+   - port panels into front-end scrollytelling steps
+   - reuse Python-generated assets (textures, borders, parquet/CSV, captions)
+
+---
+
+## Notes on running
+
+### CDS downloads
+- `download_era5_daily_t2m_cds.py` must split requests (typically by year) to avoid “cost limits exceeded”.
+- CDS sometimes returns files that are not ZIP even if requested that way; code should detect and handle.
+
+### World textures
+- Consider 4096x2048 (good default) and 8192x4096 (high quality).
+- Output resolution should roughly match grid resolution:
+  - 1.0° grid ≈ 360x181 cells → upscale to 2048/4096+ is mostly interpolation
+  - 0.25° grid has enough native detail to justify 8192x4096.
+
+---
+
+## API limits reminder (Open-Meteo)
+Long-range requests (>2 weeks) can count as multiple calls; precomputing dozens of years per city is expensive in “call units” and easily triggers 429s. Prefer append-only updates and/or CDS-based backfill.
+
+---
 
 ## Instructions for code changes
 
 - for surgical patches, please print the code block (with befor/after is clearer) rather than uploading the whole file.
-
-## Current short-term roadmap
-
-1. [DONE] Write the `make_city_list.py` to generate `locations.csv` from GeoNames
-2. [IN PROGRESS] Change the `precompute_story_cities.py` to consume `locations.csv`
-3. [TODO] Change `story_demo.py` to display one select box with favorites at the top for the location selection
-4. [TODO] Write a script to generate the `data/world/global_series.csv` (global anomaly)
-5. [TODO] Move the "You vs the world" page to use this data (local already computed + global computed just above)
-6. [TODO] Write a script to generate `data/world/warming_map_{baselineA}_{baselineB}.(png|tif|zarr)` + a tiny JSON manifest for min/max, projection, etc. #7. Move the "world map" page to use this data
-
-## What the new assistant should do next
-
-1. Implement Step #2 completion if not done: ensure precompute_story_cities.py fully consumes locations.csv + supports favorites/subsets + stable progress output.
-2. Implement Step #3 (change `story_demo.py`)
-3. Implement Step #4–7 (world data):
-- script: `global_series.csv`
-- script: warming map raster + manifest
-- implement `climate/panels/world.py` to use them
-4. Remove fake data pipeline once world panels use real data.
-5. Then revisit Monte Carlo integration (maybe keep in draft until front-end prototype).
