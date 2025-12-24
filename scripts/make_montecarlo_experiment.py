@@ -394,7 +394,7 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=12345)
     ap.add_argument("--shuffle-first", type=int, default=200, help="Only shuffle first K rows in playback order (for varying early detail)")
     ap.add_argument("--visualise", action="store_true", help="Write a convergence plot PNG after sampling.")
-    ap.add_argument("--skip-write", action="store_true", help="Skip writinging of nc output")
+    ap.add_argument("--skip-write", action="store_true", help="Skip writing Parquet samples (still writes meta + optional plots)")
     ap.add_argument("--viz-out", type=Path, default=None, help="Optional output PNG path.")
     ap.add_argument("--in-dir", type=Path, default=Path("data/mc"))
     ap.add_argument("--out-dir", type=Path, default=Path("data/mc/experiments"))
@@ -441,7 +441,7 @@ def main() -> None:
     if args.space_sampling == "latbands":
         print(f"[sampling] time={args.time_sampling} space={args.space_sampling} n_lat_bands={args.n_lat_bands}")
     else:
-        print(f"[sampling] time={args.time_sampling}) space={args.space_sampling}")
+        print(f"[sampling] time={args.time_sampling} space={args.space_sampling}")
     df_past = _sample_from_ds(ds=ds_past, era_name="past", era_id=0, n=n_each, rng=rng, time_sampling=args.time_sampling, space_sampling=args.space_sampling, n_lat_bands=args.n_lat_bands)
     df_recent = _sample_from_ds(ds=ds_recent, era_name="recent", era_id=1, n=n_each, rng=rng, time_sampling=args.time_sampling, space_sampling=args.space_sampling, n_lat_bands=args.n_lat_bands)
 
@@ -449,9 +449,30 @@ def main() -> None:
     past_vals = df_past["t_c"].to_numpy(dtype=np.float64)
     recent_vals = df_recent["t_c"].to_numpy(dtype=np.float64)
 
-    past_running = np.cumsum(past_vals) / np.arange(1, len(past_vals) + 1)
-    recent_running = np.cumsum(recent_vals) / np.arange(1, len(recent_vals) + 1)
-    delta_running = recent_running - past_running
+    sd_p = past_vals.std(ddof=1)
+    sd_r = recent_vals.std(ddof=1)
+    n = len(past_vals)
+
+    se_delta = (sd_p**2 / n + sd_r**2 / n) ** 0.5
+    ci95 = 1.96 * se_delta
+
+    # Running means (can be huge; avoid OOM)
+    n = len(past_vals)
+
+    # If we're not visualising, we only need final means
+    if not args.visualise and args.skip_write:
+        past_mean = float(past_vals.mean(dtype=np.float64))
+        recent_mean = float(recent_vals.mean(dtype=np.float64))
+        past_running = np.array([past_mean], dtype=np.float64)
+        recent_running = np.array([recent_mean], dtype=np.float64)
+        delta_running = np.array([recent_mean - past_mean], dtype=np.float64)
+    else:
+        past_running = np.cumsum(past_vals, dtype=np.float64) / np.arange(1, n + 1, dtype=np.float64)
+        recent_running = np.cumsum(recent_vals, dtype=np.float64) / np.arange(1, n + 1, dtype=np.float64)
+        delta_running = recent_running - past_running
+
+    print(f"sd_past={sd_p:.2f}°C sd_recent={sd_r:.2f}°C")
+    print(f"delta={delta_running[-1]:.6f}°C  SE={se_delta:.6f}°C  95%±{ci95:.6f}°C")
 
     if args.visualise:
         x = np.arange(1, len(past_running) + 1)
@@ -532,8 +553,8 @@ def main() -> None:
     else:
         n_samples_total = 2*n_each
 
-    meta_past = out_dir / f"era5_daily_t2m_{era_past}_grid{args.grid_deg}.meta.json"
-    meta_recent = out_dir / f"era5_daily_t2m_{era_recent}_grid{args.grid_deg}.meta.json"
+    meta_past = in_dir / f"era5_daily_t2m_{era_past}_grid{args.grid_deg}.meta.json"
+    meta_recent = in_dir / f"era5_daily_t2m_{era_recent}_grid{args.grid_deg}.meta.json"
 
     meta = {
         "experiment_id": args.experiment_id,
@@ -542,8 +563,8 @@ def main() -> None:
         "n_samples_total": int(n_samples_total),
         "grid_deg": float(args.grid_deg),
         "eras": [
-            asdict(EraSpec("past", 1979, 1988, str(meta_past if meta_past.exists() else (out_dir / f"era5_daily_t2m_{era_past}_grid{args.grid_deg}.nc")))),
-            asdict(EraSpec("recent", 2016, 2025, str(meta_recent if meta_recent.exists() else (out_dir / f"era5_daily_t2m_{era_recent}_grid{args.grid_deg}.nc")))),
+            asdict(EraSpec("past", 1979, 1988, str(meta_past if meta_past.exists() else (in_dir / f"era5_daily_t2m_{era_past}_grid{args.grid_deg}.nc")))),
+            asdict(EraSpec("recent", 2016, 2025, str(meta_recent if meta_recent.exists() else (in_dir / f"era5_daily_t2m_{era_recent}_grid{args.grid_deg}.nc")))),
         ],
         "variable": "2m_temperature",
         "statistic": "daily_mean",
