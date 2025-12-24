@@ -28,8 +28,8 @@ $ python scripts/make_warming_map_cds.py --grid-deg 0.5
 # For 3d maps:
 $ python scripts/make_warming_texture.py \
   --nc data/world/warming_map_1979-1988_to_2016-2025_grid0p25.nc \
-  --out data/world/warming_texture_1979-1988_to_2016-2025_grid0p25_8192x4096 \
-  --size 8192x4096
+  --out data/world/warming_texture_1979-1988_to_2016-2025_grid0p25_4096x2048 \
+  --size 4096x2048
 $ python scripts/make_borders_overlay.py \ 
   --out data/world/borders_8192x4096.png \
   --size 8192x4096 \
@@ -43,3 +43,4 @@ $ python scripts/make_montecarlo_experiment.py --grid-deg 1.0 --experiment-id 1 
 5. Run web page:
 $ streamlit run app/story_demo.py
 # python -m http.server 8000
+$ cd web; npm run dev 
