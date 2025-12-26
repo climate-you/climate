@@ -1,6 +1,7 @@
 .DS_Store
+.cache
 __pycache__
 data/story_climatology/*.nc
 data/world/*
 data/mc/*
-.cache
+web/public/data/*
