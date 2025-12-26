@@ -71,10 +71,9 @@ def build_last_week_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
     annotate_minmax_on_series(fig, data["time_hourly"], temp_hourly_local, ctx.unit, label_prefix="")
 
     fig.update_layout(
-        # margin=dict(l=80, r=30, t=30, b=70),
         width=1350,
-        height=350, # 320, tweak until it matches Streamlit
-        margin=dict(l=50, r=30, t=30, b=30), # margin=dict(l=0, r=0, t=10, b=40),
+        height=350,
+        margin=dict(l=50, r=30, t=30, b=30),
         showlegend=True,
         legend=dict(
             orientation="v",
@@ -171,8 +170,9 @@ def build_last_month_figure(ctx: StoryContext, facts: StoryFacts, data: dict) ->
     annotate_minmax_on_series(fig, data["time_daily"], temp_daily_local, ctx.unit, label_prefix="")
 
     fig.update_layout(
-        margin=dict(l=0, r=0, t=10, b=40),
-        height=320,
+        width=1350,
+        height=350,
+        margin=dict(l=70, r=30, t=30, b=30),
         showlegend=True,
         legend=dict(
             orientation="v",
@@ -309,7 +309,9 @@ def build_last_year_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
     annotate_minmax_on_series(fig, time_daily, t_daily_local, ctx.unit, label_prefix="")
 
     fig.update_layout(
-        height=400,
+        width=1350,
+        height=350,
+        margin=dict(l=70, r=30, t=30, b=30),
         xaxis=dict(
             title="Date",
             showgrid=True,
@@ -319,7 +321,6 @@ def build_last_year_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
             title=f"Temperature (%s)" % fmt_unit(ctx.unit),
             zeroline=False,
         ),
-        margin=dict(l=40, r=20, t=30, b=40),
         showlegend=True,
     )
 
@@ -467,8 +468,9 @@ def build_five_year_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
     add_mean_trace(fig, data["time_monthly"], temp_monthly_local, "Monthly mean", hovertemplate="%{x|%Y-%m}<br>Monthly mean: %{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>")
 
     fig.update_layout(
-        margin=dict(l=0, r=0, t=10, b=40),
-        height=320,
+        width=1350,
+        height=350,
+        margin=dict(l=70, r=30, t=30, b=30),
         showlegend=True,
         xaxis=dict(
             title="Year",
@@ -716,8 +718,9 @@ def build_fifty_year_figure(ctx: StoryContext, facts: StoryFacts, data: dict) ->
         )
     
     fig.update_layout(
-        height=400,
-        margin=dict(l=40, r=20, t=30, b=40),
+        width=1350,
+        height=350,
+        margin=dict(l=70, r=30, t=30, b=30),       
         xaxis_title="Year",
         yaxis_title="Temperature (%s)" % fmt_unit(ctx.unit),
         showlegend=True,
@@ -963,8 +966,9 @@ def build_twenty_five_years_figure(ctx: StoryContext, facts: StoryFacts, data: d
     y1 = y_center + span / 2.0 + pad
 
     fig.update_layout(
-        margin=dict(l=0, r=0, t=10, b=40),
-        height=320,
+        width=1350,
+        height=350,
+        margin=dict(l=70, r=30, t=30, b=30),
         showlegend=True,
         xaxis=dict(
             title="Year",
