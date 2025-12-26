@@ -6,6 +6,9 @@ import Globe from "@/components/Globe";
 import type { CityIndexEntry } from "@/lib/cities";
 import { nearestCity } from "@/lib/geo";
 import { motion as M } from "@/config/motion";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import Caption from "@/components/Caption"
 
 type Phase = "landing" | "flying" | "arrived";
 
@@ -78,16 +81,21 @@ export default function StoryClient() {
 
   const [phase, setPhase] = useState<Phase>("landing");
   const [unit, setUnit] = useState<"C" | "F">("C");
-
+  
   const [cities, setCities] = useState<CityIndexEntry[] | null>(null);
   const [target, setTarget] = useState<{ lat: number; lon: number } | null>(null);
   const [locationLabel, setLocationLabel] = useState<string>("your location");
-
+  
   const [currentTempC, setCurrentTempC] = useState<number | null>(null);
   const [currentMeta, setCurrentMeta] = useState<{ cached: boolean; age: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
-
+  
+  const [introCaption, setIntroCaption] = useState<string | null>(null);
   const arrivedOnceRef = useRef(false);
+
+  const [liveAsof, setLiveAsof] = useState<string | null>(null);
+  const [lastWeekSvg, setLastWeekSvg] = useState<string | null>(null);
+  const [lastWeekCaption, setLastWeekCaption] = useState<string | null>(null);
 
   // Load cities index once
   useEffect(() => {
@@ -190,6 +198,85 @@ export default function StoryClient() {
       cancelled = true;
     };
   }, [phase, target]);
+
+  useEffect(() => {
+    if (!slug || slug === "auto") return;
+
+    let cancelled = false;
+    setIntroCaption(null);
+
+    const bust = process.env.NODE_ENV === "development" ? `?v=${Date.now()}` : "";
+    const url = `/data/story/${slug}/panels/intro.${unit}.caption.md${bust}`;
+    
+    fetch(url, { cache: "no-store" })
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load intro caption: ${r.status}`);
+        return r.text();
+      })
+      .then((text) => {
+        if (cancelled) return;
+        setIntroCaption(text);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : String(e));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, unit]);
+
+  useEffect(() => {
+    if (!slug || slug === "auto") return;
+    fetch("/data/live/latest.json", { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        const asof = j?.[slug];
+        if (asof) setLiveAsof(asof);
+      })
+      .catch(() => {});
+  }, [slug]);
+
+  useEffect(() => {
+    if (phase !== "arrived") return;
+    if (!slug || slug === "auto") return;
+    if (!liveAsof) return;
+
+    let cancelled = false;
+    setLastWeekSvg(null);
+    setLastWeekCaption(null);
+
+    const bust = process.env.NODE_ENV === "development" ? `?v=${Date.now()}` : "";
+    const base = `/data/live/${liveAsof}/${slug}`;
+    const svgUrl = `${base}/last_week.${unit}.svg${bust}`;
+    const capUrl = `${base}/last_week.${unit}.caption.md${bust}`;
+
+    Promise.all([
+      fetch(svgUrl, { cache: "no-store" }).then((r) => {
+        if (!r.ok) throw new Error(`Failed to load last_week SVG: ${r.status}`);
+        return r.text();
+      }),
+      fetch(capUrl, { cache: "no-store" }).then((r) => {
+        if (!r.ok) throw new Error(`Failed to load last_week caption: ${r.status}`);
+        return r.text();
+      }),
+    ])
+      .then(([svg, md]) => {
+        if (cancelled) return;
+        setLastWeekSvg(svg);
+        setLastWeekCaption(md);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        // Don’t kill the whole page if live panels missing; just show a message.
+        console.warn(e);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, slug, unit, liveAsof]);
 
   const rightCaption = useMemo(() => {
     if (phase !== "arrived") return "Finding your location…";
@@ -301,7 +388,11 @@ export default function StoryClient() {
                 <div className="mt-6 lg:mt-10">
                   <h1 className="text-3xl font-semibold tracking-tight">{locationLabel}</h1>
                   <p className="mt-4 text-lg leading-relaxed text-neutral-700">{rightCaption}</p>
-
+                  {introCaption && (
+                    <div className="mt-6 space-y-4 text-neutral-700">
+                      {introCaption && <Caption md={introCaption} />}
+                    </div>
+                  )}
                   {currentMeta && (
                     <p className="mt-2 text-xs text-neutral-500">
                       {currentMeta.cached ? "Cached" : "Fresh"} · age {Math.round(currentMeta.age / 60)} min
@@ -324,6 +415,41 @@ export default function StoryClient() {
               {phase === "arrived" ? "Scroll to continue" : ""}
             </div>
           </div>
+          {/* Panels below (scroll) */}
+          {phase === "arrived" && (
+            <div className="mx-auto max-w-6xl px-4 pb-24">
+              {/* Spacer so the scroll feels intentional */}
+              <div className="h-10" />
+
+              <section className="mt-10">
+                <h2 className="text-xl font-semibold tracking-tight">Last week</h2>
+
+                {lastWeekSvg ? (
+                  <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-3">
+                    {/* Make SVG responsive and not squashed */}
+                    <div
+                      className="chart-svg w-full"
+                      style={{ maxWidth: "100%" }}
+                      dangerouslySetInnerHTML={{ __html: lastWeekSvg }}
+                    />
+                    <style jsx>{`
+                      :global(.chart-svg svg) {
+                        width: 100% !important;
+                        height: auto !important;
+                        display: block;
+                      }
+                    `}</style>
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-neutral-500">
+                    Loading last week’s chart…
+                  </p>
+                )}
+
+                {lastWeekCaption && <Caption md={lastWeekCaption} />}
+              </section>
+            </div>
+          )}
         </div>
       </div>
     </div>
