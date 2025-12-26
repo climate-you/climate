@@ -16,9 +16,15 @@ from climate.models import StoryContext
 from climate.export.web_write import write_json, write_text
 from climate.export.web_paths import story_slug_dir, panel_paths
 from climate.export.captions import normalize_caption
+from climate.export.web_write import write_plotly_svg
 
 from climate.panels.intro import intro_caption  # we will build intro "data" ourselves
-
+from climate.panels.zoomout import (
+    build_last_year_data, build_last_year_figure, last_year_caption,
+    build_five_year_data, build_five_year_figure, five_year_caption,
+    build_fifty_year_data, build_fifty_year_figure, fifty_year_caption,
+    build_twenty_five_years_data, build_twenty_five_years_figure, twenty_five_years_caption,
+)
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser()
@@ -158,6 +164,47 @@ def main() -> None:
             p = panel_paths(slug_dir / "panels", "intro", unit)
             write_text(p.caption_md, normalize_caption(md))
 
+            panel_specs = [
+                ("last_year", build_last_year_data, build_last_year_figure, last_year_caption),
+                ("five_year", build_five_year_data, build_five_year_figure, five_year_caption),
+                ("fifty_year", build_fifty_year_data, build_fifty_year_figure, fifty_year_caption),
+                ("twenty_five_years", build_twenty_five_years_data, build_twenty_five_years_figure, twenty_five_years_caption),
+            ]
+
+            # Compute unit-neutral data once per panel (uses ctx.ds; independent of ctx.unit)
+            ctx_data = StoryContext(
+                today=today,
+                slug=slug,
+                location_label=city["label"],
+                city_name=city["city_name"],
+                location_lat=float(city["lat"]),
+                location_lon=float(city["lon"]),
+                unit="C",  # arbitrary; data builders are in Celsius internally
+                ds=ds,
+            )
+
+            for (panel_name, build_data_fn, build_fig_fn, caption_fn) in panel_specs:
+                data = build_data_fn(ctx_data)
+
+                for unit in ("C", "F"):
+                    ctx_u = StoryContext(
+                        today=today,
+                        slug=slug,
+                        location_label=city["label"],
+                        city_name=city["city_name"],
+                        location_lat=float(city["lat"]),
+                        location_lon=float(city["lon"]),
+                        unit=unit,
+                        ds=ds,
+                    )
+
+                    fig, _tiny = build_fig_fn(ctx_u, facts, data)
+                    cap = caption_fn(ctx_u, facts, data)
+
+                    p = panel_paths(slug_dir / "panels", panel_name, unit)
+                    write_plotly_svg(p.svg, fig)
+                    write_text(p.caption_md, normalize_caption(cap))
+                    
         # meta (optional, useful for debugging)
         write_json(slug_dir / "meta.json", {
             "slug": slug,
