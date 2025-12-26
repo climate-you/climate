@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 
 from climate.models import StoryFacts, StoryContext
-from climate.units import fmt_delta, convert_temp, convert_delta
+from climate.units import fmt_delta, convert_temp, convert_delta, fmt_unit
 
 # -----------------------------------------------------------
 # Compute seasons data, graph and captions
@@ -188,8 +188,8 @@ def build_seasons_then_now_figure(ctx: StoryContext, facts: StoryFacts, data: di
             text=labels,
             hovertemplate=(
                 "%{text}: %{customdata[3]}<br>"
-                "Earlier: %{customdata[0]:.1f}" + ctx.unit + "<br>"
-                "Recent: %{customdata[1]:.1f}" + ctx.unit + ""
+                "Earlier: %{customdata[0]:.1f}" + fmt_unit(ctx.unit) + "<br>"
+                "Recent: %{customdata[1]:.1f}" + fmt_unit(ctx.unit) + ""
                 "<extra></extra>"
             ),
         )
@@ -209,8 +209,8 @@ def build_seasons_then_now_figure(ctx: StoryContext, facts: StoryFacts, data: di
             text=labels,
             hovertemplate=(
                 "%{text}: %{customdata[3]}<br>"
-                "Earlier: %{customdata[0]:.1f}" + ctx.unit + "<br>"
-                "Recent: %{customdata[1]:.1f}" + ctx.unit + "<extra></extra>"
+                "Earlier: %{customdata[0]:.1f}" + fmt_unit(ctx.unit) + "<br>"
+                "Recent: %{customdata[1]:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>"
             ),
         )
     )
@@ -235,7 +235,7 @@ def build_seasons_then_now_figure(ctx: StoryContext, facts: StoryFacts, data: di
             gridcolor="rgba(220,220,220,0.3)",
         ),
         yaxis=dict(
-            title=f"Typical monthly temperature (%s)" % ctx.unit,
+            title=f"Typical monthly temperature (%s)" % fmt_unit(ctx.unit),
             range=[y0, y1],
         ),
         margin=dict(l=40, r=160, t=60, b=40),
@@ -284,7 +284,7 @@ def build_seasons_then_now_separate_figures(ctx: StoryContext, facts: StoryFacts
                 mode="lines",
                 name="Monthly min",
                 line=dict(color="rgba(38,139,210,1.0)", width=2, shape="spline"),
-                hovertemplate="%{x}<br>Minimum: %{y:.1f}" + ctx.unit + "<extra></extra>"
+                hovertemplate="%{x}<br>Minimum: %{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>"
             )
         )
         # 2) Mean line (grey), fill between min and mean in blue
@@ -312,14 +312,14 @@ def build_seasons_then_now_separate_figures(ctx: StoryContext, facts: StoryFacts
                 line=dict(color="rgba(220,50,47,1.0)", width=2, shape="spline"),
                 fill="tonexty",
                 fillcolor="rgba(244,165,130,0.3)",
-                hovertemplate="%{x}<br>Maximum: %{y:.1f}" + ctx.unit + "<extra></extra>"
+                hovertemplate="%{x}<br>Maximum: %{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>"
             )
         )
 
         fig.update_layout(
             height=280,
             margin=dict(l=40, r=20, t=48, b=40),
-            yaxis_title=f"Daily temperature (%s)" % ctx.unit,
+            yaxis_title=f"Daily temperature (%s)" % fmt_unit(ctx.unit),
             xaxis_title="Month",
             xaxis=dict(
                 tickmode="array",

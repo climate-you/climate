@@ -12,6 +12,7 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 
 from climate.models import StoryContext, StoryFacts
+from climate.units import is_fahrenheit, fmt_unit
 
 BASELINE_START = 1979
 BASELINE_END = 1990
@@ -45,7 +46,7 @@ def build_you_vs_world_data(ctx: StoryContext) -> dict:
     global_anom = global_anom[(global_anom.index >= t0) & (global_anom.index <= t1)]
 
     # Unit conversion for display only
-    if ctx.unit == "°F":
+    if is_fahrenheit(ctx.unit):
         local_anom = local_anom * 9.0 / 5.0
         global_anom = global_anom * 9.0 / 5.0
 
@@ -63,7 +64,7 @@ def _anomaly_bars(ctx: StoryContext, series: pd.Series, *, title: str, yaxis_tit
     y = np.asarray(series.values, dtype="float64")[mask]
 
     date_str = pd.Series(pd.to_datetime(x)).dt.strftime("%Y %B").to_numpy()
-    val_str = pd.Series(y).map(lambda v: f"{v:+.2f}{ctx.unit}").to_numpy()
+    val_str = pd.Series(y).map(lambda v: f"{v:+.2f}{fmt_unit(ctx.unit)}").to_numpy()
     customdata = np.column_stack([date_str, val_str])
 
     fig = go.Figure()
@@ -115,13 +116,13 @@ def build_you_vs_world_figures(ctx, facts, data) -> (go.Figure, go.Figure, str):
         ctx,
         data["local_anom"],
         title=f"<b>{ctx.location_label} — monthly anomalies</b>",
-        yaxis_title=f"Anomaly vs {y0}–{y1} ({unit})",
+        yaxis_title=f"Anomaly vs {y0}–{y1} ({fmt_unit(unit)})",
     )
     fig_global = _anomaly_bars(
         ctx,
         data["global_anom"],
         title="<b>Global average — monthly anomalies</b>",
-        yaxis_title=f"Anomaly vs {y0}–{y1} ({unit})",
+        yaxis_title=f"Anomaly vs {y0}–{y1} ({fmt_unit(unit)})",
     )
 
     meta = _load_global_series_meta()
@@ -144,13 +145,13 @@ def _trend_per_decade(s: pd.Series) -> float:
 def _fmt(v: float, unit: str) -> str:
     if not np.isfinite(v):
         return "n/a"
-    return f"{v:+.2f}{unit}"
+    return f"{v:+.2f}{fmt_unit(unit)}"
 
 def you_vs_world_caption(ctx, facts, data) -> str:
     local: pd.Series = data["local_anom"].dropna()
     global_: pd.Series = data["global_anom"].dropna()
     (y0, y1) = data["baseline"]
-    unit = str(ctx.unit)
+    unit = ctx.unit
 
     # Align on common monthly timestamps
     df = pd.concat([local.rename("local"), global_.rename("global")], axis=1).dropna()

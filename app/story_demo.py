@@ -92,6 +92,9 @@ default_index = 0
 if DEFAULT_SLUG in ordered_slugs:
     default_index = ordered_slugs.index(DEFAULT_SLUG)
 
+def _format_unit(unit: str) -> str:
+    return "º"+unit
+
 def _format_location_slug(slug: str) -> str:
     star = "★ " if slug in favorite_set else ""
     return star + labels_by_slug.get(slug, slug)
@@ -145,7 +148,8 @@ with st.sidebar:
 
     unit = st.radio(
         "Units",
-        ["°C", "°F"],
+        ["C", "F"],
+        format_func=_format_unit,
         key="unit",
         on_change=_on_unit_change,
     )

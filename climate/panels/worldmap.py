@@ -19,7 +19,7 @@ import matplotlib.colors as mcolors
 import plotly.graph_objects as go
 
 from climate.models import StoryContext, StoryFacts
-from climate.units import convert_delta_array_to_unit, is_fahrenheit
+from climate.units import convert_delta_array_to_unit, is_fahrenheit, fmt_unit
 
 MERC_MAX_LAT = 85.05112878  # Web Mercator valid latitude limit
 
@@ -149,7 +149,7 @@ def build_world_map_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
     # Branca: keep gradient, override tick labels
     col.tick_labels = [f"{t:.0f}" for t in ticks]
     col.ticks = ticks
-    col.caption = f"Warming (ΔT, {ctx.unit}) — sequential scale"
+    col.caption = f"Warming (ΔT, {fmt_unit(ctx.unit)}) — sequential scale"
 
     col.add_to(m)
 
@@ -357,8 +357,8 @@ def build_local_inset_figure(
             zmin=vmin,
             zmax=vmax,
             colorscale="YlOrRd",
-            colorbar=dict(title=f"ΔT ({ctx.unit})"),
-            hovertemplate="Lon %{x:.1f}°, Lat %{y:.1f}°<br>ΔT %{z:.2f}" + ctx.unit + "<extra></extra>",
+            colorbar=dict(title=f"ΔT ({fmt_unit(ctx.unit)})"),
+            hovertemplate="Lon %{x:.1f}°, Lat %{y:.1f}°<br>ΔT %{z:.2f}" + fmt_unit(ctx.unit) + "<extra></extra>",
         )
     )
 
@@ -391,7 +391,7 @@ def build_local_inset_figure(
 
     tiny = (
         f"Window: ±{inset_data['window_half_width_deg']:.0f}° lon, ±{inset_data['window_half_height_deg']:.0f}° lat "
-        f"around your location. Values in {ctx.unit}."
+        f"around your location. Values in {fmt_unit(ctx.unit)}."
     )
     return fig, tiny
 
@@ -400,7 +400,7 @@ def local_inset_caption(ctx: StoryContext, facts: StoryFacts, inset_data: dict) 
     w = inset_data["stats_window"]
 
     def fmt(x: float) -> str:
-        return "n/a" if not np.isfinite(x) else f"{x:.2f}{ctx.unit}"
+        return "n/a" if not np.isfinite(x) else f"{x:.2f}{fmt_unit(ctx.unit)}"
 
     mean_near = s["mean"]
     std_near = s["std"]

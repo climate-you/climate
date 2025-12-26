@@ -9,20 +9,11 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from climate.models import StoryContext, StoryFacts
-
-
-def _is_fahrenheit(unit: str) -> bool:
-    u = (unit or "").lower()
-    return "f" in u  # handles "ºF", "F", etc.
+from climate.units import is_fahrenheit, convert_temp, fmt_unit
 
 
 def _c_to_f(x: np.ndarray) -> np.ndarray:
     return x * 9.0 / 5.0 + 32.0
-
-
-def _format_unit(unit: str) -> str:
-    # your app uses "ºC"/"ºF" style; keep it as-is
-    return unit
 
 
 def _compute_running_means(df_firstn: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -110,8 +101,8 @@ def build_montecarlo_figures(
     n = int(data.get("n", 0))
     n = max(0, min(n, n_total))
 
-    unit = _format_unit(ctx.unit)
-    use_f = _is_fahrenheit(ctx.unit)
+    unit = fmt_unit(ctx.unit)
+    use_f = is_fahrenheit(ctx.unit)
 
     df_first = df[df["seq"] < n].copy()
 
@@ -262,8 +253,8 @@ def montecarlo_caption(ctx: StoryContext, facts: StoryFacts, data: Dict) -> str:
     n = int(data.get("n", 0))
     n = max(0, min(n, n_total))
 
-    unit = _format_unit(ctx.unit)
-    use_f = _is_fahrenheit(ctx.unit)
+    unit = fmt_unit(ctx.unit)
+    use_f = is_fahrenheit(ctx.unit)
 
     if n <= 0:
         return (

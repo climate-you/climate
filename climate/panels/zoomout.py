@@ -7,7 +7,7 @@ import numpy as np
 from climate.models import StoryFacts, StoryContext
 from climate.panels.helpers import add_trace, add_mean_trace, annotate_minmax_on_series
 from climate.openmeteo import fetch_recent_7d, fetch_recent_30d
-from climate.units import fmt_temp, fmt_delta, convert_temp, convert_delta
+from climate.units import fmt_temp, fmt_delta, convert_temp, convert_delta, fmt_unit
 from climate.analytics import estimate_30d_trend, season_phrase
 from climate.io import dataset_coverage_text
 
@@ -62,17 +62,19 @@ def build_last_week_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
 
     # Hourly temp (light grey)
     temp_hourly_local = np.asarray([convert_temp(v, ctx.unit) for v in data["temp_hourly"]], dtype="float64")
-    add_trace(fig, data["time_hourly"], temp_hourly_local, "Hourly", hovertemplate="%{x|%Y-%m-%d %H:%M}<br>%{y:.1f}" + ctx.unit + "<extra></extra>")
+    add_trace(fig, data["time_hourly"], temp_hourly_local, "Hourly", hovertemplate="%{x|%Y-%m-%d %H:%M}<br>%{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>")
 
     # Daily mean (blue-ish)
     temp_daily_local = np.asarray([convert_temp(v, ctx.unit) for v in data["temp_daily"]], dtype="float64")
-    add_mean_trace(fig, data["time_daily"], temp_daily_local, "Daily mean", showmarkers=True, hovertemplate="%{x|%Y-%m-%d}<br>Daily mean: %{y:.1f}" + ctx.unit + "<extra></extra>")
+    add_mean_trace(fig, data["time_daily"], temp_daily_local, "Daily mean", showmarkers=True, hovertemplate="%{x|%Y-%m-%d}<br>Daily mean: %{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>")
 
     annotate_minmax_on_series(fig, data["time_hourly"], temp_hourly_local, ctx.unit, label_prefix="")
 
     fig.update_layout(
-        margin=dict(l=0, r=0, t=10, b=40),
-        height=320,
+        # margin=dict(l=80, r=30, t=30, b=70),
+        width=1350,
+        height=350, # 320, tweak until it matches Streamlit
+        margin=dict(l=50, r=30, t=30, b=30), # margin=dict(l=0, r=0, t=10, b=40),
         showlegend=True,
         legend=dict(
             orientation="v",
@@ -87,7 +89,7 @@ def build_last_week_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
             gridcolor="rgba(200,200,200,0.3)",
         ),
         yaxis=dict(
-            title=f"Temperature (%s)" % ctx.unit,
+            title=f"Temperature (%s)" % fmt_unit(ctx.unit),
             showgrid=True,
             gridcolor="rgba(200,200,200,0.3)",
         ),
@@ -132,17 +134,8 @@ def build_last_month_data(ctx: StoryContext) -> dict:
     tmean_30 = ds_30d["t_daily_mean"].values
 
     trend_30d = estimate_30d_trend(t_daily_30, tmean_30)
-    trend_sentence = ""
-
-    if not np.isnan(trend_30d) and abs(trend_30d) >= 0.5:
-        # threshold: ≈ ±0.5°C over 30 days to be "noticeable"
-        direction = "rising" if trend_30d > 0 else "falling"
-        sign_word = "warmer" if trend_30d > 0 else "cooler"
-        season = season_phrase(ctx.location_lat, t_daily_30[-1])
-        trend_sentence = (
-            f" Over this 30-day window, daily averages have been **{direction}** "
-            f"by about {fmt_delta(trend_30d, ctx.unit)}, consistent with {season}."
-        )
+    noticeable = (not np.isnan(trend_30d)) and (abs(trend_30d) >= 0.5)
+    season = season_phrase(ctx.location_lat, t_daily_30[-1]) if noticeable else None
 
     # 3-day rolling mean
     mean_3d = pd.Series(tmean_30, index=t_daily_30).rolling(window=3, center=True).mean().values
@@ -151,7 +144,9 @@ def build_last_month_data(ctx: StoryContext) -> dict:
         "time_daily" : t_daily_30,
         "temp_daily" : tmean_30,
         "temp_3d_mean" : mean_3d,
-        "trend_sentence" : trend_sentence,
+        "trend_30d_c": float(trend_30d) if not np.isnan(trend_30d) else None,
+        "trend_noticeable": bool(noticeable),
+        "trend_season": season,
         "range" : ds_30d.attrs.get('range', end_30d.isoformat()),
     }
 
@@ -167,11 +162,11 @@ def build_last_month_figure(ctx: StoryContext, facts: StoryFacts, data: dict) ->
     fig = go.Figure()
 
     temp_daily_local = np.asarray([convert_temp(v, ctx.unit) for v in data["temp_daily"]], dtype="float64")
-    add_trace(fig, data["time_daily"], temp_daily_local, "Daily mean", "%{x|%Y-%m-%d}<br>Daily mean: %{y:.1f}" + ctx.unit + "<extra></extra>")
+    add_trace(fig, data["time_daily"], temp_daily_local, "Daily mean", "%{x|%Y-%m-%d}<br>Daily mean: %{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>")
 
     # 3-day mean (blue)
     temp_3d_mean_local = np.asarray([convert_temp(v, ctx.unit) for v in data["temp_3d_mean"]], dtype="float64")
-    add_mean_trace(fig, data["time_daily"], temp_3d_mean_local, "3-day mean", hovertemplate="%{x|%Y-%m-%d}<br>3-day mean: %{y:.1f}" + ctx.unit + "<extra></extra>")
+    add_mean_trace(fig, data["time_daily"], temp_3d_mean_local, "3-day mean", hovertemplate="%{x|%Y-%m-%d}<br>3-day mean: %{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>")
 
     annotate_minmax_on_series(fig, data["time_daily"], temp_daily_local, ctx.unit, label_prefix="")
 
@@ -192,7 +187,7 @@ def build_last_month_figure(ctx: StoryContext, facts: StoryFacts, data: dict) ->
             gridcolor="rgba(200,200,200,0.3)",
         ),
         yaxis=dict(
-            title=f"Temperature (%s)" % ctx.unit,
+            title=f"Temperature (%s)" % fmt_unit(ctx.unit),
             showgrid=True,
             gridcolor="rgba(200,200,200,0.3)",
         ),
@@ -207,14 +202,23 @@ def last_month_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
     Generate the markdown caption for the last-month panel
     using StoryFacts (so it's easy to reuse elsewhere).
     """
-    trend_sentence = data["trend_sentence"]
     base_text = """
     Here we’re looking at **daily averages**, not the full day–night cycle.
     Over a month, the jagged ups and downs reflect **passing weather systems**:
     short warm spells, cooler snaps, and the background shift between seasons.
     """
+    
+    trend = data.get("trend_30d_c", None)
+    if data.get("trend_noticeable") and trend is not None:
+        direction = "rising" if trend > 0 else "falling"
+        season = data.get("trend_season") or "the seasonal shift"
+        trend_sentence = (
+            f"Over this 30-day window, daily averages have been **{direction}** "
+            f"by about {fmt_delta(trend, ctx.unit)}, consistent with {season}."
+        )
+        return base_text + "\n\n" + trend_sentence
 
-    return base_text + ("" if not trend_sentence else "\n\n" + trend_sentence)
+    return base_text
 
 # -----------------------------------------------------------
 # Compute last year data, graph and captions
@@ -287,7 +291,7 @@ def build_last_year_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
         x=time_daily,
         y=t_daily_local,
         name="Daily mean",
-        hovertemplate="%{x|%d %b %Y}<br>Daily mean: %{y:.1f}" + ctx.unit + "<extra></extra>",
+        hovertemplate="%{x|%d %b %Y}<br>Daily mean: %{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>",
     )
 
     # Smooth curve
@@ -298,7 +302,7 @@ def build_last_year_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
         y=t_7d_local,
         name="7-day mean",
         showmarkers=False,
-        hovertemplate="%{x|%d %b %Y}<br>7-day mean: %{y:.1f}" + ctx.unit + "<extra></extra>",
+        hovertemplate="%{x|%d %b %Y}<br>7-day mean: %{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>",
     )
 
     # Min/max annotations on the smooth curve
@@ -312,7 +316,7 @@ def build_last_year_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
             gridcolor="rgba(200,200,200,0.3)",
         ),
         yaxis=dict(
-            title=f"Temperature (%s)" % ctx.unit,
+            title=f"Temperature (%s)" % fmt_unit(ctx.unit),
             zeroline=False,
         ),
         margin=dict(l=40, r=20, t=30, b=40),
@@ -455,12 +459,12 @@ def build_five_year_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
         data["time_weekly"],
         temp_weekly_local,
         "7-day mean",
-        hovertemplate="%{x|%Y-%m-%d}<br>7-day mean: %{y:.1f}" + ctx.unit + "<extra></extra>"
+        hovertemplate="%{x|%Y-%m-%d}<br>7-day mean: %{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>"
     )
 
     # Monthly mean (warmer color, thicker)
     temp_monthly_local = np.asarray([convert_temp(v, ctx.unit) for v in data["temp_monthly"]], dtype="float64")
-    add_mean_trace(fig, data["time_monthly"], temp_monthly_local, "Monthly mean", hovertemplate="%{x|%Y-%m}<br>Monthly mean: %{y:.1f}" + ctx.unit + "<extra></extra>")
+    add_mean_trace(fig, data["time_monthly"], temp_monthly_local, "Monthly mean", hovertemplate="%{x|%Y-%m}<br>Monthly mean: %{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>")
 
     fig.update_layout(
         margin=dict(l=0, r=0, t=10, b=40),
@@ -472,7 +476,7 @@ def build_five_year_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
             gridcolor="rgba(200,200,200,0.3)",
         ),
         yaxis=dict(
-            title=f"Temperature (%s)" % ctx.unit,
+            title=f"Temperature (%s)" % fmt_unit(ctx.unit),
             showgrid=True,
             gridcolor="rgba(200,200,200,0.3)",
         ),
@@ -640,7 +644,7 @@ def build_fifty_year_figure(ctx: StoryContext, facts: StoryFacts, data: dict) ->
         y=temp_yearly_local,
         name="Yearly mean",
         showmarkers=True,
-        hovertemplate="Year %{x|%Y}<br>%{y:.1f}" + ctx.unit + "<extra></extra>",
+        hovertemplate="Year %{x|%Y}<br>%{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>",
     )
 
     # Linear trend
@@ -653,7 +657,7 @@ def build_fifty_year_figure(ctx: StoryContext, facts: StoryFacts, data: dict) ->
                 mode="lines",
                 name="Trend (yearly mean)",
                 line=dict(color="rgba(220,50,47,0.9)", width=3, shape="linear"),
-                hovertemplate="Trend %{x|%Y}<br>%{y:.1f}" + ctx.unit + "<extra></extra>",
+                hovertemplate="Trend %{x|%Y}<br>%{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>",
             )
         )
 
@@ -715,7 +719,7 @@ def build_fifty_year_figure(ctx: StoryContext, facts: StoryFacts, data: dict) ->
         height=400,
         margin=dict(l=40, r=20, t=30, b=40),
         xaxis_title="Year",
-        yaxis_title="Temperature (%s)" % ctx.unit,
+        yaxis_title="Temperature (%s)" % fmt_unit(ctx.unit),
         showlegend=True,
     )
 
@@ -888,7 +892,7 @@ def build_twenty_five_years_figure(ctx: StoryContext, facts: StoryFacts, data: d
         x=data["time_yearly"],
         y=temp_yearly_local,
         name="Yearly mean",
-        hovertemplate="Year %{x|%Y}<br>%{y:.1f}" + ctx.unit + "<extra></extra>",
+        hovertemplate="Year %{x|%Y}<br>%{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>",
     )
 
     temp_5_yearly_local = np.asarray([convert_temp(v, ctx.unit) for v in data["temp_5_yearly"]], dtype="float64")
@@ -898,7 +902,7 @@ def build_twenty_five_years_figure(ctx: StoryContext, facts: StoryFacts, data: d
         y=temp_5_yearly_local,
         name="5-year mean",
         showmarkers=False,
-        hovertemplate="Year %{x|%Y}<br>%{y:.1f}" + ctx.unit + "<extra></extra>",
+        hovertemplate="Year %{x|%Y}<br>%{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>",
     )
         
     # Plot past trend (solid red)
@@ -910,7 +914,7 @@ def build_twenty_five_years_figure(ctx: StoryContext, facts: StoryFacts, data: d
             mode="lines",
             name="Trend (yearly mean)",
             line=dict(color="rgba(220,50,47,0.9)", width=3, shape="linear"),
-            hovertemplate="Trend %{x|%Y}<br>%{y:.1f}" + ctx.unit + "<extra></extra>",
+            hovertemplate="Trend %{x|%Y}<br>%{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>",
         )
     )
 
@@ -925,7 +929,7 @@ def build_twenty_five_years_figure(ctx: StoryContext, facts: StoryFacts, data: d
             line=dict(
                 color="rgba(220,50,47,0.9)", width=3, dash="dash", shape="linear"
             ),
-            hovertemplate="Extension %{x|%Y}<br>%{y:.1f}" + ctx.unit + "<extra></extra>",
+            hovertemplate="Extension %{x|%Y}<br>%{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>",
         )
     )
 
@@ -968,7 +972,7 @@ def build_twenty_five_years_figure(ctx: StoryContext, facts: StoryFacts, data: d
             gridcolor="rgba(200,200,200,0.3)",
         ),
         yaxis=dict(
-            title=f"Temperature (%s)" % ctx.unit,
+            title=f"Temperature (%s)" % fmt_unit(ctx.unit),
             showgrid=True,
             gridcolor="rgba(200,200,200,0.3)",
             range=[y0, y1],
