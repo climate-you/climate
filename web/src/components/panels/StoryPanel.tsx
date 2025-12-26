@@ -2,26 +2,26 @@
 
 import Caption from "@/components/Caption";
 import PanelFigure, { PanelFigureStyles } from "@/components/PanelFigure";
-import { useLiveAsof } from "@/hooks/useLiveAsof";
-import { useLivePanel } from "@/hooks/useLivePanel";
+import { useStoryPanel, type StoryPanelName } from "@/hooks/useStoryPanel";
 
-export default function LastWeekPanel(props: { slug: string; unit: "C" | "F" }) {
-  const { slug, unit } = props;
+export default function StoryPanel(props: {
+  slug: string;
+  unit: "C" | "F";
+  panel: StoryPanelName;
+  title: string;
+}) {
+  const { slug, unit, panel, title } = props;
 
-  const { asof, error: asofErr } = useLiveAsof(slug, true);
-  const { svg, caption, error } = useLivePanel({
+  const { svg, caption, error } = useStoryPanel({
     slug,
     unit,
-    asof,
-    panel: "last_week",
+    panel,
     enabled: true,
   });
 
   return (
     <section className="mx-auto w-full max-w-6xl px-4 py-10">
-      <h2 className="text-xl font-semibold tracking-tight">Last week</h2>
-
-      {asofErr && <p className="mt-4 text-sm text-red-600">{asofErr}</p>}
+      <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
 
       {svg ? (
         <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-3">
@@ -29,9 +29,7 @@ export default function LastWeekPanel(props: { slug: string; unit: "C" | "F" }) 
           <PanelFigureStyles />
         </div>
       ) : (
-        <p className="mt-4 text-sm text-neutral-500">
-          Loading last week’s chart…
-        </p>
+        <p className="mt-4 text-sm text-neutral-500">Loading…</p>
       )}
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
