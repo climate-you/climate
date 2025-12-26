@@ -243,7 +243,18 @@ if step == "Intro":
         st_folium(m, width="stretch", height=420)
 
     with col_text:
-        st.markdown(intro_caption, unsafe_allow_html=True)
+        now_line = ""
+        temp_now_c = intro_data["temp_now_c"]
+        temp_now_time = intro_data["temp_now_time"]
+        if temp_now_c is not None:
+            now_line = f"It is currently **{fmt_temp(temp_now_c, ctx.unit)}** in {ctx.city_name} (latest reading: {temp_now_time})."
+        else:
+            now_line = f"Current temperature is temporarily unavailable for {ctx.city_name} (rate limited or network issue)."
+        intro_text = f"""
+        {now_line}
+        {intro_caption}
+        """
+        st.markdown(intro_text, unsafe_allow_html=True)
 
 # -----------------------------------------------------------
 # STEP: ZOOM OUT
