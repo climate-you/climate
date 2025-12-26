@@ -36,7 +36,7 @@ export default function StoryPanel(props: {
 
       {caption && (
         <div className="mt-4 text-neutral-700">
-          <Caption md={caption} />
+          <Caption md={caption} reveal="sentences" />
         </div>
       )}
     </section>

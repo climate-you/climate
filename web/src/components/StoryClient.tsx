@@ -84,6 +84,9 @@ export default function StoryClient() {
   const [currentTemp, setCurrentTemp] = useState<number | null>(null);
   const [currentMeta, setCurrentMeta] = useState<{ cached: boolean; age: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  const [tempLoading, setTempLoading] = useState(false);
+  const tempFetchKeyRef = useRef<string | null>(null);
 
   const arrivedOnceRef = useRef(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -115,7 +118,7 @@ export default function StoryClient() {
     if (!headerReady) return;
     requestAnimationFrame(() => computeTitleX());
   }, [activeSlide, headerReady]);
-  
+
   // Track which snap “page” we’re on (0 = intro, 1 = last week, etc.)
   useEffect(() => {
     const el = scrollerRef.current;
@@ -247,29 +250,40 @@ export default function StoryClient() {
     );
   }, [slug, cities, router]);
 
-  // When we “arrive”, fetch current temperature (proxy API)
+  // Fetch current temperature (proxy API) once we have a target.
   useEffect(() => {
-    if (phase !== "arrived" || !target) return;
+    if (!target) return;
+
+    const key = `${target.lat.toFixed(4)},${target.lon.toFixed(4)}`;
+    if (tempFetchKeyRef.current === key) return; // already fetched for this location
+    tempFetchKeyRef.current = key;
 
     let cancelled = false;
+
+    setTempLoading(true);
+    setError(null);
     setCurrentTemp(null);
     setCurrentMeta(null);
 
-    fetchCurrentTemp({ lat: target.lat, lon: target.lon, unit })
+    fetchCurrentTemp({ lat: target.lat, lon: target.lon, unit: "C" }) // always fetch C
       .then((r) => {
         if (cancelled) return;
-        setCurrentTemp(r.temperature);
+        setCurrentTemp(r.temperature); // store Celsius
         setCurrentMeta({ cached: r.cached, age: r.cacheAgeSeconds });
       })
       .catch((e) => {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setTempLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [phase, target, unit]);
+  }, [target]);
 
   const { caption: introCaption } = useIntroCaption({
     slug,
@@ -278,12 +292,21 @@ export default function StoryClient() {
   });
 
   const rightCaption = useMemo(() => {
-    if (phase !== "arrived") return "Finding your location…";
-    if (currentTemp == null) return `Getting the temperature in ${locationLabel}…`;
+    const locationResolved =
+      locationLabel && locationLabel.toLowerCase() !== "your location";
+
+    if (!locationResolved) return "Finding your location…";
+
+    // If the long-term intro caption isn't ready yet, we're still assembling the story.
+    if (!introCaption) return "Loading your climate story…";
+
+    // After caption exists, the only remaining “loading” is temperature.
+    if (error) return "Today’s temperature is temporarily unavailable.";
+    if (tempLoading || currentTemp == null) return "Fetching today’s temperature…";
 
     const t = unit === "F" ? cToF(currentTemp) : currentTemp;
-    return `It’s currently ${t.toFixed(1)}°${unit} in ${locationLabel}.`;
-  }, [phase, currentTemp, unit, locationLabel]);
+    return `It’s currently ${t.toFixed(1)}°${unit}.`;
+  }, [locationLabel, introCaption, error, tempLoading, currentTemp, unit]);
 
   return (
     <div className="min-h-screen text-neutral-900 bg-gradient-to-b from-white via-slate-50 to-white">
@@ -409,14 +432,8 @@ export default function StoryClient() {
 
                         {introCaption && (
                           <div className="mt-6 text-neutral-700">
-                            <Caption md={introCaption} />
+                            <Caption md={introCaption} reveal="sentences" />
                           </div>
-                        )}
-
-                        {currentMeta && (
-                          <p className="mt-2 text-xs text-neutral-500">
-                            {currentMeta.cached ? "Cached" : "Fresh"} · age {Math.round(currentMeta.age / 60)} min
-                          </p>
                         )}
 
                         {phase === "arrived" && (
@@ -448,14 +465,8 @@ export default function StoryClient() {
 
                 {introCaption && (
                   <div className="mt-8 text-neutral-700">
-                    <Caption md={introCaption} />
+                    <Caption md={introCaption} reveal="sentences" />
                   </div>
-                )}
-
-                {currentMeta && (
-                  <p className="mt-3 text-xs text-neutral-500">
-                    {currentMeta.cached ? "Cached" : "Fresh"} · age {Math.round(currentMeta.age / 60)} min
-                  </p>
                 )}
 
                 {phase === "arrived" && (
@@ -488,19 +499,19 @@ export default function StoryClient() {
 
                 <div className="snap-start min-h-[calc(100vh-56px)] flex items-center">
                   <div className="mx-auto w-full max-w-6xl px-4">
-                    <StoryPanel slug={slug} unit={unit} panel="last_year" title="Last year" />
+                    <StoryPanel slug={slug} unit={unit} panel="last_year" title="Last year - the seasonal cycle" />
                   </div>
                 </div>
 
                 <div className="snap-start min-h-[calc(100vh-56px)] flex items-center">
                   <div className="mx-auto w-full max-w-6xl px-4">
-                    <StoryPanel slug={slug} unit={unit} panel="five_year" title="Last 5 years" />
+                    <StoryPanel slug={slug} unit={unit} panel="five_year" title="Last 5 years - from seasons to climate" />
                   </div>
                 </div>
 
                 <div className="snap-start min-h-[calc(100vh-56px)] flex items-center">
                   <div className="mx-auto w-full max-w-6xl px-4">
-                    <StoryPanel slug={slug} unit={unit} panel="fifty_year" title="Last 50 years" />
+                    <StoryPanel slug={slug} unit={unit} panel="fifty_year" title="Last 50 years - long term trend" />
                   </div>
                 </div>
 
