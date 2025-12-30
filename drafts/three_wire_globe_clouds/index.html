@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Wire-map globe + layered clouds (Three.js)</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="bg"></div>
+  <canvas id="c"></canvas>
+
+  <div class="ui">
+    <div class="title">Your climate</div>
+    <div class="subtitle">Wire-map globe with correct sRGB colors + clouds that rotate with Earth (plus subtle drift).</div>
+    <div class="hint">
+      Drag to rotate • Scroll to zoom • <code>flyTo(lat, lon)</code> • <code>setClouds(true/false)</code> •
+      Tune: <code>setShadeStrength(x)</code>, <code>setBrightness(x)</code>, <code>setCloudDrift(x)</code>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
