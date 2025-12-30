@@ -34,8 +34,6 @@ const TIMING = {
   dataDelayAfterGlobeMs: 2000,
 };
 
-let dataBaseOpacity = 1.0;
-
 // sync CSS and JS
 document.documentElement.style.setProperty("--globe-fade-ms", `${TIMING.globeFadeMs}ms`);
 
@@ -54,18 +52,21 @@ function supportsAvif() {
   });
 }
 
+// Choose size based on desktop size
 const size = (Math.min(innerWidth, innerHeight) < 700) ? 2048 : 4096;
 
+// Use smaller size for data texture
+const smallSize = (Math.min(innerWidth, innerHeight) < 700) ? 1024 : 2048;
+
+// Choose texture format based on compatibility (avif is smaller)
 const ext = (await supportsAvif()) ? "avif" : "webp";
+
 const LAND_MASK_URL = `./land_${size}.${ext}`;
 const CLOUD_TEX_URL = `./clouds_${size}.${ext}`;
-
-const smallSize = (Math.min(innerWidth, innerHeight) < 700) ? 1024 : 2048;
-const BORDERS_TEX_URL = `./borders_${size}.webp`; // Borders in webp for sharpness
-
+const BORDERS_TEX_URL = `./borders_${size}.webp`; // Use webp for borders for sharpness
 const DATA_TEX_URL = `./data_${smallSize}.${ext}`;
 
-// Your mask is inverted (ocean=white, land=black) => set to 1.0
+// Invert land/border mask (ocean=white, land=black)
 const MASK_INVERT = 1.0;
 
 const COLORS = {
@@ -112,37 +113,6 @@ function loadTex(url){
   });
 }
 
-function loadCloudTex(url){
-  return new Promise((resolve, reject) => {
-    loader.load(url, (t) => {
-      // Cloud textures are usually “data-ish” (not color-corrected artwork)
-      // so avoid sRGB conversion unless you specifically want it.
-      t.colorSpace = THREE.NoColorSpace;
-      t.wrapS = THREE.RepeatWrapping;
-      t.wrapT = THREE.ClampToEdgeWrapping;
-      t.anisotropy = 8;
-      resolve(t);
-    }, undefined, reject);
-  });
-}
-
-loadCloudTex(CLOUD_TEX_URL).then((cloudTex) => {
-  const mat = new THREE.MeshBasicMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.0,
-    alphaMap: cloudTex,
-    depthWrite: false,
-  });
-  mat.alphaTest = 0.02;
-
-  cloudsTex = new THREE.Mesh(new THREE.SphereGeometry(1.018, 256, 256), mat);
-  earth.add(cloudsTex);
-
-  cloudsTex.material.opacity = 0.0;
-  cloudsTex.visible = true;          // important: must be drawn to upload to GPU
-});
-
 // Map look controls
 const uniforms = {
   landMask: { value: null },
@@ -169,7 +139,6 @@ const uniforms = {
   bordersOpacity: { value: 0.22 },
   dataStrength:   { value: 1.0},
   dataOpacity: { value: 0.0 }, // or start at 0.0 if you want to fade it in later
-  dataTint: { value: new THREE.Color(1, 1, 1) }, // starts neutral
 };
 
 const earthMat = new THREE.ShaderMaterial({
@@ -210,7 +179,6 @@ const earthMat = new THREE.ShaderMaterial({
     uniform float bordersOpacity;
     uniform float dataStrength;
     uniform float dataOpacity;
-    uniform vec3 dataTint;
 
     float saturatef(float x){ return clamp(x, 0.0, 1.0); }
 
@@ -249,7 +217,6 @@ const earthMat = new THREE.ShaderMaterial({
 
       // optional data overlay
       vec4 d = texture2D(dataTex, vUv);      
-      vec3 dcol = d.rgb * dataTint;
       vec3 dataColor = d.rgb;
       float da = d.a * dataStrength * dataOpacity;  // 0..1
       vec3 withData = mix(base, dataColor, da);
@@ -269,6 +236,36 @@ const earth = new THREE.Mesh(new THREE.SphereGeometry(1.0, 256, 256), earthMat);
 scene.add(earth);
 
 let cloudsTex = null;
+
+function loadCloudTex(url){
+  return new Promise((resolve, reject) => {
+    loader.load(url, (t) => {
+      // Cloud textures are usually “data-ish” (not color-corrected artwork)
+      // so avoid sRGB conversion unless you specifically want it.
+      t.colorSpace = THREE.NoColorSpace;
+      t.wrapS = THREE.RepeatWrapping;
+      t.wrapT = THREE.ClampToEdgeWrapping;
+      t.anisotropy = 8;
+      resolve(t);
+    }, undefined, reject);
+  });
+}
+
+loadCloudTex(CLOUD_TEX_URL).then((cloudTex) => {
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.0,
+    alphaMap: cloudTex,
+    depthWrite: false,
+  });
+  mat.alphaTest = 0.02;
+
+  cloudsTex = new THREE.Mesh(new THREE.SphereGeometry(1.018, 256, 256), mat);
+  earth.add(cloudsTex);
+
+  cloudsTex.visible = true;          // important: must be drawn to upload to GPU
+});
 
 function fadeMaterialOpacity(mat, to, ms = 700) {
   const from = mat.opacity;
@@ -407,20 +404,9 @@ async function revealClouds() {
   fadeMaterialOpacity(cloudsTex.material, 0.85, TIMING.cloudsFadeMs);
 }
 
-function fadeNumber(setter, from, to, ms=700) {
-  const t0 = performance.now();
-  function step(now){
-    const x = Math.min(1, (now - t0)/ms);
-    const k = 1 - Math.pow(1 - x, 3);
-    setter(from + (to - from) * k);
-    if (x < 1) requestAnimationFrame(step);
-  }
-  requestAnimationFrame(step);
-}
-
 async function revealData() {
   await delay(TIMING.globeFadeMs + TIMING.dataDelayAfterGlobeMs);
-  dataCycleT0 = performance.now() / 1000;
+  dataCycleT0 = (performance.now() - t0) / 1000;
 }
 
 // at top-level:
@@ -449,7 +435,7 @@ function animate(){
   const dt = (dataCycleT0 == null) ? 0 : Math.max(0, t - dataCycleT0);
   const raw = 0.5 + 0.5 * Math.sin(dt * 0.12 - Math.PI / 2); // starts at 0
   const bloom = raw * raw; // * raw; // bias toward 0
-  uniforms.dataOpacity.value = dataBaseOpacity * bloom;
+  uniforms.dataOpacity.value = bloom;
 
   uniforms.lightDir.value.copy(sun.position).normalize();
 
