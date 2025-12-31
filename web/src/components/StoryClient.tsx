@@ -91,6 +91,18 @@ export default function StoryClient() {
   const arrivedOnceRef = useRef(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [activeSlide, setActiveSlide] = useState(0);
+  const [autoResolving, setAutoResolving] = useState(false);
+
+  const COLD_OPEN_MS = 3200;   // tweak: pure spinning globe, no UI, no geolocation
+  const PRELUDE_MS = 4200;     // tweak: locate + fly-to + brief settle before story UI
+
+  const [coldOpenDone, setColdOpenDone] = useState(false);
+  const [showStory, setShowStory] = useState(false);
+
+  // Reset when slug changes (navigating between cities)
+  useEffect(() => {
+    setShowStory(false);
+  }, [slug]);
 
   // Header animation (scroll-driven)
   const headerCompact = activeSlide > 0;
@@ -100,6 +112,28 @@ export default function StoryClient() {
   // null = not measured yet (so we can hide it and avoid the left->center slide)
   const [titleX, setTitleX] = useState<number | null>(null);
   const [headerReady, setHeaderReady] = useState(false);
+
+  // 1) Cold open timer: no UI, no geolocation
+  useEffect(() => {
+    setColdOpenDone(false);
+    const t = window.setTimeout(() => setColdOpenDone(true), COLD_OPEN_MS);
+    return () => window.clearTimeout(t);
+  }, [slug]);
+
+  // 2) Story mode timer: starts only once we have a target AND cold open is done
+  useEffect(() => {
+    setShowStory(false);
+    if (!coldOpenDone) return;
+    if (!target) return;
+
+    const t = window.setTimeout(() => {
+      setShowStory(true);
+      if (scrollerRef.current) scrollerRef.current.scrollTo({ top: 0 });
+      setActiveSlide(0);
+    }, PRELUDE_MS);
+
+    return () => window.clearTimeout(t);
+  }, [coldOpenDone, target]);
 
   const computeTitleX = () => {
     const bar = headerBarRef.current;
@@ -208,6 +242,7 @@ export default function StoryClient() {
     }
 
     // slug === "auto": request geolocation then choose nearest city and redirect
+    if (!coldOpenDone) return;
     if (!navigator.geolocation) {
       const fallback = cities[0];
       writePendingFlyTo({
@@ -317,61 +352,95 @@ export default function StoryClient() {
       </div>
 
       {/* Top bar (scroll-driven sliding title) */}
-      <div className="fixed top-0 left-0 right-0 z-20 bg-white/70 backdrop-blur">
-        <div ref={headerBarRef} className="mx-auto w-full px-4 sm:px-6 lg:px-10 py-3">
-          <div className="relative h-[56px]">
-            {/* Title: slides center <-> left via transform, eases both ways */}
-            <div
-              ref={headerTitleRef}
-              className={[
-                "absolute top-1/2 left-0 will-change-transform",
-                // Fade in only after first measurement
-                "transition-opacity duration-300",
-                headerReady ? "opacity-100" : "opacity-0",
-                // Only enable transform transition once ready (prevents initial “slide-in”)
-                headerReady ? "transition-transform duration-1200" : "",
-              ].join(" ")}
-              style={{
-                transform: `translateX(${titleX ?? 0}px) translateY(-50%) scale(${headerCompact ? 0.62 : 1})`,
-                transformOrigin: "left center",
-                // A noticeably “eased” curve (more obvious than plain ease-in-out)
-                transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
-              }}
-            >
-              <div className="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight">Your climate</div>
-            </div>
-
-            {/* Subtitle: fades in on panels */}
-            <div
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base sm:text-lg text-neutral-600 transition-opacity duration-500 ease-in-out"
-              style={{ opacity: headerCompact ? 1 : 0 }}
-            >
-              Zooming out: from days to decades
-            </div>
-
-            {/* Units toggle */}
-            <div className="absolute right-0 top-1/2 -translate-y-1/2">
-              <button
-                className="rounded-full border border-neutral-200 bg-white px-3 py-1 text-sm hover:bg-neutral-50"
-                onClick={() => setUnit((u) => (u === "C" ? "F" : "C"))}
-                aria-label="Toggle units"
+      {coldOpenDone && (
+        <div className="fixed top-0 left-0 right-0 z-20 bg-white/70 backdrop-blur">
+          <div ref={headerBarRef} className="mx-auto w-full px-4 sm:px-6 lg:px-10 py-3">
+            <div className="relative h-[56px]">
+              {/* Title: slides center <-> left via transform, eases both ways */}
+              <div
+                ref={headerTitleRef}
+                className={[
+                  "absolute top-1/2 left-0 will-change-transform",
+                  // Fade in only after first measurement
+                  "transition-opacity duration-300",
+                  headerReady ? "opacity-100" : "opacity-0",
+                  // Only enable transform transition once ready (prevents initial “slide-in”)
+                  headerReady ? "transition-transform duration-1200" : "",
+                ].join(" ")}
+                style={{
+                  transform: `translateX(${titleX ?? 0}px) translateY(-50%) scale(${headerCompact ? 0.62 : 1})`,
+                  transformOrigin: "left center",
+                  // A noticeably “eased” curve (more obvious than plain ease-in-out)
+                  transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
+                }}
               >
-                °{unit}
-              </button>
+                <div className="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight">Your climate</div>
+              </div>
+
+              {/* Subtitle: fades in on panels */}
+              <div
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base sm:text-lg text-neutral-600 transition-opacity duration-500 ease-in-out"
+                style={{ opacity: headerCompact ? 1 : 0 }}
+              >
+                Zooming out: from days to decades
+              </div>
+
+              {/* Units toggle */}
+              <div className="absolute right-0 top-1/2 -translate-y-1/2">
+                <button
+                  className="rounded-full border border-neutral-200 bg-white px-3 py-1 text-sm hover:bg-neutral-50"
+                  onClick={() => setUnit((u) => (u === "C" ? "F" : "C"))}
+                  aria-label="Toggle units"
+                >
+                  °{unit}
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
 
       {/* Main layout */}
       <div className="pt-14">
+        {/* LG prelude hero globe overlay (big centered globe) */}
+        {!showStory && (
+          <div className="hidden lg:block fixed inset-0 z-10 pointer-events-none">
+            {/* Globe */}
+            <div className="absolute left-1/2 top-[84px] -translate-x-1/2 w-[760px] aspect-square">
+              <Globe
+                targetLatLon={target}
+                phase={phase}
+                onArrive={() => {
+                  if (arrivedOnceRef.current) return;
+                  arrivedOnceRef.current = true;
+                  setPhase("arrived");
+                }}
+              />
+            </div>
+
+            {/* Loading chip (on top of the globe, not behind it) */}
+            {coldOpenDone && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="rounded-full bg-white/70 px-4 py-2 text-sm text-neutral-700 backdrop-blur">
+                  Loading your climate story…
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <div className="lg:grid lg:grid-cols-[420px_1fr]">
           {/* LEFT: persistent globe on lg only */}
           <div className="hidden lg:block">
             <div className="sticky top-0 h-[calc(100vh-56px)]">
               <div className="flex h-full items-center justify-center px-6">
-                <div className="aspect-square w-full max-w-[420px] overflow-hidden rounded-3xl">
+                <div
+                  className={[
+                    "aspect-square w-full max-w-[420px]",
+                    showStory ? "opacity-100" : "opacity-0 pointer-events-none",
+                    "transition-opacity duration-700",
+                  ].join(" ")}
+                >
                   <Globe
                     targetLatLon={target}
                     phase={phase}
@@ -389,7 +458,14 @@ export default function StoryClient() {
           {/* RIGHT: snap scroller */}
           <div
             ref={scrollerRef}
-            className="h-[calc(100vh-56px)] overflow-y-auto snap-y snap-mandatory scroll-smooth"
+            className={[
+              "h-[calc(100vh-56px)] scroll-smooth snap-y snap-mandatory",
+              // Mobile: always scrollable
+              "overflow-y-auto",
+              // LG: during hero prelude, hide + disable scroll/pointer so the overlay feels like a true landing
+              showStory ? "lg:opacity-100 lg:pointer-events-auto" : "lg:opacity-0 lg:pointer-events-none lg:overflow-hidden",
+              "transition-opacity duration-700",
+            ].join(" ")}
           >
             {/* Slide 1 (mobile): intro with animated globe */}
             <div className="snap-start lg:hidden">
