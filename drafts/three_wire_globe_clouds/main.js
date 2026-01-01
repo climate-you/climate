@@ -1,5 +1,4 @@
 import * as THREE from "https://esm.sh/three@0.160.0";
-import { OrbitControls } from "https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";
 
 // --- Assets (all 2:1 equirectangular) ---
 
@@ -85,13 +84,6 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(0, 0, 4.0);
-
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.enablePan = false;
-controls.minDistance = 2.6;
-controls.maxDistance = 6.5;
-controls.rotateSpeed = 0.55;
 
 const sun = new THREE.DirectionalLight(0xffffff, 0.9);
 sun.position.set(3, 1.5, 2.5);
@@ -330,7 +322,6 @@ async function flyTo(lat, lon, durationMs=2200){
     THREE.Quaternion.slerp(qFrom, qTo, earth.quaternion, k);
     camera.position.lerpVectors(camFrom, camTo, k);
     camera.lookAt(0,0,0);
-    controls.update();
   });
 }
 
@@ -342,6 +333,7 @@ function setClouds(on){
 function setShadeStrength(x){ uniforms.shadeStrength.value = Math.max(0, Math.min(1, x)); }
 function setBrightness(x){ uniforms.brightness.value = Math.max(0, x); }
 
+// DEV ONLY
 window.flyTo = flyTo;
 window.setMarker = setMarker;
 window.setClouds = setClouds;
@@ -360,7 +352,6 @@ window.addEventListener("resize", resize);
 // Auto rotate for landing (earth rotates, clouds inherit)
 let t0 = performance.now();
 let autorotate = true;
-renderer.domElement.addEventListener("dblclick", () => { autorotate = !autorotate; });
 
 function loadTexSafe(enable, url, fallbackUrl = "./textures/empty.png") {
   if (!enable){
@@ -435,6 +426,5 @@ function animate(){
 
   uniforms.lightDir.value.copy(sun.position).normalize();
 
-  controls.update();
   renderer.render(scene, camera);
 }
