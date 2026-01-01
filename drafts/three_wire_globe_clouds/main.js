@@ -16,10 +16,6 @@ import { OrbitControls } from "https://esm.sh/three@0.160.0/examples/jsm/control
 // Borders?
 // Matplotlib version3.10.7, https://matplotlib.org/ (TBC)
 
-// const BORDERS_TEX_URL = "./borders_4096x2048.png";   // optional RGBA (alpha=borders)
-// const DATA_TEX_URL    = "./data_4096x2048.webp";   // optional RGBA (alpha=overlay strength)
-// const DATA_TEX_URL    = "./empty.png";   // optional RGBA (alpha=overlay strength)
-
 let dataCycleT0 = null; // seconds, set when data is revealed
 
 const enableBorders = true;
@@ -61,10 +57,10 @@ const smallSize = (Math.min(innerWidth, innerHeight) < 700) ? 1024 : 2048;
 // Choose texture format based on compatibility (avif is smaller)
 const ext = (await supportsAvif()) ? "avif" : "webp";
 
-const LAND_MASK_URL = `./land_${size}.${ext}`;
-const CLOUD_TEX_URL = `./clouds_${size}.${ext}`;
-const BORDERS_TEX_URL = `./borders_${size}.webp`; // Use webp for borders for sharpness
-const DATA_TEX_URL = `./data_${smallSize}.${ext}`;
+const LAND_MASK_URL = `./textures/land_${size}.${ext}`;
+const CLOUD_TEX_URL = `./textures/clouds_${size}.${ext}`;
+const BORDERS_TEX_URL = `./textures/borders_${size}.webp`; // Use webp for borders for sharpness
+const DATA_TEX_URL = `./textures/data_${smallSize}.${ext}`;
 
 // Invert land/border mask (ocean=white, land=black)
 const MASK_INVERT = 1.0;
@@ -366,7 +362,7 @@ let t0 = performance.now();
 let autorotate = true;
 renderer.domElement.addEventListener("dblclick", () => { autorotate = !autorotate; });
 
-function loadTexSafe(enable, url, fallbackUrl = "./empty.png") {
+function loadTexSafe(enable, url, fallbackUrl = "./textures/empty.png") {
   if (!enable){
     return loadTex(fallbackUrl);
   }
@@ -380,7 +376,7 @@ Promise.all([
   loadTex(LAND_MASK_URL),                        // required
   loadTexSafe(enableBorders, BORDERS_TEX_URL),   // optional
   loadTexSafe(enableData, DATA_TEX_URL),         // optional
-  loadTex("./marker.png"),
+  loadTex("./textures/marker.png"),
 ]).then(([landMask, bordersTex, dataTex, markerTex]) => {
   uniforms.landMask.value = landMask;
   uniforms.bordersTex.value = bordersTex;
