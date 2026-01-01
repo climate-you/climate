@@ -84,14 +84,17 @@ export default function StoryClient() {
   const [currentTemp, setCurrentTemp] = useState<number | null>(null);
   const [currentMeta, setCurrentMeta] = useState<{ cached: boolean; age: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [tempLoading, setTempLoading] = useState(false);
   const tempFetchKeyRef = useRef<string | null>(null);
 
   const arrivedOnceRef = useRef(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [activeSlide, setActiveSlide] = useState(0);
+
+  // For /story/auto: prevent double geolocation calls
   const [autoResolving, setAutoResolving] = useState(false);
+  const didAutoRedirectRef = useRef(false);
 
   const COLD_OPEN_MS = 3200;   // tweak: pure spinning globe, no UI, no geolocation
   const PRELUDE_MS = 4200;     // tweak: locate + fly-to + brief settle before story UI
@@ -99,13 +102,33 @@ export default function StoryClient() {
   const [coldOpenDone, setColdOpenDone] = useState(false);
   const [showStory, setShowStory] = useState(false);
 
+  // Handoff: hero globe shrinks/moves to dock then fades out
+  const HANDOFF_MS = 900;
+  const [heroLeaving, setHeroLeaving] = useState(false);
+
+  const [skipHeroPrelude, setSkipHeroPrelude] = useState(false);
+
+  // prevents the “left then zip to center” on first paint
+  const [titlePrimed, setTitlePrimed] = useState(false);
+
   // Reset when slug changes (navigating between cities)
   useEffect(() => {
-    setShowStory(false);
-  }, [slug]);
+  setShowStory(false);
+  setSkipHeroPrelude(false);
+  setTitlePrimed(false);
+  setTitleX(null);
+  setHeaderReady(false);
+
+  tempFetchKeyRef.current = null;
+  setCurrentTemp(null);
+  setCurrentMeta(null);
+  setError(null);
+  setTempLoading(false);
+}, [slug]);
 
   // Header animation (scroll-driven)
-  const headerCompact = activeSlide > 0;
+  // IMPORTANT: only compact after story is visible AND we've scrolled past the intro slide.
+  const headerCompact = showStory && activeSlide > 0;
   const headerBarRef = useRef<HTMLDivElement | null>(null);
   const headerTitleRef = useRef<HTMLDivElement | null>(null);
 
@@ -115,25 +138,57 @@ export default function StoryClient() {
 
   // 1) Cold open timer: no UI, no geolocation
   useEffect(() => {
+    // If we just redirected from /auto, don't replay cold-open (prevents flashing)
+    const pending = slug !== "auto" ? readPendingFlyTo() : null;
+    if (pending) {
+      setSkipHeroPrelude(true);
+      setColdOpenDone(true);
+      return;
+    }
+
     setColdOpenDone(false);
     const t = window.setTimeout(() => setColdOpenDone(true), COLD_OPEN_MS);
     return () => window.clearTimeout(t);
   }, [slug]);
 
   // 2) Story mode timer: starts only once we have a target AND cold open is done
+  const STORY_REVEAL_MS = 1200; // tweak: after cold-open, how quickly story UI appears on /story/<slug>
   useEffect(() => {
-    setShowStory(false);
-    if (!coldOpenDone) return;
-    if (!target) return;
+    // Never show story UI on /auto (we redirect instead)
+    if (slug === "auto") {
+      setShowStory(false);
+      return;
+    }
+
+    // If we came from /auto redirect, skip hero and show story immediately
+    if (skipHeroPrelude) {
+      setShowStory(true);
+      return;
+    }
+
+    // Otherwise show story shortly after cold open completes
+    if (!coldOpenDone) {
+      setShowStory(false);
+      return;
+    }
 
     const t = window.setTimeout(() => {
       setShowStory(true);
       if (scrollerRef.current) scrollerRef.current.scrollTo({ top: 0 });
       setActiveSlide(0);
-    }, PRELUDE_MS);
+    }, STORY_REVEAL_MS);
 
     return () => window.clearTimeout(t);
-  }, [coldOpenDone, target]);
+  }, [slug, skipHeroPrelude, coldOpenDone]);
+
+  // 3) When story becomes visible, animate hero globe into dock and fade it out
+  useEffect(() => {
+    if (!showStory) return;
+
+    setHeroLeaving(true);
+    const t = window.setTimeout(() => setHeroLeaving(false), HANDOFF_MS);
+    return () => window.clearTimeout(t);
+  }, [showStory]);
 
   const computeTitleX = () => {
     const bar = headerBarRef.current;
@@ -153,6 +208,15 @@ export default function StoryClient() {
     requestAnimationFrame(() => computeTitleX());
   }, [activeSlide, headerReady]);
 
+  useEffect(() => {
+    if (!showStory) return;
+    if (!headerReady) return;
+    if (titleX === null) return;
+    if (titlePrimed) return;
+    // Title has a valid X — allow subsequent transitions
+    setTitlePrimed(true);
+  }, [showStory, headerReady, titleX, titlePrimed]);
+
   // Track which snap “page” we’re on (0 = intro, 1 = last week, etc.)
   useEffect(() => {
     const el = scrollerRef.current;
@@ -167,7 +231,7 @@ export default function StoryClient() {
     onScroll();
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [showStory]);
 
   // Compute the title X offset so it can smoothly slide center <-> left
   useLayoutEffect(() => {
@@ -243,6 +307,11 @@ export default function StoryClient() {
 
     // slug === "auto": request geolocation then choose nearest city and redirect
     if (!coldOpenDone) return;
+    if (autoResolving) return;
+    if (didAutoRedirectRef.current) return;
+
+    setAutoResolving(true);
+
     if (!navigator.geolocation) {
       const fallback = cities[0];
       writePendingFlyTo({
@@ -251,7 +320,10 @@ export default function StoryClient() {
         label: fallback.label,
         chosenSlug: fallback.slug,
       });
-      router.replace(`/story/${fallback.slug}`);
+      didAutoRedirectRef.current = true;
+      setTimeout(() => {
+        router.replace(`/story/${fallback.slug}`);
+      }, 0);
       return;
     }
 
@@ -268,7 +340,12 @@ export default function StoryClient() {
           chosenSlug: chosen?.slug,
         });
 
-        router.replace(`/story/${chosen?.slug ?? cities[0].slug}`);
+        didAutoRedirectRef.current = true;
+        // microtask to avoid dev router edge cases
+        setTimeout(() => {
+          router.replace(`/story/${chosen?.slug ?? cities[0].slug}`);
+        }, 0);
+        // DO NOT setAutoResolving(false) here — navigation will replace the page
       },
       (geoErr) => {
         const fallback = cities[0];
@@ -278,12 +355,16 @@ export default function StoryClient() {
           label: fallback.label,
           chosenSlug: fallback.slug,
         });
-        router.replace(`/story/${fallback.slug}`);
+        didAutoRedirectRef.current = true;
+        setTimeout(() => {
+          router.replace(`/story/${fallback.slug}`);
+        }, 0);
         setError(`Geolocation unavailable (${geoErr.code}). Using ${fallback.label}.`);
+        // DO NOT setAutoResolving(false) here
       },
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 60_000 }
     );
-  }, [slug, cities, router]);
+  }, [slug, cities, router, coldOpenDone, autoResolving]);
 
   // Fetch current temperature (proxy API) once we have a target.
   useEffect(() => {
@@ -352,7 +433,7 @@ export default function StoryClient() {
       </div>
 
       {/* Top bar (scroll-driven sliding title) */}
-      {coldOpenDone && (
+      {showStory && (
         <div className="fixed top-0 left-0 right-0 z-20 bg-white/70 backdrop-blur">
           <div ref={headerBarRef} className="mx-auto w-full px-4 sm:px-6 lg:px-10 py-3">
             <div className="relative h-[56px]">
@@ -363,9 +444,9 @@ export default function StoryClient() {
                   "absolute top-1/2 left-0 will-change-transform",
                   // Fade in only after first measurement
                   "transition-opacity duration-300",
-                  headerReady ? "opacity-100" : "opacity-0",
+                  (headerReady && titleX !== null) ? "opacity-100" : "opacity-0",
                   // Only enable transform transition once ready (prevents initial “slide-in”)
-                  headerReady ? "transition-transform duration-1200" : "",
+                  (titlePrimed ? "transition-transform duration-1200" : ""),
                 ].join(" ")}
                 style={{
                   transform: `translateX(${titleX ?? 0}px) translateY(-50%) scale(${headerCompact ? 0.62 : 1})`,
@@ -403,11 +484,19 @@ export default function StoryClient() {
 
       {/* Main layout */}
       <div className="pt-14">
-        {/* LG prelude hero globe overlay (big centered globe) */}
+        {/* LG prelude hero globe overlay (big centered globe) + handoff move-to-dock */}
         {!showStory && (
           <div className="hidden lg:block fixed inset-0 z-10 pointer-events-none">
-            {/* Globe */}
-            <div className="absolute left-1/2 top-[84px] -translate-x-1/2 w-[760px] aspect-square">
+            <div
+              className={[
+                "absolute top-[84px] aspect-square transition-all",
+                `duration-[${HANDOFF_MS}ms]`,
+                "ease-[cubic-bezier(0.16,1,0.3,1)]",
+                !showStory
+                  ? "left-1/2 -translate-x-1/2 w-[760px] opacity-100"
+                  : "left-[210px] -translate-x-1/2 w-[420px] opacity-0",
+              ].join(" ")}
+            >
               <Globe
                 targetLatLon={target}
                 phase={phase}
@@ -420,7 +509,7 @@ export default function StoryClient() {
             </div>
 
             {/* Loading chip (on top of the globe, not behind it) */}
-            {coldOpenDone && (
+            {coldOpenDone && !showStory && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="rounded-full bg-white/70 px-4 py-2 text-sm text-neutral-700 backdrop-blur">
                   Loading your climate story…
@@ -431,7 +520,7 @@ export default function StoryClient() {
         )}
         <div className="lg:grid lg:grid-cols-[420px_1fr]">
           {/* LEFT: persistent globe on lg only */}
-          <div className="hidden lg:block">
+          <div className="hidden lg:block pointer-events-none">
             <div className="sticky top-0 h-[calc(100vh-56px)]">
               <div className="flex h-full items-center justify-center px-6">
                 <div
@@ -443,12 +532,8 @@ export default function StoryClient() {
                 >
                   <Globe
                     targetLatLon={target}
-                    phase={phase}
-                    onArrive={() => {
-                      if (arrivedOnceRef.current) return;
-                      arrivedOnceRef.current = true;
-                      setPhase("arrived");
-                    }}
+                    phase={"arrived"}
+                    onArrive={() => {}}
                   />
                 </div>
               </div>
@@ -460,10 +545,10 @@ export default function StoryClient() {
             ref={scrollerRef}
             className={[
               "h-[calc(100vh-56px)] scroll-smooth snap-y snap-mandatory",
-              // Mobile: always scrollable
               "overflow-y-auto",
-              // LG: during hero prelude, hide + disable scroll/pointer so the overlay feels like a true landing
-              showStory ? "lg:opacity-100 lg:pointer-events-auto" : "lg:opacity-0 lg:pointer-events-none lg:overflow-hidden",
+              showStory
+                ? "lg:opacity-100 lg:pointer-events-auto"
+                : "lg:opacity-0 lg:pointer-events-none lg:overflow-hidden",
               "transition-opacity duration-700",
             ].join(" ")}
           >
@@ -480,7 +565,9 @@ export default function StoryClient() {
                     <div
                       className={[
                         "aspect-square transition-all duration-[2800ms] ease-in-out",
-                        phase === "landing" ? "w-[760px] max-w-[92vw]" : "w-[520px] max-w-[86vw]",
+                        phase === "landing"
+                          ? "w-[760px] max-w-[92vw]"
+                          : "w-[520px] max-w-[86vw]",
                       ].join(" ")}
                     >
                       <Globe
@@ -498,7 +585,9 @@ export default function StoryClient() {
                   <div
                     className={[
                       "absolute right-0 top-24 w-full transition-all duration-[1800ms] ease-in-out",
-                      phase === "landing" ? "opacity-0 translate-y-2 pointer-events-none" : "opacity-100 translate-y-0",
+                      phase === "landing"
+                        ? "opacity-0 translate-y-2 pointer-events-none"
+                        : "opacity-100 translate-y-0",
                     ].join(" ")}
                   >
                     <div className="pb-16">
@@ -514,7 +603,9 @@ export default function StoryClient() {
 
                         {phase === "arrived" && (
                           <div className="mt-10 text-center">
-                            <div className="text-sm text-neutral-500">Scroll down to explore your local climate</div>
+                            <div className="text-sm text-neutral-500">
+                              Scroll down to explore your local climate
+                            </div>
                             <div className="mt-2 text-2xl">↓</div>
                           </div>
                         )}
@@ -559,7 +650,7 @@ export default function StoryClient() {
             </div>
 
             {/* Slides 2+: Panels */}
-            {phase === "arrived" && slug !== "auto" && (
+            {showStory && slug !== "auto" && (
               <>
                 <div className="snap-start min-h-[calc(100vh-56px)] flex items-center">
                   <div className="mx-auto w-full max-w-6xl px-4">
