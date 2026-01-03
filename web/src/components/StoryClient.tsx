@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import Globe from "@/components/Globe";
 import type { CityIndexEntry } from "@/lib/cities";
 import { nearestCity } from "@/lib/geo";
@@ -15,35 +15,8 @@ import StoryPanel from "@/components/panels/StoryPanel";
 
 type Phase = "landing" | "flying" | "arrived";
 
-type PendingFlyTo = {
-  lat: number;
-  lon: number;
-  label?: string;
-  chosenSlug?: string;
-};
-
-const PENDING_KEY = "climateStory.pendingFlyTo.v1";
-
 function cToF(c: number) {
   return (c * 9) / 5 + 32;
-}
-
-function readPendingFlyTo(): PendingFlyTo | null {
-  try {
-    const raw = sessionStorage.getItem(PENDING_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-function writePendingFlyTo(data: PendingFlyTo) {
-  sessionStorage.setItem(PENDING_KEY, JSON.stringify(data));
-}
-
-function clearPendingFlyTo() {
-  sessionStorage.removeItem(PENDING_KEY);
 }
 
 async function fetchCurrentTemp(args: { lat: number; lon: number; unit: "C" | "F" }) {
@@ -72,14 +45,25 @@ export default function StoryClient() {
   const slug =
     typeof slugParam === "string" ? slugParam : Array.isArray(slugParam) ? slugParam[0] : "auto";
 
-  const router = useRouter();
   const { cities, error: citiesError } = useCitiesIndex();
+
+  // Timing
+  const COLD_OPEN_MS = 3200; // pure spinning hero globe, no UI, no geolocation
+  const FLY_START_DELAY_MS = 800; // beat before flight begins after target is chosen
+  const POST_ARRIVE_MS = 900; // beat after reaching target before story UI fades in
+
+  const [coldOpenDone, setColdOpenDone] = useState(false);
+  const [showStory, setShowStory] = useState(false);
 
   const [phase, setPhase] = useState<Phase>("landing");
   const [unit, setUnit] = useState<"C" | "F">("C");
 
   const [target, setTarget] = useState<{ lat: number; lon: number } | null>(null);
   const [locationLabel, setLocationLabel] = useState<string>("your location");
+
+  // This is the slug used to load data/captions/panels.
+  // For /auto, we choose it from nearestCity, but we keep the URL as /auto.
+  const [storySlug, setStorySlug] = useState<string | null>(slug === "auto" ? null : slug);
 
   const [currentTemp, setCurrentTemp] = useState<number | null>(null);
   const [currentMeta, setCurrentMeta] = useState<{ cached: boolean; age: number } | null>(null);
@@ -89,166 +73,192 @@ export default function StoryClient() {
   const tempFetchKeyRef = useRef<string | null>(null);
 
   const arrivedOnceRef = useRef(false);
+  const didStartFlyRef = useRef(false);
+
+  // /auto resolving guard
+  const [autoResolving, setAutoResolving] = useState(false);
+
+  // Snap scroller
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [activeSlide, setActiveSlide] = useState(0);
 
-  // For /story/auto: prevent double geolocation calls
-  const [autoResolving, setAutoResolving] = useState(false);
-  const didAutoRedirectRef = useRef(false);
-
-  const COLD_OPEN_MS = 3200;   // tweak: pure spinning globe, no UI, no geolocation
-  const PRELUDE_MS = 4200;     // tweak: locate + fly-to + brief settle before story UI
-
-  const [coldOpenDone, setColdOpenDone] = useState(false);
-  const [showStory, setShowStory] = useState(false);
-
-  // Handoff: hero globe shrinks/moves to dock then fades out
-  const HANDOFF_MS = 900;
-  const [heroLeaving, setHeroLeaving] = useState(false);
-
-  const [skipHeroPrelude, setSkipHeroPrelude] = useState(false);
-
-  // prevents the “left then zip to center” on first paint
-  const [titlePrimed, setTitlePrimed] = useState(false);
-
-  // Reset when slug changes (navigating between cities)
-  useEffect(() => {
-  setShowStory(false);
-  setSkipHeroPrelude(false);
-  setTitlePrimed(false);
-  setTitleX(null);
-  setHeaderReady(false);
-
-  tempFetchKeyRef.current = null;
-  setCurrentTemp(null);
-  setCurrentMeta(null);
-  setError(null);
-  setTempLoading(false);
-}, [slug]);
-
   // Header animation (scroll-driven)
-  // IMPORTANT: only compact after story is visible AND we've scrolled past the intro slide.
   const headerCompact = showStory && activeSlide > 0;
   const headerBarRef = useRef<HTMLDivElement | null>(null);
   const headerTitleRef = useRef<HTMLDivElement | null>(null);
 
-  // null = not measured yet (so we can hide it and avoid the left->center slide)
   const [titleX, setTitleX] = useState<number | null>(null);
   const [headerReady, setHeaderReady] = useState(false);
+  const [titlePrimed, setTitlePrimed] = useState(false);
 
-  // 1) Cold open timer: no UI, no geolocation
+  // Reset when slug changes
   useEffect(() => {
-    // If we just redirected from /auto, don't replay cold-open (prevents flashing)
-    const pending = slug !== "auto" ? readPendingFlyTo() : null;
-    if (pending) {
-      setSkipHeroPrelude(true);
-      setColdOpenDone(true);
-      return;
-    }
-
+    setShowStory(false);
     setColdOpenDone(false);
+
+    setPhase("landing");
+    setTarget(null);
+    setLocationLabel("your location");
+
+    setStorySlug(slug === "auto" ? null : slug);
+
+    arrivedOnceRef.current = false;
+    didStartFlyRef.current = false;
+
+    tempFetchKeyRef.current = null;
+    setCurrentTemp(null);
+    setCurrentMeta(null);
+    setError(null);
+    setTempLoading(false);
+
+    setAutoResolving(false);
+
+    // header measurement resets
+    setTitlePrimed(false);
+    setTitleX(null);
+    setHeaderReady(false);
+  }, [slug]);
+
+  // Cold open timer (no UI, no geolocation)
+  useEffect(() => {
     const t = window.setTimeout(() => setColdOpenDone(true), COLD_OPEN_MS);
     return () => window.clearTimeout(t);
   }, [slug]);
 
-  // 2) Story mode timer: starts only once we have a target AND cold open is done
-  const STORY_REVEAL_MS = 1200; // tweak: after cold-open, how quickly story UI appears on /story/<slug>
+  // IMPORTANT: Do not add custom wheel listeners here.
+  // Native scrolling + scroll-snap works best across browsers.
+
+  // Resolve target + start fly (after cold open), with no redirect
   useEffect(() => {
-    // Never show story UI on /auto (we redirect instead)
-    if (slug === "auto") {
+    if (!cities) return;
+    if (!coldOpenDone) return;
+    if (didStartFlyRef.current) return;
+
+    const startFly = (lat: number, lon: number, label: string) => {
+      didStartFlyRef.current = true;
+      setTarget({ lat, lon });
+      setLocationLabel(label);
+      setPhase("landing");
+      window.setTimeout(() => setPhase("flying"), FLY_START_DELAY_MS);
+    };
+
+    // Direct slug
+    if (slug !== "auto") {
+      const city = cities.find((c) => c.slug === slug);
+      if (!city) {
+        setError(`Unknown slug "${slug}" (not found in cities_index.json).`);
+        return;
+      }
+      setStorySlug(city.slug);
+      startFly(city.lat, city.lon, city.label);
+      return;
+    }
+
+    // /auto
+    if (autoResolving) return;
+    setAutoResolving(true);
+
+    const fallback = cities[0];
+
+    const finish = (chosen: CityIndexEntry, flyLat: number, flyLon: number) => {
+      setStorySlug(chosen.slug);
+      startFly(flyLat, flyLon, chosen.label);
+      setAutoResolving(false);
+    };
+
+    if (!navigator.geolocation) {
+      finish(fallback, fallback.lat, fallback.lon);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+
+        const chosen = nearestCity(cities, { lat, lon }) ?? fallback;
+
+        // Fly to user's actual coordinate (feels right) but load panels for chosen.slug
+        finish(chosen, lat, lon);
+      },
+      (geoErr) => {
+        setError(`Geolocation unavailable (${geoErr.code}). Using ${fallback.label}.`);
+        finish(fallback, fallback.lat, fallback.lon);
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60_000 }
+    );
+  }, [slug, cities, coldOpenDone, autoResolving]);
+
+  // Reveal story UI only after arrival (+ delay)
+  useEffect(() => {
+    if (!storySlug) {
       setShowStory(false);
       return;
     }
-
-    // If we came from /auto redirect, skip hero and show story immediately
-    if (skipHeroPrelude) {
-      setShowStory(true);
-      return;
-    }
-
-    // Otherwise show story shortly after cold open completes
     if (!coldOpenDone) {
       setShowStory(false);
       return;
     }
+    if (phase !== "arrived") {
+      setShowStory(false);
+      return;
+    }
+    if (showStory) return;
 
     const t = window.setTimeout(() => {
       setShowStory(true);
       if (scrollerRef.current) scrollerRef.current.scrollTo({ top: 0 });
       setActiveSlide(0);
-    }, STORY_REVEAL_MS);
+    }, POST_ARRIVE_MS);
 
     return () => window.clearTimeout(t);
-  }, [slug, skipHeroPrelude, coldOpenDone]);
+  }, [storySlug, coldOpenDone, phase, showStory]);
 
-  // 3) When story becomes visible, animate hero globe into dock and fade it out
-  useEffect(() => {
-    if (!showStory) return;
-
-    setHeroLeaving(true);
-    const t = window.setTimeout(() => setHeroLeaving(false), HANDOFF_MS);
-    return () => window.clearTimeout(t);
-  }, [showStory]);
-
+  // Compute title X (centered when not compact)
   const computeTitleX = () => {
     const bar = headerBarRef.current;
     const title = headerTitleRef.current;
     if (!bar || !title) return;
 
-    // Use layout widths (ignore transforms) so centering doesn't drift during scale animations.
-    const barW = bar.clientWidth;      // ignores transforms
-    const titleW = title.offsetWidth;  // ignores transforms
+    const barW = bar.clientWidth;
+    const titleW = title.offsetWidth;
     const centerX = Math.max(0, (barW - titleW) / 2);
 
     setTitleX(headerCompact ? 0 : centerX);
   };
 
-  useEffect(() => {
-    if (!headerReady) return;
-    requestAnimationFrame(() => computeTitleX());
-  }, [activeSlide, headerReady]);
-
-  useEffect(() => {
-    if (!showStory) return;
-    if (!headerReady) return;
-    if (titleX === null) return;
-    if (titlePrimed) return;
-    // Title has a valid X — allow subsequent transitions
-    setTitlePrimed(true);
-  }, [showStory, headerReady, titleX, titlePrimed]);
-
-  // Track which snap “page” we’re on (0 = intro, 1 = last week, etc.)
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-
-    const onScroll = () => {
-      const h = el.clientHeight || 1;
-      const idx = Math.round(el.scrollTop / h);
-      setActiveSlide(idx);
-    };
-
-    onScroll();
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [showStory]);
-
-  // Compute the title X offset so it can smoothly slide center <-> left
+  // Only measure header once it exists (showStory)
   useLayoutEffect(() => {
+    if (!showStory) return;
+
     computeTitleX();
 
     if (!headerReady) {
       const raf = requestAnimationFrame(() => setHeaderReady(true));
       return () => cancelAnimationFrame(raf);
     }
-  }, [headerCompact, headerReady]);
-  useEffect(() => {
-    window.addEventListener("resize", computeTitleX);
-    return () => window.removeEventListener("resize", computeTitleX);
-  }, [headerCompact]);
+  }, [showStory, headerCompact, headerReady]);
 
-  // Re-measure after web fonts finish loading (fixes subtle off-center)
   useEffect(() => {
+    if (!showStory) return;
+    const onResize = () => computeTitleX();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [showStory, headerCompact]);
+
+  // Allow transitions only after first valid measurement
+  useEffect(() => {
+    if (!showStory) return;
+    if (!headerReady) return;
+    if (titleX === null) return;
+    if (titlePrimed) return;
+    setTitlePrimed(true);
+  }, [showStory, headerReady, titleX, titlePrimed]);
+
+  // Re-measure after web fonts finish loading
+  useEffect(() => {
+    if (!showStory) return;
+
     let cancelled = false;
 
     const kick = () => {
@@ -275,103 +285,30 @@ export default function StoryClient() {
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [headerCompact]);
+  }, [showStory, headerCompact]);
 
-  // Boot logic: resolve slug -> target; for /auto -> geolocate and redirect
+  // Track active snap slide index
   useEffect(() => {
-    if (!cities) return;
+    const el = scrollerRef.current;
+    if (!el) return;
 
-    // If we're on a concrete slug page, try to restore pending fly-to (from /auto redirect)
-    if (slug !== "auto") {
-      const pending = readPendingFlyTo();
-      if (pending?.lat != null && pending?.lon != null) {
-        clearPendingFlyTo();
-        setTarget({ lat: pending.lat, lon: pending.lon });
-        setLocationLabel(pending.label ?? locationLabelFromSlug(slug, cities));
-        setPhase("landing");
-        window.setTimeout(() => setPhase("flying"), 3600);
-        return;
-      }
+    const onScroll = () => {
+      const h = el.clientHeight || 1;
+      const idx = Math.round(el.scrollTop / h);
+      setActiveSlide(idx);
+    };
 
-      const city = cities.find((c) => c.slug === slug);
-      if (city) {
-        setTarget({ lat: city.lat, lon: city.lon });
-        setLocationLabel(city.label);
-        setPhase("landing");
-        window.setTimeout(() => setPhase("flying"), 3600);
-      } else {
-        setError(`Unknown slug "${slug}" (not found in cities_index.json).`);
-      }
-      return;
-    }
+    onScroll();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [showStory]);
 
-    // slug === "auto": request geolocation then choose nearest city and redirect
-    if (!coldOpenDone) return;
-    if (autoResolving) return;
-    if (didAutoRedirectRef.current) return;
-
-    setAutoResolving(true);
-
-    if (!navigator.geolocation) {
-      const fallback = cities[0];
-      writePendingFlyTo({
-        lat: fallback.lat,
-        lon: fallback.lon,
-        label: fallback.label,
-        chosenSlug: fallback.slug,
-      });
-      didAutoRedirectRef.current = true;
-      setTimeout(() => {
-        router.replace(`/story/${fallback.slug}`);
-      }, 0);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
-
-        const chosen = nearestCity(cities, { lat, lon });
-        writePendingFlyTo({
-          lat,
-          lon,
-          label: chosen?.label,
-          chosenSlug: chosen?.slug,
-        });
-
-        didAutoRedirectRef.current = true;
-        // microtask to avoid dev router edge cases
-        setTimeout(() => {
-          router.replace(`/story/${chosen?.slug ?? cities[0].slug}`);
-        }, 0);
-        // DO NOT setAutoResolving(false) here — navigation will replace the page
-      },
-      (geoErr) => {
-        const fallback = cities[0];
-        writePendingFlyTo({
-          lat: fallback.lat,
-          lon: fallback.lon,
-          label: fallback.label,
-          chosenSlug: fallback.slug,
-        });
-        didAutoRedirectRef.current = true;
-        setTimeout(() => {
-          router.replace(`/story/${fallback.slug}`);
-        }, 0);
-        setError(`Geolocation unavailable (${geoErr.code}). Using ${fallback.label}.`);
-        // DO NOT setAutoResolving(false) here
-      },
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60_000 }
-    );
-  }, [slug, cities, router, coldOpenDone, autoResolving]);
-
-  // Fetch current temperature (proxy API) once we have a target.
+  // Fetch current temperature once we have a target
   useEffect(() => {
     if (!target) return;
 
     const key = `${target.lat.toFixed(4)},${target.lon.toFixed(4)}`;
-    if (tempFetchKeyRef.current === key) return; // already fetched for this location
+    if (tempFetchKeyRef.current === key) return;
     tempFetchKeyRef.current = key;
 
     let cancelled = false;
@@ -381,7 +318,7 @@ export default function StoryClient() {
     setCurrentTemp(null);
     setCurrentMeta(null);
 
-    fetchCurrentTemp({ lat: target.lat, lon: target.lon, unit: "C" }) // always fetch C
+    fetchCurrentTemp({ lat: target.lat, lon: target.lon, unit: "C" })
       .then((r) => {
         if (cancelled) return;
         setCurrentTemp(r.temperature); // store Celsius
@@ -401,22 +338,19 @@ export default function StoryClient() {
     };
   }, [target]);
 
+  // Intro caption (load as soon as we know storySlug, even during flight)
   const { caption: introCaption } = useIntroCaption({
-    slug,
+    slug: storySlug ?? "auto",
     unit,
-    enabled: phase !== "landing" && slug !== "auto",
+    enabled: !!storySlug,
   });
 
   const rightCaption = useMemo(() => {
-    const locationResolved =
-      locationLabel && locationLabel.toLowerCase() !== "your location";
-
+    const locationResolved = locationLabel && locationLabel.toLowerCase() !== "your location";
     if (!locationResolved) return "Finding your location…";
 
-    // If the long-term intro caption isn't ready yet, we're still assembling the story.
     if (!introCaption) return "Loading your climate story…";
 
-    // After caption exists, the only remaining “loading” is temperature.
     if (error) return "Today’s temperature is temporarily unavailable.";
     if (tempLoading || currentTemp == null) return "Fetching today’s temperature…";
 
@@ -432,33 +366,32 @@ export default function StoryClient() {
         <div className="absolute bottom-[-140px] right-[-160px] h-[520px] w-[520px] rounded-full bg-[radial-gradient(circle_at_center,rgba(244,63,94,0.10),transparent_60%)]" />
       </div>
 
-      {/* Top bar (scroll-driven sliding title) */}
+      {/* Top bar only after story reveal */}
       {showStory && (
         <div className="fixed top-0 left-0 right-0 z-20 bg-white/70 backdrop-blur">
           <div ref={headerBarRef} className="mx-auto w-full px-4 sm:px-6 lg:px-10 py-3">
             <div className="relative h-[56px]">
-              {/* Title: slides center <-> left via transform, eases both ways */}
               <div
                 ref={headerTitleRef}
                 className={[
                   "absolute top-1/2 left-0 will-change-transform",
-                  // Fade in only after first measurement
                   "transition-opacity duration-300",
-                  (headerReady && titleX !== null) ? "opacity-100" : "opacity-0",
-                  // Only enable transform transition once ready (prevents initial “slide-in”)
-                  (titlePrimed ? "transition-transform duration-1200" : ""),
+                  headerReady && titleX !== null ? "opacity-100" : "opacity-0",
+                  titlePrimed ? "transition-transform duration-1200" : "",
                 ].join(" ")}
                 style={{
-                  transform: `translateX(${titleX ?? 0}px) translateY(-50%) scale(${headerCompact ? 0.62 : 1})`,
+                  transform: `translateX(${titleX ?? 0}px) translateY(-50%) scale(${
+                    headerCompact ? 0.62 : 1
+                  })`,
                   transformOrigin: "left center",
-                  // A noticeably “eased” curve (more obvious than plain ease-in-out)
                   transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
                 }}
               >
-                <div className="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight">Your climate</div>
+                <div className="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight">
+                  Your climate
+                </div>
               </div>
 
-              {/* Subtitle: fades in on panels */}
               <div
                 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base sm:text-lg text-neutral-600 transition-opacity duration-500 ease-in-out"
                 style={{ opacity: headerCompact ? 1 : 0 }}
@@ -466,7 +399,6 @@ export default function StoryClient() {
                 Zooming out: from days to decades
               </div>
 
-              {/* Units toggle */}
               <div className="absolute right-0 top-1/2 -translate-y-1/2">
                 <button
                   className="rounded-full border border-neutral-200 bg-white px-3 py-1 text-sm hover:bg-neutral-50"
@@ -481,71 +413,65 @@ export default function StoryClient() {
         </div>
       )}
 
-
-      {/* Main layout */}
       <div className="pt-14">
-        {/* LG prelude hero globe overlay (big centered globe) + handoff move-to-dock */}
-        {!showStory && (
-          <div className="hidden lg:block fixed inset-0 z-10 pointer-events-none">
-            <div
-              className={[
-                "absolute top-[84px] aspect-square transition-all",
-                `duration-[${HANDOFF_MS}ms]`,
-                "ease-[cubic-bezier(0.16,1,0.3,1)]",
-                !showStory
-                  ? "left-1/2 -translate-x-1/2 w-[760px] opacity-100"
-                  : "left-[210px] -translate-x-1/2 w-[420px] opacity-0",
-              ].join(" ")}
-            >
-              <Globe
-                targetLatLon={target}
-                phase={phase}
-                onArrive={() => {
-                  if (arrivedOnceRef.current) return;
-                  arrivedOnceRef.current = true;
-                  setPhase("arrived");
-                }}
-              />
-            </div>
-
-            {/* Loading chip (on top of the globe, not behind it) */}
-            {coldOpenDone && !showStory && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="rounded-full bg-white/70 px-4 py-2 text-sm text-neutral-700 backdrop-blur">
-                  Loading your climate story…
-                </div>
-              </div>
-            )}
+        {/* LG hero overlay stays mounted and fades out once showStory is true */}
+        <div
+          className={[
+            "hidden lg:block fixed inset-0 z-10 pointer-events-none transition-opacity duration-700",
+            "pointer-events-none [&_*]:pointer-events-none",
+            showStory ? "opacity-0" : "opacity-100",
+          ].join(" ")}
+          aria-hidden={showStory}
+        >
+          <div className="absolute top-[84px] left-1/2 -translate-x-1/2 w-[760px] aspect-square">
+            <Globe
+              targetLatLon={target}
+              phase={phase}
+              onArrive={() => {
+                if (arrivedOnceRef.current) return;
+                arrivedOnceRef.current = true;
+                setPhase("arrived");
+              }}
+            />
           </div>
-        )}
+
+          {/* Loading chip (appears only after cold open) */}
+          {coldOpenDone && !showStory && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="rounded-full bg-white/70 px-4 py-2 text-sm text-neutral-700 backdrop-blur">
+                Loading your climate story…
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="lg:grid lg:grid-cols-[420px_1fr]">
-          {/* LEFT: persistent globe on lg only */}
+          {/* LEFT: mini globe (lg only), fades in when story reveals */}
           <div className="hidden lg:block pointer-events-none">
             <div className="sticky top-0 h-[calc(100vh-56px)]">
               <div className="flex h-full items-center justify-center px-6">
                 <div
                   className={[
                     "aspect-square w-full max-w-[420px]",
-                    showStory ? "opacity-100" : "opacity-0 pointer-events-none",
+                    "pointer-events-none [&_*]:pointer-events-none",
                     "transition-opacity duration-700",
+                    showStory ? "opacity-100" : "opacity-0",
                   ].join(" ")}
                 >
-                  <Globe
-                    targetLatLon={target}
-                    phase={"arrived"}
-                    onArrive={() => {}}
-                  />
+                  <Globe targetLatLon={target} phase={"arrived"} onArrive={() => {}} />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* RIGHT: snap scroller */}
+          {/* RIGHT: snap scroller (only interactive when story reveals) */}
           <div
             ref={scrollerRef}
+            data-story-scroller
             className={[
+              "relative z-30", // <— add this
               "h-[calc(100vh-56px)] scroll-smooth snap-y snap-mandatory",
-              "overflow-y-auto",
+              "overflow-y-auto overscroll-contain",
               showStory
                 ? "lg:opacity-100 lg:pointer-events-auto"
                 : "lg:opacity-0 lg:pointer-events-none lg:overflow-hidden",
@@ -553,23 +479,11 @@ export default function StoryClient() {
             ].join(" ")}
           >
             {/* Slide 1 (mobile): intro with animated globe */}
-            <div className="snap-start lg:hidden">
+            <div className="snap-start [scroll-snap-stop:always] lg:hidden">
               <div className="mx-auto max-w-6xl px-4">
                 <div className="relative min-h-[calc(100vh-56px)]">
-                  <div
-                    className={[
-                      "absolute top-10 left-1/2 -translate-x-1/2 transition-all duration-[2800ms] ease-in-out",
-                      phase === "landing" ? "translate-y-0" : "translate-y-0",
-                    ].join(" ")}
-                  >
-                    <div
-                      className={[
-                        "aspect-square transition-all duration-[2800ms] ease-in-out",
-                        phase === "landing"
-                          ? "w-[760px] max-w-[92vw]"
-                          : "w-[520px] max-w-[86vw]",
-                      ].join(" ")}
-                    >
+                  <div className="absolute top-10 left-1/2 -translate-x-1/2 transition-all duration-[2800ms] ease-in-out">
+                    <div className="aspect-square w-[760px] max-w-[92vw] pointer-events-none [&_*]:pointer-events-none">
                       <Globe
                         targetLatLon={target}
                         phase={phase}
@@ -603,9 +517,7 @@ export default function StoryClient() {
 
                         {phase === "arrived" && (
                           <div className="mt-10 text-center">
-                            <div className="text-sm text-neutral-500">
-                              Scroll down to explore your local climate
-                            </div>
+                            <div className="text-sm text-neutral-500">Scroll down to explore your local climate</div>
                             <div className="mt-2 text-2xl">↓</div>
                           </div>
                         )}
@@ -624,8 +536,8 @@ export default function StoryClient() {
               </div>
             </div>
 
-            {/* Slide 1 (lg): intro text only (globe is on the left) */}
-            <div className="snap-start hidden lg:flex min-h-[calc(100vh-56px)] items-center">
+            {/* Slide 1 (lg): intro text only */}
+            <div className="snap-start [scroll-snap-stop:always] hidden lg:flex min-h-[calc(100vh-56px)] items-center">
               <div className="mx-auto w-full max-w-2xl px-4">
                 <h1 className="text-4xl font-semibold tracking-tight">{locationLabel}</h1>
                 <p className="mt-5 text-xl leading-relaxed text-neutral-700">{rightCaption}</p>
@@ -649,42 +561,42 @@ export default function StoryClient() {
               </div>
             </div>
 
-            {/* Slides 2+: Panels */}
-            {showStory && slug !== "auto" && (
+            {/* Slides 2+: Panels (use storySlug, works for /auto too) */}
+            {showStory && storySlug && (
               <>
-                <div className="snap-start min-h-[calc(100vh-56px)] flex items-center">
+                <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                   <div className="mx-auto w-full max-w-6xl px-4">
-                    <LastWeekPanel slug={slug} unit={unit} />
+                    <LastWeekPanel slug={storySlug} unit={unit} />
                   </div>
                 </div>
 
-                <div className="snap-start min-h-[calc(100vh-56px)] flex items-center">
+                <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                   <div className="mx-auto w-full max-w-6xl px-4">
-                    <LastMonthPanel slug={slug} unit={unit} />
+                    <LastMonthPanel slug={storySlug} unit={unit} />
                   </div>
                 </div>
 
-                <div className="snap-start min-h-[calc(100vh-56px)] flex items-center">
+                <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                   <div className="mx-auto w-full max-w-6xl px-4">
-                    <StoryPanel slug={slug} unit={unit} panel="last_year" title="Last year - the seasonal cycle" />
+                    <StoryPanel slug={storySlug} unit={unit} panel="last_year" title="Last year - the seasonal cycle" />
                   </div>
                 </div>
 
-                <div className="snap-start min-h-[calc(100vh-56px)] flex items-center">
+                <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                   <div className="mx-auto w-full max-w-6xl px-4">
-                    <StoryPanel slug={slug} unit={unit} panel="five_year" title="Last 5 years - from seasons to climate" />
+                    <StoryPanel slug={storySlug} unit={unit} panel="five_year" title="Last 5 years - from seasons to climate" />
                   </div>
                 </div>
 
-                <div className="snap-start min-h-[calc(100vh-56px)] flex items-center">
+                <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                   <div className="mx-auto w-full max-w-6xl px-4">
-                    <StoryPanel slug={slug} unit={unit} panel="fifty_year" title="Last 50 years - long term trend" />
+                    <StoryPanel slug={storySlug} unit={unit} panel="fifty_year" title="Last 50 years - long term trend" />
                   </div>
                 </div>
 
-                <div className="snap-start min-h-[calc(100vh-56px)] flex items-center">
+                <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                   <div className="mx-auto w-full max-w-6xl px-4">
-                    <StoryPanel slug={slug} unit={unit} panel="twenty_five_years" title="25 years ahead" />
+                    <StoryPanel slug={storySlug} unit={unit} panel="twenty_five_years" title="25 years ahead" />
                   </div>
                 </div>
 
@@ -696,8 +608,4 @@ export default function StoryClient() {
       </div>
     </div>
   );
-}
-
-function locationLabelFromSlug(slug: string, cities: CityIndexEntry[]) {
-  return cities.find((c) => c.slug === slug)?.label ?? slug;
 }
