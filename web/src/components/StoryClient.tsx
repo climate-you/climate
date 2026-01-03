@@ -158,7 +158,7 @@ export default function StoryClient() {
     if (autoResolving) return;
     setAutoResolving(true);
 
-    const fallback = cities[0];
+    const fallback = cities.find((c) => c.slug === "city_gb_london") ?? cities[0];
 
     const finish = (chosen: CityIndexEntry, flyLat: number, flyLon: number) => {
       setStorySlug(chosen.slug);
