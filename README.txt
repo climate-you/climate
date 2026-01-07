@@ -41,6 +41,12 @@ $ python scripts/make_montecarlo_experiment.py --grid-deg 1.0 --experiment-id 1 
 
 
 5. Run web page:
+
+# Streamlit - http://localhost:8501/
 $ streamlit run app/story_demo.py
-# python -m http.server 8000
+
+# Static web - http://localhost:8000/drafts/globe_demo.html
+# python -m http.server 8000 
+
+# Next web - http://localhost:3000/story/auto
 $ cd web; npm run dev 
