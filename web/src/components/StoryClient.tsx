@@ -62,8 +62,8 @@ export default function StoryClient() {
   const { cities, error: citiesError } = useCitiesIndex();
 
   // Timing
-  const COLD_OPEN_MS = 3200; // pure spinning hero globe, no UI, no geolocation
-  const FLY_START_DELAY_MS = 800; // beat before flight begins after target is chosen
+  const COLD_OPEN_MS = 5000; // pure spinning hero globe, no UI, no geolocation
+  const FLY_START_DELAY_MS = 2500; // beat before flight begins after target is chosen
   const POST_ARRIVE_MS = 900; // beat after reaching target before story UI fades in
 
   const [coldOpenDone, setColdOpenDone] = useState(false);
