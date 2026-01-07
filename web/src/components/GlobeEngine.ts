@@ -51,6 +51,7 @@ export type GlobeOptions = {
 
   // texture mask invert
   maskInvert?: number; // 1.0 or 0.0
+  lonShiftDeg?: number; // e.g. 90
 
   // camera
   fov?: number;
@@ -136,6 +137,8 @@ export class GlobeEngine {
   private startRotY: number;
   private cloudDriftSpeed = 0.01; // radians/sec, same as your current
 
+  private lonShiftDeg: number;
+
   constructor(private opts: GlobeOptions) {
     this.enableBorders = opts.enableBorders ?? true;
     this.enableData = opts.enableData ?? true;
@@ -160,6 +163,8 @@ export class GlobeEngine {
     this.sun.position.set(3, 1.5, 2.5);
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.85));
     this.scene.add(this.sun);
+
+    this.lonShiftDeg = opts.lonShiftDeg ?? 90;
 
     // keep CSS and JS fade duration in sync (same as your main.js)
     document.documentElement.style.setProperty("--globe-fade-ms", `${this.timings.globeFadeMs}ms`);
@@ -192,6 +197,59 @@ export class GlobeEngine {
     this.camera.position.z = z;
   }
 
+  private ll(lat: number, lon: number, r = 1) {
+    // IMPORTANT: include your lon shift here if you have one
+    return GlobeEngine.latLonToVec3(lat, lon + this.lonShiftDeg, r);
+  }
+
+  // Tangent direction that points to geographic north (in local earth coords)
+  private northTangentLocal(lat: number, lon: number) {
+    const latR = THREE.MathUtils.degToRad(lat);
+    const lonR = THREE.MathUtils.degToRad(lon + this.lonShiftDeg);
+
+    // derivative wrt lat of your latLonToVec3 formula
+    const x = -Math.sin(latR) * Math.sin(lonR);
+    const y =  Math.cos(latR);
+    const z = -Math.sin(latR) * Math.cos(lonR);
+
+    return new THREE.Vector3(x, y, z).normalize();
+  }
+
+  /**
+   * Returns a new quaternion that:
+   * - puts (lat,lon) at the front (+Z)
+   * - keeps north pointing up (+Y)
+   * starting from baseQuat.
+   */
+  private quatToFrontNorthUp(lat: number, lon: number, baseQuat: THREE.Quaternion) {
+    // location & north direction in *local* (unrotated) space
+    const L_local = this.ll(lat, lon, 1.0).normalize();
+    const N_local = this.northTangentLocal(lat, lon);
+
+    // convert those directions into *world* space under the current orientation
+    const Lw = L_local.clone().applyQuaternion(baseQuat).normalize();
+    const Nw0 = N_local.clone().applyQuaternion(baseQuat).normalize();
+
+    // orthonormalize: make north tangent perpendicular to Lw
+    const Nw = Nw0.sub(Lw.clone().multiplyScalar(Nw0.dot(Lw))).normalize();
+
+    // right-handed basis at target: X = N × L, Y = N, Z = L
+    const Xw = new THREE.Vector3().crossVectors(Nw, Lw).normalize();
+
+    // B maps canonical axes -> (Xw,Yw,Lw). We want inverse to map (Xw,Yw,Lw) -> canonical.
+    const B = new THREE.Matrix4().makeBasis(Xw, Nw, Lw);
+    const R = B.clone().transpose(); // inverse for orthonormal basis
+
+    const qRot = new THREE.Quaternion().setFromRotationMatrix(R);
+    return qRot.multiply(baseQuat.clone());
+  }
+
+  warmup() {
+    // compile shaders + upload textures once before we fade in
+    this.renderer.compile(this.scene, this.camera);
+    this.renderer.render(this.scene, this.camera);
+  }
+
   /** Mini-globe use: lock earth to location instantly + marker on */
   setFixedLocation(lat: number, lon: number) {
     this.autorotate = false;
@@ -201,20 +259,14 @@ export class GlobeEngine {
 
     // “home” orientation matches hero’s startRotY
     const qHome = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, this.startRotY, 0));
-
-    // compute rotation from the *world-facing* target under qHome
-    const targetLocal = GlobeEngine.latLonToVec3(lat, lon, 1.0).normalize();
-    const targetWorldFromHome = targetLocal.clone().applyQuaternion(qHome);
-
-    const qRot = new THREE.Quaternion().setFromUnitVectors(targetWorldFromHome, zAxis);
-    const qTo = qRot.multiply(qHome);
+    const qTo = this.quatToFrontNorthUp(lat, lon, qHome);
 
     this.earth.quaternion.copy(qTo);
   }
 
   async setMarker(lat: number, lon: number) {
     await this.ready;
-    this.marker.position.copy(GlobeEngine.latLonToVec3(lat, lon, 1.05));
+    this.marker.position.copy(this.ll(lat, lon, 1.05));
     this.marker.visible = true;
   }
 
@@ -224,16 +276,15 @@ export class GlobeEngine {
     this.autorotate = false;
     await this.setMarker(lat, lon);
 
-    const target = GlobeEngine.latLonToVec3(lat, lon, 1.0).normalize();
+    const target = this.ll(lat, lon, 1.0).normalize();
     const zAxis = new THREE.Vector3(0, 0, 1);
 
     const qFrom = this.earth.quaternion.clone();
 
-    const targetLocal = GlobeEngine.latLonToVec3(lat, lon, 1.0).normalize();
+    const targetLocal = this.ll(lat, lon, 1.0).normalize();
     const targetWorld = targetLocal.clone().applyQuaternion(qFrom);
 
-    const qRot = new THREE.Quaternion().setFromUnitVectors(targetWorld, zAxis);
-    const qTo = qRot.multiply(qFrom);
+    const qTo = this.quatToFrontNorthUp(lat, lon, qFrom);
 
     const camFrom = this.camera.position.clone();
     const camTo = new THREE.Vector3(0, 0, 3.2);

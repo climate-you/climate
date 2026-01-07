@@ -37,6 +37,12 @@ export function Globe({
       enableBorders: true,
       enableData: true,
       onArrive: () => onArriveRef.current?.(),
+      timings: {
+        globeFadeMs: 2000,
+        cloudsDelayAfterGlobeMs: 0,
+        cloudsFadeMs: 1000,
+        dataDelayAfterGlobeMs: 2000,
+      },
     });
     engineRef.current = engine;
 
@@ -49,6 +55,7 @@ export function Globe({
 
       engine.resize();
       engine.start();
+      engine.warmup();
 
       // apply snapshot once (for mini handoff)
       if (initialSnapshot) {
@@ -56,8 +63,9 @@ export function Globe({
         engine.applySnapshot?.(initialSnapshot);
       }
 
-      // your existing visibility class (optional)
-      canvas.classList.add("is-visible");
+      requestAnimationFrame(() => {
+        canvas.classList.add("is-visible");
+      });
 
       if (variant === "hero") {
         engine.setAutorotate(true);
@@ -108,7 +116,7 @@ export function Globe({
     eng.ready.then(() => eng.setFixedLocation(targetLatLon.lat, targetLatLon.lon));
   }, [variant, targetLatLon?.lat, targetLatLon?.lon]);
 
-  return <canvas ref={canvasRef} className="w-full h-full" />;
+  return <canvas ref={canvasRef} className="w-full h-full globe-canvas" />;
 }
 
 
