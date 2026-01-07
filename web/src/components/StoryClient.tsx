@@ -39,7 +39,21 @@ async function fetchCurrentTemp(args: { lat: number; lon: number; unit: "C" | "F
   }>;
 }
 
+// StoryClient.tsx (near top)
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    const m = window.matchMedia(query);
+    const onChange = () => setMatches(m.matches);
+    onChange();
+    m.addEventListener?.("change", onChange);
+    return () => m.removeEventListener?.("change", onChange);
+  }, [query]);
+  return matches;
+}
+
 export default function StoryClient() {
+  const isLg = useMediaQuery("(min-width: 1024px)");
   const params = useParams();
   const slugParam = (params as any)?.slug;
   const slug =
@@ -472,7 +486,8 @@ export default function StoryClient() {
         </div>
       )}
 
-      <div className="pt-14">
+      {isLg && (
+        <div className="pt-14">
         {/* LG hero overlay stays mounted and fades out once showStory is true */}
         <div
           className={[
@@ -522,7 +537,8 @@ export default function StoryClient() {
             "transition-opacity duration-700",
           ].join(" ")}
         >
-          <div className="lg:grid lg:grid-cols-[420px_1fr]">
+          {isLg && (
+            <div className="lg:grid lg:grid-cols-[420px_1fr]">
             {/* LEFT: mini globe (lg only), sticky */}
             <div className="hidden lg:block">
               <div className="sticky top-0 h-[calc(100vh-56px)]">
@@ -548,7 +564,8 @@ export default function StoryClient() {
             {/* RIGHT: slides */}
             <div>
               {/* Slide 1 (mobile): intro with animated globe */}
-              <div className="snap-start [scroll-snap-stop:always] lg:hidden">
+              {!isLg && (
+                <div className="snap-start [scroll-snap-stop:always]">
                 <div className="mx-auto max-w-6xl px-4">
                   <div className="relative min-h-[calc(100vh-56px)]">
                     <div className="absolute top-10 left-1/2 -translate-x-1/2 transition-all duration-[2800ms] ease-in-out">
@@ -606,7 +623,8 @@ export default function StoryClient() {
                     </div>
                   </div>
                 </div>
-              </div>
+                </div>
+              )}
 
               {/* Slide 1 (lg): intro text only */}
               <div className="snap-start [scroll-snap-stop:always] hidden lg:flex min-h-[calc(100vh-56px)] items-center">
@@ -686,9 +704,11 @@ export default function StoryClient() {
                 </>
               )}
             </div>
-          </div>
+            </div>
+          )}
         </div>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
