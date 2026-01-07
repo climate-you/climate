@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import Globe from "@/components/Globe";
+import { Globe } from "@/components/Globe";
 import type { CityIndexEntry } from "@/lib/cities";
 import { nearestCity } from "@/lib/geo";
 
@@ -92,6 +92,9 @@ export default function StoryClient() {
   const [headerReady, setHeaderReady] = useState(false);
   const [titlePrimed, setTitlePrimed] = useState(false);
 
+  const heroSnapshotRef = useRef<any>(null);
+  const [miniSnapshot, setMiniSnapshot] = useState<any>(null);
+
   // Reset when slug changes
   useEffect(() => {
     setShowStory(false);
@@ -120,6 +123,10 @@ export default function StoryClient() {
     setTitleX(null);
     setHeaderReady(false);
   }, [slug]);
+
+    useEffect(() => {
+      if (showStory) setMiniSnapshot(heroSnapshotRef.current);
+    }, [showStory]);
 
   // Cold open timer (no UI, no geolocation)
   useEffect(() => {
@@ -477,8 +484,10 @@ export default function StoryClient() {
         >
           <div className="absolute top-[84px] left-1/2 -translate-x-1/2 w-[760px] aspect-square">
             <Globe
+              variant="hero"
               targetLatLon={target}
               phase={phase}
+              onSnapshot={(s) => { heroSnapshotRef.current = s; }}
               onArrive={() => {
                 if (arrivedOnceRef.current) return;
                 arrivedOnceRef.current = true;
@@ -526,7 +535,11 @@ export default function StoryClient() {
                       showStory ? "opacity-100" : "opacity-0",
                     ].join(" ")}
                   >
-                    <Globe targetLatLon={target} phase={"arrived"} onArrive={() => {}} />
+                    <Globe
+                      variant="mini"
+                      targetLatLon={target}
+                      phase={"arrived"}
+                      onArrive={() => {}} />
                   </div>
                 </div>
               </div>
@@ -541,6 +554,7 @@ export default function StoryClient() {
                     <div className="absolute top-10 left-1/2 -translate-x-1/2 transition-all duration-[2800ms] ease-in-out">
                       <div className="aspect-square w-[760px] max-w-[92vw] pointer-events-none [&_*]:pointer-events-none">
                         <Globe
+                          variant="hero"
                           targetLatLon={target}
                           phase={phase}
                           onArrive={() => {
