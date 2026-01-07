@@ -4,6 +4,8 @@ import Caption from "@/components/Caption";
 import PanelFigure, { PanelFigureStyles } from "@/components/PanelFigure";
 import { useLiveAsof } from "@/hooks/useLiveAsof";
 import { useLivePanel } from "@/hooks/useLivePanel";
+// import { useState } from "react";
+
 
 export default function LastMonthPanel(props: { slug: string; unit: "C" | "F" }) {
   const { slug, unit } = props;
@@ -16,6 +18,7 @@ export default function LastMonthPanel(props: { slug: string; unit: "C" | "F" })
     panel: "last_month",
     enabled: true,
   });
+  // const [figureDone, setFigureDone] = useState(false);
 
   return (
     <section className="mx-auto w-full max-w-6xl px-4 py-10">
@@ -25,7 +28,12 @@ export default function LastMonthPanel(props: { slug: string; unit: "C" | "F" })
 
       {svg ? (
         <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-3">
-          <PanelFigure svg={svg} />
+          <PanelFigure
+            svg={svg}
+            animate="draw"
+            replayOnEnter
+            // onDrawComplete={() => setFigureDone(true)}
+          />
           <PanelFigureStyles />
         </div>
       ) : (
@@ -34,7 +42,7 @@ export default function LastMonthPanel(props: { slug: string; unit: "C" | "F" })
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
-      {caption && (
+      {/*figureDone && */ caption && (
         <div className="mt-4 text-neutral-700">
           <Caption md={caption} reveal="sentences" />
         </div>

@@ -25,7 +25,7 @@ export default function StoryPanel(props: {
 
       {svg ? (
         <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-3">
-          <PanelFigure svg={svg} />
+          <PanelFigure svg={svg}  animate="draw" replayOnEnter/>
           <PanelFigureStyles />
         </div>
       ) : (
