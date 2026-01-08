@@ -216,11 +216,23 @@ export default function Caption(props: {
   }, [reveal, revealOnView, resetOnExit, inView, items.length, staggerMs, initialDelayMs]);
 
   return (
-    <div ref={containerRef} className="prose prose-neutral max-w-none">
+    <div
+      ref={containerRef}
+      className={[
+        // base prose styling (tailwind-typography)
+        "prose max-w-none",
+        // color + dark mode
+        "prose-neutral dark:prose-invert",
+        // bigger, more readable story text
+        "text-[16px] leading-7 sm:text-[18px] sm:leading-8 lg:text-[20px] lg:leading-9",
+        // slightly roomier spacing between blocks
+        "prose-p:my-4 prose-li:my-2 prose-strong:font-semibold",
+      ].join(" ")}
+    >
       {reveal === "none" ? (
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleaned}</ReactMarkdown>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-5">
           {blocks.map((block, blockIdx) => {
             const blockItems = items.filter((it) => it.blockIndex === blockIdx);
             if (blockItems.length === 0) return null;
