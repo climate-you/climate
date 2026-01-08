@@ -287,7 +287,7 @@ export class GlobeEngine {
     const qTo = this.quatToFrontNorthUp(lat, lon, qFrom);
 
     const camFrom = this.camera.position.clone();
-    const camTo = new THREE.Vector3(0, 0, 3.2);
+    const camTo = new THREE.Vector3(0, 0, 3.4);
 
     await new Promise<void>((resolve) => {
       const tStart = performance.now();
