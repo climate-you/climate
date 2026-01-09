@@ -205,6 +205,100 @@ function playMaskDraw(maskPaths: SVGPathElement[], ms: number, timingFunction: s
   });
 }
 
+function isDarkMode() {
+  return typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+}
+
+function isWhiteish(fill: string) {
+  const f = (fill || "").trim().toLowerCase();
+  return (
+    f === "white" ||
+    f === "#fff" ||
+    f === "#ffffff" ||
+    f.startsWith("rgb(255, 255, 255)") ||
+    f.startsWith("rgba(255, 255, 255")
+  );
+}
+
+function forceTransparentFill(el: SVGGraphicsElement) {
+  // Attributes
+  el.setAttribute("fill", "transparent");
+  el.setAttribute("fill-opacity", "0");
+
+  // Inline style overrides (highest priority after !important CSS)
+  (el.style as any).fill = "transparent";
+  (el.style as any).fillOpacity = "0";
+
+  // Remove any existing inline fill declarations Plotly put in the style attr
+  const styleAttr = el.getAttribute("style") || "";
+  if (styleAttr) {
+    const cleaned = styleAttr
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .filter((s) => {
+        const k = s.split(":")[0]?.trim().toLowerCase();
+        return k !== "fill" && k !== "fill-opacity";
+      })
+      .join("; ");
+    if (cleaned) el.setAttribute("style", cleaned);
+    else el.removeAttribute("style");
+  }
+}
+
+function applyPlotlySvgDarkFix(svgEl: SVGSVGElement) {
+  if (!isDarkMode()) return;
+
+  // Also clear any inline background on the root svg element
+  (svgEl.style as any).background = "transparent";
+
+  // Consider all filled shapes (Plotly sometimes uses paths for backgrounds)
+  const candidates = Array.from(
+    svgEl.querySelectorAll<SVGGraphicsElement>("rect, path, polygon")
+  );
+
+  if (!candidates.length) return;
+
+  // Compute areas; find max area among candidates
+  let maxArea = 0;
+  const items: Array<{ el: SVGGraphicsElement; area: number; fill: string; cls: string }> = [];
+
+  for (const el of candidates) {
+    // Ignore elements that obviously aren't background candidates
+    // (stroked-only lines etc.)
+    const style = window.getComputedStyle(el as any);
+    const fill = (el.getAttribute("fill") ?? style.fill ?? "").toString();
+    const cls = el.getAttribute("class") ?? "";
+
+    if (!fill || fill === "none") continue;
+
+    let bb: DOMRect | null = null;
+    try {
+      bb = (el as any).getBBox();
+    } catch {
+      continue;
+    }
+
+    const area = bb.width * bb.height;
+    if (!Number.isFinite(area) || area <= 0) continue;
+
+    items.push({ el, area, fill, cls });
+    if (area > maxArea) maxArea = area;
+  }
+
+  if (!items.length || maxArea <= 0) return;
+
+  const largeThresh = maxArea * 0.25;
+
+  for (const { el, area, fill, cls } of items) {
+    // Clear large white-ish backgrounds; also clear legend bg by class "bg"
+    const shouldClear = (isWhiteish(fill) && area >= largeThresh) || (cls.includes("bg") && isWhiteish(fill));
+    if (!shouldClear) continue;
+
+    forceTransparentFill(el);
+  }
+}
+
 export default function PanelFigure({
   svg,
   className,
@@ -225,18 +319,36 @@ export default function PanelFigure({
 
   const reduced = useMemo(() => prefersReducedMotion(), []);
 
-  // Inject SVG
+  // Inject SVG (+ apply dark background fix immediately)
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
     host.innerHTML = svg || "";
 
+    const svgEl = host.querySelector("svg") as SVGSVGElement | null;
+    if (svgEl) applyPlotlySvgDarkFix(svgEl);
+
     if (svg && lastSvgRef.current !== svg) {
       lastSvgRef.current = svg;
       hasPlayedRef.current = false;
     }
   }, [svg]);
+
+  // Re-apply dark SVG fix when theme toggles (so you don't need to reload SVG)
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    const obs = new MutationObserver(() => {
+      const svgEl = host.querySelector("svg") as SVGSVGElement | null;
+      if (!svgEl) return;
+      applyPlotlySvgDarkFix(svgEl);
+    });
+
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
 
   // Pre-arm on inject: hide markers + hide annotations + arm masks so nothing "leaks"
   useEffect(() => {
@@ -355,7 +467,7 @@ export default function PanelFigure({
             for (const markers of traceMarkers) showMarkers(markers);
             showAnnotations();
             hasPlayedRef.current = true;
-             onDrawComplete?.();
+            onDrawComplete?.();
           }, drawMs + 100)
         );
         return;
@@ -421,6 +533,7 @@ export default function PanelFigure({
     sequence,
     timingFunction,
     annotationsSelector,
+    onDrawComplete,
   ]);
 
   return <div ref={hostRef} className={["panel-figure w-full", className].filter(Boolean).join(" ")} />;
@@ -433,6 +546,26 @@ export function PanelFigureStyles() {
         width: 100% !important;
         height: auto !important;
         display: block;
+      }
+
+      /* Dark-mode overrides for Plotly-exported SVGs */
+      :global(.dark .panel-figure svg .xtick text),
+      :global(.dark .panel-figure svg .ytick text),
+      :global(.dark .panel-figure svg .gtitle),
+      :global(.dark .panel-figure svg .legend text) {
+        fill: #e5e5e5 !important;
+      }
+
+      :global(.dark .panel-figure svg .gridlayer path),
+      :global(.dark .panel-figure svg .zerolinelayer path),
+      :global(.dark .panel-figure svg .xlines-above path),
+      :global(.dark .panel-figure svg .ylines-above path) {
+        stroke: #3a3a3a !important;
+      }
+
+      :global(.dark .panel-figure svg .xaxislayer-above path),
+      :global(.dark .panel-figure svg .yaxislayer-above path) {
+        stroke: #666666 !important;
       }
     `}</style>
   );
