@@ -197,6 +197,13 @@ export class GlobeEngine {
     this.camera.position.z = z;
   }
 
+  setPalette(p: { ocean?: string; land?: string; grid?: string; border?: string }) {
+    if (p.ocean) this.uniforms.oceanColor.value.set(p.ocean);
+    if (p.land) this.uniforms.landColor.value.set(p.land);
+    if (p.grid) this.uniforms.gridColor.value.set(p.grid);
+    if (p.border) this.uniforms.borderColor.value.set(p.border);
+  }
+
   private ll(lat: number, lon: number, r = 1) {
     // IMPORTANT: include your lon shift here if you have one
     return GlobeEngine.latLonToVec3(lat, lon + this.lonShiftDeg, r);

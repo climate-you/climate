@@ -1,6 +1,18 @@
 import { useEffect, useRef } from "react";
 import { GlobeEngine } from "./GlobeEngine";
 
+function applyGlobeTheme(engine: GlobeEngine) {
+  const isDark = document.documentElement.classList.contains("dark");
+
+  engine.setPalette({
+    // tweak to taste
+    ocean: isDark ? "#2a2d33" : "#e0e0e0",
+    // optional: also tweak grid/borders slightly in dark
+    grid:  isDark ? "#8a8a8d" : "#49494b",
+    border: isDark ? "#101010" : "#ffffff",
+  });
+}
+
 export function Globe({
   targetLatLon,
   phase,
@@ -17,6 +29,7 @@ export function Globe({
   onSnapshot?: (s: any) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const washRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<GlobeEngine | null>(null);
   const onArriveRef = useRef(onArrive);
 
@@ -38,15 +51,16 @@ export function Globe({
       enableData: true,
       onArrive: () => onArriveRef.current?.(),
       timings: {
-        globeFadeMs: 2000,
-        cloudsDelayAfterGlobeMs: 0,
-        cloudsFadeMs: 1000,
+        globeFadeMs: 3500,
+        cloudsDelayAfterGlobeMs: 500,
+        cloudsFadeMs: 2000,
         dataDelayAfterGlobeMs: 2000,
       },
     });
     engineRef.current = engine;
 
     let ro: ResizeObserver | null = null;
+    let obs: MutationObserver | null = null;
     let cancelled = false;
 
     (async () => {
@@ -64,7 +78,7 @@ export function Globe({
       }
 
       requestAnimationFrame(() => {
-        canvas.classList.add("is-visible");
+        washRef.current?.classList.add("is-visible");
       });
 
       if (variant === "hero") {
@@ -79,6 +93,10 @@ export function Globe({
         // do NOT call runIntroSequence in mini
       }
     
+      applyGlobeTheme(engine);
+      obs = new MutationObserver(() => applyGlobeTheme(engine));
+      obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
       ro = new ResizeObserver(() => engine.resize());
       ro.observe(canvas);
     })();
@@ -88,6 +106,7 @@ export function Globe({
       ro?.disconnect();
       engine.destroy();
       engineRef.current = null;
+      obs?.disconnect();
     };
   }, []); // ✅ important: empty deps
 
@@ -116,7 +135,12 @@ export function Globe({
     eng.ready.then(() => eng.setFixedLocation(targetLatLon.lat, targetLatLon.lon));
   }, [variant, targetLatLon?.lat, targetLatLon?.lon]);
 
-  return <canvas ref={canvasRef} className="w-full h-full globe-canvas" />;
+  return (
+    <div className="relative w-full h-full">
+      <canvas ref={canvasRef} className="w-full h-full globe-canvas" />
+      <div ref={washRef} className="globe-wash" aria-hidden />
+    </div>
+  );
 }
 
 

@@ -3,8 +3,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { Globe } from "@/components/Globe";
+import { useTheme } from "@/hooks/useTheme";
 import type { CityIndexEntry } from "@/lib/cities";
 import { nearestCity } from "@/lib/geo";
+import { Sun, Moon, Monitor } from "lucide-react";
 
 import { useCitiesIndex } from "@/hooks/useCitiesIndex";
 import { useIntroCaption } from "@/hooks/useIntroCaption";
@@ -53,18 +55,30 @@ function useMediaQuery(query: string) {
 }
 
 export default function StoryClient() {
+  // Display
   const isLg = useMediaQuery("(min-width: 1024px)");
+  const { cycleTheme, themeLabel, themePref } = useTheme();
+
   const params = useParams();
   const slugParam = (params as any)?.slug;
   const slug =
     typeof slugParam === "string" ? slugParam : Array.isArray(slugParam) ? slugParam[0] : "auto";
 
   const { cities, error: citiesError } = useCitiesIndex();
+  const themeIcon =
+    themePref === "system" ? <Monitor size={16} /> :
+    themePref === "dark" ? <Moon size={16} /> :
+    <Sun size={16} />;
 
+  const themeText =
+    themePref === "system" ? "System" :
+    themePref === "dark" ? "Dark" :
+    "Light";
+    
   // Timing
-  const COLD_OPEN_MS = 5000; // pure spinning hero globe, no UI, no geolocation
-  const FLY_START_DELAY_MS = 2500; // beat before flight begins after target is chosen
-  const POST_ARRIVE_MS = 900; // beat after reaching target before story UI fades in
+  const COLD_OPEN_MS = 6000; // pure spinning hero globe, no UI, no geolocation
+  const FLY_START_DELAY_MS = 3000; // beat before flight begins after target is chosen
+  const POST_ARRIVE_MS = 1500; // beat after reaching target before story UI fades in
 
   const [coldOpenDone, setColdOpenDone] = useState(false);
   const [showStory, setShowStory] = useState(false);
@@ -432,7 +446,11 @@ export default function StoryClient() {
   }, [coldOpenDone, showStory, slug, awaitingGeo, target]);
 
   return (
-    <div className="min-h-screen text-neutral-900 bg-gradient-to-b from-white via-slate-50 to-white">
+    <div className="
+      min-h-screen text-neutral-900 dark:text-neutral-50
+      bg-gradient-to-b from-white via-slate-50 to-white
+      dark:from-[#212121] dark:via-[#212121] dark:to-[#212121]
+    ">
       {/* subtle background accents */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-24 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.12),transparent_60%)]" />
@@ -441,7 +459,7 @@ export default function StoryClient() {
 
       {/* Top bar only after story reveal */}
       {showStory && (
-        <div className="fixed top-0 left-0 right-0 z-20 bg-white/70 backdrop-blur">
+        <div className="fixed top-0 left-0 right-0 z-20 bg-white/70 dark:bg-[#212121]/80 backdrop-blur">
           <div ref={headerBarRef} className="mx-auto w-full px-4 sm:px-6 lg:px-10 py-3">
             <div className="relative h-[56px]">
               <div
@@ -466,15 +484,29 @@ export default function StoryClient() {
               </div>
 
               <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base sm:text-lg text-neutral-600 transition-opacity duration-500 ease-in-out"
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base sm:text-lg text-neutral-600 dark:text-neutral-300 transition-opacity duration-500 ease-in-out"
                 style={{ opacity: headerCompact ? 1 : 0 }}
               >
                 Zooming out: from days to decades
               </div>
 
-              <div className="absolute right-0 top-1/2 -translate-y-1/2">
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
                 <button
-                  className="rounded-full border border-neutral-200 bg-white px-3 py-1 text-sm hover:bg-neutral-50"
+                  className="rounded-full border border-neutral-200 bg-white px-3 py-1 text-sm hover:bg-neutral-50
+                            dark:border-neutral-800 dark:bg-[#171717] dark:hover:bg-neutral-800"
+                  onClick={cycleTheme}
+                  aria-label={`Theme: ${themeText}`}
+                  title={`Theme: ${themeText}`}
+                >
+                  <span className="flex items-center gap-2">
+                    {themeIcon}
+                    <span className="hidden sm:inline">{themeText}</span>
+                  </span>
+                </button>
+
+                <button
+                  className="rounded-full border border-neutral-200 bg-white px-3 py-1 text-sm hover:bg-neutral-50
+                            dark:border-neutral-800 dark:bg-[#171717] dark:hover:bg-neutral-800"
                   onClick={() => setUnit((u) => (u === "C" ? "F" : "C"))}
                   aria-label="Toggle units"
                 >
@@ -503,18 +535,13 @@ export default function StoryClient() {
               targetLatLon={target}
               phase={phase}
               onSnapshot={(s) => { heroSnapshotRef.current = s; }}
-              onArrive={() => {
-                if (arrivedOnceRef.current) return;
-                arrivedOnceRef.current = true;
-                setPhase("arrived");
-              }}
+              onArrive={() => { if (arrivedOnceRef.current) return; arrivedOnceRef.current = true; setPhase("arrived"); }}
             />
           </div>
-
           {/* Loading chip (appears only after cold open) */}
           {heroChipText && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="rounded-full bg-white/70 px-4 py-2 text-sm text-neutral-700 backdrop-blur">
+              <div className="rounded-full bg-white/70 px-4 py-2 text-sm text-neutral-700 dark:text-neutral-200 backdrop-blur">
                 {heroChipText}
               </div>
             </div>
@@ -594,17 +621,17 @@ export default function StoryClient() {
                       <div className="pb-16">
                         <div className="mt-6">
                           <h1 className="text-3xl font-semibold tracking-tight">{locationLabel}</h1>
-                          <p className="mt-4 text-lg leading-relaxed text-neutral-700">{rightCaption}</p>
+                          <p className="mt-4 text-lg leading-relaxed text-neutral-700 dark:text-neutral-200 ">{rightCaption}</p>
 
                           {introCaption && (
-                            <div className="mt-6 text-neutral-700">
+                            <div className="mt-6 text-neutral-700 dark:text-neutral-200 ">
                               <Caption md={introCaption} reveal="sentences" />
                             </div>
                           )}
 
                           {phase === "arrived" && (
                             <div className="mt-10 text-center">
-                              <div className="text-sm text-neutral-500">
+                              <div className="text-sm text-neutral-500 dark:text-neutral-400 ">
                                 Scroll down to explore your local climate
                               </div>
                               <div className="mt-2 text-2xl">↓</div>
@@ -618,7 +645,7 @@ export default function StoryClient() {
                       </div>
                     </div>
 
-                    <div className="absolute bottom-6 left-0 right-0 text-center text-xs text-neutral-400">
+                    <div className="absolute bottom-6 left-0 right-0 text-center text-xs text-neutral-400 dark:text-neutral-500 ">
                       {phase === "arrived" ? "Scroll to continue" : ""}
                     </div>
                   </div>
@@ -628,19 +655,19 @@ export default function StoryClient() {
 
               {/* Slide 1 (lg): intro text only */}
               <div className="snap-start [scroll-snap-stop:always] hidden lg:flex min-h-[calc(100vh-56px)] items-center">
-                <div className="mx-auto w-full max-w-2xl px-4">
-                  <h1 className="text-4xl font-semibold tracking-tight">{locationLabel}</h1>
-                  <p className="mt-5 text-xl leading-relaxed text-neutral-700">{rightCaption}</p>
+                <div className="mx-auto w-full max-w-3xl px-6">
+                  <h1 className="text-5xl font-semibold tracking-tight">{locationLabel}</h1>
+                  <p className="mt-6 text-2xl leading-relaxed text-neutral-700 dark:text-neutral-200">{rightCaption}</p>
 
                   {introCaption && (
-                    <div className="mt-8 text-neutral-700">
+                    <div className="mt-8 text-neutral-700 dark:text-neutral-200 ">
                       <Caption md={introCaption} reveal="sentences" />
                     </div>
                   )}
 
                   {phase === "arrived" && (
                     <div className="mt-10">
-                      <div className="text-sm text-neutral-500">Scroll down to explore your local climate</div>
+                      <div className="text-sm text-neutral-500 dark:text-neutral-400 ">Scroll down to explore your local climate</div>
                       <div className="mt-2 text-2xl">↓</div>
                     </div>
                   )}
@@ -655,19 +682,19 @@ export default function StoryClient() {
               {showStory && storySlug && (
                 <>
                   <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
-                    <div className="mx-auto w-full max-w-6xl px-4">
+                    <div className="mx-auto w-full max-w-7xl px-6">
                       <LastWeekPanel slug={storySlug} unit={unit} />
                     </div>
                   </div>
 
                   <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
-                    <div className="mx-auto w-full max-w-6xl px-4">
+                    <div className="mx-auto w-full max-w-7xl px-6">
                       <LastMonthPanel slug={storySlug} unit={unit} />
                     </div>
                   </div>
 
                   <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
-                    <div className="mx-auto w-full max-w-6xl px-4">
+                    <div className="mx-auto w-full max-w-7xl px-6">
                       <StoryPanel
                         slug={storySlug}
                         unit={unit}
@@ -678,7 +705,7 @@ export default function StoryClient() {
                   </div>
 
                   <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
-                    <div className="mx-auto w-full max-w-6xl px-4">
+                    <div className="mx-auto w-full max-w-7xl px-6">
                       <StoryPanel
                         slug={storySlug}
                         unit={unit}
@@ -689,13 +716,13 @@ export default function StoryClient() {
                   </div>
 
                   <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
-                    <div className="mx-auto w-full max-w-6xl px-4">
+                    <div className="mx-auto w-full max-w-7xl px-6">
                       <StoryPanel slug={storySlug} unit={unit} panel="fifty_year" title="Last 50 years - long term trend" />
                     </div>
                   </div>
 
                   <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
-                    <div className="mx-auto w-full max-w-6xl px-4">
+                    <div className="mx-auto w-full max-w-7xl px-6">
                       <StoryPanel slug={storySlug} unit={unit} panel="twenty_five_years" title="25 years ahead" />
                     </div>
                   </div>
