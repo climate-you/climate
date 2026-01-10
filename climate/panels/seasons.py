@@ -225,6 +225,9 @@ def build_seasons_then_now_figure(ctx: StoryContext, facts: StoryFacts, data: di
     y1 = y_center + span / 2.0 + pad
 
     fig.update_layout(
+        width=1350,
+        height=480,
+        # margin=dict(l=50, r=30, t=30, b=30),
         title=f"How your seasons have shifted – {ctx.location_label}",
         xaxis=dict(
             title="Month",
