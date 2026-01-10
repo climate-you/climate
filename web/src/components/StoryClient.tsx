@@ -14,6 +14,8 @@ import Caption from "@/components/Caption";
 import LastWeekPanel from "@/components/panels/LastWeekPanel";
 import LastMonthPanel from "@/components/panels/LastMonthPanel";
 import StoryPanel from "@/components/panels/StoryPanel";
+import SeasonsShiftPanel from "@/components/panels/SeasonsShiftPanel";
+import SeasonsRangePanel from "@/components/panels/SeasonsRangePanel";
 
 type Phase = "landing" | "flying" | "arrived";
 
@@ -724,6 +726,18 @@ export default function StoryClient() {
                   <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                     <div className="mx-auto w-full max-w-7xl px-6">
                       <StoryPanel slug={storySlug} unit={unit} panel="twenty_five_years" title="25 years ahead" />
+                    </div>
+                  </div>
+
+                  <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
+                    <div className="mx-auto w-full max-w-7xl px-6">
+                      <SeasonsShiftPanel slug={slug} unit={unit} />
+                    </div>
+                  </div>
+
+                  <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
+                    <div className="mx-auto w-full max-w-7xl px-6">
+                      <SeasonsRangePanel slug={slug} unit={unit} />
                     </div>
                   </div>
 

@@ -25,6 +25,13 @@ from climate.panels.zoomout import (
     build_fifty_year_data, build_fifty_year_figure, fifty_year_caption,
     build_twenty_five_years_data, build_twenty_five_years_figure, twenty_five_years_caption,
 )
+from climate.panels.seasons import (
+    build_seasons_then_now_data,
+    build_seasons_then_now_figure,
+    build_seasons_then_now_separate_figures,
+    seasons_then_now_caption,
+    seasons_then_now_separate_caption,
+)
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser()
@@ -164,12 +171,6 @@ def main() -> None:
             p = panel_paths(slug_dir / "panels", "intro", unit)
             write_text(p.caption_md, normalize_caption(md))
 
-            panel_specs = [
-                ("last_year", build_last_year_data, build_last_year_figure, last_year_caption),
-                ("five_year", build_five_year_data, build_five_year_figure, five_year_caption),
-                ("fifty_year", build_fifty_year_data, build_fifty_year_figure, fifty_year_caption),
-                ("twenty_five_years", build_twenty_five_years_data, build_twenty_five_years_figure, twenty_five_years_caption),
-            ]
 
             # Compute unit-neutral data once per panel (uses ctx.ds; independent of ctx.unit)
             ctx_data = StoryContext(
@@ -183,6 +184,12 @@ def main() -> None:
                 ds=ds,
             )
 
+            panel_specs = [
+                ("last_year", build_last_year_data, build_last_year_figure, last_year_caption),
+                ("five_year", build_five_year_data, build_five_year_figure, five_year_caption),
+                ("fifty_year", build_fifty_year_data, build_fifty_year_figure, fifty_year_caption),
+                ("twenty_five_years", build_twenty_five_years_data, build_twenty_five_years_figure, twenty_five_years_caption),
+            ]
             for (panel_name, build_data_fn, build_fig_fn, caption_fn) in panel_specs:
                 data = build_data_fn(ctx_data)
 
@@ -204,6 +211,48 @@ def main() -> None:
                     p = panel_paths(slug_dir / "panels", panel_name, unit)
                     write_plotly_svg(p.svg, fig)
                     write_text(p.caption_md, normalize_caption(cap))
+            
+            # ---------------------------------------------------------------------
+            # Seasons then vs now (2 slides in web):
+            #  - Slide 1: seasons_shift (single figure)
+            #  - Slide 2: seasons_range_earlier + seasons_range_recent (two figures) + seasons_range caption
+            # ---------------------------------------------------------------------
+            seasons_data = build_seasons_then_now_data(ctx_data)
+            if seasons_data:
+                for unit in ("C", "F"):
+                    ctx_u = StoryContext(
+                        today=today,
+                        slug=slug,
+                        location_label=city["label"],
+                        city_name=city["city_name"],
+                        location_lat=float(city["lat"]),
+                        location_lon=float(city["lon"]),
+                        unit=unit,
+                        ds=ds,
+                    )
+
+                    # Slide 1: single figure
+                    fig_shift, _tiny = build_seasons_then_now_figure(ctx_u, facts, seasons_data)
+                    p = panel_paths(slug_dir / "panels", "seasons_shift", unit)
+                    write_plotly_svg(p.svg, fig_shift)
+                    write_text(p.caption_md, normalize_caption(seasons_then_now_caption(ctx_u, facts, seasons_data)))
+
+                    # Slide 2: two figures side-by-side + shared caption
+                    fig_past, fig_recent = build_seasons_then_now_separate_figures(ctx_u, facts, seasons_data)
+
+                    p_past = panel_paths(slug_dir / "panels", "seasons_range_earlier", unit)
+                    p_recent = panel_paths(slug_dir / "panels", "seasons_range_recent", unit)
+                    write_plotly_svg(p_past.svg, fig_past)
+                    write_plotly_svg(p_recent.svg, fig_recent)
+
+                    p_cap = panel_paths(slug_dir / "panels", "seasons_range", unit)
+                    write_text(
+                        p_cap.caption_md,
+                        normalize_caption(seasons_then_now_separate_caption(ctx_u, facts, seasons_data)),
+                    )
+            else:
+                print(f"[info] monthly climatologies unavailable for {slug}; skipping seasons panels")
+
                     
         # meta (optional, useful for debugging)
         write_json(slug_dir / "meta.json", {
