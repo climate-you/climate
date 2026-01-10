@@ -6,11 +6,26 @@ import remarkGfm from "remark-gfm";
 
 function normalize(md: string) {
   const text = md.replace(/\r\n/g, "\n");
-  return text
-    .split("\n")
-    .map((line) => line.replace(/^\s+/, ""))
-    .join("\n")
-    .trim();
+  const lines = text.split("\n");
+
+  // Compute common leading indent across non-empty lines
+  let minIndent = Infinity;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const m = line.match(/^(\s+)/);
+    if (!m) {
+      minIndent = 0;
+      break;
+    }
+    minIndent = Math.min(minIndent, m[1].length);
+  }
+
+  const dedented =
+    minIndent && minIndent !== Infinity
+      ? lines.map((l) => (l.startsWith(" ".repeat(minIndent)) ? l.slice(minIndent) : l)).join("\n")
+      : lines.join("\n");
+
+  return dedented.trim();
 }
 
 function splitBlocks(md: string): string[] {
@@ -219,6 +234,8 @@ export default function Caption(props: {
     <div
       ref={containerRef}
       className={[
+        // Support for lists
+        "caption-md",
         // base prose styling (tailwind-typography)
         "prose max-w-none",
         // color + dark mode
@@ -276,6 +293,21 @@ export default function Caption(props: {
           })}
         </div>
       )}
+      <style jsx>{`
+      :global(.caption-md ul) {
+        list-style: disc !important;
+        padding-left: 1.4rem !important;
+        margin: 0.75rem 0 !important;
+      }
+      :global(.caption-md ol) {
+        list-style: decimal !important;
+        padding-left: 1.4rem !important;
+        margin: 0.75rem 0 !important;
+      }
+      :global(.caption-md li) {
+        margin: 0.25rem 0 !important;
+      }
+    `}</style>
     </div>
   );
 }
