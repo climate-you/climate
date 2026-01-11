@@ -113,6 +113,11 @@ export default function StoryClient() {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [activeSlide, setActiveSlide] = useState(0);
 
+  // Header section (drives the subtitle)
+  const [activeSection, setActiveSection] = useState<"intro" | "zoomout" | "seasons" | "world">(
+    "intro"
+  );
+
   // Header animation (scroll-driven)
   const headerCompact = showStory && activeSlide > 0;
   const headerBarRef = useRef<HTMLDivElement | null>(null);
@@ -255,6 +260,38 @@ export default function StoryClient() {
 
     return () => window.clearTimeout(t);
   }, [storySlug, coldOpenDone, phase, showStory]);
+
+  // Track which "section" is currently visible (intro / zoomout / seasons / world)
+  useEffect(() => {
+    const root = scrollerRef.current;
+    if (!root) return;
+
+    const slides = Array.from(root.querySelectorAll<HTMLElement>("[data-story-section]"));
+    if (!slides.length) return;
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        // Choose the most-visible intersecting slide
+        let best: IntersectionObserverEntry | null = null;
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          if (!best || e.intersectionRatio > best.intersectionRatio) best = e;
+        }
+        if (!best) return;
+
+        const el = best.target as HTMLElement;
+        const sec = el.dataset.storySection as any;
+        if (sec) setActiveSection(sec);
+      },
+      {
+        root,
+        threshold: [0.55, 0.7, 0.85],
+      }
+    );
+
+    slides.forEach((el) => obs.observe(el));
+    return () => obs.disconnect();
+  }, [showStory, storySlug]);
 
   // Compute title X (centered when not compact)
   const computeTitleX = () => {
@@ -486,10 +523,14 @@ export default function StoryClient() {
               </div>
 
               <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base sm:text-lg text-neutral-600 dark:text-neutral-300 transition-opacity duration-500 ease-in-out"
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-base sm:text-lg text-neutral-600 transition-opacity duration-500 ease-in-out"
                 style={{ opacity: headerCompact ? 1 : 0 }}
               >
-                Zooming out: from days to decades
+                {activeSection === "seasons"
+                  ? "Seasons then and now"
+                  : activeSection === "world"
+                    ? "You vs the world"
+                    : "Zooming out: from days to decades"}
               </div>
 
               <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
@@ -594,7 +635,7 @@ export default function StoryClient() {
             <div>
               {/* Slide 1 (mobile): intro with animated globe */}
               {!isLg && (
-                <div className="snap-start [scroll-snap-stop:always]">
+                <div data-story-section="intro" className="snap-start [scroll-snap-stop:always]">
                 <div className="mx-auto max-w-6xl px-4">
                   <div className="relative min-h-[calc(100vh-56px)]">
                     <div className="absolute top-10 left-1/2 -translate-x-1/2 transition-all duration-[2800ms] ease-in-out">
@@ -656,7 +697,7 @@ export default function StoryClient() {
               )}
 
               {/* Slide 1 (lg): intro text only */}
-              <div className="snap-start [scroll-snap-stop:always] hidden lg:flex min-h-[calc(100vh-56px)] items-center">
+              <div data-story-section="intro" className="snap-start [scroll-snap-stop:always] hidden lg:flex min-h-[calc(100vh-56px)] items-center">
                 <div className="mx-auto w-full max-w-3xl px-6">
                   <h1 className="text-5xl font-semibold tracking-tight">{locationLabel}</h1>
                   <p className="mt-6 text-2xl leading-relaxed text-neutral-700 dark:text-neutral-200">{rightCaption}</p>
@@ -683,19 +724,19 @@ export default function StoryClient() {
               {/* Slides 2+: Panels (use storySlug, works for /auto too) */}
               {showStory && storySlug && (
                 <>
-                  <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
+                  <div data-story-section="zoomout" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                     <div className="mx-auto w-full max-w-7xl px-6">
                       <LastWeekPanel slug={storySlug} unit={unit} />
                     </div>
                   </div>
 
-                  <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
+                  <div data-story-section="zoomout" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                     <div className="mx-auto w-full max-w-7xl px-6">
                       <LastMonthPanel slug={storySlug} unit={unit} />
                     </div>
                   </div>
 
-                  <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
+                  <div data-story-section="zoomout" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                     <div className="mx-auto w-full max-w-7xl px-6">
                       <StoryPanel
                         slug={storySlug}
@@ -706,7 +747,7 @@ export default function StoryClient() {
                     </div>
                   </div>
 
-                  <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
+                  <div data-story-section="zoomout" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                     <div className="mx-auto w-full max-w-7xl px-6">
                       <StoryPanel
                         slug={storySlug}
@@ -717,25 +758,25 @@ export default function StoryClient() {
                     </div>
                   </div>
 
-                  <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
+                  <div data-story-section="zoomout" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                     <div className="mx-auto w-full max-w-7xl px-6">
                       <StoryPanel slug={storySlug} unit={unit} panel="fifty_year" title="Last 50 years - long term trend" />
                     </div>
                   </div>
 
-                  <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
+                  <div data-story-section="zoomout" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                     <div className="mx-auto w-full max-w-7xl px-6">
                       <StoryPanel slug={storySlug} unit={unit} panel="twenty_five_years" title="25 years ahead" />
                     </div>
                   </div>
 
-                  <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
+                  <div data-story-section="seasons" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                     <div className="mx-auto w-full max-w-7xl px-6">
                       <SeasonsShiftPanel slug={storySlug} unit={unit} />
                     </div>
                   </div>
 
-                  <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
+                  <div data-story-section="seasons" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                     <div className="mx-auto w-full max-w-7xl px-6">
                       <SeasonsRangePanel slug={storySlug} unit={unit} />
                     </div>
