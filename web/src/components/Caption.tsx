@@ -66,7 +66,6 @@ function splitSentencesMarkdownSafe(text: string): string[] {
   const n = text.length;
 
   const isEscaped = (i: number) => i > 0 && text[i - 1] === "\\";
-  const isWs = (c: stringstring) => c === "" || c === " " || c === "\n" || c === "\t";
   const isEmBoundary = (prev: string, next: string) => {
     // A lightweight heuristic: allow emphasis toggles when marker is at a "word boundary"
     // e.g. start of string or preceded by whitespace/punct, and followed by non-whitespace.
