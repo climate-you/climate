@@ -731,13 +731,13 @@ export default function StoryClient() {
 
                   <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                     <div className="mx-auto w-full max-w-7xl px-6">
-                      <SeasonsShiftPanel slug={slug} unit={unit} />
+                      <SeasonsShiftPanel slug={storySlug} unit={unit} />
                     </div>
                   </div>
 
                   <div className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                     <div className="mx-auto w-full max-w-7xl px-6">
-                      <SeasonsRangePanel slug={slug} unit={unit} />
+                      <SeasonsRangePanel slug={storySlug} unit={unit} />
                     </div>
                   </div>
 
