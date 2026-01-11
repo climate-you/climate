@@ -61,36 +61,57 @@ function splitSentencesMarkdownSafe(text: string): string[] {
 
   let inCode = false;
   let inBold = false;
+  let inEm = false; // <-- NEW: track emphasis (_..._ or *...*)
 
   const n = text.length;
+
+  const isEscaped = (i: number) => i > 0 && text[i - 1] === "\\";
+  const isWs = (c: stringstring) => c === "" || c === " " || c === "\n" || c === "\t";
+  const isEmBoundary = (prev: string, next: string) => {
+    // A lightweight heuristic: allow emphasis toggles when marker is at a "word boundary"
+    // e.g. start of string or preceded by whitespace/punct, and followed by non-whitespace.
+    const prevOk = prev === "" || /\s|[([{"'“‘]/.test(prev);
+    const nextOk = next !== "" && !/\s/.test(next);
+    return prevOk && nextOk;
+  };
 
   for (let i = 0; i < n; i++) {
     const ch = text[i];
 
     // Toggle inline code on backticks (ignore escaped)
-    if (ch === "`" && (i === 0 || text[i - 1] !== "\\")) {
+    if (ch === "`" && !isEscaped(i)) {
       inCode = !inCode;
       continue;
     }
 
     // Toggle bold on ** (ignore escaped)
-    if (
-      ch === "*" &&
-      i + 1 < n &&
-      text[i + 1] === "*" &&
-      (i === 0 || text[i - 1] !== "\\")
-    ) {
+    if (ch === "*" && i + 1 < n && text[i + 1] === "*" && !isEscaped(i)) {
       inBold = !inBold;
-      i++; // consume the second '*'
+      i++; // consume second '*'
       continue;
     }
 
-    // Only consider punctuation as sentence boundary when not inside code/bold
-    if (!inCode && !inBold && (ch === "." || ch === "!" || ch === "?")) {
+    // Toggle emphasis on _..._ or *...* (ignore escaped).
+    // We only do this when NOT in code/bold, and when marker is at a plausible boundary.
+    if (!inCode && !inBold && !isEscaped(i) && (ch === "_" || ch === "*")) {
+      // For '*' italics, ensure it's not part of '**' (already handled above)
+      if (ch === "*" && i + 1 < n && text[i + 1] === "*") {
+        // skip; handled by bold toggling
+      } else {
+        const prev = i > 0 ? text[i - 1] : "";
+        const next = i + 1 < n ? text[i + 1] : "";
+        if (isEmBoundary(prev, next)) {
+          inEm = !inEm;
+          continue;
+        }
+      }
+    }
+
+    // Only split on punctuation when not inside code/bold/emphasis
+    if (!inCode && !inBold && !inEm && (ch === "." || ch === "!" || ch === "?")) {
       const next = i + 1 < n ? text[i + 1] : "";
       const next2 = i + 2 < n ? text[i + 2] : "";
 
-      // Split on ". " / ".\n" / end-of-string, and also handle quotes/parens like '." '
       const looksLikeBoundary =
         next === "" ||
         next === " " ||
