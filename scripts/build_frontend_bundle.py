@@ -32,6 +32,11 @@ from climate.panels.seasons import (
     seasons_then_now_caption,
     seasons_then_now_separate_caption,
 )
+from climate.panels.world import (
+    build_you_vs_world_data,
+    build_you_vs_world_figures,
+    you_vs_world_caption,
+)
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser()
@@ -252,6 +257,44 @@ def main() -> None:
                     )
             else:
                 print(f"[info] monthly climatologies unavailable for {slug}; skipping seasons panels")
+
+            # -----------------------------------------------------------
+            # YOU VS THE WORLD (local vs global anomalies) — 2 figures side-by-side in the web slide
+            # Writes:
+            #   - you_vs_world_local.<UNIT>.svg
+            #   - you_vs_world_global.<UNIT>.svg
+            #   - you_vs_world.<UNIT>.caption.md
+            #
+            # Note: build_you_vs_world_data() applies °F conversion based on ctx.unit,
+            # so we must compute it per unit (cannot reuse unit-neutral data).
+            # -----------------------------------------------------------
+            for unit in ("C", "F"):
+                ctx_u = StoryContext(
+                    today=today,
+                    slug=slug,
+                    location_label=city["label"],
+                    city_name=city["city_name"],
+                    location_lat=float(city["lat"]),
+                    location_lon=float(city["lon"]),
+                    unit=unit,
+                    ds=ds,
+                )
+
+                data_w = build_you_vs_world_data(ctx_u)
+                fig_local, fig_global, tiny = build_you_vs_world_figures(ctx_u, facts, data_w)
+                cap = you_vs_world_caption(ctx_u, facts, data_w)
+
+                # Append the tiny streamlit caption as a final italic line (optional but nice for sharing)
+                if tiny:
+                    cap = cap.rstrip() + "\n\n" + f"_{tiny}_"
+
+                p_local = panel_paths(slug_dir / "panels", "you_vs_world_local", unit)
+                p_global = panel_paths(slug_dir / "panels", "you_vs_world_global", unit)
+                p_cap = panel_paths(slug_dir / "panels", "you_vs_world", unit)
+
+                write_plotly_svg(p_local.svg, fig_local)
+                write_plotly_svg(p_global.svg, fig_global)
+                write_text(p_cap.caption_md, normalize_caption(cap))
 
                     
         # meta (optional, useful for debugging)

@@ -16,6 +16,7 @@ import LastMonthPanel from "@/components/panels/LastMonthPanel";
 import StoryPanel from "@/components/panels/StoryPanel";
 import SeasonsShiftPanel from "@/components/panels/SeasonsShiftPanel";
 import SeasonsRangePanel from "@/components/panels/SeasonsRangePanel";
+import YouVsWorldPanel from "@/components/panels/YouVsWorldPanel";
 
 type Phase = "landing" | "flying" | "arrived";
 
@@ -779,6 +780,12 @@ export default function StoryClient() {
                   <div data-story-section="seasons" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                     <div className="mx-auto w-full max-w-7xl px-6">
                       <SeasonsRangePanel slug={storySlug} unit={unit} />
+                    </div>
+                  </div>
+
+                  <div data-story-section="world" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
+                    <div className="mx-auto w-full max-w-7xl px-6">
+                      <YouVsWorldPanel slug={storySlug} unit={unit} />
                     </div>
                   </div>
 
