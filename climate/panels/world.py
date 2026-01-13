@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Tuple
@@ -17,8 +18,10 @@ from climate.units import is_fahrenheit, fmt_unit
 BASELINE_START = 1979
 BASELINE_END = 1990
 
+WORLD_DATA_DIR = Path("data/world")
+
 def _load_global_series_meta() -> dict:
-    p = Path("data/world/global_series.meta.json")
+    p = WORLD_DATA_DIR / "global_series.meta.json"
     if not p.exists():
         return {}
     try:
@@ -36,7 +39,8 @@ def build_you_vs_world_data(ctx: StoryContext) -> dict:
     local_anom = _anom_from_baseline_monthly_clim(local_monthly, BASELINE_START, BASELINE_END)
 
     # Global: load anomaly series produced by scripts/make_global_series.py
-    global_raw = _load_global_series(Path("data/world/global_series.csv"))
+    global_series = WORLD_DATA_DIR / "global_series.csv"
+    global_raw = _load_global_series(global_series)
     global_anom = _rebase_anomaly_series(global_raw, BASELINE_START, BASELINE_END)
 
     # Align time range so plots cover same span

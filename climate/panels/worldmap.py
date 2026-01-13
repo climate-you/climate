@@ -23,6 +23,7 @@ from climate.units import convert_delta_array_to_unit, is_fahrenheit, fmt_unit
 
 MERC_MAX_LAT = 85.05112878  # Web Mercator valid latitude limit
 
+WORLD_DATA_DIR = Path("data/world")
 
 # -------------------------
 # Public API
@@ -36,10 +37,9 @@ def build_world_map_data(ctx: StoryContext, *, grid_deg: float | None = None) ->
       data/world/warming_map_*_to_*.nc
       data/world/warming_map_*_to_*.manifest.json
     """
-    data_dir = Path("data/world")
 
     nc_files = sorted(
-        data_dir.glob("warming_map_*_to_*_grid*.nc"),
+        WORLD_DATA_DIR.glob("warming_map_*_to_*_grid*.nc"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
@@ -51,7 +51,7 @@ def build_world_map_data(ctx: StoryContext, *, grid_deg: float | None = None) ->
     # fallback to any warming_map if none matched
     if not nc_files:
         nc_files = sorted(
-            data_dir.glob("warming_map_*_to_*.nc"),
+            WORLD_DATA_DIR.glob("warming_map_*_to_*.nc"),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )
@@ -64,7 +64,7 @@ def build_world_map_data(ctx: StoryContext, *, grid_deg: float | None = None) ->
     manifest_path = nc_path.with_suffix(".manifest.json")
     if not manifest_path.exists():
         # tolerate older naming
-        cand = list(data_dir.glob(nc_path.stem + "*.manifest.json"))
+        cand = list(WORLD_DATA_DIR.glob(nc_path.stem + "*.manifest.json"))
         if cand:
             manifest_path = cand[0]
 

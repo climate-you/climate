@@ -1,12 +1,13 @@
 import os
 from datetime import date, datetime
+from pathlib import Path
 
 import plotly.express as px
 import pandas as pd
 import streamlit as st
 import xarray as xr
 
-CLIM_DIR = "data/story_climatology"
+CLIM_DIR = Path("data/story_climatology")
 
 # ############################################
 
@@ -26,7 +27,7 @@ def last_full_quarter_end(today: date) -> date:
     return date(today.year, q_end_month, last_day)
 
 def status_for_slug(slug: str) -> str:
-    path = os.path.join(CLIM_DIR, f"clim_{slug}.nc")
+    path = CLIM_DIR / f"clim_{slug}.nc"
     if not os.path.exists(path):
         return "missing"
     try:

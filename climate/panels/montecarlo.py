@@ -51,7 +51,7 @@ def build_montecarlo_data(
     ctx: StoryContext,
     *,
     experiment_id: int = 1,
-    data_dir: Path = Path("data/mc"),
+    data_dir: Path,
 ) -> Dict:
     """
     Loads a precomputed experiment parquet.
@@ -62,8 +62,8 @@ def build_montecarlo_data(
       - n_total: total rows
       - experiment_id
     """
-    p = data_dir / f"experiment_{experiment_id:02d}_samples.parquet"
-    meta_p = data_dir / f"experiment_{experiment_id:02d}_samples.meta.json"
+    p = data_dir / "mc" / f"experiment_{experiment_id:02d}_samples.parquet"
+    meta_p = data_dir / "mc" / f"experiment_{experiment_id:02d}_samples.meta.json"
 
     if not p.exists():
         raise FileNotFoundError(

@@ -5,12 +5,7 @@ import numpy as np
 from datetime import date #, datetime, timedelta
 import folium
 
-#import glob
 import pandas as pd
-#import plotly.graph_objs as go
-#import requests
-#from dataclasses import dataclass
-#from typing import Optional
 
 # streamlit
 import streamlit as st
@@ -46,14 +41,15 @@ from climate.panels.worldmap import (
 )
 
 # 
-DATA_DIR = Path("data/story_climatology")
+DATA_DIR = Path("data")
+CLIMATOLOGY_DIR = DATA_DIR / "story_climatology"
 
 # Discover all available locations from precomputed files
 @st.cache_data(ttl=30)  # keeps widget options stable while precompute is writing new files
 def _discover_cached(clim_dir: str):
     return discover_locations(clim_dir)
 
-LOCATIONS = _discover_cached(clim_dir=DATA_DIR)
+LOCATIONS = _discover_cached(clim_dir=CLIMATOLOGY_DIR)
 
 if not LOCATIONS:
     st.error("No climatology files found in story_climatology/. "
@@ -453,7 +449,7 @@ if step == "Monte Carlo: how global warming is estimated":
     # ---- Load data (cached at streamlit level)
     @st.cache_data(show_spinner=False)
     def _load_exp(experiment_id: int) -> dict:
-        return build_montecarlo_data(ctx, experiment_id=experiment_id)
+        return build_montecarlo_data(ctx, experiment_id=experiment_id, data_dir=DATA_DIR)
 
     base = _load_exp(st.session_state["mc_experiment_id"])
     n_total = int(base["n_total"])
