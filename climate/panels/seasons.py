@@ -42,6 +42,7 @@ def build_seasons_then_now_data(ctx: StoryContext) -> dict:
     s_max.index  = pd.to_datetime(s_max.index)
 
     month_names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+    month_names_long = ["January","February","March","April","May","June","July","August","September","October","November","December"]
 
     def _eval_month_trend(series: pd.Series, month: int):
         """
@@ -119,6 +120,7 @@ def build_seasons_then_now_data(ctx: StoryContext) -> dict:
 
     x = np.arange(12)
     month_labels_shifted = [month_names[(i - shift) % 12] for i in range(12)]
+    month_labels_long_shifted = [month_names_long[(i - shift) % 12] for i in range(12)]
 
     past_mean_r = roll(past_mean)
     recent_mean_r = roll(recent_mean)
@@ -141,6 +143,7 @@ def build_seasons_then_now_data(ctx: StoryContext) -> dict:
     return {
         "x": x,
         "month_labels": month_labels_shifted,
+        "month_labels_long" : month_labels_long_shifted,
         "shift": shift,
         "ihot": ihot,
 
@@ -358,6 +361,7 @@ def seasons_then_now_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -
     delta = np.asarray(data["delta_mean"], dtype="float64")
     recent = np.asarray(data["recent_mean"], dtype="float64")
     month_names = list(data["month_labels"])
+    month_names_long = list(data["month_labels_long"])
 
     mean_delta = float(np.nanmean(delta))
     max_delta = float(np.nanmax(delta))
@@ -365,17 +369,17 @@ def seasons_then_now_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -
 
     # Month with strongest warming
     imax = int(np.nanargmax(delta))
-    warmest_shift_month = month_names[imax]
+    warmest_shift_month = month_names_long[imax]
     warmest_shift_value = float(delta[imax])
 
     # Month with strongest cooling (if any)
     imin = int(np.nanargmin(delta))
-    coolest_shift_month = month_names[imin]
+    coolest_shift_month = month_names_long[imin]
     coolest_shift_value = float(delta[imin])
 
     # Hottest month in the recent climate – “summer”
     ihot = int(np.nanargmax(recent))
-    summer_month = month_names[ihot]
+    summer_month = month_names_long[ihot]
     summer_delta = float(delta[ihot])
 
     extra_parts: list[str] = []
