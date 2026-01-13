@@ -33,6 +33,7 @@ export type GlobeOptions = {
   // behavior toggles like your flags
   enableBorders?: boolean;
   enableData?: boolean;
+  enableClouds?: boolean;
 
   timings?: Partial<GlobeTimings>;
   assets: GlobeAssets;
@@ -133,6 +134,7 @@ export class GlobeEngine {
 
   private enableBorders: boolean;
   private enableData: boolean;
+  private enableClouds: boolean;
 
   private startRotY: number;
   private cloudDriftSpeed = 0.01; // radians/sec, same as your current
@@ -142,6 +144,7 @@ export class GlobeEngine {
   constructor(private opts: GlobeOptions) {
     this.enableBorders = opts.enableBorders ?? true;
     this.enableData = opts.enableData ?? true;
+    this.enableClouds = opts.enableClouds ?? true;
 
     this.timings = { ...DEFAULT_TIMING, ...(opts.timings ?? {}) };
 
@@ -321,8 +324,52 @@ export class GlobeEngine {
     this.dataCycleT0 = this.getT();
   }
 
+  stopDataRevealCycle() {
+   this.dataCycleT0 = null;
+  }
+
+  runWarmingSequence(opts: {
+    lat: number;
+    lon: number;
+    revealDelayMs?: number;   // wait before blending to data
+    revealFadeMs?: number;    // blend duration
+    spinDelayMs?: number;     // wait after blend before spin
+    spinSpeed?: number;       // if you support this; otherwise ignore
+  }) {
+    const {
+      lat,
+      lon,
+      revealDelayMs = 500,
+      revealFadeMs = 1800,
+      spinDelayMs = 300,
+    } = opts;
+
+    // No clouds for this mode (caller should also set enableClouds:false)
+    this.setAutorotate(false);
+
+    // Fix view on location
+    this.setFixedLocation(lat, lon);
+
+    // Ensure no cycle overrides
+    this.stopDataRevealCycle();
+
+    // Start from “no data overlay”
+    this.setDataOpacity(0, 0);
+
+    // Blend to warming overlay
+    window.setTimeout(() => {
+      this.setDataOpacity(1, revealFadeMs);
+
+      // Start slow spin after blend
+      window.setTimeout(() => {
+        this.setAutorotate(true);
+      }, revealFadeMs + spinDelayMs);
+    }, revealDelayMs);
+  }
+
   /** Clouds are pre-warmed at opacity 0; reveal just fades opacity up */
   requestCloudsReveal() {
+    if (!this.enableClouds) return;
     this.cloudsRequestedReveal = true;
     if (this.cloudsTex) {
       fadeMaterialOpacity(this.cloudsTex.material as any, 0.85, this.timings.cloudsFadeMs);
@@ -413,7 +460,9 @@ export class GlobeEngine {
       this.readyResolve(); // ✅ marker is now created
 
       // clouds load async; doesn’t block main draw
-      this.loadClouds(CLOUD_TEX_URL).catch((e) => console.warn("Clouds failed:", e));
+      if (this.enableClouds) {
+        this.loadClouds(CLOUD_TEX_URL).catch((e) => console.warn("Clouds failed:", e));
+      }
 
     } catch (e) {
       this.opts.onError?.(e);
@@ -686,11 +735,13 @@ export class GlobeEngine {
       this.cloudsTex.rotation.y = t * this.cloudDriftSpeed;
     }
 
-    // data reveal cycle (starts at 0 when dataCycleT0 is set)
-    const dt = this.dataCycleT0 == null ? 0 : Math.max(0, t - this.dataCycleT0);
-    const raw = 0.5 + 0.5 * Math.sin(dt * 0.12 - Math.PI / 2); // starts at 0
-    const bloom = raw * raw; // your current eased curve
-    this.uniforms.dataOpacity.value = bloom;
+    if (this.dataCycleT0 != null) {
+      // data reveal cycle (starts at 0 when dataCycleT0 is set)
+      const dt = this.dataCycleT0 == null ? 0 : Math.max(0, t - this.dataCycleT0);
+      const raw = 0.5 + 0.5 * Math.sin(dt * 0.12 - Math.PI / 2); // starts at 0
+      const bloom = raw * raw; // your current eased curve
+      this.uniforms.dataOpacity.value = bloom;
+    }
 
     this.uniforms.lightDir.value.copy(this.sun.position).normalize();
 

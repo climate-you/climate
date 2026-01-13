@@ -15,16 +15,24 @@ function applyGlobeTheme(engine: GlobeEngine) {
 
 export function Globe({
   targetLatLon,
-  phase,
+  phase = "arrived",
   onArrive,
   variant = "hero",
+  active = true,
+  warmingConfig,
   initialSnapshot,
   onSnapshot,
 }: {
   targetLatLon: { lat: number; lon: number } | null;
-  phase: "landing" | "flying" | "arrived";
+  phase?: "landing" | "flying" | "arrived";
   onArrive?: () => void;
-  variant?: "hero" | "mini";
+  variant?: "hero" | "mini" | "warming";
+  active?: boolean;
+  warmingConfig?: {
+    revealDelayMs?: number;
+    revealFadeMs?: number;
+    spinDelayMs?: number;
+  };
   initialSnapshot?: any; // you can type this later
   onSnapshot?: (s: any) => void;
 }) {
@@ -49,6 +57,7 @@ export function Globe({
       assets: { basePath: "/data/textures", markerFile: "marker.png", emptyFile: "empty.png" },
       enableBorders: true,
       enableData: true,
+      enableClouds: variant !== "warming",
       onArrive: () => onArriveRef.current?.(),
       timings: {
         globeFadeMs: 3500,
@@ -85,6 +94,10 @@ export function Globe({
         engine.setAutorotate(true);
         engine.runIntroSequence(); // delayed clouds + delayed data
         // REMOVE this: engine.requestCloudsReveal(); (it fights the intro)
+      } else if (variant === "warming") {
+        engine.setAutorotate(false);
+        engine.stopDataRevealCycle?.();
+        engine.setDataOpacity(0, 0);
       } else {
         // mini defaults
         engine.setAutorotate(false);
@@ -134,6 +147,42 @@ export function Globe({
 
     eng.ready.then(() => eng.setFixedLocation(targetLatLon.lat, targetLatLon.lon));
   }, [variant, targetLatLon?.lat, targetLatLon?.lon]);
+
+  useEffect(() => {
+    const eng = engineRef.current;
+    if (!eng) return;
+    if (variant !== "warming") return;
+    if (!targetLatLon) return;
+
+    if (!active) {
+      // reset so re-enter replays
+      eng.ready.then(() => {
+        eng.setAutorotate(false);
+        eng.stopDataRevealCycle?.();
+        eng.setDataOpacity(0, 0);
+        eng.setFixedLocation(targetLatLon.lat, targetLatLon.lon);
+      });
+      return;
+    }
+
+    eng.ready.then(() => {
+      eng.runWarmingSequence?.({
+        lat: targetLatLon.lat,
+        lon: targetLatLon.lon,
+        revealDelayMs: warmingConfig?.revealDelayMs ?? 700,
+        revealFadeMs: warmingConfig?.revealFadeMs ?? 2200,
+        spinDelayMs: warmingConfig?.spinDelayMs ?? 500,
+      });
+    });
+  }, [
+    variant,
+    active,
+    targetLatLon?.lat,
+    targetLatLon?.lon,
+    warmingConfig?.revealDelayMs,
+    warmingConfig?.revealFadeMs,
+    warmingConfig?.spinDelayMs,
+  ]);
 
   return (
     <div className="relative w-full h-full">

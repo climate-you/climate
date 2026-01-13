@@ -17,6 +17,7 @@ import StoryPanel from "@/components/panels/StoryPanel";
 import SeasonsShiftPanel from "@/components/panels/SeasonsShiftPanel";
 import SeasonsRangePanel from "@/components/panels/SeasonsRangePanel";
 import YouVsWorldPanel from "@/components/panels/YouVsWorldPanel";
+import WarmingGlobePanel from "@/components/panels/WarmingGlobePanel";
 
 type Phase = "landing" | "flying" | "arrived";
 
@@ -115,7 +116,7 @@ export default function StoryClient() {
   const [activeSlide, setActiveSlide] = useState(0);
 
   // Header section (drives the subtitle)
-  const [activeSection, setActiveSection] = useState<"intro" | "zoomout" | "seasons" | "world">(
+  const [activeSection, setActiveSection] = useState<"intro" | "zoomout" | "seasons" | "world" | "warming">(
     "intro"
   );
 
@@ -531,7 +532,9 @@ export default function StoryClient() {
                   ? "Seasons then and now"
                   : activeSection === "world"
                     ? "You vs the world"
-                    : "Zooming out: from days to decades"}
+                    : activeSection === "warming"
+                      ? "Warming around the world"
+                      : "Zooming out: from days to decades"}
               </div>
 
               <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
@@ -619,7 +622,7 @@ export default function StoryClient() {
                       "aspect-square w-full max-w-[420px]",
                       "pointer-events-none [&_*]:pointer-events-none",
                       "transition-opacity duration-700",
-                      showStory ? "opacity-100" : "opacity-0",
+                      showStory && activeSection !== "warming" ? "opacity-100" : "opacity-0",
                     ].join(" ")}
                   >
                     <Globe
@@ -786,6 +789,15 @@ export default function StoryClient() {
                   <div data-story-section="world" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
                     <div className="mx-auto w-full max-w-7xl px-6">
                       <YouVsWorldPanel slug={storySlug} unit={unit} />
+                    </div>
+                  </div>
+
+                  <div
+                    data-story-section="warming"
+                    className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
+                  >
+                    <div className="mx-auto w-full max-w-7xl px-6">
+                      <WarmingGlobePanel target={target} unit={unit} locationLabel={locationLabel} />
                     </div>
                   </div>
 
