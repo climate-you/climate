@@ -214,7 +214,7 @@ def last_month_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
         season = data.get("trend_season") or "the seasonal shift"
         trend_sentence = (
             f"Over this 30-day window, daily averages have been **{direction}** "
-            f"by about {fmt_delta(trend, ctx.unit)}, consistent with {season}."
+            f"by about **{fmt_delta(trend, ctx.unit, sign=False)}**, consistent with {season}."
         )
         return base_text + "\n\n" + trend_sentence
 
@@ -365,13 +365,13 @@ def last_year_caption(ctx: StoryContext,facts: StoryFacts, data: dict) -> str:
         anom = facts.last_year_anomaly
         if anom > 0.8:
             extra = (
-                f" This particular year was about **{fmt_delta(anom, ctx.unit)} warmer** than the "
+                f" This particular year was about **{fmt_delta(anom, ctx.unit, sign=False)} warmer** than the "
                 "long-term average for this location."
             )
         elif anom > 0.3:
             extra = (
                 f" This particular year was **slightly warmer than usual**, roughly "
-                f"{fmt_delta(anom, ctx.unit)} above the long-term average."
+                f"**{fmt_delta(anom, ctx.unit)}** above the long-term average."
             )
         elif anom < -0.8:
             extra = (
@@ -381,7 +381,7 @@ def last_year_caption(ctx: StoryContext,facts: StoryFacts, data: dict) -> str:
         elif anom < -0.3:
             extra = (
                 f" This particular year ran **a bit cooler than usual**, around "
-                f"{fmt_delta(abs(anom), ctx.unit)} below the long-term average."
+                f"**{fmt_delta(abs(anom), ctx.unit, sign=False)}** below the long-term average."
             )
 
     return base_text + "\n" + extra
@@ -498,7 +498,7 @@ def five_year_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
     """
     base_5y = (
         "Over the last five years, the shorter-term wiggles (the 7-day mean) sit on top of a smoother monthly pattern. "
-        "As you zoom out, weather becomes noise and you start to see the underlying climate: which seasons are warming "
+        "As you zoom out, weather becomes noise and you start to see the **underlying climate**: which seasons are warming "
         "the most, and how often the line pushes into new territory."
     )
 
@@ -518,7 +518,7 @@ def five_year_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
             direction = "warmer" if short >= 0 else "cooler"
             extra_5y = (
                 f"Even over just these recent years, the smoothed curve points to a change "
-                f"equivalent to about {fmt_delta(short, ctx.unit)} per decade. That trend connects directly "
+                f"equivalent to about **{fmt_delta(short, ctx.unit)} per decade**. That trend connects directly "
                 "to the longer-term shift you’ll see in the 50-year view."
         )
 
@@ -758,7 +758,7 @@ def fifty_year_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
         else:
             # cooler
             change_text = (
-                f"is now roughly **{fmt_delta(abs(total_warming), ctx.unit)} cooler on average** than it was "
+                f"is now roughly **{fmt_delta(abs(total_warming), ctx.unit, sign=False)} cooler on average** than it was "
                 f"at the start of the record — a smaller change than in many places."
             )
 
@@ -767,14 +767,14 @@ def fifty_year_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
             cold = data["coldest_month_trend_50y"]
             warm = data["warmest_month_trend_50y"]
 
-            extra += " The dashed lines show how the **coldest** and **warmest** typical months behave:"
+            extra += " The dashed lines show how the **coldest** and **warmest** typical months behave:\n"
 
             def describe(label: str, val: float) -> str:
                 if val > 0.3:
-                    return f" the {label} month is about **{fmt_delta(val, ctx.unit)} warmer**."
+                    return f"- the **{label} month** is about **{fmt_delta(val, ctx.unit)} warmer**.\n"
                 if val < -0.3:
-                    return f" the {label} month is about **{fmt_delta(abs(val), ctx.unit, sign=False)} cooler**."
-                return f" the {label} month has changed by only about **{fmt_delta(val, ctx.unit)}**."
+                    return f"- the **{label} month** is about **{fmt_delta(abs(val), ctx.unit, sign=False)} cooler**.\n"
+                return f"- the **{label} month** has changed by only about **{fmt_delta(val, ctx.unit, decimals=2)}**.\n"
 
             extra += describe("coldest", cold)
             extra += describe("warmest", warm)
@@ -996,7 +996,7 @@ def twenty_five_years_caption(ctx: StoryContext, facts: StoryFacts, data: dict) 
 
     base = (
         f"This panel takes the long-term trend from the last few decades and extends it "
-        f"forward by 25 years."
+        f"forward by **25 years**."
     )
 
     if abs(delta) < 0.2:
