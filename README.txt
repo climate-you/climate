@@ -42,11 +42,20 @@ $ python scripts/make_montecarlo_experiment.py --grid-deg 1.0 --experiment-id 1 
 
 5. Run web page:
 
+# Next web - http://localhost:3000/
+$ cd web; npm run dev 
+
 # Streamlit - http://localhost:8501/
 $ streamlit run app/story_demo.py
 
-# Static web - http://localhost:8000/drafts/globe_demo.html
+# Warming Globe - http://localhost:8000/drafts/warming_globe_demo/
 # python -m http.server 8000 
 
-# Next web - http://localhost:3000/story/auto
-$ cd web; npm run dev 
+# Hero Wire Globe - http://localhost:8000/
+# cd drafts/three_wire_globe_clouds; python -m http.server 8000 
+
+---
+
+Guardian articles:
+URL: https://www.theguardian.com/environment/ng-interactive/2025/dec/18/how-climate-breakdown-is-putting-the-worlds-food-in-peril-in-maps-and-charts
+URL: Wildfires mapped January 2026
