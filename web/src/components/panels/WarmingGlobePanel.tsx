@@ -9,13 +9,13 @@ function WarmingLegend({ unit }: { unit: "C" | "F" }) {
     ? [-1, 0, 1, 2, 3, 4]
     : [-1, 0, 1, 2, 3, 4, 5, 6, 7];
 
-  const gradient = "linear-gradient(to bottom, #ffffcc, #ffeda0, #feb24c, #f03b20, #bd0026)";
+  const gradient = "linear-gradient(to top, #ffffcc, #ffeda0, #feb24c, #f03b20, #bd0026)";
 
   return (
     <div className="flex items-center gap-3">
       <div className="h-56 w-3 rounded-full" style={{ background: gradient }} />
       <div className="flex h-56 flex-col justify-between text-xs text-neutral-600 dark:text-neutral-300">
-        {ticks.map((t) => (
+        {ticks.reverse().map((t) => (
           <div key={t} className="flex items-center gap-2">
             <div className="h-px w-3 bg-neutral-400/60 dark:bg-neutral-500/60" />
             <div>
@@ -62,21 +62,16 @@ export default function WarmingGlobePanel({
     return () => io.disconnect();
   }, []);
 
-  const md = useMemo(() => {
-    return [
-      `This globe shows warming in **2016–2025 vs 1979–1988** (ERA5 2m air temperature).`,
-      ``,
-      `It blends from a neutral Earth view into the **warming map**, then begins a slow rotation.`,
-      ``,
-      `*Centered on **${locationLabel}**.*`,
-    ].join("\n");
-  }, [locationLabel]);
+  const md = useMemo(
+    () => `This globe shows warming in **2016–2025 vs 1979–1988** (ERA5 2m air temperature).`,
+    []
+  );
 
   return (
-    <div ref={rootRef} className="w-full">
-      <div className="relative">
+    <div ref={rootRef} className="w-full flex flex-col items-center justify-center gap-6">
+      <div className="relative w-full">
         {/* Big globe (centered in viewport; compensate for the fixed left globe column on lg) */}
-        <div className="mx-auto aspect-square w-full max-w-[980px] lg:-translate-x-[210px]">
+        <div className="mx-auto aspect-square w-full max-w-[780px] lg:-translate-x-[180px]">
           <Globe
             variant="warming"
             targetLatLon={target}
@@ -96,7 +91,7 @@ export default function WarmingGlobePanel({
         </div>
       </div>
 
-      <div className="mx-auto mt-8 max-w-3xl">
+      <div className="mx-auto max-w-xl text-center">
         <Caption md={md} reveal="sentences" />
       </div>
     </div>

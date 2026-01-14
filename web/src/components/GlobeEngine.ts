@@ -128,6 +128,24 @@ export class GlobeEngine {
   private running = false;
 
   private autorotate = true;
+
+  // --- autorotate (avoid "jump" when enabling spin later) ---
+  private autorotateT0: number | null = null;           // seconds (engine t) when spin started
+  private autorotateQuat0 = new THREE.Quaternion();     // earth orientation at spin start
+  private tmpYawQ = new THREE.Quaternion();             // scratch quaternion
+  private axisY = new THREE.Vector3(0, 1, 0);           // world up axis
+  private autorotateSpeed = 0.08;                       // rad/sec (default)
+
+  // --- tilt reset (gradually remove pitch/roll while spinning) ---
+  private autorotateUprightQuat0 = new THREE.Quaternion(); // same yaw, no tilt
+  private tmpBaseQ = new THREE.Quaternion();               // scratch base quaternion
+  private tmpV = new THREE.Vector3();                      // scratch vector
+  private tiltResetT0: number | null = null;               // seconds (engine t)
+  private tiltResetDuration = 12.0;                         // seconds to become upright
+
+  // --- shader grid control (grid is drawn in fragment shader via gridOpacity uniform) ---
+  private gridOpacitySaved: number | null = null;
+
   private dataCycleT0: number | null = null;
 
   private timings: GlobeTimings;
@@ -193,7 +211,56 @@ export class GlobeEngine {
   }
 
   setAutorotate(on: boolean) {
+    // When switching ON, snapshot the current orientation and start time.
+    // This prevents a "jump" caused by using the global engine time t directly.
+    if (on && !this.autorotate) {
+      this.autorotateT0 = this.getT();
+
+      if (this.earth) {
+        // Base pose at the moment spinning starts (might be tilted)
+        this.autorotateQuat0.copy(this.earth.quaternion);
+
+        // Target upright pose: same yaw, zero pitch/roll
+        this.computeUprightFrom(this.autorotateQuat0);
+
+        // Start the "upright over time" blending
+        this.tiltResetT0 = this.getT();
+      } else {
+        this.tiltResetT0 = null;
+      }
+    }
+
+    if (!on) {
+      this.autorotateT0 = null;
+      this.tiltResetT0 = null;
+    }
+
     this.autorotate = on;
+  }
+
+  setAutorotateSpeed(radPerSec: number) {
+    this.autorotateSpeed = radPerSec;
+  }
+
+  setMarkerVisible(visible: boolean) {
+    if (this.marker) this.marker.visible = visible;
+  }
+
+  setGridVisible(visible: boolean) {
+    const u = this.uniforms.gridOpacity;
+    if (!u) return;
+
+    if (!visible) {
+      // Save current opacity once, then force to 0
+      if (this.gridOpacitySaved == null) this.gridOpacitySaved = u.value as number;
+      u.value = 0.0;
+      return;
+    }
+
+    // Restore saved (or fallback to current/default)
+    const restore = this.gridOpacitySaved ?? (u.value as number) ?? 0.2;
+    u.value = restore;
+    this.gridOpacitySaved = null;
   }
 
   setZoom(z: number) {
@@ -342,13 +409,17 @@ export class GlobeEngine {
       revealDelayMs = 500,
       revealFadeMs = 1800,
       spinDelayMs = 300,
+      spinSpeed = 0.05,
     } = opts;
 
     // No clouds for this mode (caller should also set enableClouds:false)
     this.setAutorotate(false);
 
-    // Fix view on location
+    // Fix view on location (also makes marker visible via setMarker)
     this.setFixedLocation(lat, lon);
+
+    // Warming mode: hide shader grid immediately
+    this.setGridVisible(false);
 
     // Ensure no cycle overrides
     this.stopDataRevealCycle();
@@ -362,6 +433,11 @@ export class GlobeEngine {
 
       // Start slow spin after blend
       window.setTimeout(() => {
+        // Hide marker once we start spinning
+        this.setMarkerVisible(false);
+
+        // Spin starts smoothly "from now" and at configured speed
+        this.setAutorotateSpeed(spinSpeed);
         this.setAutorotate(true);
       }, revealFadeMs + spinDelayMs);
     }, revealDelayMs);
@@ -489,6 +565,27 @@ export class GlobeEngine {
   private getT() {
     return (performance.now() - this.t0) / 1000;
   }
+
+  private computeUprightFrom(q: THREE.Quaternion) {
+    // Take the current orientation, extract the yaw angle (rotation around world Y),
+    // and return a quaternion that is purely that yaw (no pitch/roll).
+    //
+    // We do this by rotating a forward vector (0,0,1), projecting onto XZ,
+    // then atan2(x, z).
+    this.tmpV.set(0, 0, 1).applyQuaternion(q);
+    this.tmpV.y = 0;
+
+    // If we're looking almost straight up/down, projection is tiny — fall back.
+    if (this.tmpV.lengthSq() < 1e-8) {
+      this.autorotateUprightQuat0.identity();
+      return;
+    }
+
+    this.tmpV.normalize();
+    const yaw = Math.atan2(this.tmpV.x, this.tmpV.z); // radians
+    this.autorotateUprightQuat0.setFromAxisAngle(this.axisY, yaw);
+  }
+
 
   private makeLoader() {
     const loader = new THREE.TextureLoader();
@@ -660,6 +757,10 @@ export class GlobeEngine {
     this.earth = new THREE.Mesh(new THREE.SphereGeometry(1.0, 256, 256), this.earthMat);
     this.earth.rotation.y = this.startRotY; // ensure same base orientation for hero+mini
     this.scene.add(this.earth);
+
+    // Initialize autorotate baseline so spin (when enabled) starts smoothly from current pose.
+    this.autorotateQuat0.copy(this.earth.quaternion);
+    this.autorotateT0 = this.getT();
   }
 
   private async buildMarker(markerUrl: string) {
@@ -721,7 +822,25 @@ export class GlobeEngine {
     const t = this.getT();
 
     if (this.autorotate) {
-      this.earth.rotation.y = this.startRotY + t * 0.08;
+      const t0 = this.autorotateT0 ?? t;            // if missing, start "now"
+      const dt = Math.max(0, t - t0);
+      const ang = dt * this.autorotateSpeed;        // rad/sec
+
+      this.tmpYawQ.setFromAxisAngle(this.axisY, ang);
+
+      // Blend base orientation toward upright over tiltResetDuration seconds
+      let base = this.autorotateQuat0;
+
+      if (this.tiltResetT0 != null) {
+        const u = Math.min(1, (t - this.tiltResetT0) / this.tiltResetDuration);
+        // ease-in-out (optional)
+        const k = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+
+        this.tmpBaseQ.copy(this.autorotateQuat0).slerp(this.autorotateUprightQuat0, k);
+        base = this.tmpBaseQ;
+      }
+
+      this.earth.quaternion.copy(base).multiply(this.tmpYawQ);
     }
 
     // marker pulse
