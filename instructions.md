@@ -1,324 +1,307 @@
-# Climate Story — Handoff Summary (instructions.md)
+# Climate Story — Updated Handoff Summary (2026-01)
 
-This repo builds a **climate scrollytelling experience**. Today it’s primarily prototyped in **Streamlit** (`app/story_demo.py`), but the long-term plan is a **separate front-end scrollytelling site** that reuses the same Python backend outputs (data files, figures, captions).
+This repo builds a **climate scrollytelling experience** driven by **Python-generated data + figures + captions**, rendered in a **Next.js/React** front-end.
 
-The project is organized around a consistent pattern for panels:
-- `build_*_data(ctx, facts) -> dict`
-- `build_*_figure(ctx, facts, data) -> figure(s)`
-- `*_caption(ctx, facts, data) -> str`
+The core design is now:
 
-Panels live under `climate/panels/`. Scripts to generate datasets and assets live under `scripts/`. Outputs go to `data/`.
+- **Python is the single source of truth** for:
+  - panel logic
+  - captions text
+  - figure generation (Plotly → SVG)
+  - unit-specific wording/value formatting (C/F)
 
-## Story
-
-The page teaches:
-- what climate change looks like **locally** (day/night cycle → month → year → 50 years → trend into future),
-- how **seasons shifted** (recent vs earlier climate),
-- how local warming compares to **global warming** (“You vs the world”),
-- a world map showing **warming relative to a baseline**,
-- a **Monte Carlo sampling** visualization that explains the “+1.5°C global warming” idea (currently a standalone demo with fake data).
-
-Non-goals for v1: heatwave detection (parked), “typical year daily then vs now” at global scale (may be revisited later).
+- **Web app is a renderer**:
+  - loads exported assets (SVG + Markdown captions) from `web/public/data/...`
+  - implements narrative UX: scroll-snapped slides, progressive caption reveal, animated SVG drawing, dark/light/system theme, globe visuals.
 
 ---
 
-## Current “story” structure
+## 1) Repository structure (what matters now)
 
-### Streamlit prototype
-- Entry point: `story_demo.py`
-- Panels now include:
-  - **Seasons then vs now** (existing)
-  - **You vs the world** (now uses real data; was fake in early prototype)
-  - **World map** warming layer (now uses real ERA5-based warming map; was fake)
-  - **Monte Carlo** global-mean experiment (now uses real ERA5 daily mean data from CDS; was fake)
+### Python (source of truth)
+- `climate/panels/`
+  - Panel modules (e.g. `intro.py`, `zoomout.py`, `seasons.py`, `world.py`, etc.)
+  - Pattern per panel still conceptually:
+    - `build_*_data(ctx) -> dict`
+    - `build_*_figure(ctx, facts, data) -> (fig or figs, tiny_caption?)`
+    - `*_caption(ctx, facts, data) -> markdown`
+  - But for the web, we mostly export **SVG + caption.md** (data.json is not needed for v1).
 
-### Front-end plan (future)
-- Keep Streamlit as a fast iteration / prototyping tool.
-- When a panel is “ready”, port it 1:1 into a front-end “step” (scrollytelling).
-- Python continues to generate:
-  - precomputed data files (CSV/NetCDF/Parquet)
-  - textures (webp/png) + manifests
-  - captions / derived “facts” blobs
+- `climate/export/`
+  - `web_paths.py`: path conventions for exported web bundle
+  - `web_write.py`: write helpers (`write_json`, `write_text`, etc.)
+  - `normalize_caption()` helper was introduced (or should exist) to strip indentation/normalize markdown output for React markdown.
 
----
+- `scripts/`
+  - `build_frontend_bundle.py`
+    - Reads per-city `.nc` files and exports the **long-term/static panels** for each slug.
+  - `build_live_panels.py`
+    - Fetches Open-Meteo data for short-term panels (last week/month) and exports them daily per slug.
+    - Writes a `latest.json` so web can find the newest available “as-of” directory per slug.
+  - (existing precompute scripts still exist for generating city climatology NetCDFs)
 
-## Key datasets & outputs
-
-### Dataclasses
-```python
-@dataclass
-class StoryFacts:
-    data_start_year: int
-    data_end_year: int
-    total_warming_50y: Optional[float]
-    recent_warming_10y: Optional[float]
-    last_year_anomaly: Optional[float]
-    hemisphere: str
-
-@dataclass
-class StoryContext:
-    today: date
-    slug: str
-    location_label: str
-    city_name: str
-    location_lat: float
-    location_lon: float
-    unit: str                    # "C" or "F"
-    ds: xr.Dataset               # precomputed climatology dataset for selected slug
-```
-
-### Panel function pattern (now used consistently)
-
-Each panel uses:
-```python
-def build_x_data(ctx: StoryContext) -> dict
-def build_x_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> (go.Figure, str)   # returns (figure, tiny caption like “Source/range”)
-def x_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str
-```
-Goal: keep Streamlit layer thin; later can reuse same data/fig/caption builders in a JS frontend.
-
-### Global temperature series (for “You vs the world”)
-- Script: `scripts/make_global_series.py`
-- Outputs:
-  - `data/world/global_series.csv`
-  - `data/world/global_series.meta.json`
-- Used by: “You vs the world” panel (global anomalies chart).
-
-### World warming map (2D Leaflet/Folium overlay)
-- Script: `scripts/make_warming_map.py`
-- Outputs:
-  - `data/world/warming_map_....nc`
-  - `data/world/warming_map_....manifest.json`
-- Panel: `climate/panels/worldmap.py` (Folium-based interactive map)
-- Notes:
-  - NetCDF grid is typically `(latitude, longitude)` with:
-    - lat descending: 90..-90
-    - lon 0..359
-  - Rendering had issues earlier (upside-down / offset / no repeat). Fixed by:
-    - correct lat orientation
-    - correct bounds
-    - correct lon handling (0..360 vs -180..180)
-    - optional longitude rolling for centering.
-
-### World warming texture (for 3D globe)
-- Script: `scripts/make_warming_texture.py`
-- Outputs:
-  - `data/world/warming_texture_*.webp`
-  - `data/world/warming_texture_*.manifest.json`
-- This produces a single equirectangular texture (global) suitable for a globe mesh.
-- There is a helper in the script to roll lon 0..360 → -180..180 to center Greenwich; this affects how the JS globe needs to set its initial longitude.
-
-### Borders overlay texture (coastlines + country borders)
-- Script: `scripts/make_borders_overlay.py`
-- Outputs:
-  - `data/world/borders_<WxH>.png`
-- Used by: globe prototype as a transparent overlay.
-- Raster looks great zoomed out; for very deep zoom you’ll eventually want vector or tiled raster.
-
-### Monte Carlo experiment (ERA5 daily mean, global mean warming)
-- Download script (CDS): `scripts/download_era5_daily_t2m_cds.py`
-- Experiment script: `scripts/make_montecarlo_experiment.py`
-- Outputs:
-  - Input NetCDFs in `data/mc/`:
-    - `era5_daily_t2m_<YEAR>_gridX.nc` (+ meta)
-  - Experiment sample parquet (optional):
-    - `data/mc/experiment_XX_samples.parquet` (+ meta)
-  - Experiment curve images (optional visualisation mode):
-    - convergence curves plot
-    - delta plot (difference over samples)
-- Panel: `climate/panels/montecarlo.py`
+### Web (renderer)
+- Next.js app under `web/`
+- Story route:
+  - `/story/[slug]` for explicit slug
+  - `/story/auto` (and `/`) resolves location (geolocation) then selects nearest supported slug
+- Key components/hooks:
+  - `web/src/components/StoryClient.tsx`
+    The orchestration layer: routing, unit/theme, scroller + slides layout, data fetching for captions/SVGs, header title transitions, and globe behavior.
+  - `web/src/components/Caption.tsx`
+    `react-markdown` renderer + **progressive reveal** support (`reveal="sentences"` etc.) + typography styling (`caption-md`).
+  - `web/src/components/PanelFigure.tsx`
+    Renders injected SVG safely, applies scoped CSS, and supports **SVG stroke-dash draw animations** (including sequencing, markers/annotations timing, dashed-line preservation).
+  - `web/src/components/Globe.tsx` + `web/src/components/GlobeEngine.ts`
+    Three.js globe and shader-based rendering, with multiple “variants” (hero/mini/warming).
+  - Hooks that exist in the refactor:
+    - `useCitiesIndex`, `useIntroCaption`, `useLivePanel`, `useLiveAsof`, etc.
+  - Theme:
+    - `web/src/hooks/useTheme.ts` provides System/Light/Dark (stored in localStorage) and toggles Tailwind’s `.dark` on `<html>`.
 
 ---
 
-## Units
+## 2) Slugs and file naming conventions (current consensus)
 
-Global toggle **Celsius vs Fahrenheit** is implemented and used across real-data pages. Default by location (US → F) is desired/implemented. Captions must handle delta formatting (“0.5°F colder” rather than “-0.5°F colder”).
+- **Slug is the canonical ID everywhere** and includes the `city_` prefix:
+  - e.g. `city_gb_london`, `city_jp_tokyo`, `city_mu_tamarin`
+- City climatology files:
+  - `data/story_climatology/clim_<slug>.nc`
+  - e.g. `data/story_climatology/clim_city_jp_tokyo.nc`
+- Web story bundle output:
+  - `web/public/data/story/<slug>/facts.json`
+  - `web/public/data/story/<slug>/meta.json`
+  - `web/public/data/story/<slug>/panels/<panel>.<unit>.caption.md`
+  - `web/public/data/story/<slug>/panels/<panel>.<unit>.svg`
 
-## UI behavior & styling conventions
-
-- Graph style standardized:
-  - grey for noisy/raw (eg. hourly temp)
-  - blue for smoothing/means (eg. daily mean)
-  - red for trend
-  - dotted red for future extension (with shaded period)
-- Annotations:
-  - min and max annotated with `annotate_minmax_on_series(fig, x, y, ...)` 
-- Timezones:
-  - Live Open-Meteo data queried with `"timezone"="auto"`
-- Plotly rendering:
-  - use `st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})` to avoid Streamlit deprecation warnings.
+Units are `"C"` and `"F"` internally, and formatting helpers add the degree symbol and sign.
 
 ---
 
-## Admin/maintenance pages (future but planned)
+## 3) Export format and pipeline
 
-- cache size, disk space, number of precomputed locations
-- monitor Open-Meteo/CDS request counts and failures
-- track real user locations (aggregated/anonymous) + world map
-- feedback link/email
-- run precompute jobs (with progress monitoring) regularly (quarterly baseline + more frequent “popular cities”)
-- reliability/SRE-ish monitoring
+### A) Long-term/static panels export
+Run via `scripts/build_frontend_bundle.py` (typically monthly/quarterly):
+- Inputs: `data/story_climatology/clim_<slug>.nc`
+- Produces per slug:
+  - `facts.json` + `meta.json`
+  - panel assets: `panels/*.svg` and `panels/*.caption.md`
+  - **both C and F variants** for SVG and caption (because captions embed numbers and units)
 
-## Key design decisions and rationale**
+Common tweaks that were required for good SVG rendering in the web app:
+- enforce Plotly layout `width/height/margins`
+- ensure y-axis ticks are visible (`margin.l` etc.)
 
-- Conda environment is set up on user workstation (running MacOS)
-- Account is set up with CDS
-- Using **Open-Meteo ERA5** archive for precompute because CDS/ERA5 direct queries were slow and error-prone (CDS “no space left on device”, job failures). Open-Meteo is fast but rate-limited (429).
-- Precompute city history to avoid live heavy queries and to support many users.
-- Live Open-Meteo only for “fresh” windows (current temp, last week/month).
-- Precompute end date set to **last full quarter** to keep data fresh but reduce compute frequency (quarterly update).
-- Code refactored into modules with clear “data → figure → caption” pipeline so it can later move to a front-end scrollytelling framework.
-- ERA5 “50 years” baseline starts at 1979 because ERA5 reanalysis coverage is conventionally used from 1979 onward.
-- temperatures are shown in local time (Open-Meteo timezone handling) and put daily mean points at midday instead of 00:00.
-- There is an ability to “time travel” (override today date in sidebar) to test how the page looks at different time of the year, this will be kept only in test page, not the final world-visible page.
+### B) Live panels export (short-term)
+Run via `scripts/build_live_panels.py` (daily, for selected slugs):
+- Outputs per date (“as-of”) directory:
+  - `web/public/data/live/<YYYY-MM-DD>/<slug>/`
+    - `last_week.C.svg`, `last_week.C.caption.md` (+ `.F`)
+    - `last_month...`
+    - `meta.json`
+- Writes:
+  - `web/public/data/live/latest.json` mapping `{ slug -> "YYYY-MM-DD" }`
+- Web reads `latest.json` to choose the most recent available as-of date.
 
----
-
-## JS globe prototype (scrollytelling “v1” visual target)
-
-### Prototype file(s)
-- Minimal globe demo page: `scripts/globe_demo.html` (or similar static HTML)
-- Loads:
-  - warming texture webp
-  - borders overlay png
-
-### Rendering choice
-- Use `MeshBasicMaterial` (no lights) to match “flat” Guardian-like look.
-- Use a white page background (CSS + renderer clear color if needed).
-
-### Notes / gotchas
-- If the texture is rolled/shifted in Python (lon rolling), then “startLon” in JS may need adjustment.
-- “Fly to London” issues:
-  - If rotation is applied incrementally from current orientation, you get offsets.
-  - Fix by computing absolute target orientation and tweening to it.
-  - Maintaining north-up in view needs careful camera/rotation handling (avoid introducing roll).
+Strategy (compromise for v1):
+- Precompute live panels daily for “popular” locations.
+- For other locations: can generate on-demand server-side later (not implemented as a full service yet).
+- Current temperature is still fetched through a **Next.js API proxy** (not direct browser → Open-Meteo), to keep visibility, caching, and troubleshooting centralized.
 
 ---
 
-## Open-Meteo precompute pipeline (cities)
+## 4) Slides currently implemented in the web app
 
-### Current state
-- There is a `scripts/precompute_story_cities.py` that precomputes city histories via Open-Meteo ERA5 archive.
-- We implemented:
-  - chunked fallback on `timeoutReached` (e.g., 5-year chunks)
-  - reduced unnecessary waits between chunk requests
-  - skip-if-up-to-date fast path
-  - view map improvements: bigger map + state breakdown bar
+The story is now a scroll-snapped scrollytelling sequence with “slides”, roughly:
 
-### Rate limiting reality (429s)
-- Open-Meteo free tier counts “long-range” queries (>2 weeks, many years) as **multiple calls**.
-- Precomputing 40–50 years per city can cost hundreds of “call units” per city.
-- You can hit limits quickly (minutely/hourly/daily/monthly).
+### Intro + short-term weather
+- Intro caption is exported from Python; “now temperature” line is **removed** from the exported intro caption (the web has its own “It’s currently …” line from the live proxy).
+- Short-term slides:
+  - Last week (SVG + caption)
+  - Last month (SVG + caption)
+  - These use live bundle assets.
 
-### Strategy options (still under discussion)
-A) **Open-Meteo subscription bootstrap**
-- Pay for 1 month, bulk precompute (e.g., 2k+ cities)
-- Then cancel and do small periodic updates.
+### Zoom-out temperature history (from `zoomout.py`)
+- Last year
+- Last 5 years
+- Last 50 years
+- Future/trend panel(s) (e.g., 25 years ahead depending on what you exported)
 
-B) **CDS backfill + Open-Meteo incremental**
-- Use CDS to download global gridded data once per era / per year
-- Extract city point time series locally (no 429s)
-- Use Open-Meteo only for “live-ish” short windows (last week/month).
+### Seasons then vs now (from `seasons.py`)
+Implemented as **two slides**:
+1) One main figure + caption
+2) Two side-by-side envelope figures + caption (markdown lists render correctly now)
 
-C) **All CDS for backfill + incremental**
-- Each quarter/month: download new CDS year or month blocks and append locally.
-- Most freedom (no Open-Meteo limits), but heavier pipeline and local storage.
+### You vs the world (from `world.py`)
+- Two side-by-side anomaly charts (local vs global) + caption
+- Caption supports lists and italics correctly after fixing markdown splitting/rendering issues.
 
-Key tradeoff: CDS gives stable reproducibility + unlimited local extraction, but you manage more data.
-
----
-
-## File map (what matters most)
-
-### Panels
-- `climate/panels/world.py`  
-  “You vs the world” (local anomalies vs global anomalies). Uses:
-  - local: precomputed ERA5 (Open-Meteo) city files
-  - global: `data/world/global_series.csv`
-
-- `climate/panels/worldmap.py`  
-  “World map” (Folium/Leaflet overlay of warming + local inset caption logic)
-
-- `climate/panels/montecarlo.py`  
-  Monte Carlo experiment panel (playback loop in Streamlit; uses precomputed experiment data)
-
-### Scripts
-- `scripts/make_global_series.py`
-- `scripts/make_warming_map.py`
-- `scripts/make_warming_texture.py`
-- `scripts/make_borders_overlay.py`
-- `scripts/globe_demo.html`
-- `scripts/download_era5_daily_t2m_cds.py`
-- `scripts/make_montecarlo_experiment.py`
-- `scripts/precompute_story_cities.py`
-- `scripts/make_city_list.py` (needs rewrite / smarter selection)
+### Warming globe slide (new)
+A special slide with a **centered big globe**:
+- Uses a dedicated globe “warming” mode:
+  - transitions land/border coloring to warming “data” texture
+  - then begins spinning
+  - **grid lines hidden in warming mode** (grid is shader-driven via `gridOpacity` uniform)
+  - marker visible initially, then disappears when spinning starts
+  - spin time anchored so it does not “jump”
+  - optional “tilt reset”: spinning gradually removes pitch/roll so equator becomes horizontal after a few seconds
 
 ---
 
-## Monte Carlo “sampling” model (current intended default)
-Goal: estimate change in **global mean near-surface air temperature** between eras.
+## 5) Front-end UX decisions and compromises
 
-Recommended default choices for v1:
-- **Space sampling**: “area-weighted” (cos(latitude) correction) so each unit area contributes equally.
-- **Time sampling**: monthly stratification (easier story) or day-of-year stratification (optional).
+### Scroll snapping
+- The main narrative uses a single scroll container with CSS snap:
+  - `snap-y snap-mandatory`
+  - `scroll-snap-stop: always` on slides to prevent skipping multiple slides on trackpads.
+- Wheel event “hacks” were tried and removed; CSS snap works best.
+- The scroll container now wraps both columns so scrolling works even when pointer is over the globe column.
 
-Important: Without proper area weighting, experiments can converge to noticeably different deltas because high latitudes get overrepresented.
+### Progressive captions
+- Captions are rendered via `react-markdown`.
+- `Caption` supports progressive reveal (e.g. sentence-by-sentence).
+- Some markdown transformations were needed to avoid breaking emphasis across sentence splits; this is now fixed.
 
----
+### SVG draw animations
+- `PanelFigure` can animate curves:
+  - sequentially (grey then blue, etc.)
+  - markers can be hidden until after paths draw
+  - annotations can appear after lines
+  - dashed lines required special handling to preserve dash patterns during stroke-dash animation
 
-## Known issues / work in progress
+Hover tooltips from Plotly are **not** implemented in SVG mode. (Possible later: embed data for hover, switch to Plotly.js for interactive charts, or add custom hover overlays.)
 
-### Monte Carlo
-- Large N (10M–50M) runs show some drift/run-to-run variance; likely remaining sampling variance + implementation details.
-- We added options to skip writing full sample parquet for huge N to avoid memory blowups.
+### Theme
+- System/Light/Dark theme toggle exists and works.
+- Tailwind dark mode is enabled using `.dark` on `<html>`.
+- Dark palette was tuned closer to ChatGPT-like colors (e.g. background `#212121`, pills `#171717`).
+- SVGs required cleanup:
+  - remove/override Plotly’s white background rects
+  - adjust text/axis colors via CSS/processing so figures look correct in dark mode
+  - result: SVGs look correct in both modes now.
 
-### City list / precompute strategy
-- `make_city_list.py` currently selects poorly (e.g., small territories get same slots as large countries).
-- Need a new selection scheme: population-weighted, region-balanced, and “likely user origins”.
-
-### CDS vs Open-Meteo integration
-- Decide primary “backfill” source:
-  - Open-Meteo subscription vs CDS download-and-extract workflow.
-
----
-
-## Immediate next tasks (for future chats)
-1) Rewrite `make_city_list.py` to produce a better city set:
-   - prioritize expected users (UK/Europe/US) + global coverage
-   - avoid 3-per-country naive rule
-   - cap tiny territories
-
-2) Rewrite `precompute_story_cities.py` around the chosen strategy:
-   - ideally append-only updates
-   - possibly CDS-backed extraction for long history
-   - Open-Meteo only for short “live” windows
-
-3) Front-end integration:
-   - keep Streamlit as a panel prototyping environment
-   - port panels into front-end scrollytelling steps
-   - reuse Python-generated assets (textures, borders, parquet/CSV, captions)
+### Globe
+- Multiple globe “roles” exist:
+  - hero cold-open globe
+  - mini globe docked left (lg screens)
+  - warming globe panel
+- The globe engine is shader-based with uniforms (including `gridOpacity`, `dataOpacity`, etc.), so many visual toggles are done via uniforms rather than meshes.
 
 ---
 
-## Notes on running
+## 6) Known “sharp edges” and gotchas
 
-### CDS downloads
-- `download_era5_daily_t2m_cds.py` must split requests (typically by year) to avoid “cost limits exceeded”.
-- CDS sometimes returns files that are not ZIP even if requested that way; code should detect and handle.
-
-### World textures
-- Consider 4096x2048 (good default) and 8192x4096 (high quality).
-- Output resolution should roughly match grid resolution:
-  - 1.0° grid ≈ 360x181 cells → upscale to 2048/4096+ is mostly interpolation
-  - 0.25° grid has enough native detail to justify 8192x4096.
+- **Dev caching**: sometimes stale `cities_index.json` or caption assets require a hard reload / restart; verifying by opening `/data/...` URLs in the browser is the quickest sanity check.
+- `cities_index.json` can list more locations than actually exported; if auto-selection picks a missing slug, the page needs a fallback strategy (currently handled by ensuring the closest slug is generated, or regenerating the index).
+- Exported markdown sometimes included leading indentation from triple-quoted Python strings; this is fixed by normalizing lines (e.g. lstrip each line) in the export pipeline (`normalize_caption`).
+- Live “as-of” date logic must use `latest.json` (not “yesterday”) to be robust.
 
 ---
 
-## API limits reminder (Open-Meteo)
-Long-range requests (>2 weeks) can count as multiple calls; precomputing dozens of years per city is expensive in “call units” and easily triggers 429s. Prefer append-only updates and/or CDS-based backfill.
+## 7) Instructions for code changes (how to request patches)
+
+When making changes, prefer **surgical patches**. For requests:
+
+- Always specify:
+  - **file path**
+  - **exact block** to change (copy/paste before)
+  - show **after** code for that block
+- Avoid vague instructions like “near your booleans”.
+- If adding a function/variable, the patch must include:
+  - the **definition**
+  - how it’s wired into existing logic
+  - any required imports
+- Avoid introducing duplicate or contradictory `useEffect`/`useLayoutEffect` blocks.
+- If fixing a UI behavior, include the relevant CSS classes and their file location.
+- For Plotly export tweaks, prefer minimal changes:
+  - adjust `fig.update_layout(width=..., height=..., margin=...)` in the Python panel code only.
 
 ---
 
-## Instructions for code changes
+## 8) Runbook (common workflows)
 
-- for surgical patches, please print the code block (with befor/after is clearer) rather than uploading the whole file.
+### A) Run the web app locally
+From repo root:
+- Install deps (first time):
+  - `cd web`
+  - `npm install`
+- Run dev server:
+  - `npm run dev`
+- Then open:
+  - `http://localhost:3000/` (auto mode)
+  - `http://localhost:3000/story/city_mu_tamarin` (explicit slug)
+
+### B) Build the long-term/static web bundle for a slug
+From repo root:
+- Ensure climatology NetCDF exists:
+  - `data/story_climatology/clim_<slug>.nc`
+- Run bundle:
+  - `python scripts/build_frontend_bundle.py --slugs city_mu_tamarin`
+- Expected outputs:
+  - `web/public/data/story/city_mu_tamarin/facts.json`
+  - `web/public/data/story/city_mu_tamarin/meta.json`
+  - `web/public/data/story/city_mu_tamarin/panels/<panel>.<C|F>.svg`
+  - `web/public/data/story/city_mu_tamarin/panels/<panel>.<C|F>.caption.md`
+  - `web/public/data/cities_index.json` (copied/updated by bundle script)
+
+### C) Build daily live panels for a slug (last week / last month)
+From repo root:
+- Run:
+  - `python scripts/build_live_panels.py --slugs city_mu_tamarin`
+- Expected outputs (example as-of date):
+  - `web/public/data/live/2025-12-24/city_mu_tamarin/last_week.C.svg`
+  - `web/public/data/live/2025-12-24/city_mu_tamarin/last_week.C.caption.md`
+  - `web/public/data/live/2025-12-24/city_mu_tamarin/last_month.F.svg`
+  - `web/public/data/live/2025-12-24/city_mu_tamarin/meta.json`
+  - `web/public/data/live/latest.json` (maps slug → latest as-of date)
+
+### D) Quick sanity checks when something “doesn’t update”
+- Open the raw asset in browser to confirm it exists:
+  - `http://localhost:3000/data/story/<slug>/panels/<panel>.C.caption.md`
+  - `http://localhost:3000/data/live/latest.json`
+- Restart dev server if Next.js is serving cached assets:
+  - stop `npm run dev`
+  - rerun `npm run dev`
+- Hard refresh the page:
+  - (Chrome) Cmd+Shift+R / Ctrl+Shift+R
+
+---
+
+## 9) Future directions (explicitly discussed)
+
+### UX / storytelling improvements
+- Better slide layout and hierarchy:
+  - separate header area
+  - timed text to match curve drawing
+  - more deliberate pacing and transitions between slide “chapters”
+- Advanced caption choreography:
+  - interleave text reveals with staged SVG drawing (grey line → sentence → blue line → sentence → annotations)
+  - requires a small “timeline” API (panel-level orchestration)
+
+### Data expansion beyond 2m temperature
+- Add other datasets where 2m temperature “story” is less compelling:
+  - SST / water temperature
+  - precipitation
+  - pollution/air quality
+- Data availability will vary by location; need fallback captions.
+
+### Comparisons between locations
+- “compare my city vs another city” slides
+- ability to bookmark/share a comparison
+
+### Precompute strategy at scale
+- Improve city selection (`locations.csv` generation)
+- Better Open-Meteo/CDS hybrid:
+  - Open-Meteo for short windows + incremental
+  - CDS for heavy backfill + unlimited extraction
+- Goal: generate panels **on-demand** for any location efficiently.
+
+### Case-study / headline pages
+- Pages that explain items like:
+  - “2025 was second hottest year on record” (or whatever the latest verified claim is)
+  - El Niño / La Niña effects
+  - notable recent extremes
+
+### Monte Carlo simulation in React
+- Port the Monte Carlo panel into the web narrative or as a separate page
+- Likely still Python-exported assets first; later could become interactive.
