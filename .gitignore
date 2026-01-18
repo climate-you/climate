@@ -4,4 +4,5 @@ __pycache__
 data/story_climatology/*.nc
 data/world/*
 data/mc/*
+data/cache/*
 web/public/data/*
