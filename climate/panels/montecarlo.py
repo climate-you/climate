@@ -16,7 +16,9 @@ def _c_to_f(x: np.ndarray) -> np.ndarray:
     return x * 9.0 / 5.0 + 32.0
 
 
-def _compute_running_means(df_firstn: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _compute_running_means(
+    df_firstn: pd.DataFrame,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Returns (x, mean_past, mean_recent) with x=1..n.
     mean arrays have NaN where that era has no samples yet.
@@ -47,6 +49,7 @@ def _compute_running_means(df_firstn: pd.DataFrame) -> Tuple[np.ndarray, np.ndar
 # Exported API (3 functions)
 # ---------------------------------------------------------------------
 
+
 def build_montecarlo_data(
     ctx: StoryContext,
     *,
@@ -76,6 +79,7 @@ def build_montecarlo_data(
     meta = None
     if meta_p.exists():
         import json
+
         meta = json.loads(meta_p.read_text(encoding="utf-8"))
 
     return {
@@ -107,7 +111,11 @@ def build_montecarlo_figures(
     df_first = df[df["seq"] < n].copy()
 
     # t_val = display unit
-    t_c = df_first["t_c"].to_numpy(np.float64) if len(df_first) else np.array([], dtype=np.float64)
+    t_c = (
+        df_first["t_c"].to_numpy(np.float64)
+        if len(df_first)
+        else np.array([], dtype=np.float64)
+    )
     if use_f:
         df_first["t_val"] = _c_to_f(t_c)
     else:
@@ -118,7 +126,10 @@ def build_montecarlo_figures(
     # ----------------
     fig_map = go.Figure()
 
-    for era_name, era_id, color in (("past", 0, "rgba(70, 110, 200, 0.75)"), ("recent", 1, "rgba(220, 80, 80, 0.75)")):
+    for era_name, era_id, color in (
+        ("past", 0, "rgba(70, 110, 200, 0.75)"),
+        ("recent", 1, "rgba(220, 80, 80, 0.75)"),
+    ):
         dfe = df_first[df_first["era_id"] == era_id]
         if len(dfe) == 0:
             continue
@@ -166,7 +177,10 @@ def build_montecarlo_figures(
     # ----------------
     fig_time = go.Figure()
 
-    for era_name, era_id, color in (("past", 0, "rgba(70, 110, 200, 0.75)"), ("recent", 1, "rgba(220, 80, 80, 0.75)")):
+    for era_name, era_id, color in (
+        ("past", 0, "rgba(70, 110, 200, 0.75)"),
+        ("recent", 1, "rgba(220, 80, 80, 0.75)"),
+    ):
         dfe = df_first[df_first["era_id"] == era_id]
         if len(dfe) == 0:
             continue
@@ -206,12 +220,24 @@ def build_montecarlo_figures(
     if len(df_first) > 0:
         x, mean_past, mean_recent = _compute_running_means(df_first)
 
-        fig_mean.add_trace(go.Scatter(x=x, y=mean_past, mode="lines", name="Past era mean"))
-        fig_mean.add_trace(go.Scatter(x=x, y=mean_recent, mode="lines", name="Recent era mean"))
+        fig_mean.add_trace(
+            go.Scatter(x=x, y=mean_past, mode="lines", name="Past era mean")
+        )
+        fig_mean.add_trace(
+            go.Scatter(x=x, y=mean_recent, mode="lines", name="Recent era mean")
+        )
 
         # current estimate (use last non-nan)
-        mp = float(pd.Series(mean_past).dropna().iloc[-1]) if np.isfinite(mean_past).any() else float("nan")
-        mr = float(pd.Series(mean_recent).dropna().iloc[-1]) if np.isfinite(mean_recent).any() else float("nan")
+        mp = (
+            float(pd.Series(mean_past).dropna().iloc[-1])
+            if np.isfinite(mean_past).any()
+            else float("nan")
+        )
+        mr = (
+            float(pd.Series(mean_recent).dropna().iloc[-1])
+            if np.isfinite(mean_recent).any()
+            else float("nan")
+        )
         if np.isfinite(mp) and np.isfinite(mr):
             d = mr - mp
             fig_mean.add_annotation(
@@ -225,7 +251,9 @@ def build_montecarlo_figures(
             )
 
     fig_mean.update_layout(
-        title=dict(text="<b>The estimate stabilizes as samples grow</b>", x=0, xanchor="left"),
+        title=dict(
+            text="<b>The estimate stabilizes as samples grow</b>", x=0, xanchor="left"
+        ),
         height=320,
         margin=dict(l=50, r=10, t=40, b=40),
         xaxis_title="Number of samples revealed",
@@ -241,9 +269,15 @@ def build_montecarlo_figures(
             tiny_bits.append(f"ERA5 daily mean, grid {grid}°.")
         eras = meta.get("eras")
         if eras and isinstance(eras, list) and len(eras) == 2:
-            tiny_bits.append(f"Eras: {eras[0]['start_year']}-{eras[0]['end_year']} vs {eras[1]['start_year']}-{eras[1]['end_year']}.")
+            tiny_bits.append(
+                f"Eras: {eras[0]['start_year']}-{eras[0]['end_year']} vs {eras[1]['start_year']}-{eras[1]['end_year']}."
+            )
 
-    tiny = " ".join(tiny_bits) if tiny_bits else "ERA5 daily mean 2m temperature (precomputed samples)."
+    tiny = (
+        " ".join(tiny_bits)
+        if tiny_bits
+        else "ERA5 daily mean 2m temperature (precomputed samples)."
+    )
     return fig_map, fig_time, fig_mean, tiny
 
 
@@ -289,7 +323,9 @@ def montecarlo_caption(ctx: StoryContext, facts: StoryFacts, data: Dict) -> str:
     elif n < 2000:
         stability = "The estimate is starting to settle, but it will still wobble."
     else:
-        stability = "At this point the estimate changes slowly — you’re seeing convergence."
+        stability = (
+            "At this point the estimate changes slowly — you’re seeing convergence."
+        )
 
     return (
         f"Samples: {n} (past={cp}, recent={cr}). "

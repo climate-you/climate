@@ -23,16 +23,30 @@ import cartopy.feature as cfeature
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True, help="Output PNG path (transparent)")
-    ap.add_argument("--size", default="4096x2048", help="Output size WxH (default: 4096x2048)")
+    ap.add_argument(
+        "--size", default="4096x2048", help="Output size WxH (default: 4096x2048)"
+    )
     ap.add_argument(
         "--scale",
         default="50m",
         choices=["110m", "50m", "10m"],
         help="Natural Earth scale (110m coarser, 10m finest). Default: 50m",
     )
-    ap.add_argument("--coast-lw", type=float, default=1.2, help="Coastline line width (default: 1.2)")
-    ap.add_argument("--borders-lw", type=float, default=0.7, help="Country borders line width (default: 0.7)")
-    ap.add_argument("--alpha", type=float, default=0.85, help="Line alpha (default: 0.85)")
+    ap.add_argument(
+        "--coast-lw",
+        type=float,
+        default=1.2,
+        help="Coastline line width (default: 1.2)",
+    )
+    ap.add_argument(
+        "--borders-lw",
+        type=float,
+        default=0.7,
+        help="Country borders line width (default: 0.7)",
+    )
+    ap.add_argument(
+        "--alpha", type=float, default=0.85, help="Line alpha (default: 0.85)"
+    )
     args = ap.parse_args()
 
     out = Path(args.out)

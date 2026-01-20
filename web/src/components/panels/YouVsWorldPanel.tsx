@@ -10,7 +10,13 @@ async function fetchText(url: string) {
   return await r.text();
 }
 
-export default function YouVsWorldPanel({ slug, unit }: { slug: string; unit: "C" | "F" }) {
+export default function YouVsWorldPanel({
+  slug,
+  unit,
+}: {
+  slug: string;
+  unit: "C" | "F";
+}) {
   const [svgLocal, setSvgLocal] = useState<string | null>(null);
   const [svgGlobal, setSvgGlobal] = useState<string | null>(null);
   const [md, setMd] = useState<string | null>(null);
@@ -45,18 +51,37 @@ export default function YouVsWorldPanel({ slug, unit }: { slug: string; unit: "C
     };
   }, [slug, unit]);
 
-  if (err) return <div className="text-sm text-neutral-500">World comparison panel unavailable.</div>;
+  if (err)
+    return (
+      <div className="text-sm text-neutral-500">
+        World comparison panel unavailable.
+      </div>
+    );
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-24">
-      <h2 className="text-2xl font-semibold tracking-tight">Your warming vs global warming</h2>
+      <h2 className="text-2xl font-semibold tracking-tight">
+        Your warming vs global warming
+      </h2>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-neutral-200 bg-white/70 p-4 dark:border-neutral-800 dark:bg-[#171717]">
-          <PanelFigure svg={svgLocal} animate="draw" sequence="traces" drawMs={2200} replayOnEnter />
+          <PanelFigure
+            svg={svgLocal}
+            animate="draw"
+            sequence="traces"
+            drawMs={2200}
+            replayOnEnter
+          />
         </div>
         <div className="rounded-2xl border border-neutral-200 bg-white/70 p-4 dark:border-neutral-800 dark:bg-[#171717]">
-          <PanelFigure svg={svgGlobal} animate="draw" sequence="traces" drawMs={2200} replayOnEnter />
+          <PanelFigure
+            svg={svgGlobal}
+            animate="draw"
+            sequence="traces"
+            drawMs={2200}
+            replayOnEnter
+          />
         </div>
       </div>
 

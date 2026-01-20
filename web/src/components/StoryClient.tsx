@@ -25,7 +25,11 @@ function cToF(c: number) {
   return (c * 9) / 5 + 32;
 }
 
-async function fetchCurrentTemp(args: { lat: number; lon: number; unit: "C" | "F" }) {
+async function fetchCurrentTemp(args: {
+  lat: number;
+  lon: number;
+  unit: "C" | "F";
+}) {
   const url = new URL("/api/weather/current", window.location.origin);
   url.searchParams.set("lat", String(args.lat));
   url.searchParams.set("lon", String(args.lon));
@@ -66,19 +70,25 @@ export default function StoryClient() {
   const params = useParams();
   const slugParam = (params as any)?.slug;
   const slug =
-    typeof slugParam === "string" ? slugParam : Array.isArray(slugParam) ? slugParam[0] : "auto";
+    typeof slugParam === "string"
+      ? slugParam
+      : Array.isArray(slugParam)
+        ? slugParam[0]
+        : "auto";
 
   const { cities, error: citiesError } = useCitiesIndex();
   const themeIcon =
-    themePref === "system" ? <Monitor size={16} /> :
-    themePref === "dark" ? <Moon size={16} /> :
-    <Sun size={16} />;
+    themePref === "system" ? (
+      <Monitor size={16} />
+    ) : themePref === "dark" ? (
+      <Moon size={16} />
+    ) : (
+      <Sun size={16} />
+    );
 
   const themeText =
-    themePref === "system" ? "System" :
-    themePref === "dark" ? "Dark" :
-    "Light";
-    
+    themePref === "system" ? "System" : themePref === "dark" ? "Dark" : "Light";
+
   // Timing
   const COLD_OPEN_MS = 6000; // pure spinning hero globe, no UI, no geolocation
   const FLY_START_DELAY_MS = 3000; // beat before flight begins after target is chosen
@@ -90,15 +100,22 @@ export default function StoryClient() {
   const [phase, setPhase] = useState<Phase>("landing");
   const [unit, setUnit] = useState<"C" | "F">("C");
 
-  const [target, setTarget] = useState<{ lat: number; lon: number } | null>(null);
+  const [target, setTarget] = useState<{ lat: number; lon: number } | null>(
+    null,
+  );
   const [locationLabel, setLocationLabel] = useState<string>("your location");
 
   // This is the slug used to load data/captions/panels.
   // For /auto, we choose it from nearestCity, but we keep the URL as /auto.
-  const [storySlug, setStorySlug] = useState<string | null>(slug === "auto" ? null : slug);
+  const [storySlug, setStorySlug] = useState<string | null>(
+    slug === "auto" ? null : slug,
+  );
 
   const [currentTemp, setCurrentTemp] = useState<number | null>(null);
-  const [currentMeta, setCurrentMeta] = useState<{ cached: boolean; age: number } | null>(null);
+  const [currentMeta, setCurrentMeta] = useState<{
+    cached: boolean;
+    age: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [tempLoading, setTempLoading] = useState(false);
@@ -116,9 +133,9 @@ export default function StoryClient() {
   const [activeSlide, setActiveSlide] = useState(0);
 
   // Header section (drives the subtitle)
-  const [activeSection, setActiveSection] = useState<"intro" | "zoomout" | "seasons" | "world" | "warming">(
-    "intro"
-  );
+  const [activeSection, setActiveSection] = useState<
+    "intro" | "zoomout" | "seasons" | "world" | "warming"
+  >("intro");
 
   // Header animation (scroll-driven)
   const headerCompact = showStory && activeSlide > 0;
@@ -161,9 +178,9 @@ export default function StoryClient() {
     setHeaderReady(false);
   }, [slug]);
 
-    useEffect(() => {
-      if (showStory) setMiniSnapshot(heroSnapshotRef.current);
-    }, [showStory]);
+  useEffect(() => {
+    if (showStory) setMiniSnapshot(heroSnapshotRef.current);
+  }, [showStory]);
 
   // Cold open timer (no UI, no geolocation)
   useEffect(() => {
@@ -204,7 +221,8 @@ export default function StoryClient() {
     if (autoResolving) return;
     setAutoResolving(true);
 
-    const fallback = cities.find((c) => c.slug === "city_gb_london") ?? cities[0];
+    const fallback =
+      cities.find((c) => c.slug === "city_gb_london") ?? cities[0];
 
     const finish = (chosen: CityIndexEntry, flyLat: number, flyLon: number) => {
       setAwaitingGeo(false);
@@ -230,11 +248,13 @@ export default function StoryClient() {
         finish(chosen, lat, lon);
       },
       (geoErr) => {
-        setError(`Geolocation unavailable (${geoErr.code}). Using ${fallback.label}.`);
+        setError(
+          `Geolocation unavailable (${geoErr.code}). Using ${fallback.label}.`,
+        );
         finish(fallback, fallback.lat, fallback.lon);
       },
       // NOTE: increase timeout so the UI stays in "Finding your location…" while user decides
-      { enableHighAccuracy: false, timeout: 30_000, maximumAge: 60_000 }
+      { enableHighAccuracy: false, timeout: 30_000, maximumAge: 60_000 },
     );
   }, [slug, cities, coldOpenDone, autoResolving]);
 
@@ -268,7 +288,9 @@ export default function StoryClient() {
     const root = scrollerRef.current;
     if (!root) return;
 
-    const slides = Array.from(root.querySelectorAll<HTMLElement>("[data-story-section]"));
+    const slides = Array.from(
+      root.querySelectorAll<HTMLElement>("[data-story-section]"),
+    );
     if (!slides.length) return;
 
     const obs = new IntersectionObserver(
@@ -288,7 +310,7 @@ export default function StoryClient() {
       {
         root,
         threshold: [0.55, 0.7, 0.85],
-      }
+      },
     );
 
     slides.forEach((el) => obs.observe(el));
@@ -463,35 +485,51 @@ export default function StoryClient() {
 
   const rightCaption = useMemo(() => {
     // While the browser permission prompt is open (or we are waiting on geolocation):
-    if (slug === "auto" && awaitingGeo && !target) return "Finding your location…";
+    if (slug === "auto" && awaitingGeo && !target)
+      return "Finding your location…";
 
-    const locationResolved = locationLabel && locationLabel.toLowerCase() !== "your location";
+    const locationResolved =
+      locationLabel && locationLabel.toLowerCase() !== "your location";
     if (!locationResolved) return "Finding your location…";
 
     if (!introCaption) return "Loading your climate story…";
 
     if (error) return "Today’s temperature is temporarily unavailable.";
-    if (tempLoading || currentTemp == null) return "Fetching today’s temperature…";
+    if (tempLoading || currentTemp == null)
+      return "Fetching today’s temperature…";
 
     const t = unit === "F" ? cToF(currentTemp) : currentTemp;
     return `It’s currently ${t.toFixed(1)}°${unit}.`;
-  }, [slug, awaitingGeo, target, locationLabel, introCaption, error, tempLoading, currentTemp, unit]);
+  }, [
+    slug,
+    awaitingGeo,
+    target,
+    locationLabel,
+    introCaption,
+    error,
+    tempLoading,
+    currentTemp,
+    unit,
+  ]);
 
   const heroChipText = useMemo(() => {
     if (!coldOpenDone) return null;
     if (showStory) return null;
 
-    if (slug === "auto" && awaitingGeo && !target) return "Finding your location…";
+    if (slug === "auto" && awaitingGeo && !target)
+      return "Finding your location…";
     if (!target) return "Finding your location…";
     return "Loading your climate story…";
   }, [coldOpenDone, showStory, slug, awaitingGeo, target]);
 
   return (
-    <div className="
+    <div
+      className="
       min-h-screen text-neutral-900 dark:text-neutral-50
       bg-gradient-to-b from-white via-slate-50 to-white
       dark:from-[#212121] dark:via-[#212121] dark:to-[#212121]
-    ">
+    "
+    >
       {/* subtle background accents */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-24 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.12),transparent_60%)]" />
@@ -501,7 +539,10 @@ export default function StoryClient() {
       {/* Top bar only after story reveal */}
       {showStory && (
         <div className="fixed top-0 left-0 right-0 z-20 bg-white/70 dark:bg-[#212121]/80 backdrop-blur">
-          <div ref={headerBarRef} className="mx-auto w-full px-4 sm:px-6 lg:px-10 py-3">
+          <div
+            ref={headerBarRef}
+            className="mx-auto w-full px-4 sm:px-6 lg:px-10 py-3"
+          >
             <div className="relative h-[56px]">
               <div
                 ref={headerTitleRef}
@@ -567,247 +608,320 @@ export default function StoryClient() {
 
       {isLg && (
         <div className="pt-14">
-        {/* LG hero overlay stays mounted and fades out once showStory is true */}
-        <div
-          className={[
-            "hidden lg:block fixed inset-0 z-10 pointer-events-none transition-opacity duration-700",
-            "pointer-events-none [&_*]:pointer-events-none",
-            showStory ? "opacity-0" : "opacity-100",
-          ].join(" ")}
-          aria-hidden={showStory}
-        >
-          <div className="absolute top-[84px] left-1/2 -translate-x-1/2 w-[760px] aspect-square">
-            <Globe
-              variant="hero"
-              targetLatLon={target}
-              phase={phase}
-              onSnapshot={(s) => { heroSnapshotRef.current = s; }}
-              onArrive={() => { if (arrivedOnceRef.current) return; arrivedOnceRef.current = true; setPhase("arrived"); }}
-            />
-          </div>
-          {/* Loading chip (appears only after cold open) */}
-          {heroChipText && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="rounded-full bg-white/70 px-4 py-2 text-sm text-neutral-700 dark:text-neutral-200 backdrop-blur">
-                {heroChipText}
-              </div>
+          {/* LG hero overlay stays mounted and fades out once showStory is true */}
+          <div
+            className={[
+              "hidden lg:block fixed inset-0 z-10 pointer-events-none transition-opacity duration-700",
+              "pointer-events-none [&_*]:pointer-events-none",
+              showStory ? "opacity-0" : "opacity-100",
+            ].join(" ")}
+            aria-hidden={showStory}
+          >
+            <div className="absolute top-[84px] left-1/2 -translate-x-1/2 w-[760px] aspect-square">
+              <Globe
+                variant="hero"
+                targetLatLon={target}
+                phase={phase}
+                onSnapshot={(s) => {
+                  heroSnapshotRef.current = s;
+                }}
+                onArrive={() => {
+                  if (arrivedOnceRef.current) return;
+                  arrivedOnceRef.current = true;
+                  setPhase("arrived");
+                }}
+              />
             </div>
-          )}
-        </div>
-
-        {/* === IMPORTANT CHANGE ===
-            The snap scroller now wraps BOTH columns on lg.
-            This makes scrolling work even when the cursor is over the mini globe. */}
-        <div
-          ref={scrollerRef}
-          data-story-scroller
-          className={[
-            "relative z-30",
-            "h-[calc(100vh-56px)] overflow-y-auto overscroll-contain scroll-smooth",
-            "snap-y snap-mandatory",
-            showStory
-              ? "lg:opacity-100 lg:pointer-events-auto"
-              : "lg:opacity-0 lg:pointer-events-none lg:overflow-hidden",
-            "transition-opacity duration-700",
-          ].join(" ")}
-        >
-          {isLg && (
-            <div className="lg:grid lg:grid-cols-[420px_1fr]">
-            {/* LEFT: mini globe (lg only), sticky */}
-            <div className="hidden lg:block">
-              <div className="sticky top-0 h-[calc(100vh-56px)]">
-                <div className="flex h-full items-center justify-center px-6">
-                  <div
-                    className={[
-                      "aspect-square w-full max-w-[420px]",
-                      "pointer-events-none [&_*]:pointer-events-none",
-                      "transition-opacity duration-700",
-                      showStory && activeSection !== "warming" ? "opacity-100" : "opacity-0",
-                    ].join(" ")}
-                  >
-                    <Globe
-                      variant="mini"
-                      targetLatLon={target}
-                      phase={"arrived"}
-                      onArrive={() => {}} />
-                  </div>
+            {/* Loading chip (appears only after cold open) */}
+            {heroChipText && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="rounded-full bg-white/70 px-4 py-2 text-sm text-neutral-700 dark:text-neutral-200 backdrop-blur">
+                  {heroChipText}
                 </div>
               </div>
-            </div>
+            )}
+          </div>
 
-            {/* RIGHT: slides */}
-            <div>
-              {/* Slide 1 (mobile): intro with animated globe */}
-              {!isLg && (
-                <div data-story-section="intro" className="snap-start [scroll-snap-stop:always]">
-                <div className="mx-auto max-w-6xl px-4">
-                  <div className="relative min-h-[calc(100vh-56px)]">
-                    <div className="absolute top-10 left-1/2 -translate-x-1/2 transition-all duration-[2800ms] ease-in-out">
-                      <div className="aspect-square w-[760px] max-w-[92vw] pointer-events-none [&_*]:pointer-events-none">
+          {/* === IMPORTANT CHANGE ===
+            The snap scroller now wraps BOTH columns on lg.
+            This makes scrolling work even when the cursor is over the mini globe. */}
+          <div
+            ref={scrollerRef}
+            data-story-scroller
+            className={[
+              "relative z-30",
+              "h-[calc(100vh-56px)] overflow-y-auto overscroll-contain scroll-smooth",
+              "snap-y snap-mandatory",
+              showStory
+                ? "lg:opacity-100 lg:pointer-events-auto"
+                : "lg:opacity-0 lg:pointer-events-none lg:overflow-hidden",
+              "transition-opacity duration-700",
+            ].join(" ")}
+          >
+            {isLg && (
+              <div className="lg:grid lg:grid-cols-[420px_1fr]">
+                {/* LEFT: mini globe (lg only), sticky */}
+                <div className="hidden lg:block">
+                  <div className="sticky top-0 h-[calc(100vh-56px)]">
+                    <div className="flex h-full items-center justify-center px-6">
+                      <div
+                        className={[
+                          "aspect-square w-full max-w-[420px]",
+                          "pointer-events-none [&_*]:pointer-events-none",
+                          "transition-opacity duration-700",
+                          showStory && activeSection !== "warming"
+                            ? "opacity-100"
+                            : "opacity-0",
+                        ].join(" ")}
+                      >
                         <Globe
-                          variant="hero"
+                          variant="mini"
                           targetLatLon={target}
-                          phase={phase}
-                          onArrive={() => {
-                            if (arrivedOnceRef.current) return;
-                            arrivedOnceRef.current = true;
-                            setPhase("arrived");
-                          }}
+                          phase={"arrived"}
+                          onArrive={() => {}}
                         />
                       </div>
                     </div>
+                  </div>
+                </div>
 
+                {/* RIGHT: slides */}
+                <div>
+                  {/* Slide 1 (mobile): intro with animated globe */}
+                  {!isLg && (
                     <div
-                      className={[
-                        "absolute right-0 top-24 w-full transition-all duration-[1800ms] ease-in-out",
-                        phase === "landing"
-                          ? "opacity-0 translate-y-2 pointer-events-none"
-                          : "opacity-100 translate-y-0",
-                      ].join(" ")}
+                      data-story-section="intro"
+                      className="snap-start [scroll-snap-stop:always]"
                     >
-                      <div className="pb-16">
-                        <div className="mt-6">
-                          <h1 className="text-3xl font-semibold tracking-tight">{locationLabel}</h1>
-                          <p className="mt-4 text-lg leading-relaxed text-neutral-700 dark:text-neutral-200 ">{rightCaption}</p>
-
-                          {introCaption && (
-                            <div className="mt-6 text-neutral-700 dark:text-neutral-200 ">
-                              <Caption md={introCaption} reveal="sentences" />
+                      <div className="mx-auto max-w-6xl px-4">
+                        <div className="relative min-h-[calc(100vh-56px)]">
+                          <div className="absolute top-10 left-1/2 -translate-x-1/2 transition-all duration-[2800ms] ease-in-out">
+                            <div className="aspect-square w-[760px] max-w-[92vw] pointer-events-none [&_*]:pointer-events-none">
+                              <Globe
+                                variant="hero"
+                                targetLatLon={target}
+                                phase={phase}
+                                onArrive={() => {
+                                  if (arrivedOnceRef.current) return;
+                                  arrivedOnceRef.current = true;
+                                  setPhase("arrived");
+                                }}
+                              />
                             </div>
-                          )}
+                          </div>
 
-                          {phase === "arrived" && (
-                            <div className="mt-10 text-center">
-                              <div className="text-sm text-neutral-500 dark:text-neutral-400 ">
-                                Scroll down to explore your local climate
+                          <div
+                            className={[
+                              "absolute right-0 top-24 w-full transition-all duration-[1800ms] ease-in-out",
+                              phase === "landing"
+                                ? "opacity-0 translate-y-2 pointer-events-none"
+                                : "opacity-100 translate-y-0",
+                            ].join(" ")}
+                          >
+                            <div className="pb-16">
+                              <div className="mt-6">
+                                <h1 className="text-3xl font-semibold tracking-tight">
+                                  {locationLabel}
+                                </h1>
+                                <p className="mt-4 text-lg leading-relaxed text-neutral-700 dark:text-neutral-200 ">
+                                  {rightCaption}
+                                </p>
+
+                                {introCaption && (
+                                  <div className="mt-6 text-neutral-700 dark:text-neutral-200 ">
+                                    <Caption
+                                      md={introCaption}
+                                      reveal="sentences"
+                                    />
+                                  </div>
+                                )}
+
+                                {phase === "arrived" && (
+                                  <div className="mt-10 text-center">
+                                    <div className="text-sm text-neutral-500 dark:text-neutral-400 ">
+                                      Scroll down to explore your local climate
+                                    </div>
+                                    <div className="mt-2 text-2xl">↓</div>
+                                  </div>
+                                )}
+
+                                {(citiesError || error) && (
+                                  <p className="mt-6 text-sm text-red-600">
+                                    {citiesError ?? error}
+                                  </p>
+                                )}
                               </div>
-                              <div className="mt-2 text-2xl">↓</div>
                             </div>
-                          )}
+                          </div>
 
-                          {(citiesError || error) && (
-                            <p className="mt-6 text-sm text-red-600">{citiesError ?? error}</p>
-                          )}
+                          <div className="absolute bottom-6 left-0 right-0 text-center text-xs text-neutral-400 dark:text-neutral-500 ">
+                            {phase === "arrived" ? "Scroll to continue" : ""}
+                          </div>
                         </div>
                       </div>
                     </div>
+                  )}
 
-                    <div className="absolute bottom-6 left-0 right-0 text-center text-xs text-neutral-400 dark:text-neutral-500 ">
-                      {phase === "arrived" ? "Scroll to continue" : ""}
+                  {/* Slide 1 (lg): intro text only */}
+                  <div
+                    data-story-section="intro"
+                    className="snap-start [scroll-snap-stop:always] hidden lg:flex min-h-[calc(100vh-56px)] items-center"
+                  >
+                    <div className="mx-auto w-full max-w-3xl px-6">
+                      <h1 className="text-5xl font-semibold tracking-tight">
+                        {locationLabel}
+                      </h1>
+                      <p className="mt-6 text-2xl leading-relaxed text-neutral-700 dark:text-neutral-200">
+                        {rightCaption}
+                      </p>
+
+                      {introCaption && (
+                        <div className="mt-8 text-neutral-700 dark:text-neutral-200 ">
+                          <Caption md={introCaption} reveal="sentences" />
+                        </div>
+                      )}
+
+                      {phase === "arrived" && (
+                        <div className="mt-10">
+                          <div className="text-sm text-neutral-500 dark:text-neutral-400 ">
+                            Scroll down to explore your local climate
+                          </div>
+                          <div className="mt-2 text-2xl">↓</div>
+                        </div>
+                      )}
+
+                      {(citiesError || error) && (
+                        <p className="mt-6 text-sm text-red-600">
+                          {citiesError ?? error}
+                        </p>
+                      )}
                     </div>
                   </div>
-                </div>
-                </div>
-              )}
 
-              {/* Slide 1 (lg): intro text only */}
-              <div data-story-section="intro" className="snap-start [scroll-snap-stop:always] hidden lg:flex min-h-[calc(100vh-56px)] items-center">
-                <div className="mx-auto w-full max-w-3xl px-6">
-                  <h1 className="text-5xl font-semibold tracking-tight">{locationLabel}</h1>
-                  <p className="mt-6 text-2xl leading-relaxed text-neutral-700 dark:text-neutral-200">{rightCaption}</p>
+                  {/* Slides 2+: Panels (use storySlug, works for /auto too) */}
+                  {showStory && storySlug && (
+                    <>
+                      <div
+                        data-story-section="zoomout"
+                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
+                      >
+                        <div className="mx-auto w-full max-w-7xl px-6">
+                          <LastWeekPanel slug={storySlug} unit={unit} />
+                        </div>
+                      </div>
 
-                  {introCaption && (
-                    <div className="mt-8 text-neutral-700 dark:text-neutral-200 ">
-                      <Caption md={introCaption} reveal="sentences" />
-                    </div>
-                  )}
+                      <div
+                        data-story-section="zoomout"
+                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
+                      >
+                        <div className="mx-auto w-full max-w-7xl px-6">
+                          <LastMonthPanel slug={storySlug} unit={unit} />
+                        </div>
+                      </div>
 
-                  {phase === "arrived" && (
-                    <div className="mt-10">
-                      <div className="text-sm text-neutral-500 dark:text-neutral-400 ">Scroll down to explore your local climate</div>
-                      <div className="mt-2 text-2xl">↓</div>
-                    </div>
-                  )}
+                      <div
+                        data-story-section="zoomout"
+                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
+                      >
+                        <div className="mx-auto w-full max-w-7xl px-6">
+                          <StoryPanel
+                            slug={storySlug}
+                            unit={unit}
+                            panel="last_year"
+                            title="Last year - the seasonal cycle"
+                          />
+                        </div>
+                      </div>
 
-                  {(citiesError || error) && (
-                    <p className="mt-6 text-sm text-red-600">{citiesError ?? error}</p>
+                      <div
+                        data-story-section="zoomout"
+                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
+                      >
+                        <div className="mx-auto w-full max-w-7xl px-6">
+                          <StoryPanel
+                            slug={storySlug}
+                            unit={unit}
+                            panel="five_year"
+                            title="Last 5 years - from seasons to climate"
+                          />
+                        </div>
+                      </div>
+
+                      <div
+                        data-story-section="zoomout"
+                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
+                      >
+                        <div className="mx-auto w-full max-w-7xl px-6">
+                          <StoryPanel
+                            slug={storySlug}
+                            unit={unit}
+                            panel="fifty_year"
+                            title="Last 50 years - long term trend"
+                          />
+                        </div>
+                      </div>
+
+                      <div
+                        data-story-section="zoomout"
+                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
+                      >
+                        <div className="mx-auto w-full max-w-7xl px-6">
+                          <StoryPanel
+                            slug={storySlug}
+                            unit={unit}
+                            panel="twenty_five_years"
+                            title="25 years ahead"
+                          />
+                        </div>
+                      </div>
+
+                      <div
+                        data-story-section="seasons"
+                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
+                      >
+                        <div className="mx-auto w-full max-w-7xl px-6">
+                          <SeasonsShiftPanel slug={storySlug} unit={unit} />
+                        </div>
+                      </div>
+
+                      <div
+                        data-story-section="seasons"
+                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
+                      >
+                        <div className="mx-auto w-full max-w-7xl px-6">
+                          <SeasonsRangePanel slug={storySlug} unit={unit} />
+                        </div>
+                      </div>
+
+                      <div
+                        data-story-section="world"
+                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
+                      >
+                        <div className="mx-auto w-full max-w-7xl px-6">
+                          <YouVsWorldPanel slug={storySlug} unit={unit} />
+                        </div>
+                      </div>
+
+                      <div
+                        data-story-section="warming"
+                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
+                      >
+                        <div className="mx-auto w-full max-w-7xl px-6">
+                          <WarmingGlobePanel
+                            target={target}
+                            unit={unit}
+                            locationLabel={locationLabel}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="h-24" />
+                    </>
                   )}
                 </div>
               </div>
-
-              {/* Slides 2+: Panels (use storySlug, works for /auto too) */}
-              {showStory && storySlug && (
-                <>
-                  <div data-story-section="zoomout" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
-                    <div className="mx-auto w-full max-w-7xl px-6">
-                      <LastWeekPanel slug={storySlug} unit={unit} />
-                    </div>
-                  </div>
-
-                  <div data-story-section="zoomout" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
-                    <div className="mx-auto w-full max-w-7xl px-6">
-                      <LastMonthPanel slug={storySlug} unit={unit} />
-                    </div>
-                  </div>
-
-                  <div data-story-section="zoomout" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
-                    <div className="mx-auto w-full max-w-7xl px-6">
-                      <StoryPanel
-                        slug={storySlug}
-                        unit={unit}
-                        panel="last_year"
-                        title="Last year - the seasonal cycle"
-                      />
-                    </div>
-                  </div>
-
-                  <div data-story-section="zoomout" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
-                    <div className="mx-auto w-full max-w-7xl px-6">
-                      <StoryPanel
-                        slug={storySlug}
-                        unit={unit}
-                        panel="five_year"
-                        title="Last 5 years - from seasons to climate"
-                      />
-                    </div>
-                  </div>
-
-                  <div data-story-section="zoomout" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
-                    <div className="mx-auto w-full max-w-7xl px-6">
-                      <StoryPanel slug={storySlug} unit={unit} panel="fifty_year" title="Last 50 years - long term trend" />
-                    </div>
-                  </div>
-
-                  <div data-story-section="zoomout" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
-                    <div className="mx-auto w-full max-w-7xl px-6">
-                      <StoryPanel slug={storySlug} unit={unit} panel="twenty_five_years" title="25 years ahead" />
-                    </div>
-                  </div>
-
-                  <div data-story-section="seasons" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
-                    <div className="mx-auto w-full max-w-7xl px-6">
-                      <SeasonsShiftPanel slug={storySlug} unit={unit} />
-                    </div>
-                  </div>
-
-                  <div data-story-section="seasons" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
-                    <div className="mx-auto w-full max-w-7xl px-6">
-                      <SeasonsRangePanel slug={storySlug} unit={unit} />
-                    </div>
-                  </div>
-
-                  <div data-story-section="world" className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center">
-                    <div className="mx-auto w-full max-w-7xl px-6">
-                      <YouVsWorldPanel slug={storySlug} unit={unit} />
-                    </div>
-                  </div>
-
-                  <div
-                    data-story-section="warming"
-                    className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
-                  >
-                    <div className="mx-auto w-full max-w-7xl px-6">
-                      <WarmingGlobePanel target={target} unit={unit} locationLabel={locationLabel} />
-                    </div>
-                  </div>
-
-                  <div className="h-24" />
-                </>
-              )}
-            </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
         </div>
       )}
     </div>

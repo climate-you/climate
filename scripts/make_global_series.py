@@ -36,7 +36,9 @@ BULLETIN_ROOT = "https://sites.ecmwf.int/data/c3sci/bulletin/"
 
 # Prefer the "Fig2 ... monthly global surface temperature anomaly preindustrial" CSV in press_release/
 PREFERRED_FILENAMES = [
-    re.compile(r"Fig2_.*monthly_global_surface_temperature_anomaly_preindustrial.*\.csv$", re.I),
+    re.compile(
+        r"Fig2_.*monthly_global_surface_temperature_anomaly_preindustrial.*\.csv$", re.I
+    ),
     re.compile(r"Monthly global temperature anomalies since 1940\.csv$", re.I),
     re.compile(r"timeseries_era5_monthly_2t_global.*\.csv$", re.I),
 ]
@@ -57,7 +59,9 @@ def _find_latest_bulletin_dir(timeout_s: int = 60) -> str:
     return dirs[-1]
 
 
-def _find_best_csv_in_press_release(yyyymm: str, timeout_s: int = 60) -> Tuple[str, str]:
+def _find_best_csv_in_press_release(
+    yyyymm: str, timeout_s: int = 60
+) -> Tuple[str, str]:
     press_url = f"{BULLETIN_ROOT}{yyyymm}/press_release/"
     html = _http_get(press_url, timeout_s=timeout_s).text
     # Extract hrefs (file names)
@@ -125,7 +129,9 @@ def _coerce_year_month(df: pd.DataFrame) -> pd.DataFrame:
         if dt.notna().any():
             df["year"] = dt.dt.year
             df["month_num"] = dt.dt.month
-            df["date"] = pd.to_datetime(dict(year=df["year"], month=df["month_num"], day=1))
+            df["date"] = pd.to_datetime(
+                dict(year=df["year"], month=df["month_num"], day=1)
+            )
             df = df[df["date"].notna()]
             return df
 
@@ -137,7 +143,9 @@ def _coerce_year_month(df: pd.DataFrame) -> pd.DataFrame:
         df = df[df["date"].notna()]
         return df
 
-    raise RuntimeError(f"Upstream CSV missing year/month or date columns. Columns: {list(df.columns)}")
+    raise RuntimeError(
+        f"Upstream CSV missing year/month or date columns. Columns: {list(df.columns)}"
+    )
 
 
 def _pick_column(df: pd.DataFrame, candidates: list[str]) -> Optional[str]:
@@ -153,7 +161,9 @@ def _to_app_schema(df: pd.DataFrame) -> pd.DataFrame:
 
     col_t2m = _pick_column(df, ["2t", "t2m", "t2m_mean", "temperature"])
     col_clim = _pick_column(df, ["clim_91-20", "clim_91_20", "clim_1991-2020"])
-    col_ano_91_20 = _pick_column(df, ["ano_91-20", "ano_91_20", "anomaly_91-20", "anomaly_1991-2020"])
+    col_ano_91_20 = _pick_column(
+        df, ["ano_91-20", "ano_91_20", "anomaly_91-20", "anomaly_1991-2020"]
+    )
     col_offset = _pick_column(df, ["offset_pi", "offset_preindustrial"])
     col_ano_pi = _pick_column(df, ["ano_pi", "anomaly_pi", "anomaly_preindustrial"])
 
@@ -180,8 +190,12 @@ def _to_app_schema(df: pd.DataFrame) -> pd.DataFrame:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, default=Path("data/world/global_series.csv"))
-    ap.add_argument("--meta-out", type=Path, default=Path("data/world/global_series.meta.json"))
-    ap.add_argument("--yyyymm", type=str, default=None, help="Override bulletin directory (YYYYMM)")
+    ap.add_argument(
+        "--meta-out", type=Path, default=Path("data/world/global_series.meta.json")
+    )
+    ap.add_argument(
+        "--yyyymm", type=str, default=None, help="Override bulletin directory (YYYYMM)"
+    )
     ap.add_argument("--timeout", type=int, default=60)
     args = ap.parse_args()
 

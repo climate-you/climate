@@ -3,6 +3,7 @@ from typing import Optional
 import xarray as xr
 from datetime import date
 
+
 @dataclass
 class StoryFacts:
     data_start_year: int
@@ -12,12 +13,13 @@ class StoryFacts:
     last_year_anomaly: Optional[float]
     hemisphere: str
 
+
 @dataclass
 class StoryContext:
     today: date
     slug: str
     location_label: str
-    city_name : str
+    city_name: str
     location_lat: float
     location_lon: float
     unit: str

@@ -19,6 +19,7 @@ Core contract:
 ## 1) Repository structure (what matters now)
 
 ### Python (source of truth)
+
 - `climate/panels/`
   - Panel modules (e.g. `intro.py`, `zoomout.py`, `seasons.py`, `world.py`, etc.)
   - Conceptual pattern per panel:
@@ -40,12 +41,14 @@ Core contract:
     - Writes a `latest.json` so web can find the newest available “as-of” directory per slug.
 
 ### Web (renderer)
+
 - Next.js app under `web/`
 - Story route:
   - `/story/[slug]` for explicit slug
   - `/story/auto` (and `/`) resolves location (geolocation) then selects nearest supported slug
 
 Key components/hooks:
+
 - `web/src/components/StoryClient.tsx`
   Orchestrates routing, unit/theme, scroller + slides layout, asset fetching for captions/SVGs, header transitions, and globe behavior.
 - `web/src/components/Caption.tsx`
@@ -80,7 +83,9 @@ Units are `"C"` and `"F"`. We export **both SVG and caption** in both units beca
 ## 3) Export format and pipeline
 
 ### A) Long-term/static panels export
+
 Run via `scripts/build_frontend_bundle.py` (typically monthly/quarterly):
+
 - Inputs: `data/story_climatology/clim_<slug>.nc`
 - Produces per slug:
   - `facts.json` + `meta.json`
@@ -88,11 +93,14 @@ Run via `scripts/build_frontend_bundle.py` (typically monthly/quarterly):
   - **both C and F variants**
 
 Plotly SVG export tweaks required for web:
+
 - enforce Plotly layout `width/height/margins`
 - ensure y-axis ticks are visible (`margin.l` etc.)
 
 ### B) Live panels export (short-term)
+
 Run via `scripts/build_live_panels.py` (daily, for selected slugs):
+
 - Outputs per date (“as-of”) directory:
   - `web/public/data/live/<YYYY-MM-DD>/<slug>/`
     - `last_week.<unit>.svg`, `last_week.<unit>.caption.md`
@@ -103,6 +111,7 @@ Run via `scripts/build_live_panels.py` (daily, for selected slugs):
 - Web reads `latest.json` to choose the most recent available as-of date.
 
 Compromise for v1:
+
 - Precompute live panels daily for “popular” locations.
 - For other locations: generate on-demand server-side later (not implemented yet).
 - Current temperature is fetched via a **Next.js API proxy** (not browser → Open-Meteo) to centralize caching/troubleshooting.
@@ -114,26 +123,32 @@ Compromise for v1:
 Story is a scroll-snapped scrollytelling sequence with “slides”, roughly:
 
 ### Intro + short-term weather
+
 - Intro caption is exported from Python; the “now temperature” line is removed from exported intro caption (web has its own “It’s currently …” from the live proxy).
 - Short-term slides use live bundle assets:
   - Last week (SVG + caption)
   - Last month (SVG + caption)
 
 ### Zoom-out temperature history (from `zoomout.py`)
+
 - Last year
 - Last 5 years
 - Last 50 years
 - Future/trend panels (depending on export)
 
 ### Seasons then vs now (from `seasons.py`)
+
 Two slides:
-1) One main figure + caption
-2) Two side-by-side envelope figures + caption (markdown lists render correctly)
+
+1. One main figure + caption
+2. Two side-by-side envelope figures + caption (markdown lists render correctly)
 
 ### You vs the world (from `world.py`)
+
 - Two side-by-side anomaly charts (local vs global) + caption
 
 ### Warming globe slide (new)
+
 - Dedicated “warming” mode:
   - transitions to warming “data” texture, then spins
   - grid lines hidden in warming mode (`gridOpacity` uniform)
@@ -146,6 +161,7 @@ Two slides:
 ## 5) Front-end UX decisions and compromises
 
 ### Scroll snapping
+
 - Single scroll container with CSS snap:
   - `snap-y snap-mandatory`
   - `scroll-snap-stop: always` on slides (prevents skipping with trackpads)
@@ -153,20 +169,24 @@ Two slides:
 - Scroll container wraps both columns so scrolling works when pointer is over the globe column.
 
 ### Progressive captions
+
 - Captions via `react-markdown`.
 - `Caption` supports progressive reveal (sentence-by-sentence).
 - Markdown splitting issues (emphasis across sentence splits) fixed by normalization.
 
 ### SVG draw animations
+
 - `PanelFigure` can animate curves sequentially; markers/annotations can appear after lines.
 - Dashed lines require special handling to preserve dash patterns during stroke-dash animation.
 - Plotly hover tooltips are not available in SVG mode (future: embed data for hover / switch to Plotly.js / custom overlays).
 
 ### Theme
+
 - System/Light/Dark toggle works; Tailwind dark mode via `.dark` on `<html>`.
 - SVGs are post-processed / CSS-overridden to remove Plotly white rects and adapt axis/text colors.
 
 ### Globe
+
 - Multiple globe roles: hero, mini (docked), warming globe panel.
 - Engine is shader-based; visual toggles are mostly uniforms.
 
@@ -184,6 +204,7 @@ Two slides:
 ## 7) Instructions for code changes (how to request patches)
 
 Prefer **surgical patches**:
+
 - Specify **file path**
 - Copy/paste the **exact block** to change (“before”)
 - Provide the “after” code for that block
@@ -197,19 +218,23 @@ Prefer **surgical patches**:
 ## 8) Runbook (common workflows)
 
 ### A) Run the web app locally
+
 From repo root:
+
 - `cd web`
 - `npm install`
 - `npm run dev`
-Open:
+  Open:
 - `http://localhost:3000/`
 - `http://localhost:3000/story/city_mu_tamarin`
 
 ### B) Build the long-term/static web bundle for a slug
+
 From repo root:
+
 - Ensure `data/story_climatology/clim_<slug>.nc` exists
 - `python scripts/build_frontend_bundle.py --slugs city_mu_tamarin`
-Expected:
+  Expected:
 - `web/public/data/story/<slug>/facts.json`
 - `web/public/data/story/<slug>/meta.json`
 - `web/public/data/story/<slug>/panels/<panel>.<C|F>.svg`
@@ -217,9 +242,11 @@ Expected:
 - `web/public/data/cities_index.json`
 
 ### C) Build daily live panels for a slug
+
 From repo root:
+
 - `python scripts/build_live_panels.py --slugs city_mu_tamarin`
-Expected (example):
+  Expected (example):
 - `web/public/data/live/<YYYY-MM-DD>/<slug>/last_week.C.svg`
 - `web/public/data/live/<YYYY-MM-DD>/<slug>/last_week.C.caption.md`
 - `web/public/data/live/<YYYY-MM-DD>/<slug>/last_month.F.svg`
@@ -227,6 +254,7 @@ Expected (example):
 - `web/public/data/live/latest.json`
 
 ### D) Quick sanity checks
+
 - Open raw assets:
   - `/data/story/<slug>/panels/<panel>.C.caption.md`
   - `/data/live/latest.json`

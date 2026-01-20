@@ -10,7 +10,13 @@ async function fetchText(url: string) {
   return await r.text();
 }
 
-export default function SeasonsRangePanel({ slug, unit }: { slug: string; unit: "C" | "F" }) {
+export default function SeasonsRangePanel({
+  slug,
+  unit,
+}: {
+  slug: string;
+  unit: "C" | "F";
+}) {
   const [svgPast, setSvgPast] = useState<string | null>(null);
   const [svgRecent, setSvgRecent] = useState<string | null>(null);
   const [md, setMd] = useState<string | null>(null);
@@ -45,7 +51,12 @@ export default function SeasonsRangePanel({ slug, unit }: { slug: string; unit: 
     };
   }, [slug, unit]);
 
-  if (err) return <div className="text-sm text-neutral-500">Seasons range panel unavailable.</div>;
+  if (err)
+    return (
+      <div className="text-sm text-neutral-500">
+        Seasons range panel unavailable.
+      </div>
+    );
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-24">
@@ -55,16 +66,28 @@ export default function SeasonsRangePanel({ slug, unit }: { slug: string; unit: 
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-neutral-200 bg-white/70 p-4 dark:border-neutral-800 dark:bg-[#171717]">
-          <PanelFigure svg={svgPast} animate="draw" sequence="traces" drawMs={2000} replayOnEnter />
+          <PanelFigure
+            svg={svgPast}
+            animate="draw"
+            sequence="traces"
+            drawMs={2000}
+            replayOnEnter
+          />
         </div>
         <div className="rounded-2xl border border-neutral-200 bg-white/70 p-4 dark:border-neutral-800 dark:bg-[#171717]">
-          <PanelFigure svg={svgRecent} animate="draw" sequence="traces" drawMs={2000} replayOnEnter />
+          <PanelFigure
+            svg={svgRecent}
+            animate="draw"
+            sequence="traces"
+            drawMs={2000}
+            replayOnEnter
+          />
         </div>
       </div>
 
       {md && (
         <div className="mt-6 text-neutral-700 dark:text-neutral-200">
-          <Caption md={md} reveal="sentences"/>
+          <Caption md={md} reveal="sentences" />
         </div>
       )}
     </div>

@@ -24,9 +24,11 @@ export default function StoryPanel(props: {
       <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
 
       {svg ? (
-        <div className="mt-5 rounded-2xl border border-neutral-200 bg-white/70 p-4
-                        dark:border-neutral-800 dark:bg-[#171717]">
-          <PanelFigure svg={svg}  animate="draw" replayOnEnter/>
+        <div
+          className="mt-5 rounded-2xl border border-neutral-200 bg-white/70 p-4
+                        dark:border-neutral-800 dark:bg-[#171717]"
+        >
+          <PanelFigure svg={svg} animate="draw" replayOnEnter />
           <PanelFigureStyles />
         </div>
       ) : (

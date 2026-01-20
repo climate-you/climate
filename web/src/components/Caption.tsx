@@ -22,7 +22,11 @@ function normalize(md: string) {
 
   const dedented =
     minIndent && minIndent !== Infinity
-      ? lines.map((l) => (l.startsWith(" ".repeat(minIndent)) ? l.slice(minIndent) : l)).join("\n")
+      ? lines
+          .map((l) =>
+            l.startsWith(" ".repeat(minIndent)) ? l.slice(minIndent) : l,
+          )
+          .join("\n")
       : lines.join("\n");
 
   return dedented.trim();
@@ -107,7 +111,12 @@ function splitSentencesMarkdownSafe(text: string): string[] {
     }
 
     // Only split on punctuation when not inside code/bold/emphasis
-    if (!inCode && !inBold && !inEm && (ch === "." || ch === "!" || ch === "?")) {
+    if (
+      !inCode &&
+      !inBold &&
+      !inEm &&
+      (ch === "." || ch === "!" || ch === "?")
+    ) {
       const next = i + 1 < n ? text[i + 1] : "";
       const next2 = i + 2 < n ? text[i + 2] : "";
 
@@ -176,7 +185,9 @@ export default function Caption(props: {
     blocks.forEach((b, i) => {
       if (reveal === "sentences" && isPlainParagraphBlock(b)) {
         const sentences = splitSentencesMarkdownSafe(b);
-        sentences.forEach((s) => out.push({ kind: "sentence", blockIndex: i, text: s }));
+        sentences.forEach((s) =>
+          out.push({ kind: "sentence", blockIndex: i, text: s }),
+        );
       } else {
         out.push({ kind: "block", blockIndex: i, text: b });
       }
@@ -201,7 +212,7 @@ export default function Caption(props: {
         setInView(Boolean(e?.isIntersecting));
       },
       // A bit strict so it triggers when the slide is actually “on stage”
-      { threshold: 0.55 }
+      { threshold: 0.55 },
     );
 
     obs.observe(el);
@@ -209,7 +220,7 @@ export default function Caption(props: {
   }, [revealOnView]);
 
   const [visibleCount, setVisibleCount] = useState(
-    reveal === "none" ? Number.MAX_SAFE_INTEGER : 0
+    reveal === "none" ? Number.MAX_SAFE_INTEGER : 0,
   );
 
   // Reset on md change
@@ -248,7 +259,15 @@ export default function Caption(props: {
       cancelled = true;
       if (t != null) window.clearTimeout(t);
     };
-  }, [reveal, revealOnView, resetOnExit, inView, items.length, staggerMs, initialDelayMs]);
+  }, [
+    reveal,
+    revealOnView,
+    resetOnExit,
+    inView,
+    items.length,
+    staggerMs,
+    initialDelayMs,
+  ]);
 
   return (
     <div
@@ -282,9 +301,15 @@ export default function Caption(props: {
               return (
                 <div
                   key={`b-${blockIdx}`}
-                  className={show ? "opacity-100 transition-opacity duration-500" : "opacity-0"}
+                  className={
+                    show
+                      ? "opacity-100 transition-opacity duration-500"
+                      : "opacity-0"
+                  }
                 >
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{blockItems[0].text}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {blockItems[0].text}
+                  </ReactMarkdown>
                 </div>
               );
             }
@@ -314,20 +339,20 @@ export default function Caption(props: {
         </div>
       )}
       <style jsx>{`
-      :global(.caption-md ul) {
-        list-style: disc !important;
-        padding-left: 1.4rem !important;
-        margin: 0.75rem 0 !important;
-      }
-      :global(.caption-md ol) {
-        list-style: decimal !important;
-        padding-left: 1.4rem !important;
-        margin: 0.75rem 0 !important;
-      }
-      :global(.caption-md li) {
-        margin: 0.25rem 0 !important;
-      }
-    `}</style>
+        :global(.caption-md ul) {
+          list-style: disc !important;
+          padding-left: 1.4rem !important;
+          margin: 0.75rem 0 !important;
+        }
+        :global(.caption-md ol) {
+          list-style: decimal !important;
+          padding-left: 1.4rem !important;
+          margin: 0.75rem 0 !important;
+        }
+        :global(.caption-md li) {
+          margin: 0.25rem 0 !important;
+        }
+      `}</style>
     </div>
   );
 }

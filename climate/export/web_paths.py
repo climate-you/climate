@@ -3,12 +3,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from datetime import date
 
+
 @dataclass(frozen=True)
 class PanelPaths:
     svg: Path
     caption_md: Path
     caption_json: Path
     meta_json: Path | None = None
+
 
 def panel_paths(base_dir: Path, panel: str, unit: str) -> PanelPaths:
     """
@@ -26,9 +28,11 @@ def panel_paths(base_dir: Path, panel: str, unit: str) -> PanelPaths:
         meta_json=None,
     )
 
+
 def live_slug_dir(root: Path, asof: date, slug: str) -> Path:
     # root = web/public/data/live
     return root / asof.isoformat() / slug
+
 
 def story_slug_dir(root: Path, slug: str) -> Path:
     # root = web/public/data/story

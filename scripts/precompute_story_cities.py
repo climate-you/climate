@@ -46,19 +46,24 @@ from tqdm import tqdm
 # -----------------------
 
 # Prefer your new repo layout if present
-_DEFAULT_DATA_DIR = Path("data/story_climatology") if Path("data/story_climatology").exists() else Path("story_climatology")
+_DEFAULT_DATA_DIR = (
+    Path("data/story_climatology")
+    if Path("data/story_climatology").exists()
+    else Path("story_climatology")
+)
 
 # ERA5 is conventionally used from 1979 onwards
 START_YEAR = 1979
 
 # Define window sizes instead of fixed years
-PAST_CLIM_YEARS = 10     # e.g. 10 earliest years
-RECENT_CLIM_YEARS = 10   # e.g. 10 most recent years
+PAST_CLIM_YEARS = 10  # e.g. 10 earliest years
+RECENT_CLIM_YEARS = 10  # e.g. 10 most recent years
 
 
 # -----------------------
 # Date helper
 # -----------------------
+
 
 def last_full_quarter_end(today: date | None = None) -> date:
     """Return the last fully completed calendar quarter end date."""
@@ -88,6 +93,7 @@ def parse_yyyy_mm_dd(s: str) -> date:
 # -----------------------
 # Locations loading
 # -----------------------
+
 
 def load_locations_csv(path: Path) -> list[dict]:
     """
@@ -140,7 +146,8 @@ def load_locations_csv(path: Path) -> list[dict]:
             loc = {
                 "slug": slug,
                 "name_short": city or slug,
-                "name_long": label or (f"{city}, {country}" if city and country else slug),
+                "name_long": label
+                or (f"{city}, {country}" if city and country else slug),
                 "country": country or cc,
                 "country_code": cc or "",
                 "lat": lat,
@@ -203,6 +210,7 @@ def filter_locations(
 # Open-Meteo helper
 # -----------------------
 
+
 def fetch_city_daily_history(
     lat: float,
     lon: float,
@@ -253,7 +261,9 @@ def fetch_city_daily_history(
         p["end_date"] = e.isoformat()
 
         base_sleep = 10.0
-        backoff_floor = max(base_sleep, float(min_backoff_seconds or 0.0))  # used only for 429
+        backoff_floor = max(
+            base_sleep, float(min_backoff_seconds or 0.0)
+        )  # used only for 429
 
         last_err: Exception | None = None
         for attempt in range(max_retries):
@@ -262,7 +272,7 @@ def fetch_city_daily_history(
                 if r.status_code == 429:
                     consecutive_429 += 1
                     last_err = requests.HTTPError("429 Too Many Requests", response=r)
-                    wait = backoff_floor * (2 ** attempt)
+                    wait = backoff_floor * (2**attempt)
                     jitter = random.uniform(0.0, min(0.4, 0.10 * backoff_floor))
                     time.sleep(wait + jitter)
                     if consecutive_429 >= 3:
@@ -274,8 +284,13 @@ def fetch_city_daily_history(
 
                 body = r.text or ""
                 # Open-Meteo sometimes returns: "Unexpected error while streaming data: timeoutReached"
-                if "timeoutReached" in body or "Unexpected error while streaming data" in body:
-                    raise requests.RequestException(f"Open-Meteo backend timeout: {body[:200]!r}")
+                if (
+                    "timeoutReached" in body
+                    or "Unexpected error while streaming data" in body
+                ):
+                    raise requests.RequestException(
+                        f"Open-Meteo backend timeout: {body[:200]!r}"
+                    )
 
                 try:
                     return r.json()
@@ -288,9 +303,13 @@ def fetch_city_daily_history(
 
             except requests.RequestException as ex:
                 last_err = ex
-                is_429 = (r.status_code == 429) if "r" in locals() else False  # or set a flag explicitly
-                floor = backoff_floor if is_429 else base_sleep  # don't use --min-gap floor for non-429
-                wait = floor * (2 ** attempt)
+                is_429 = (
+                    (r.status_code == 429) if "r" in locals() else False
+                )  # or set a flag explicitly
+                floor = (
+                    backoff_floor if is_429 else base_sleep
+                )  # don't use --min-gap floor for non-429
+                wait = floor * (2**attempt)
                 jitter = random.uniform(0.0, min(0.4, 0.10 * floor))
                 time.sleep(wait + jitter)
 
@@ -321,7 +340,7 @@ def fetch_city_daily_history(
         cur = pd.Timestamp(start_date)
         end_ts = pd.Timestamp(end_date)
 
-        while cur <= end_ts:            
+        while cur <= end_ts:
             # inclusive chunk end
             nxt = (cur + pd.DateOffset(years=chunk_years)) - pd.Timedelta(days=1)
             if nxt > end_ts:
@@ -329,7 +348,7 @@ def fetch_city_daily_history(
 
             s = cur.date()
             ee = nxt.date()
-            
+
             print(f"  [chunk] requesting {s}..{ee}")
 
             j_part = _request_json(s, ee)
@@ -350,6 +369,7 @@ def fetch_city_daily_history(
 # Derived series & climatologies
 # -----------------------
 
+
 def derive_monthly_and_yearly(ds_daily: xr.Dataset):
     """From daily dataset, derive monthly and yearly mean series."""
     monthly_mean = ds_daily["t2m_daily_mean_c"].resample(time="MS").mean()
@@ -366,7 +386,9 @@ def derive_monthly_and_yearly(ds_daily: xr.Dataset):
     return monthly_mean, monthly_min, monthly_max, yearly_mean
 
 
-def derive_monthly_climatologies(ds_daily: xr.Dataset) -> tuple[xr.DataArray | None, xr.DataArray | None]:
+def derive_monthly_climatologies(
+    ds_daily: xr.Dataset,
+) -> tuple[xr.DataArray | None, xr.DataArray | None]:
     """Compute past vs recent monthly climatology for daily mean temperature."""
     da = ds_daily["t2m_daily_mean_c"]
     years = da["time"].dt.year
@@ -377,7 +399,9 @@ def derive_monthly_climatologies(ds_daily: xr.Dataset) -> tuple[xr.DataArray | N
 
     min_needed = PAST_CLIM_YEARS + RECENT_CLIM_YEARS
     if n_years < min_needed:
-        print(f"  [warn] record too short for climatologies: {n_years} years, need at least {min_needed}")
+        print(
+            f"  [warn] record too short for climatologies: {n_years} years, need at least {min_needed}"
+        )
         return None, None
 
     past_start = min_year
@@ -386,28 +410,38 @@ def derive_monthly_climatologies(ds_daily: xr.Dataset) -> tuple[xr.DataArray | N
     recent_end = max_year
     recent_start = max_year - RECENT_CLIM_YEARS + 1
 
-    print(f"  [info] climatology windows: past={past_start}–{past_end}, recent={recent_start}–{recent_end}")
+    print(
+        f"  [info] climatology windows: past={past_start}–{past_end}, recent={recent_start}–{recent_end}"
+    )
 
     # Monthly means from daily – 'ME' to avoid xarray warning
     da_mon = da.resample(time="ME").mean()
 
-    mask_past = (da_mon["time"].dt.year >= past_start) & (da_mon["time"].dt.year <= past_end)
+    mask_past = (da_mon["time"].dt.year >= past_start) & (
+        da_mon["time"].dt.year <= past_end
+    )
     mon_past = da_mon.where(mask_past, drop=True)
 
     if mon_past.time.size == 0:
         past_clim = None
     else:
         past_clim = mon_past.groupby("time.month").mean("time")
-        past_clim = past_clim.rename(month="month").assign_coords(month=np.arange(1, 13))
+        past_clim = past_clim.rename(month="month").assign_coords(
+            month=np.arange(1, 13)
+        )
 
-    mask_recent = (da_mon["time"].dt.year >= recent_start) & (da_mon["time"].dt.year <= recent_end)
+    mask_recent = (da_mon["time"].dt.year >= recent_start) & (
+        da_mon["time"].dt.year <= recent_end
+    )
     mon_recent = da_mon.where(mask_recent, drop=True)
 
     if mon_recent.time.size == 0:
         recent_clim = None
     else:
         recent_clim = mon_recent.groupby("time.month").mean("time")
-        recent_clim = recent_clim.rename(month="month").assign_coords(month=np.arange(1, 13))
+        recent_clim = recent_clim.rename(month="month").assign_coords(
+            month=np.arange(1, 13)
+        )
 
     return past_clim, recent_clim
 
@@ -415,6 +449,7 @@ def derive_monthly_climatologies(ds_daily: xr.Dataset) -> tuple[xr.DataArray | N
 # -----------------------
 # Check existing files
 # -----------------------
+
 
 def is_existing_file_up_to_date(path: Path, slug: str, target_end: date) -> bool:
     """Return True if an existing NetCDF file is up-to-date and complete."""
@@ -431,12 +466,16 @@ def is_existing_file_up_to_date(path: Path, slug: str, target_end: date) -> bool
         attrs = ds.attrs
 
         if attrs.get("location_slug") != slug:
-            print(f"  [info] {path} slug mismatch (found {attrs.get('location_slug')}, expected {slug})")
+            print(
+                f"  [info] {path} slug mismatch (found {attrs.get('location_slug')}, expected {slug})"
+            )
             return False
 
         start_year_attr = int(attrs.get("start_year", -1))
         if start_year_attr != START_YEAR:
-            print(f"  [info] {path} start_year mismatch (found {start_year_attr}, expected {START_YEAR})")
+            print(
+                f"  [info] {path} start_year mismatch (found {start_year_attr}, expected {START_YEAR})"
+            )
             return False
 
         required_vars = {
@@ -467,7 +506,9 @@ def is_existing_file_up_to_date(path: Path, slug: str, target_end: date) -> bool
         if existing_end >= target_end:
             return True
 
-        print(f"  [info] {path} only covers up to {existing_end}, need {target_end}, will recompute")
+        print(
+            f"  [info] {path} only covers up to {existing_end}, need {target_end}, will recompute"
+        )
         return False
 
     finally:
@@ -478,7 +519,15 @@ def is_existing_file_up_to_date(path: Path, slug: str, target_end: date) -> bool
 # Precompute per location
 # -----------------------
 
-def precompute_for_location(loc: dict, target_end: date, data_dir: Path, *, skip_check: bool = True, min_gap: float = 0.0) -> tuple[str, str]:
+
+def precompute_for_location(
+    loc: dict,
+    target_end: date,
+    data_dir: Path,
+    *,
+    skip_check: bool = True,
+    min_gap: float = 0.0,
+) -> tuple[str, str]:
     """
     Returns (status, detail) where status is one of:
       - "skip"      (already up-to-date)
@@ -499,11 +548,12 @@ def precompute_for_location(loc: dict, target_end: date, data_dir: Path, *, skip
     elif out_path.exists():
         status = "recompute"
 
-
     start_date = date(START_YEAR, 1, 1)
     end_date = target_end
 
-    ds_daily = fetch_city_daily_history(lat, lon, start_date, end_date, min_backoff_seconds=min_gap)
+    ds_daily = fetch_city_daily_history(
+        lat, lon, start_date, end_date, min_backoff_seconds=min_gap
+    )
 
     m_mean, m_min, m_max, y_mean = derive_monthly_and_yearly(ds_daily)
     past_clim, recent_clim = derive_monthly_climatologies(ds_daily)
@@ -550,23 +600,65 @@ def precompute_for_location(loc: dict, target_end: date, data_dir: Path, *, skip
 # CLI
 # -----------------------
 
+
 def build_arg_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Precompute story climatology NetCDFs from locations.csv")
-    p.add_argument("--locations-csv", type=Path, default=Path("locations/locations.csv"))
-    p.add_argument("--favorites-file", type=Path, default=Path("locations/favorites.txt"))
+    p = argparse.ArgumentParser(
+        description="Precompute story climatology NetCDFs from locations.csv"
+    )
+    p.add_argument(
+        "--locations-csv", type=Path, default=Path("locations/locations.csv")
+    )
+    p.add_argument(
+        "--favorites-file", type=Path, default=Path("locations/favorites.txt")
+    )
 
-    p.add_argument("--only-favorites", action="store_true", help="Only precompute slugs listed in favorites.txt")
-    p.add_argument("--slug", action="append", default=None, help="Precompute only this slug (repeatable)")
-    p.add_argument("--country", action="append", default=None, help="Filter by country code (repeatable), e.g. --country US")
+    p.add_argument(
+        "--only-favorites",
+        action="store_true",
+        help="Only precompute slugs listed in favorites.txt",
+    )
+    p.add_argument(
+        "--slug",
+        action="append",
+        default=None,
+        help="Precompute only this slug (repeatable)",
+    )
+    p.add_argument(
+        "--country",
+        action="append",
+        default=None,
+        help="Filter by country code (repeatable), e.g. --country US",
+    )
 
-    p.add_argument("--limit", type=int, default=None, help="Limit number of locations (after filtering)")
+    p.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Limit number of locations (after filtering)",
+    )
     p.add_argument("--out-dir", type=Path, default=_DEFAULT_DATA_DIR)
 
-    p.add_argument("--target-end", type=parse_yyyy_mm_dd, default=None, help="Override target end date (YYYY-MM-DD)")
-    p.add_argument("--dry-run", action="store_true", help="Print selected slugs and exit")
+    p.add_argument(
+        "--target-end",
+        type=parse_yyyy_mm_dd,
+        default=None,
+        help="Override target end date (YYYY-MM-DD)",
+    )
+    p.add_argument(
+        "--dry-run", action="store_true", help="Print selected slugs and exit"
+    )
 
-    p.add_argument("--min-gap", type=float, default=2.0, help="Minimum seconds to wait between cities (helps avoid 429). Default: %(default)s")
-    p.add_argument("--no-progress", action="store_true", help="Disable tqdm progress bar (useful for CI logs)")
+    p.add_argument(
+        "--min-gap",
+        type=float,
+        default=2.0,
+        help="Minimum seconds to wait between cities (helps avoid 429). Default: %(default)s",
+    )
+    p.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable tqdm progress bar (useful for CI logs)",
+    )
 
     return p
 
@@ -581,7 +673,9 @@ def main():
 
     print(f"Locations CSV: {args.locations_csv}")
     print(f"Output dir:    {data_dir.resolve()}")
-    print(f"Target end:    {target_end.isoformat()}  (last full quarter unless overridden)")
+    print(
+        f"Target end:    {target_end.isoformat()}  (last full quarter unless overridden)"
+    )
     print()
 
     locs = load_locations_csv(args.locations_csv)
@@ -611,7 +705,9 @@ def main():
 
     start_t = time.time()
 
-    use_tqdm = (not args.no_progress) and hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
+    use_tqdm = (
+        (not args.no_progress) and hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
+    )
     if use_tqdm:
         pbar = tqdm(
             selected,
@@ -644,10 +740,20 @@ def main():
 
         # Fast path: skip WITHOUT waiting if already up to date
         try:
-            if out_path.exists() and is_existing_file_up_to_date(out_path, slug, target_end):
+            if out_path.exists() and is_existing_file_up_to_date(
+                out_path, slug, target_end
+            ):
                 counts["skip"] += 1
                 if pbar is not None:
-                    pbar.set_postfix({'slug': slug, 'skip': counts['skip'], 'write': counts['write'], 'recompute': counts['recompute'], 'error': counts['error']})
+                    pbar.set_postfix(
+                        {
+                            "slug": slug,
+                            "skip": counts["skip"],
+                            "write": counts["write"],
+                            "recompute": counts["recompute"],
+                            "error": counts["error"],
+                        }
+                    )
                 continue
         except Exception as e:
             # If the up-to-date check itself fails, fall back to recompute path
@@ -658,27 +764,55 @@ def main():
             now = time.monotonic()
             wait = args.min_gap - (now - last_done)
             if wait > 0:
-                time.sleep(wait + random.uniform(0, 0.4))  # jitter helps avoid “thundering herd”
+                time.sleep(
+                    wait + random.uniform(0, 0.4)
+                )  # jitter helps avoid “thundering herd”
 
         if pbar is not None:
-            pbar.set_postfix({'slug': slug, 'skip': counts['skip'], 'write': counts['write'], 'recompute': counts['recompute'], 'error': counts['error']})
+            pbar.set_postfix(
+                {
+                    "slug": slug,
+                    "skip": counts["skip"],
+                    "write": counts["write"],
+                    "recompute": counts["recompute"],
+                    "error": counts["error"],
+                }
+            )
         try:
-            status, detail = precompute_for_location(loc, target_end, data_dir, skip_check=False, min_gap=args.min_gap)
+            status, detail = precompute_for_location(
+                loc, target_end, data_dir, skip_check=False, min_gap=args.min_gap
+            )
             counts[status] += 1
             if pbar is not None:
-                pbar.set_postfix({'slug': slug, 'skip': counts['skip'], 'write': counts['write'], 'recompute': counts['recompute'], 'error': counts['error']})
+                pbar.set_postfix(
+                    {
+                        "slug": slug,
+                        "skip": counts["skip"],
+                        "write": counts["write"],
+                        "recompute": counts["recompute"],
+                        "error": counts["error"],
+                    }
+                )
         except Exception as e:
             counts["error"] += 1
             if pbar is not None:
-                pbar.set_postfix({'slug': slug, 'skip': counts['skip'], 'write': counts['write'], 'recompute': counts['recompute'], 'error': counts['error']})
+                pbar.set_postfix(
+                    {
+                        "slug": slug,
+                        "skip": counts["skip"],
+                        "write": counts["write"],
+                        "recompute": counts["recompute"],
+                        "error": counts["error"],
+                    }
+                )
             _log(f"[error] {slug} failed: {e}")
         finally:
             # Update only after a real attempt (so skips don't “consume” the gap)
             last_done = time.monotonic()
-    
+
     if pbar is not None:
         pbar.close()
-    
+
     dt = time.time() - start_t
     print(f"\nDone. Total wall time: {dt:.1f}s")
 

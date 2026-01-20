@@ -1,6 +1,9 @@
 import type { CityIndexEntry } from "@/lib/cities";
 
-export function nearestCity(cities: CityIndexEntry[], pt: { lat: number; lon: number }): CityIndexEntry | null {
+export function nearestCity(
+  cities: CityIndexEntry[],
+  pt: { lat: number; lon: number },
+): CityIndexEntry | null {
   if (!cities.length) return null;
 
   let best = cities[0];
@@ -25,7 +28,10 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;

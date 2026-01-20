@@ -44,7 +44,9 @@ def _find_latest_bulletin_dir(timeout_s: int = 60) -> str:
     return dirs[-1]
 
 
-def _find_files(yyyymm: str, timeout_s: int = 60) -> Tuple[str, Optional[str], Optional[str]]:
+def _find_files(
+    yyyymm: str, timeout_s: int = 60
+) -> Tuple[str, Optional[str], Optional[str]]:
     press_url = f"{BULLETIN_ROOT}{yyyymm}/press_release/"
     html = _http_get(press_url, timeout_s=timeout_s).text
     files = [m.group(1) for m in re.finditer(r'href="([^"]+)"', html)]
@@ -55,7 +57,7 @@ def _find_files(yyyymm: str, timeout_s: int = 60) -> Tuple[str, Optional[str], O
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out-dir", type=Path, default=Path("data/world"))    
+    ap.add_argument("--out-dir", type=Path, default=Path("data/world"))
     ap.add_argument("--yyyymm", type=str, default=None)
     ap.add_argument("--timeout", type=int, default=60)
     args = ap.parse_args()
@@ -88,11 +90,13 @@ def main() -> None:
     out_manifest.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
     if not nc and not png:
-        raise RuntimeError(f"Could not find Fig3 global anomaly map files in {press_url}")
+        raise RuntimeError(
+            f"Could not find Fig3 global anomaly map files in {press_url}"
+        )
 
     print(f"Wrote {out_manifest}")
     for k, v in manifest["files"].items():
-        print(f"- {k}: {v['path']}")    
+        print(f"- {k}: {v['path']}")
 
 
 if __name__ == "__main__":

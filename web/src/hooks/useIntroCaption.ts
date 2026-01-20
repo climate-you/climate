@@ -30,9 +30,12 @@ export function useIntroCaption(args: {
 
     (async () => {
       try {
-        const url = cacheBustDev(`/data/story/${slug}/panels/intro.${unit}.caption.md`);
+        const url = cacheBustDev(
+          `/data/story/${slug}/panels/intro.${unit}.caption.md`,
+        );
         const res = await fetch(url, { cache: "no-store" });
-        if (!res.ok) throw new Error(`Failed to load intro caption: ${res.status}`);
+        if (!res.ok)
+          throw new Error(`Failed to load intro caption: ${res.status}`);
         const md = await res.text();
         if (!cancelled) setCaption(md);
       } catch (e) {

@@ -20,10 +20,18 @@ from climate.export.web_write import write_plotly_svg, write_matplotlib_svg
 
 from climate.panels.intro import intro_caption  # we will build intro "data" ourselves
 from climate.panels.zoomout import (
-    build_last_year_data, build_last_year_figure, last_year_caption,
-    build_five_year_data, build_five_year_figure, five_year_caption,
-    build_fifty_year_data, build_fifty_year_figure, fifty_year_caption,
-    build_twenty_five_years_data, build_twenty_five_years_figure, twenty_five_years_caption,
+    build_last_year_data,
+    build_last_year_figure,
+    last_year_caption,
+    build_five_year_data,
+    build_five_year_figure,
+    five_year_caption,
+    build_fifty_year_data,
+    build_fifty_year_figure,
+    fifty_year_caption,
+    build_twenty_five_years_data,
+    build_twenty_five_years_figure,
+    twenty_five_years_caption,
 )
 from climate.panels.seasons import (
     build_seasons_then_now_data,
@@ -50,14 +58,23 @@ from climate.panels.ocean import (
     build_ocean_context_map_figure,
 )
 
+
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser()
     ap.add_argument("--locations-csv", default="locations/locations.csv")
     ap.add_argument("--clim-dir", default="data/story_climatology")
     ap.add_argument("--out-story", default="web/public/data/story")
     ap.add_argument("--out-index", default="web/public/data/cities_index.json")
-    ap.add_argument("--slugs", default=None, help="Comma-separated web slugs (e.g. gb_london,jp_tokyo)")
-    ap.add_argument("--today", default=None, help="Override today's date (YYYY-MM-DD). Default = today.")
+    ap.add_argument(
+        "--slugs",
+        default=None,
+        help="Comma-separated web slugs (e.g. gb_london,jp_tokyo)",
+    )
+    ap.add_argument(
+        "--today",
+        default=None,
+        help="Override today's date (YYYY-MM-DD). Default = today.",
+    )
     return ap.parse_args()
 
 
@@ -93,7 +110,9 @@ def build_cities_index(loc_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "lat": float(r["lat"]),
                 "lon": float(r["lon"]),
                 "timezone": r.get("timezone", "").strip(),
-                "population": int(float(r["population"])) if r.get("population") else None,
+                "population": (
+                    int(float(r["population"])) if r.get("population") else None
+                ),
                 "geonameid": int(r["geonameid"]) if r.get("geonameid") else None,
                 "source_slug": loc_slug,
             }
@@ -123,7 +142,17 @@ def strip_intro_now_paragraph(md: str) -> str:
     return md.strip()
 
 
-def write_panel_caption(slug_dir: Path, panel: str, unit: str, md: str, *, title: str = "", header: str = "", source: str = "", url: str = "") -> None:
+def write_panel_caption(
+    slug_dir: Path,
+    panel: str,
+    unit: str,
+    md: str,
+    *,
+    title: str = "",
+    header: str = "",
+    source: str = "",
+    url: str = "",
+) -> None:
     """
     Backwards-compatible caption export:
     - Always write legacy caption.md (used by current web app)
@@ -246,7 +275,6 @@ def build_story_manifest_v1(slug: str, *, has_ocean: bool) -> dict:
     }
 
 
-
 def main() -> None:
     args = parse_args()
     locations_csv = Path(args.locations_csv)
@@ -309,7 +337,9 @@ def main() -> None:
 
             md = intro_caption(ctx, facts, intro_data)
             md = strip_intro_now_paragraph(md)
-            write_panel_caption(slug_dir, "intro", unit, md, title="", header="", source="", url="")
+            write_panel_caption(
+                slug_dir, "intro", unit, md, title="", header="", source="", url=""
+            )
 
             # Compute unit-neutral data once per panel (uses ctx.ds; independent of ctx.unit)
             ctx_data = StoryContext(
@@ -324,12 +354,32 @@ def main() -> None:
             )
 
             panel_specs = [
-                ("last_year", build_last_year_data, build_last_year_figure, last_year_caption),
-                ("five_year", build_five_year_data, build_five_year_figure, five_year_caption),
-                ("fifty_year", build_fifty_year_data, build_fifty_year_figure, fifty_year_caption),
-                ("twenty_five_years", build_twenty_five_years_data, build_twenty_five_years_figure, twenty_five_years_caption),
+                (
+                    "last_year",
+                    build_last_year_data,
+                    build_last_year_figure,
+                    last_year_caption,
+                ),
+                (
+                    "five_year",
+                    build_five_year_data,
+                    build_five_year_figure,
+                    five_year_caption,
+                ),
+                (
+                    "fifty_year",
+                    build_fifty_year_data,
+                    build_fifty_year_figure,
+                    fifty_year_caption,
+                ),
+                (
+                    "twenty_five_years",
+                    build_twenty_five_years_data,
+                    build_twenty_five_years_figure,
+                    twenty_five_years_caption,
+                ),
             ]
-            for (panel_name, build_data_fn, build_fig_fn, caption_fn) in panel_specs:
+            for panel_name, build_data_fn, build_fig_fn, caption_fn in panel_specs:
                 data = build_data_fn(ctx_data)
 
                 for unit in ("C", "F"):
@@ -349,9 +399,14 @@ def main() -> None:
 
                     p = panel_paths(slug_dir / "panels", panel_name, unit)
                     write_plotly_svg(p.svg, fig)
-                    write_panel_caption(slug_dir, panel_name, unit, cap, source="ERA5 (climatology) / local processing")
+                    write_panel_caption(
+                        slug_dir,
+                        panel_name,
+                        unit,
+                        cap,
+                        source="ERA5 (climatology) / local processing",
+                    )
 
-            
             # ---------------------------------------------------------------------
             # Seasons then vs now (2 slides in web):
             #  - Slide 1: seasons_shift (single figure)
@@ -372,22 +427,44 @@ def main() -> None:
                     )
 
                     # Slide 1: single figure
-                    fig_shift, _tiny = build_seasons_then_now_figure(ctx_u, facts, seasons_data)
+                    fig_shift, _tiny = build_seasons_then_now_figure(
+                        ctx_u, facts, seasons_data
+                    )
                     p = panel_paths(slug_dir / "panels", "seasons_shift", unit)
                     write_plotly_svg(p.svg, fig_shift)
-                    write_panel_caption(slug_dir, "seasons_shift", unit, seasons_then_now_caption(ctx_u, facts, seasons_data), source="ERA5 (climatology) / local processing")
+                    write_panel_caption(
+                        slug_dir,
+                        "seasons_shift",
+                        unit,
+                        seasons_then_now_caption(ctx_u, facts, seasons_data),
+                        source="ERA5 (climatology) / local processing",
+                    )
 
                     # Slide 2: two figures side-by-side + shared caption
-                    fig_past, fig_recent = build_seasons_then_now_separate_figures(ctx_u, facts, seasons_data)
+                    fig_past, fig_recent = build_seasons_then_now_separate_figures(
+                        ctx_u, facts, seasons_data
+                    )
 
-                    p_past = panel_paths(slug_dir / "panels", "seasons_range_earlier", unit)
-                    p_recent = panel_paths(slug_dir / "panels", "seasons_range_recent", unit)
+                    p_past = panel_paths(
+                        slug_dir / "panels", "seasons_range_earlier", unit
+                    )
+                    p_recent = panel_paths(
+                        slug_dir / "panels", "seasons_range_recent", unit
+                    )
                     write_plotly_svg(p_past.svg, fig_past)
                     write_plotly_svg(p_recent.svg, fig_recent)
 
-                    write_panel_caption(slug_dir, "seasons_range", unit, seasons_then_now_separate_caption(ctx_u, facts, seasons_data), source="ERA5 (climatology) / local processing")
+                    write_panel_caption(
+                        slug_dir,
+                        "seasons_range",
+                        unit,
+                        seasons_then_now_separate_caption(ctx_u, facts, seasons_data),
+                        source="ERA5 (climatology) / local processing",
+                    )
             else:
-                print(f"[info] monthly climatologies unavailable for {slug}; skipping seasons panels")
+                print(
+                    f"[info] monthly climatologies unavailable for {slug}; skipping seasons panels"
+                )
 
             # -----------------------------------------------------------
             # YOU VS THE WORLD (local vs global anomalies) — 2 figures side-by-side in the web slide
@@ -412,7 +489,9 @@ def main() -> None:
                 )
 
                 data_w = build_you_vs_world_data(ctx_u)
-                fig_local, fig_global, tiny = build_you_vs_world_figures(ctx_u, facts, data_w)
+                fig_local, fig_global, tiny = build_you_vs_world_figures(
+                    ctx_u, facts, data_w
+                )
                 cap = you_vs_world_caption(ctx_u, facts, data_w)
 
                 # Append the tiny streamlit caption as a final italic line (optional but nice for sharing)
@@ -424,8 +503,14 @@ def main() -> None:
 
                 write_plotly_svg(p_local.svg, fig_local)
                 write_plotly_svg(p_global.svg, fig_global)
-                write_panel_caption(slug_dir, "you_vs_world", unit, cap, source="ERA5 (climatology) / local processing")
-            
+                write_panel_caption(
+                    slug_dir,
+                    "you_vs_world",
+                    unit,
+                    cap,
+                    source="ERA5 (climatology) / local processing",
+                )
+
             # -----------------------------------------------------------
             # OCEAN STRESS (SST anomaly, SST hot-days, coral heat stress / DHW)
             #
@@ -446,16 +531,22 @@ def main() -> None:
                 sst_anom_data = None
                 sst_hotdays_data = None
                 dhw_data = None
-                print(f"[info] ocean cache unavailable for {slug}; skipping ocean exports ({type(e).__name__}: {e})")
+                print(
+                    f"[info] ocean cache unavailable for {slug}; skipping ocean exports ({type(e).__name__}: {e})"
+                )
 
             if sst_anom_data is not None:
                 # Map (unit-agnostic): current “context” map (DHW box / coastline context)
                 try:
-                    fig_map, tiny = build_ocean_context_map_figure(ctx_data, facts, dhw_data)
+                    fig_map, tiny = build_ocean_context_map_figure(
+                        ctx_data, facts, dhw_data
+                    )
                     map_path = slug_dir / "maps" / "ocean_context_map.svg"
                     write_matplotlib_svg(map_path, fig_map)
                 except Exception as e:
-                    print(f"[info] ocean context map failed for {slug} ({type(e).__name__}: {e})")
+                    print(
+                        f"[info] ocean context map failed for {slug} ({type(e).__name__}: {e})"
+                    )
 
                 # Reserve room for later (SST anomaly map), but don't write anything yet:
                 # slug_dir / "maps" / "ocean_sst_map.svg"
@@ -502,18 +593,23 @@ def main() -> None:
         # story manifest (static bundle)
         ocean_path = Path("data/story_ocean") / f"ocean_{slug}.nc"
         has_ocean = ocean_path.exists()
-        write_json(slug_dir / "story.json", build_story_manifest_v1(slug, has_ocean=has_ocean))
+        write_json(
+            slug_dir / "story.json", build_story_manifest_v1(slug, has_ocean=has_ocean)
+        )
 
         # meta (optional, useful for debugging)
         ocean_path = Path("data/story_ocean") / f"ocean_{slug}.nc"
         has_ocean = ocean_path.exists()
-        write_json(slug_dir / "meta.json", {
-            "slug": slug,
-            "generated_at": datetime.utcnow().isoformat() + "Z",
-            "climatology_file": str(clim_path),
-            "ocean_file": str(ocean_path) if has_ocean else None,
-            "today": today.isoformat(),
-        })
+        write_json(
+            slug_dir / "meta.json",
+            {
+                "slug": slug,
+                "generated_at": datetime.utcnow().isoformat() + "Z",
+                "climatology_file": str(clim_path),
+                "ocean_file": str(ocean_path) if has_ocean else None,
+                "today": today.isoformat(),
+            },
+        )
 
         print(f"[ok] {slug} -> {slug_dir}")
 

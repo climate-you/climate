@@ -10,7 +10,10 @@ import json
 
 import xarray as xr  # only for StoryContext typing; ds not used for these panels
 
-from climate.models import StoryContext, StoryFacts  # :contentReference[oaicite:1]{index=1}
+from climate.models import (
+    StoryContext,
+    StoryFacts,
+)  # :contentReference[oaicite:1]{index=1}
 from climate.export.web_paths import live_slug_dir, panel_paths
 from climate.export.web_write import write_plotly_svg, write_text, write_json
 from climate.export.captions import normalize_caption
@@ -25,26 +28,40 @@ from climate.panels.zoomout import (
     last_month_caption,
 )
 
+
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cities-index", default="web/public/data/cities_index.json")
     ap.add_argument("--out", default="web/public/data/live")
-    ap.add_argument("--asof", default=None, help="YYYY-MM-DD; interpreted as 'data through end of that day'. Default=yesterday.")
+    ap.add_argument(
+        "--asof",
+        default=None,
+        help="YYYY-MM-DD; interpreted as 'data through end of that day'. Default=yesterday.",
+    )
     ap.add_argument("--slugs", default=None, help="Comma-separated slugs")
-    ap.add_argument("--slugs-file", default=None, help="Text file with one slug per line")
+    ap.add_argument(
+        "--slugs-file", default=None, help="Text file with one slug per line"
+    )
     return ap.parse_args()
+
 
 def load_cities_index(path: Path) -> list[dict[str, Any]]:
     return json.loads(path.read_text(encoding="utf-8"))
+
 
 def choose_slugs(args: argparse.Namespace, cities: list[dict[str, Any]]) -> list[str]:
     if args.slugs:
         return [s.strip() for s in args.slugs.split(",") if s.strip()]
     if args.slugs_file:
         p = Path(args.slugs_file)
-        return [ln.strip() for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip() and not ln.strip().startswith("#")]
+        return [
+            ln.strip()
+            for ln in p.read_text(encoding="utf-8").splitlines()
+            if ln.strip() and not ln.strip().startswith("#")
+        ]
     # default: all cities in index
     return [c["slug"] for c in cities]
+
 
 def dummy_facts(lat: float, ctx_today: date) -> StoryFacts:
     hemi = "north" if lat >= 0 else "south"
@@ -56,6 +73,7 @@ def dummy_facts(lat: float, ctx_today: date) -> StoryFacts:
         last_year_anomaly=None,
         hemisphere=hemi,
     )
+
 
 def main() -> None:
     args = parse_args()
@@ -111,7 +129,14 @@ def main() -> None:
         m_data = build_last_month_data(ctxC)
 
         if w_data is None or m_data is None:
-            write_json(out_dir / "build_error.json", {"slug": slug, "asof": asof.isoformat(), "error": "Open-Meteo returned None"})
+            write_json(
+                out_dir / "build_error.json",
+                {
+                    "slug": slug,
+                    "asof": asof.isoformat(),
+                    "error": "Open-Meteo returned None",
+                },
+            )
             continue
 
         # Render per unit from the same data
@@ -142,20 +167,24 @@ def main() -> None:
             write_text(p.caption_md, normalize_caption(cap_m))
 
         # shared metadata
-        write_json(out_dir / "meta.json", {
-            "slug": slug,
-            "label": label,
-            "asof": asof.isoformat(),
-            "generated_at": datetime.utcnow().isoformat() + "Z",
-            "source": "Open-Meteo",
-            "panels": ["last_week", "last_month"],
-        })
+        write_json(
+            out_dir / "meta.json",
+            {
+                "slug": slug,
+                "label": label,
+                "asof": asof.isoformat(),
+                "generated_at": datetime.utcnow().isoformat() + "Z",
+                "source": "Open-Meteo",
+                "panels": ["last_week", "last_month"],
+            },
+        )
 
         latest[slug] = asof.isoformat()
         print(f"[ok] {slug} {asof.isoformat()} -> {out_dir}")
-    
+
     print(f"[writing] {len(latest)} entries -> {latest_path}")
     write_json(latest_path, latest)
+
 
 if __name__ == "__main__":
     main()

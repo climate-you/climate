@@ -60,7 +60,7 @@ ERDDAP_DATASETS = {
         "lat_col_candidates": ["latitude", "lat"],
         "lon_col_candidates": ["longitude", "lon"],
     },
-     "crw_dhw_daily": {
+    "crw_dhw_daily": {
         "dataset_id": "noaacrwdhwDaily",
         "var": "degree_heating_week",
         # CRW DHW uses daily time at 12:00Z (as observed from curl)
@@ -90,7 +90,7 @@ OISST_BASES = [
 CRW_BASE = "https://coastwatch.noaa.gov/erddap"
 CRW_DATASET_ID = "noaacrwdhwDaily"
 CRW_VAR = "degree_heating_week"
-CRW_START = "1985-03-25"                       # dataset axis minimum observed
+CRW_START = "1985-03-25"  # dataset axis minimum observed
 
 # Baseline for anomalies / thresholds
 BASELINE_START = "1981-01-01"
@@ -103,6 +103,7 @@ DEFAULT_DHW_BOX_HALF_DEG = 0.05
 # Helpers
 # -------------------------
 
+
 def _lon_pm180(lon: float) -> float:
     lon_q = lon
     if lon_q > 180:
@@ -111,12 +112,15 @@ def _lon_pm180(lon: float) -> float:
         lon_q += 360
     return lon_q
 
+
 def _ensure_dir(p: Path) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
 
+
 def _sleep_seconds(attempt: int, base: float = 1.0) -> float:
     jitter = 0.25 * np.random.random()
-    return base * (2 ** attempt) + jitter
+    return base * (2**attempt) + jitter
+
 
 def download_to(
     url: str,
@@ -138,7 +142,9 @@ def download_to(
     for attempt in range(retries):
         try:
             if label:
-                print(f"{label} Downloading (attempt {attempt+1}/{retries}) -> {path.name}")
+                print(
+                    f"{label} Downloading (attempt {attempt+1}/{retries}) -> {path.name}"
+                )
             r = requests.get(url, timeout=timeout)
             r.raise_for_status()
             path.write_bytes(r.content)
@@ -153,14 +159,18 @@ def download_to(
                 print(f"{label} 404 body: {body[:400]}")
             wait = _sleep_seconds(attempt, base=1.0)
             if label:
-                print(f"{label} Download failed: HTTPError {status} (sleep {wait:.1f}s)")
+                print(
+                    f"{label} Download failed: HTTPError {status} (sleep {wait:.1f}s)"
+                )
             time.sleep(wait)
 
         except Exception as e:
             last_err = e
             wait = _sleep_seconds(attempt, base=1.0)
             if label:
-                print(f"{label} Download failed: {type(e).__name__}: {e} (sleep {wait:.1f}s)")
+                print(
+                    f"{label} Download failed: {type(e).__name__}: {e} (sleep {wait:.1f}s)"
+                )
             time.sleep(wait)
 
     raise RuntimeError(f"Failed to download after {retries} attempts: {last_err}")
@@ -209,7 +219,9 @@ def build_erddap_griddap_query_from_spec(
             parts.append(f"[({lon0}):1:({lon1})]")
         else:
             # If we ever add a dataset with a new dim, we must encode how to constrain it.
-            raise RuntimeError(f"Unhandled ERDDAP dim '{dim}' for var '{var}'. Update spec/query builder.")
+            raise RuntimeError(
+                f"Unhandled ERDDAP dim '{dim}' for var '{var}'. Update spec/query builder."
+            )
 
     return var + "".join(parts)
 
@@ -223,6 +235,7 @@ def erddap_griddap_url(base: str, dataset_id: str, query: str, ext: str) -> str:
     q = quote(query, safe=safe)
     return f"{base}/griddap/{dataset_id}.{ext}?{q}"
 
+
 def _http_status(err: Exception) -> int | None:
     try:
         if isinstance(err, requests.HTTPError) and err.response is not None:
@@ -231,11 +244,13 @@ def _http_status(err: Exception) -> int | None:
         return None
     return None
 
+
 def read_erddap_csv(path: Path) -> pd.DataFrame:
     """
     ERDDAP CSV: header row, then units row. Skip units row.
     """
     return pd.read_csv(path, skiprows=[1])
+
 
 def _year_blocks(start: str, end: str, block_years: int):
     y0 = int(start[:4])
@@ -247,16 +262,21 @@ def _year_blocks(start: str, end: str, block_years: int):
         b = min(b, end)
         yield a, b
 
+
 def _drop_feb29(s: pd.Series) -> pd.Series:
     idx = pd.DatetimeIndex(s.index)
     mask = ~((idx.month == 2) & (idx.day == 29))
     return s.loc[mask]
 
+
 # -------------------------
 # OISST SST fetch + metrics
 # -------------------------
 
-def fetch_oisst_daily_sst_point(lat: float, lon: float, start: str, end: str) -> pd.Series:
+
+def fetch_oisst_daily_sst_point(
+    lat: float, lon: float, start: str, end: str
+) -> pd.Series:
     """
     Fetch OISST daily SST via ERDDAP (Spike-style robust approach):
 
@@ -280,7 +300,9 @@ def fetch_oisst_daily_sst_point(lat: float, lon: float, start: str, end: str) ->
     # Clamp to dataset availability (don’t force callers to remember dataset starts)
     start = max(start, spec.get("dataset_start", start))
 
-    def build_query(a: str, b: str, la0: float, la1: float, lo0: float, lo1: float) -> str:
+    def build_query(
+        a: str, b: str, la0: float, la1: float, lo0: float, lo1: float
+    ) -> str:
         return build_erddap_griddap_query_from_spec(
             spec,
             a_date=a,
@@ -292,7 +314,7 @@ def fetch_oisst_daily_sst_point(lat: float, lon: float, start: str, end: str) ->
         )
 
     series_parts = []
-    for (a, b) in _year_blocks(start, end, block_years=5):
+    for a, b in _year_blocks(start, end, block_years=5):
         ok = False
         last_err: Optional[Exception] = None
 
@@ -306,13 +328,23 @@ def fetch_oisst_daily_sst_point(lat: float, lon: float, start: str, end: str) ->
 
         dataset_id = spec["dataset_id"]
         for base in OISST_BASES:
-            for (la0, la1, lo0, lo1) in variants:
+            for la0, la1, lo0, lo1 in variants:
                 query = build_query(a, b, la0, la1, lo0, lo1)
                 url = erddap_griddap_url(base, dataset_id, query, "csv")
-                cache_path = CACHE_DIR / "oisst" / f"oisst_{dataset_id}_{lat:.4f}_{lon:.4f}_{a}_{b}.csv"
+                cache_path = (
+                    CACHE_DIR
+                    / "oisst"
+                    / f"oisst_{dataset_id}_{lat:.4f}_{lon:.4f}_{a}_{b}.csv"
+                )
 
                 try:
-                    download_to(url, cache_path, retries=6, timeout=(30, 300), label=f"[OISST {a[:4]}]")
+                    download_to(
+                        url,
+                        cache_path,
+                        retries=6,
+                        timeout=(30, 300),
+                        label=f"[OISST {a[:4]}]",
+                    )
                     df = read_erddap_csv(cache_path)
 
                     tcol = "time" if "time" in df.columns else df.columns[0]
@@ -321,15 +353,27 @@ def fetch_oisst_daily_sst_point(lat: float, lon: float, start: str, end: str) ->
 
                     var = spec["var"]
                     if var not in df.columns:
-                        raise RuntimeError(f"OISST CSV missing '{var}' column; columns={list(df.columns)}")
+                        raise RuntimeError(
+                            f"OISST CSV missing '{var}' column; columns={list(df.columns)}"
+                        )
 
-                    lat_col = _pick_first_present(list(df.columns), spec.get("lat_col_candidates", ["latitude", "lat"]))
-                    lon_col = _pick_first_present(list(df.columns), spec.get("lon_col_candidates", ["longitude", "lon"]))
+                    lat_col = _pick_first_present(
+                        list(df.columns),
+                        spec.get("lat_col_candidates", ["latitude", "lat"]),
+                    )
+                    lon_col = _pick_first_present(
+                        list(df.columns),
+                        spec.get("lon_col_candidates", ["longitude", "lon"]),
+                    )
                     if lat_col is None or lon_col is None:
-                        raise RuntimeError(f"OISST CSV missing lat/lon columns; columns={list(df.columns)}")
+                        raise RuntimeError(
+                            f"OISST CSV missing lat/lon columns; columns={list(df.columns)}"
+                        )
 
                     df["d2"] = (df[lat_col] - lat) ** 2 + (df[lon_col] - lon_pm) ** 2
-                    df = df.sort_values("d2").drop_duplicates(subset=[tcol], keep="first")
+                    df = df.sort_values("d2").drop_duplicates(
+                        subset=[tcol], keep="first"
+                    )
 
                     s = pd.Series(df[var].values, index=pd.to_datetime(df[tcol].values))
                     s = s.sort_index()
@@ -358,9 +402,14 @@ def fetch_oisst_daily_sst_point(lat: float, lon: float, start: str, end: str) ->
     return sst
 
 
-def daily_climatology_mean_p90(s_daily: pd.Series, baseline_start: str, baseline_end: str) -> tuple[pd.Series, pd.Series]:
+def daily_climatology_mean_p90(
+    s_daily: pd.Series, baseline_start: str, baseline_end: str
+) -> tuple[pd.Series, pd.Series]:
     s = _drop_feb29(s_daily)
-    base = s.loc[(s.index >= pd.Timestamp(baseline_start)) & (s.index <= pd.Timestamp(baseline_end))]
+    base = s.loc[
+        (s.index >= pd.Timestamp(baseline_start))
+        & (s.index <= pd.Timestamp(baseline_end))
+    ]
     if len(base) < 365 * 5:
         raise RuntimeError("Not enough baseline data to compute SST climatology.")
     doy = base.index.dayofyear
@@ -368,6 +417,7 @@ def daily_climatology_mean_p90(s_daily: pd.Series, baseline_start: str, baseline
     clim_mean = df.groupby("doy")["v"].mean()
     clim_p90 = df.groupby("doy")["v"].quantile(0.9)
     return clim_mean, clim_p90
+
 
 def annual_group(s: pd.Series, how: str) -> pd.Series:
     y = s.index.year
@@ -378,6 +428,7 @@ def annual_group(s: pd.Series, how: str) -> pd.Series:
     if how == "max":
         return s.groupby(y).max()
     raise ValueError(how)
+
 
 def compute_sst_anom_and_hotdays(sst_daily: pd.Series) -> tuple[pd.Series, pd.Series]:
     sst = _drop_feb29(sst_daily)
@@ -395,11 +446,15 @@ def compute_sst_anom_and_hotdays(sst_daily: pd.Series) -> tuple[pd.Series, pd.Se
 
     return anom_year, hotdays_year
 
+
 # -------------------------
 # CRW DHW fetch + metrics
 # -------------------------
 
-def fetch_crw_dhw_box_mean(lat: float, lon: float, box_half_deg: float, start: str, end: str) -> pd.Series:
+
+def fetch_crw_dhw_box_mean(
+    lat: float, lon: float, box_half_deg: float, start: str, end: str
+) -> pd.Series:
     """
     Fetch Coral Reef Watch DHW (degree_heating_week) for a small lat/lon box and return
     daily box-mean (NaNs ignored).
@@ -424,16 +479,22 @@ def fetch_crw_dhw_box_mean(lat: float, lon: float, box_half_deg: float, start: s
     lon0, lon1 = lon - box_half_deg, lon + box_half_deg
 
     series_parts = []
-    for (a, b) in _year_blocks(start, end, block_years=block_years):
+    for a, b in _year_blocks(start, end, block_years=block_years):
         query = (
             f"{var}[({a}T{time_hms}):1:({b}T{time_hms})]"
             f"[({lat0}):1:({lat1})]"
             f"[({lon0}):1:({lon1})]"
         )
         url = erddap_griddap_url(CRW_BASE, dataset_id, query, "csv")
-        cache_path = CACHE_DIR / "crw" / f"crw_{dataset_id}_{lat:.4f}_{lon:.4f}_{box_half_deg:.3f}_{a}_{b}.csv"
+        cache_path = (
+            CACHE_DIR
+            / "crw"
+            / f"crw_{dataset_id}_{lat:.4f}_{lon:.4f}_{box_half_deg:.3f}_{a}_{b}.csv"
+        )
 
-        download_to(url, cache_path, retries=10, timeout=(30, 300), label=f"[CRW {a[:4]}]")
+        download_to(
+            url, cache_path, retries=10, timeout=(30, 300), label=f"[CRW {a[:4]}]"
+        )
         df = read_erddap_csv(cache_path)
 
         tcol = "time" if "time" in df.columns else df.columns[0]
@@ -441,7 +502,9 @@ def fetch_crw_dhw_box_mean(lat: float, lon: float, box_half_deg: float, start: s
         df = df.dropna(subset=[tcol])
 
         if var not in df.columns:
-            raise RuntimeError(f"CRW CSV missing '{var}' column; columns={list(df.columns)}")
+            raise RuntimeError(
+                f"CRW CSV missing '{var}' column; columns={list(df.columns)}"
+            )
 
         g = df.groupby(tcol)[var].mean()
         s = pd.Series(g.values, index=pd.to_datetime(g.index.values))
@@ -454,15 +517,23 @@ def fetch_crw_dhw_box_mean(lat: float, lon: float, box_half_deg: float, start: s
     return dhw
 
 
-def compute_dhw_annual_metrics(dhw_daily: pd.Series) -> tuple[pd.Series, pd.Series, pd.Series]:
+def compute_dhw_annual_metrics(
+    dhw_daily: pd.Series,
+) -> tuple[pd.Series, pd.Series, pd.Series]:
     dhw_max = annual_group(dhw_daily, how="max").rename("dhw_max_year")
-    ge4 = annual_group((dhw_daily >= 4.0).astype("float64"), how="sum").rename("dhw_ge4_days_year")
-    ge8 = annual_group((dhw_daily >= 8.0).astype("float64"), how="sum").rename("dhw_ge8_days_year")
+    ge4 = annual_group((dhw_daily >= 4.0).astype("float64"), how="sum").rename(
+        "dhw_ge4_days_year"
+    )
+    ge8 = annual_group((dhw_daily >= 8.0).astype("float64"), how="sum").rename(
+        "dhw_ge8_days_year"
+    )
     return dhw_max, ge4, ge8
+
 
 # -------------------------
 # NetCDF writer
 # -------------------------
+
 
 def write_ocean_cache(
     out_path: Path,
@@ -479,19 +550,33 @@ def write_ocean_cache(
     dhw_ge8_days_year: pd.Series,
     dhw_box_half_deg: float,
 ) -> None:
-    years = sorted(set(sst_anom_year_c.index.tolist())
-                   | set(sst_hotdays_p90_year.index.tolist())
-                   | set(dhw_max_year.index.tolist())
-                   | set(dhw_ge4_days_year.index.tolist())
-                   | set(dhw_ge8_days_year.index.tolist()))
+    years = sorted(
+        set(sst_anom_year_c.index.tolist())
+        | set(sst_hotdays_p90_year.index.tolist())
+        | set(dhw_max_year.index.tolist())
+        | set(dhw_ge4_days_year.index.tolist())
+        | set(dhw_ge8_days_year.index.tolist())
+    )
 
     ds = xr.Dataset(
         data_vars=dict(
-            sst_anom_year_c=("year", [float(sst_anom_year_c.get(y, np.nan)) for y in years]),
-            sst_hotdays_p90_year=("year", [float(sst_hotdays_p90_year.get(y, np.nan)) for y in years]),
+            sst_anom_year_c=(
+                "year",
+                [float(sst_anom_year_c.get(y, np.nan)) for y in years],
+            ),
+            sst_hotdays_p90_year=(
+                "year",
+                [float(sst_hotdays_p90_year.get(y, np.nan)) for y in years],
+            ),
             dhw_max_year=("year", [float(dhw_max_year.get(y, np.nan)) for y in years]),
-            dhw_ge4_days_year=("year", [float(dhw_ge4_days_year.get(y, np.nan)) for y in years]),
-            dhw_ge8_days_year=("year", [float(dhw_ge8_days_year.get(y, np.nan)) for y in years]),
+            dhw_ge4_days_year=(
+                "year",
+                [float(dhw_ge4_days_year.get(y, np.nan)) for y in years],
+            ),
+            dhw_ge8_days_year=(
+                "year",
+                [float(dhw_ge8_days_year.get(y, np.nan)) for y in years],
+            ),
         ),
         coords=dict(
             year=("year", np.asarray(years, dtype=np.int32)),
@@ -521,9 +606,11 @@ def write_ocean_cache(
     os.replace(tmp_path, out_path)
     ds.close()
 
+
 # -------------------------
 # Main
 # -------------------------
+
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser()
@@ -533,6 +620,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--dhw-box-half-deg", type=float, default=DEFAULT_DHW_BOX_HALF_DEG)
     return ap.parse_args()
+
 
 def main() -> None:
     args = parse_args()
@@ -571,14 +659,20 @@ def main() -> None:
         print(f"\n=== {slug} ({label}) ===")
 
         # SST
-        sst_end = min(pd.Timestamp(end_date), pd.Timestamp(date.today())).strftime("%Y-%m-%d")
+        sst_end = min(pd.Timestamp(end_date), pd.Timestamp(date.today())).strftime(
+            "%Y-%m-%d"
+        )
         sst = fetch_oisst_daily_sst_point(lat, lon, BASELINE_START, sst_end)
         sst_anom_year_c, sst_hotdays_p90_year = compute_sst_anom_and_hotdays(sst)
 
         # DHW
         dhw_end = sst_end
-        dhw = fetch_crw_dhw_box_mean(lat, lon, args.dhw_box_half_deg, BASELINE_START, dhw_end)
-        dhw_max_year, dhw_ge4_days_year, dhw_ge8_days_year = compute_dhw_annual_metrics(dhw)
+        dhw = fetch_crw_dhw_box_mean(
+            lat, lon, args.dhw_box_half_deg, BASELINE_START, dhw_end
+        )
+        dhw_max_year, dhw_ge4_days_year, dhw_ge8_days_year = compute_dhw_annual_metrics(
+            dhw
+        )
 
         out_path = out_dir / f"ocean_{slug}.nc"
         write_ocean_cache(
@@ -597,6 +691,7 @@ def main() -> None:
         )
 
         print(f"[ok] wrote {out_path}")
+
 
 if __name__ == "__main__":
     main()

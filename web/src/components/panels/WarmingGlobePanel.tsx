@@ -5,11 +5,11 @@ import { Globe } from "@/components/Globe";
 import Caption from "@/components/Caption";
 
 function WarmingLegend({ unit }: { unit: "C" | "F" }) {
-  const ticks = unit === "C"
-    ? [-1, 0, 1, 2, 3, 4]
-    : [-1, 0, 1, 2, 3, 4, 5, 6, 7];
+  const ticks =
+    unit === "C" ? [-1, 0, 1, 2, 3, 4] : [-1, 0, 1, 2, 3, 4, 5, 6, 7];
 
-  const gradient = "linear-gradient(to top, #ffffcc, #ffeda0, #feb24c, #f03b20, #bd0026)";
+  const gradient =
+    "linear-gradient(to top, #ffffcc, #ffeda0, #feb24c, #f03b20, #bd0026)";
 
   return (
     <div className="flex items-center gap-3">
@@ -55,7 +55,7 @@ export default function WarmingGlobePanel({
       {
         root: scroller ?? null, // fallback to viewport if not found
         threshold: 0.6,
-      }
+      },
     );
 
     io.observe(el);
@@ -63,12 +63,16 @@ export default function WarmingGlobePanel({
   }, []);
 
   const md = useMemo(
-    () => `This globe shows warming in **2016–2025 vs 1979–1988** (ERA5 2m air temperature).`,
-    []
+    () =>
+      `This globe shows warming in **2016–2025 vs 1979–1988** (ERA5 2m air temperature).`,
+    [],
   );
 
   return (
-    <div ref={rootRef} className="w-full flex flex-col items-center justify-center gap-6">
+    <div
+      ref={rootRef}
+      className="w-full flex flex-col items-center justify-center gap-6"
+    >
       <div className="relative w-full">
         {/* Big globe (centered in viewport; compensate for the fixed left globe column on lg) */}
         <div className="mx-auto aspect-square w-full max-w-[780px] lg:-translate-x-[180px]">
@@ -76,7 +80,11 @@ export default function WarmingGlobePanel({
             variant="warming"
             targetLatLon={target}
             active={active}
-            warmingConfig={{ revealDelayMs: 900, revealFadeMs: 2600, spinDelayMs: 600 }}
+            warmingConfig={{
+              revealDelayMs: 900,
+              revealFadeMs: 2600,
+              spinDelayMs: 600,
+            }}
           />
         </div>
 

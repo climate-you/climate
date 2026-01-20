@@ -35,7 +35,9 @@ type PanelFigureProps = {
 
 function prefersReducedMotion() {
   if (typeof window === "undefined") return false;
-  return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+  return (
+    window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false
+  );
 }
 
 function isStrokeOnlyPath(p: SVGPathElement) {
@@ -54,7 +56,9 @@ function getTraceGroups(svgEl: SVGSVGElement) {
 }
 
 function getLinePaths(traceG: SVGGElement) {
-  const candidates = Array.from(traceG.querySelectorAll<SVGPathElement>("path"));
+  const candidates = Array.from(
+    traceG.querySelectorAll<SVGPathElement>("path"),
+  );
   return candidates.filter(isStrokeOnlyPath);
 }
 
@@ -62,8 +66,8 @@ function getMarkerElements(traceG: SVGGElement) {
   // Conservative set of marker-ish elements inside a trace.
   return Array.from(
     traceG.querySelectorAll<SVGGraphicsElement>(
-      "g.points path, path.point, path.scatterpts, g.points circle, g.points rect"
-    )
+      "g.points path, path.point, path.scatterpts, g.points circle, g.points rect",
+    ),
   );
 }
 
@@ -99,7 +103,8 @@ function svgBBox(svgEl: SVGSVGElement) {
   } catch {
     // Some SVGs may throw if not fully laid out; fall back to viewBox if present
     const vb = svgEl.viewBox?.baseVal;
-    if (vb && vb.width && vb.height) return { x: vb.x, y: vb.y, width: vb.width, height: vb.height };
+    if (vb && vb.width && vb.height)
+      return { x: vb.x, y: vb.y, width: vb.width, height: vb.height };
     return { x: 0, y: 0, width: 1000, height: 1000 };
   }
 }
@@ -109,10 +114,16 @@ type MaskHandle = {
   maskPath: SVGPathElement;
 };
 
-function ensureMaskForPath(svgEl: SVGSVGElement, defs: SVGDefsElement, p: SVGPathElement): MaskHandle | null {
+function ensureMaskForPath(
+  svgEl: SVGSVGElement,
+  defs: SVGDefsElement,
+  p: SVGPathElement,
+): MaskHandle | null {
   // Reuse mask per-path per SVG injection.
   let id = p.dataset._maskId;
-  let mask = id ? svgEl.querySelector<SVGMaskElement>(`#${CSS.escape(id)}`) : null;
+  let mask = id
+    ? svgEl.querySelector<SVGMaskElement>(`#${CSS.escape(id)}`)
+    : null;
 
   if (!mask) {
     id = `m_${Math.random().toString(36).slice(2)}`;
@@ -153,7 +164,11 @@ function ensureMaskForPath(svgEl: SVGSVGElement, defs: SVGDefsElement, p: SVGPat
  * Arm the line path so it is fully hidden initially using a MASK.
  * The real path remains untouched, so dashed lines stay dashed.
  */
-function armHiddenWithMask(svgEl: SVGSVGElement, defs: SVGDefsElement, p: SVGPathElement) {
+function armHiddenWithMask(
+  svgEl: SVGSVGElement,
+  defs: SVGDefsElement,
+  p: SVGPathElement,
+) {
   const d = p.getAttribute("d");
   if (!d) return null;
 
@@ -186,7 +201,11 @@ function armHiddenWithMask(svgEl: SVGSVGElement, defs: SVGDefsElement, p: SVGPat
   return mp;
 }
 
-function playMaskDraw(maskPaths: SVGPathElement[], ms: number, timingFunction: string) {
+function playMaskDraw(
+  maskPaths: SVGPathElement[],
+  ms: number,
+  timingFunction: string,
+) {
   for (const mp of maskPaths) {
     const len = Number(mp.dataset._dashLen ?? "0");
     if (!Number.isFinite(len) || len <= 1) continue;
@@ -206,7 +225,10 @@ function playMaskDraw(maskPaths: SVGPathElement[], ms: number, timingFunction: s
 }
 
 function isDarkMode() {
-  return typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+  return (
+    typeof document !== "undefined" &&
+    document.documentElement.classList.contains("dark")
+  );
 }
 
 function isWhiteish(fill: string) {
@@ -254,14 +276,19 @@ function applyPlotlySvgDarkFix(svgEl: SVGSVGElement) {
 
   // Consider all filled shapes (Plotly sometimes uses paths for backgrounds)
   const candidates = Array.from(
-    svgEl.querySelectorAll<SVGGraphicsElement>("rect, path, polygon")
+    svgEl.querySelectorAll<SVGGraphicsElement>("rect, path, polygon"),
   );
 
   if (!candidates.length) return;
 
   // Compute areas; find max area among candidates
   let maxArea = 0;
-  const items: Array<{ el: SVGGraphicsElement; area: number; fill: string; cls: string }> = [];
+  const items: Array<{
+    el: SVGGraphicsElement;
+    area: number;
+    fill: string;
+    cls: string;
+  }> = [];
 
   for (const el of candidates) {
     // Ignore elements that obviously aren't background candidates
@@ -292,7 +319,9 @@ function applyPlotlySvgDarkFix(svgEl: SVGSVGElement) {
 
   for (const { el, area, fill, cls } of items) {
     // Clear large white-ish backgrounds; also clear legend bg by class "bg"
-    const shouldClear = (isWhiteish(fill) && area >= largeThresh) || (cls.includes("bg") && isWhiteish(fill));
+    const shouldClear =
+      (isWhiteish(fill) && area >= largeThresh) ||
+      (cls.includes("bg") && isWhiteish(fill));
     if (!shouldClear) continue;
 
     forceTransparentFill(el);
@@ -346,7 +375,10 @@ export default function PanelFigure({
       applyPlotlySvgDarkFix(svgEl);
     });
 
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    obs.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
     return () => obs.disconnect();
   }, []);
 
@@ -368,7 +400,9 @@ export default function PanelFigure({
     if (!traces.length) return;
 
     // Hide annotations initially (min/max etc.)
-    const annotations = Array.from(svgEl.querySelectorAll<SVGGElement>(annotationsSelector));
+    const annotations = Array.from(
+      svgEl.querySelectorAll<SVGGElement>(annotationsSelector),
+    );
     for (const a of annotations) {
       a.style.transition = "none";
       a.style.opacity = "0";
@@ -406,7 +440,9 @@ export default function PanelFigure({
     const traces = getTraceGroups(svgEl);
     if (!traces.length) return;
 
-    const annotations = Array.from(svgEl.querySelectorAll<SVGGElement>(annotationsSelector));
+    const annotations = Array.from(
+      svgEl.querySelectorAll<SVGGElement>(annotationsSelector),
+    );
 
     const clearTimers = () => {
       for (const t of timeoutsRef.current) window.clearTimeout(t);
@@ -468,7 +504,7 @@ export default function PanelFigure({
             showAnnotations();
             hasPlayedRef.current = true;
             onDrawComplete?.();
-          }, drawMs + 100)
+          }, drawMs + 100),
         );
         return;
       }
@@ -488,7 +524,7 @@ export default function PanelFigure({
             window.setTimeout(() => {
               if (markers.length) showMarkers(markers);
             }, drawMs + 60);
-          }, acc)
+          }, acc),
         );
 
         acc += drawMs + 140;
@@ -499,7 +535,7 @@ export default function PanelFigure({
           showAnnotations();
           hasPlayedRef.current = true;
           onDrawComplete?.();
-        }, acc + 80)
+        }, acc + 80),
       );
     };
 
@@ -515,7 +551,7 @@ export default function PanelFigure({
           clearTimers();
         }
       },
-      { threshold: [0, inViewThreshold, 1] }
+      { threshold: [0, inViewThreshold, 1] },
     );
 
     obs.observe(host);
@@ -536,7 +572,12 @@ export default function PanelFigure({
     onDrawComplete,
   ]);
 
-  return <div ref={hostRef} className={["panel-figure w-full", className].filter(Boolean).join(" ")} />;
+  return (
+    <div
+      ref={hostRef}
+      className={["panel-figure w-full", className].filter(Boolean).join(" ")}
+    />
+  );
 }
 
 export function PanelFigureStyles() {

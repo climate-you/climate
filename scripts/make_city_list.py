@@ -35,20 +35,39 @@ CITIES_SOURCES: Dict[str, str] = {
     "cities15000": f"{GEONAMES_DUMP_BASE}/cities15000.zip",
 }
 
+
 def cities_zip_url(source: str) -> str:
     if source not in CITIES_SOURCES:
-        raise ValueError(f"Unknown source {source!r}. Choose from: {', '.join(sorted(CITIES_SOURCES))}")
+        raise ValueError(
+            f"Unknown source {source!r}. Choose from: {', '.join(sorted(CITIES_SOURCES))}"
+        )
     return CITIES_SOURCES[source]
+
 
 # GeoNames geoname table columns (as per readme.txt)
 # geonameid, name, asciiname, alternatenames, latitude, longitude,
 # feature class, feature code, country code, cc2, admin1, admin2, admin3, admin4,
 # population, elevation, dem, timezone, modification date
 GEONAMES_COLS = [
-    "geonameid", "name", "asciiname", "alternatenames", "latitude", "longitude",
-    "feature_class", "feature_code", "country_code", "cc2",
-    "admin1", "admin2", "admin3", "admin4",
-    "population", "elevation", "dem", "timezone", "modification_date",
+    "geonameid",
+    "name",
+    "asciiname",
+    "alternatenames",
+    "latitude",
+    "longitude",
+    "feature_class",
+    "feature_code",
+    "country_code",
+    "cc2",
+    "admin1",
+    "admin2",
+    "admin3",
+    "admin4",
+    "population",
+    "elevation",
+    "dem",
+    "timezone",
+    "modification_date",
 ]
 
 OUT_COLS = [
@@ -220,6 +239,7 @@ def select_cities(
     )
     return out
 
+
 def _norm(s: str) -> str:
     """
     Normalize for fuzzy-ish matching: lowercase, strip accents, collapse whitespace/punct.
@@ -259,9 +279,11 @@ def _parse_city_country(spec: str) -> Tuple[str, str]:
     return s, ""
 
 
-def load_extras(extra_args: List[str], extra_file: Optional[Path]) -> List[Tuple[str, str]]:
+def load_extras(
+    extra_args: List[str], extra_file: Optional[Path]
+) -> List[Tuple[str, str]]:
     out: List[Tuple[str, str]] = []
-    for spec in (extra_args or []):
+    for spec in extra_args or []:
         c, k = _parse_city_country(spec)
         if c:
             out.append((c, k))
@@ -338,7 +360,8 @@ def resolve_extra_cities(
 
             # If not found with strict cc+name, try "name-only within country" ignoring accents/punct
             candidates = [
-                r for r in rows
+                r
+                for r in rows
                 if r.country_code.upper() == cc and _norm(r.name) == _norm(city_name)
             ]
             if candidates:
@@ -375,6 +398,7 @@ def merge_cities(base: List[CityRow], extra: List[CityRow]) -> List[CityRow]:
         picked.values(),
         key=lambda r: (r.country_code, -r.population, r.name.lower(), r.geonameid),
     )
+
 
 def write_locations_csv(
     out_csv: Path,
@@ -462,9 +486,25 @@ def main() -> None:
     ap.add_argument("--write-favorites", action="store_true")
     ap.add_argument("--no-capitals", action="store_true")
     ap.add_argument("--favorites-n", type=int, default=10)
-    ap.add_argument("--source", type=str, default="cities15000", choices=sorted(CITIES_SOURCES.keys()), help="Which GeoNames cities dump to use (cities500 is broadest; cities15000 is smallest).")
-    ap.add_argument("--extra-file",type=str,default=None,help="Optional path to a text file listing extra locations to force-include (one per line: 'City, Country').")
-    ap.add_argument("--extra",action="append",default=[],help="Force-include an extra location (repeatable). Format: 'City, Country' or 'City | Country'.")
+    ap.add_argument(
+        "--source",
+        type=str,
+        default="cities15000",
+        choices=sorted(CITIES_SOURCES.keys()),
+        help="Which GeoNames cities dump to use (cities500 is broadest; cities15000 is smallest).",
+    )
+    ap.add_argument(
+        "--extra-file",
+        type=str,
+        default=None,
+        help="Optional path to a text file listing extra locations to force-include (one per line: 'City, Country').",
+    )
+    ap.add_argument(
+        "--extra",
+        action="append",
+        default=[],
+        help="Force-include an extra location (repeatable). Format: 'City, Country' or 'City | Country'.",
+    )
     args = ap.parse_args()
 
     cache_dir = Path(args.cache_dir)
@@ -480,7 +520,7 @@ def main() -> None:
         top_per_country=args.top_per_country,
         include_capitals=(not args.no_capitals),
     )
-    
+
     extras = load_extras(args.extra, Path(args.extra_file) if args.extra_file else None)
     if extras:
         extra_rows = resolve_extra_cities(rows, extras, country_names)

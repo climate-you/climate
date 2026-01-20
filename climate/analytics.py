@@ -1,4 +1,3 @@
-
 import pandas as pd
 import numpy as np
 from dataclasses import dataclass
@@ -9,6 +8,7 @@ from climate.models import StoryFacts
 # -----------------------------------------------------------
 # Helpers to detect trends
 # -----------------------------------------------------------
+
 
 def estimate_30d_trend(dates: pd.DatetimeIndex, temps: np.ndarray) -> float:
     """
@@ -48,30 +48,32 @@ def season_phrase(lat: float, ref_date: pd.Timestamp) -> str:
     """
     north = lat >= 0
     m = ref_date.month
-   
+
     if north:
-         if m in (12, 1, 2):
-             return "mid-winter"
-         elif m in (3, 4, 5):
-             return "spring heading into summer"
-         elif m in (6, 7, 8):
-             return "mid-summer"
-         else:  # 9,10,11
-             return "autumn heading into winter"
+        if m in (12, 1, 2):
+            return "mid-winter"
+        elif m in (3, 4, 5):
+            return "spring heading into summer"
+        elif m in (6, 7, 8):
+            return "mid-summer"
+        else:  # 9,10,11
+            return "autumn heading into winter"
     else:
-         # Southern hemisphere seasons are flipped
-         if m in (12, 1, 2):
-             return "mid-summer"
-         elif m in (3, 4, 5):
-             return "autumn heading into winter"
-         elif m in (6, 7, 8):
-             return "mid-winter"
-         else:  # 9,10,11
-             return "spring heading into summer"
+        # Southern hemisphere seasons are flipped
+        if m in (12, 1, 2):
+            return "mid-summer"
+        elif m in (3, 4, 5):
+            return "autumn heading into winter"
+        elif m in (6, 7, 8):
+            return "mid-winter"
+        else:  # 9,10,11
+            return "spring heading into summer"
+
 
 # -----------------------------------------------------------
 # Compute global facts
 # -----------------------------------------------------------
+
 
 def compute_story_facts(ds, lat: Optional[float] = None) -> StoryFacts:
     """

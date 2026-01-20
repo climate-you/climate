@@ -5,7 +5,8 @@ import numpy as np
 # Add and annotate traces
 # -----------------------------------------------------------
 
-def add_trace(figure, x, y, name, hovertemplate=""): 
+
+def add_trace(figure, x, y, name, hovertemplate=""):
     """
     Add trace to figure.
     """
@@ -21,24 +22,26 @@ def add_trace(figure, x, y, name, hovertemplate=""):
         )
     )
 
-def add_mean_trace(figure, x, y, name, showmarkers=False, hovertemplate=""): 
+
+def add_mean_trace(figure, x, y, name, showmarkers=False, hovertemplate=""):
     """
     Add mean trace to figure.
     """
     figure.add_trace(
-            go.Scatter(
-                x=x,
-                y=y,
-                mode="lines+markers" if showmarkers else "lines",
-                name=name,
-                line=dict(
-                    color="rgba(38,139,210,0.9)",
-                    width=3,
-                    shape="spline",
-                ),
-                hovertemplate=hovertemplate,
-            )
+        go.Scatter(
+            x=x,
+            y=y,
+            mode="lines+markers" if showmarkers else "lines",
+            name=name,
+            line=dict(
+                color="rgba(38,139,210,0.9)",
+                width=3,
+                shape="spline",
+            ),
+            hovertemplate=hovertemplate,
         )
+    )
+
 
 def annotate_minmax_on_series(fig, x, y, unit, label_prefix=""):
     """
@@ -92,6 +95,5 @@ def annotate_minmax_on_series(fig, x, y, unit, label_prefix=""):
         font=dict(color="rgba(220,50,47,1.0)", size=13),
         arrowcolor="rgba(220,50,47,0.9)",
     )
-    
-    return min_val, max_val
 
+    return min_val, max_val

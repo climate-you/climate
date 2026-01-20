@@ -41,7 +41,11 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Slugs + coords (from your cities_index.json extract)
 LOCATIONS = {
-    "city_mu_tamarin": {"label": "Tamarin, Mauritius", "lat": -20.32556, "lon": 57.37056},
+    "city_mu_tamarin": {
+        "label": "Tamarin, Mauritius",
+        "lat": -20.32556,
+        "lon": 57.37056,
+    },
     "city_gb_london": {"label": "London, UK", "lat": 51.50853, "lon": -0.12574},
     "city_fr_troyes": {"label": "Troyes, France", "lat": 48.30073, "lon": 4.08524},
 }
@@ -57,12 +61,14 @@ def doy_index(dt_index: pd.DatetimeIndex) -> np.ndarray:
     # 1..366
     return dt_index.dayofyear.values
 
+
 def ensure_datetime_index(df: pd.DataFrame, time_col: str = "time") -> pd.DataFrame:
     df = df.copy()
     df[time_col] = pd.to_datetime(df[time_col], utc=True)
     df = df.sort_values(time_col)
     df = df.set_index(time_col)
     return df
+
 
 def longest_run(bool_arr: np.ndarray) -> int:
     # longest consecutive True run
@@ -78,6 +84,7 @@ def longest_run(bool_arr: np.ndarray) -> int:
             run = 0
     return int(max_run)
 
+
 def yearly_max_run(dates: pd.DatetimeIndex, is_event: np.ndarray) -> pd.Series:
     years = dates.year
     out = {}
@@ -86,6 +93,7 @@ def yearly_max_run(dates: pd.DatetimeIndex, is_event: np.ndarray) -> pd.Series:
         out[int(y)] = longest_run(is_event[mask])
     return pd.Series(out).sort_index()
 
+
 def yearly_count(dates: pd.DatetimeIndex, is_event: np.ndarray) -> pd.Series:
     years = dates.year
     out = {}
@@ -93,6 +101,7 @@ def yearly_count(dates: pd.DatetimeIndex, is_event: np.ndarray) -> pd.Series:
         mask = years == y
         out[int(y)] = int(is_event[mask].sum())
     return pd.Series(out).sort_index()
+
 
 def plot_series(series: pd.Series, title: str, outpath: pathlib.Path) -> None:
     outpath.parent.mkdir(parents=True, exist_ok=True)
@@ -113,6 +122,7 @@ def erddap_griddap_nc_url(base: str, dataset_id: str, query: str) -> str:
     #   f"{base}/griddap/{dataset_id}.nc?sst[(1981-01-01T00:00:00Z):1:(2025-12-31T00:00:00Z)][(lat0):1:(lat1)][(lon0):1:(lon1)]"
     return f"{base}/griddap/{dataset_id}.nc?{query}"
 
+
 def _probe_erddap_reachable(url: str, connect_timeout: float = 3.0) -> tuple[bool, str]:
     """
     If url looks like an ERDDAP request, do a quick HEAD/GET probe to help
@@ -128,7 +138,9 @@ def _probe_erddap_reachable(url: str, connect_timeout: float = 3.0) -> tuple[boo
         ]
         for p in probe_urls:
             try:
-                r = requests.head(p, timeout=(connect_timeout, connect_timeout), allow_redirects=True)
+                r = requests.head(
+                    p, timeout=(connect_timeout, connect_timeout), allow_redirects=True
+                )
                 if r.status_code < 500:
                     return True, base
             except Exception:
@@ -137,7 +149,9 @@ def _probe_erddap_reachable(url: str, connect_timeout: float = 3.0) -> tuple[boo
         # HEAD sometimes blocked; try a tiny GET as fallback
         for p in probe_urls:
             try:
-                r = requests.get(p, timeout=(connect_timeout, connect_timeout), allow_redirects=True)
+                r = requests.get(
+                    p, timeout=(connect_timeout, connect_timeout), allow_redirects=True
+                )
                 if r.status_code < 500:
                     return True, base
             except Exception:
@@ -147,11 +161,12 @@ def _probe_erddap_reachable(url: str, connect_timeout: float = 3.0) -> tuple[boo
     except Exception:
         return True, ""  # don't block download if parsing/probe fails
 
+
 def probe(
     url: str,
     timeout=(60, 300),
-    ):
- # QoL: quick ERDDAP reachability check (helps explain "hangs on this ISP/router")
+):
+    # QoL: quick ERDDAP reachability check (helps explain "hangs on this ISP/router")
     if "/erddap/" not in url:
         return
     ok, base = _probe_erddap_reachable(url, connect_timeout=min(3.0, float(timeout[0])))
@@ -160,9 +175,12 @@ def probe(
             f"ERDDAP host appears unreachable from this network ({base}).\n"
             f"- You can verify with: curl -I {base}/erddap/info/index.html\n"
             f"- Workarounds: use a VPN, phone hotspot, or run this from a cloud machine.\n"
-            f"Original URL:\n{url}")
+            f"Original URL:\n{url}"
+        )
+
 
 _SESSION = requests.Session()
+
 
 def download_to(
     url: str,
@@ -202,12 +220,15 @@ def download_to(
             # Backoff with jitter
             backoff = min(30.0, (2 ** (attempt - 1)))
             sleep_s = random.uniform(0.5, 1.5) + backoff * 0.2
-            print(f"{tag}Download failed: {type(e).__name__}: {e} (sleep {sleep_s:.1f}s)")
+            print(
+                f"{tag}Download failed: {type(e).__name__}: {e} (sleep {sleep_s:.1f}s)"
+            )
             time.sleep(sleep_s)
 
     raise RuntimeError(
         f"{tag}Failed to download after {retries} attempts.\nURL: {url}\nLast error: {last_err}"
     )
+
 
 def open_erddap_subset_as_xr(url: str, cache_path: pathlib.Path) -> xr.Dataset:
     probe(url)
@@ -221,6 +242,7 @@ def open_erddap_subset_as_xr(url: str, cache_path: pathlib.Path) -> xr.Dataset:
 def erddap_griddap_csv_url(base: str, dataset_id: str, query: str) -> str:
     return f"{base}/griddap/{dataset_id}.csv?{query}"
 
+
 def year_block_ranges(start: str, end: str, block_years: int = 5):
     y0 = int(start[:4])
     y1 = int(end[:4])
@@ -231,6 +253,7 @@ def year_block_ranges(start: str, end: str, block_years: int = 5):
         b = min(b, end)
         yield a, b
 
+
 def fetch_oisst_point_timeseries(lat: float, lon: float) -> pd.Series:
     ERDDAP_BASES = [
         "https://coastwatch.pfeg.noaa.gov/erddap",
@@ -239,8 +262,10 @@ def fetch_oisst_point_timeseries(lat: float, lon: float) -> pd.Series:
     DATASET_ID = "ncdcOisst21Agg_LonPM180"
 
     lon_q = lon
-    if lon_q > 180: lon_q -= 360
-    if lon_q < -180: lon_q += 360
+    if lon_q > 180:
+        lon_q -= 360
+    if lon_q < -180:
+        lon_q += 360
 
     # start2 = max(START, "2000-01-01")
     start2 = max(START, "1981-09-01")
@@ -262,7 +287,7 @@ def fetch_oisst_point_timeseries(lat: float, lon: float) -> pd.Series:
 
     parts = []
 
-    for (a, b) in year_block_ranges(start2, end2, block_years=5):
+    for a, b in year_block_ranges(start2, end2, block_years=5):
         # OISST time is typically 12:00Z; include zlev dim (0.0) for this dataset
         query = (
             f"sst[({a}T12:00:00Z):1:({b}T12:00:00Z)]"
@@ -276,10 +301,20 @@ def fetch_oisst_point_timeseries(lat: float, lon: float) -> pd.Series:
 
         for base in ERDDAP_BASES:
             url = erddap_griddap_csv_url(base, DATASET_ID, query)
-            cache_path = CACHE_DIR / "oisst" / f"oisst_{DATASET_ID}_{lat:.4f}_{lon:.4f}_{a}_{b}.csv"
+            cache_path = (
+                CACHE_DIR
+                / "oisst"
+                / f"oisst_{DATASET_ID}_{lat:.4f}_{lon:.4f}_{a}_{b}.csv"
+            )
             try:
-                download_to(url, cache_path, timeout=(60, 300), retries=3, label=f"OISST {a[:4]}")
-                
+                download_to(
+                    url,
+                    cache_path,
+                    timeout=(60, 300),
+                    retries=3,
+                    label=f"OISST {a[:4]}",
+                )
+
                 # ERDDAP CSV often includes a 2nd "units" line (e.g. first value "UTC")
                 # Skip it via skiprows=1, and also treat lines starting with "#" as comments.
                 df = pd.read_csv(cache_path, skiprows=[1], comment="#")
@@ -288,7 +323,9 @@ def fetch_oisst_point_timeseries(lat: float, lon: float) -> pd.Series:
 
                 # ERDDAP time strings are typically ISO-like, e.g. "2000-01-01T12:00:00Z"
                 # Provide an explicit format to avoid slow/ambiguous parsing warnings.
-                df[tcol] = pd.to_datetime(df[tcol], format="%Y-%m-%dT%H:%M:%SZ", utc=True, errors="raise")
+                df[tcol] = pd.to_datetime(
+                    df[tcol], format="%Y-%m-%dT%H:%M:%SZ", utc=True, errors="raise"
+                )
 
                 # pick sst column
                 sst_col = "sst"
@@ -297,14 +334,23 @@ def fetch_oisst_point_timeseries(lat: float, lon: float) -> pd.Series:
                     sst_col = df.columns[-1]
 
                 # choose the row whose lat/lon are closest to requested
-                latcol = "latitude" if "latitude" in df.columns else ("lat" if "lat" in df.columns else None)
-                loncol = "longitude" if "longitude" in df.columns else ("lon" if "lon" in df.columns else None)
+                latcol = (
+                    "latitude"
+                    if "latitude" in df.columns
+                    else ("lat" if "lat" in df.columns else None)
+                )
+                loncol = (
+                    "longitude"
+                    if "longitude" in df.columns
+                    else ("lon" if "lon" in df.columns else None)
+                )
 
                 if latcol and loncol:
                     # group by time and pick nearest spatial row each time
                     def pick_nearest(g):
                         d = (g[latcol] - lat).abs() + (g[loncol] - lon_q).abs()
                         return g.loc[d.idxmin()]
+
                     picked = df.groupby(tcol, sort=True).apply(pick_nearest)
                     s = pd.Series(picked[sst_col].values, index=picked[tcol].values)
                 else:
@@ -320,7 +366,9 @@ def fetch_oisst_point_timeseries(lat: float, lon: float) -> pd.Series:
                 last_err = e
 
         if not ok:
-            raise RuntimeError(f"OISST ERDDAP failed for {a}..{b}. Last error: {last_err}")
+            raise RuntimeError(
+                f"OISST ERDDAP failed for {a}..{b}. Last error: {last_err}"
+            )
 
     sst = pd.concat(parts).sort_index()
     sst = sst[~sst.index.duplicated(keep="first")]
@@ -331,7 +379,9 @@ def fetch_oisst_point_timeseries(lat: float, lon: float) -> pd.Series:
 # ----------------------------
 # CRW DHW: small-box mean series (Tamarin)
 # ----------------------------
-def fetch_crw_dhw_boxmean_timeseries(lat: float, lon: float, half_deg: float = 0.05) -> pd.Series:
+def fetch_crw_dhw_boxmean_timeseries(
+    lat: float, lon: float, half_deg: float = 0.05
+) -> pd.Series:
     """
     CRW DHW daily via NOAA CoastWatch ERDDAP.
     Chunk requests in time to avoid 500s on long ranges.
@@ -362,7 +412,7 @@ def fetch_crw_dhw_boxmean_timeseries(lat: float, lon: float, half_deg: float = 0
 
     parts = []
 
-    for (a, b) in year_block_ranges(start2, end2, block_years=1):
+    for a, b in year_block_ranges(start2, end2, block_years=1):
         var = "degree_heating_week"
         # CRW DHW time axis is at 12:00Z (as seen in curl output)
         query = (
@@ -377,17 +427,41 @@ def fetch_crw_dhw_boxmean_timeseries(lat: float, lon: float, half_deg: float = 0
         for base in ERDDAP_BASES:
             # Try CSV first (often avoids 500s for long netcdf responses)
             url_csv = f"{base}/griddap/{DATASET_ID}.csv?{query}"
-            cache_csv = CACHE_DIR / "crw" / f"crw_{DATASET_ID}_{lat:.4f}_{lon:.4f}_{half_deg:.3f}_{a}_{b}.csv"
+            cache_csv = (
+                CACHE_DIR
+                / "crw"
+                / f"crw_{DATASET_ID}_{lat:.4f}_{lon:.4f}_{half_deg:.3f}_{a}_{b}.csv"
+            )
             try:
-                download_to(url_csv, cache_csv, timeout=(60, 300), retries=10, label=f"CRW {a[:4]}")
+                download_to(
+                    url_csv,
+                    cache_csv,
+                    timeout=(60, 300),
+                    retries=10,
+                    label=f"CRW {a[:4]}",
+                )
                 df = pd.read_csv(cache_csv, skiprows=[1], comment="#")
                 # expected cols: time, latitude, longitude, dhw (and maybe others)
                 tcol = "time" if "time" in df.columns else df.columns[0]
-                df[tcol] = pd.to_datetime(df[tcol], format="%Y-%m-%dT%H:%M:%SZ", utc=True)
+                df[tcol] = pd.to_datetime(
+                    df[tcol], format="%Y-%m-%dT%H:%M:%SZ", utc=True
+                )
 
-                dhw_col = "degree_heating_week" if "degree_heating_week" in df.columns else df.columns[-1]
-                latcol = "latitude" if "latitude" in df.columns else ("lat" if "lat" in df.columns else None)
-                loncol = "longitude" if "longitude" in df.columns else ("lon" if "lon" in df.columns else None)
+                dhw_col = (
+                    "degree_heating_week"
+                    if "degree_heating_week" in df.columns
+                    else df.columns[-1]
+                )
+                latcol = (
+                    "latitude"
+                    if "latitude" in df.columns
+                    else ("lat" if "lat" in df.columns else None)
+                )
+                loncol = (
+                    "longitude"
+                    if "longitude" in df.columns
+                    else ("lon" if "lon" in df.columns else None)
+                )
 
                 if latcol and loncol:
                     # For each time, average dhw across all spatial rows (box mean)
@@ -405,13 +479,27 @@ def fetch_crw_dhw_boxmean_timeseries(lat: float, lon: float, half_deg: float = 0
 
             # Fallback to NetCDF if CSV fails
             url_nc = f"{base}/griddap/{DATASET_ID}.nc?{query}"
-            cache_nc = CACHE_DIR / "crw" / f"crw_{DATASET_ID}_{lat:.4f}_{lon:.4f}_{half_deg:.3f}_{a}_{b}.nc"
+            cache_nc = (
+                CACHE_DIR
+                / "crw"
+                / f"crw_{DATASET_ID}_{lat:.4f}_{lon:.4f}_{half_deg:.3f}_{a}_{b}.nc"
+            )
             try:
-                download_to(url_nc, cache_nc, timeout=(60, 300), retries=10, label=f"CRWnc {a[:4]}")
+                download_to(
+                    url_nc,
+                    cache_nc,
+                    timeout=(60, 300),
+                    retries=10,
+                    label=f"CRWnc {a[:4]}",
+                )
                 ds = xr.open_dataset(cache_nc)
                 da = ds[var]
 
-                spatial_dims = [d for d in da.dims if d.lower() in ("lat", "latitude", "lon", "longitude")]
+                spatial_dims = [
+                    d
+                    for d in da.dims
+                    if d.lower() in ("lat", "latitude", "lon", "longitude")
+                ]
                 da_mean = da.mean(dim=spatial_dims, skipna=True)
 
                 s = da_mean.to_series()
@@ -443,7 +531,11 @@ def fetch_era5_hourly_tp_timeseries(lat: float, lon: float) -> pd.Series:
     Uses dataset: reanalysis-era5-single-levels-timeseries (designed for fast point time-series).
     """
     dataset = "reanalysis-era5-single-levels-timeseries"
-    cache_csv = CACHE_DIR / "era5" / f"era5_tp_hourly_timeseries_{lat:.4f}_{lon:.4f}_{START}_{END}.csv"
+    cache_csv = (
+        CACHE_DIR
+        / "era5"
+        / f"era5_tp_hourly_timeseries_{lat:.4f}_{lon:.4f}_{START}_{END}.csv"
+    )
 
     if not cache_csv.exists():
         client = cdsapi.Client()
@@ -497,7 +589,9 @@ def fetch_era5_hourly_tp_timeseries(lat: float, lon: float) -> pd.Series:
         # fallback: assume the only non-time column is the variable
         cols = [c for c in df.columns if c != time_col]
         if len(cols) != 1:
-            raise ValueError(f"Could not identify precip column in CSV. Columns={list(df.columns)}")
+            raise ValueError(
+                f"Could not identify precip column in CSV. Columns={list(df.columns)}"
+            )
         col = cols[0]
 
     s = df[col].astype(float)
@@ -511,8 +605,9 @@ def fetch_era5_hourly_tp_timeseries(lat: float, lon: float) -> pd.Series:
 def compute_dryspell_maxlen(pr_mm: pd.Series) -> pd.Series:
     pr_mm = pr_mm.dropna()
     dates = pr_mm.index
-    is_dry = (pr_mm.values < DRY_MM)
+    is_dry = pr_mm.values < DRY_MM
     return yearly_max_run(dates, is_dry)
+
 
 def compute_sst_anom_and_hotdays(sst_c: pd.Series) -> Tuple[pd.Series, pd.Series]:
     sst_c = sst_c.dropna()
@@ -535,10 +630,11 @@ def compute_sst_anom_and_hotdays(sst_c: pd.Series) -> Tuple[pd.Series, pd.Series
     hotdays.name = "sst_hotdays_p90_count"
     return annual_mean_anom, hotdays
 
+
 def compute_dhw_metrics(
-        dhw: pd.Series,
-        thresholds: tuple[float, ...] = (4.0, 8.0),
-    ) -> tuple[pd.Series, dict[float, pd.Series]]:
+    dhw: pd.Series,
+    thresholds: tuple[float, ...] = (4.0, 8.0),
+) -> tuple[pd.Series, dict[float, pd.Series]]:
     dhw = dhw.dropna()
     annual_max = dhw.resample("YS").max()
     annual_max.index = annual_max.index.year
@@ -554,9 +650,11 @@ def compute_dhw_metrics(
 
     return annual_max, counts
 
+
 # ----------------------------
 # Helpers
 # ----------------------------
+
 
 def warm_season_mask(dti: pd.DatetimeIndex, lat: float) -> np.ndarray:
     # NH: May-Sep, SH: Nov-Mar
@@ -565,6 +663,7 @@ def warm_season_mask(dti: pd.DatetimeIndex, lat: float) -> np.ndarray:
         return (m >= 5) & (m <= 9)
     else:
         return (m >= 11) | (m <= 3)
+
 
 # ----------------------------
 # Main
@@ -612,27 +711,49 @@ def main() -> None:
     print(f"\n[OISST] Fetching SST point series for {slug} ({lat},{lon}) ...")
     sst = fetch_oisst_point_timeseries(lat, lon)
     sst_anom, sst_hotdays = compute_sst_anom_and_hotdays(sst.loc[START:END])
-    plot_series(sst_anom, f"{slug} SST annual mean anomaly (vs 1981-2010)", OUT_DIR / "plots" / f"{slug}_sst_anom.png")
-    plot_series(sst_hotdays, f"{slug} SST hotdays (above baseline P90)", OUT_DIR / "plots" / f"{slug}_sst_hotdays_p90.png")
+    plot_series(
+        sst_anom,
+        f"{slug} SST annual mean anomaly (vs 1981-2010)",
+        OUT_DIR / "plots" / f"{slug}_sst_anom.png",
+    )
+    plot_series(
+        sst_hotdays,
+        f"{slug} SST hotdays (above baseline P90)",
+        OUT_DIR / "plots" / f"{slug}_sst_hotdays_p90.png",
+    )
 
     print(f"\n[CRW] Fetching DHW box-mean series for {slug} ...")
     dhw = fetch_crw_dhw_boxmean_timeseries(lat, lon, half_deg=TAMARIN_DHW_BOX_HALF_DEG)
     dhw_max, dhw_counts = compute_dhw_metrics(dhw, thresholds=(4.0, 8.0))
     dhw_ge4 = dhw_counts[4.0]
     dhw_ge8 = dhw_counts[8.0]
-    plot_series(dhw_max, f"{slug} DHW annual max", OUT_DIR / "plots" / f"{slug}_dhw_max.png")
-    plot_series(dhw_ge4, f"{slug} DHW days >= 4", OUT_DIR / "plots" / f"{slug}_dhw_ge4_days.png")
-    plot_series(dhw_ge8, f"{slug} DHW days >= 8", OUT_DIR / "plots" / f"{slug}_dhw_ge8_days.png")
+    plot_series(
+        dhw_max, f"{slug} DHW annual max", OUT_DIR / "plots" / f"{slug}_dhw_max.png"
+    )
+    plot_series(
+        dhw_ge4, f"{slug} DHW days >= 4", OUT_DIR / "plots" / f"{slug}_dhw_ge4_days.png"
+    )
+    plot_series(
+        dhw_ge8, f"{slug} DHW days >= 8", OUT_DIR / "plots" / f"{slug}_dhw_ge8_days.png"
+    )
 
     summary.setdefault(slug, {})["sst"] = {
         "anom_1981_1990_mean": float(sst_anom.loc[1981:1990].mean()),
         "anom_2016_2025_mean": float(sst_anom.loc[2016:2025].mean()),
     }
     summary[slug]["dhw"] = {
-        "dhw_max_1985_1994_mean": float(dhw_max.loc[1985:1994].mean()) if 1985 in dhw_max.index else None,
-        "dhw_max_2016_2025_mean": float(dhw_max.loc[2016:2025].mean()) if 2016 in dhw_max.index else None,
-        "dhw_ge4_days_2016_2025_mean": float(dhw_ge4.loc[2016:2025].mean()) if 2016 in dhw_ge4.index else None,
-        "dhw_ge8_days_2016_2025_mean": float(dhw_ge8.loc[2016:2025].mean()) if 2016 in dhw_ge8.index else None,
+        "dhw_max_1985_1994_mean": (
+            float(dhw_max.loc[1985:1994].mean()) if 1985 in dhw_max.index else None
+        ),
+        "dhw_max_2016_2025_mean": (
+            float(dhw_max.loc[2016:2025].mean()) if 2016 in dhw_max.index else None
+        ),
+        "dhw_ge4_days_2016_2025_mean": (
+            float(dhw_ge4.loc[2016:2025].mean()) if 2016 in dhw_ge4.index else None
+        ),
+        "dhw_ge8_days_2016_2025_mean": (
+            float(dhw_ge8.loc[2016:2025].mean()) if 2016 in dhw_ge8.index else None
+        ),
     }
 
     out_json = OUT_DIR / "summary.json"

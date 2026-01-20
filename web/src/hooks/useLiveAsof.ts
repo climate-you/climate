@@ -28,7 +28,8 @@ export function useLiveAsof(slug: string, enabled: boolean) {
       try {
         const url = cacheBustDev("/data/live/latest.json");
         const res = await fetch(url, { cache: "no-store" });
-        if (!res.ok) throw new Error(`Failed to load live/latest.json: ${res.status}`);
+        if (!res.ok)
+          throw new Error(`Failed to load live/latest.json: ${res.status}`);
         const latest = (await res.json()) as LatestMap;
         const v = latest[slug] ?? null;
         if (!cancelled) setAsof(v);

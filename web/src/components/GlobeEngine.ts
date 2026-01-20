@@ -15,16 +15,16 @@ export type GlobeAssets = {
   basePath: string;
 
   // naming conventions (default matches your main.js)
-  landPrefix?: string;    // "land_"
-  cloudsPrefix?: string;  // "clouds_"
+  landPrefix?: string; // "land_"
+  cloudsPrefix?: string; // "clouds_"
   bordersPrefix?: string; // "borders_"
-  dataPrefix?: string;    // "data_"
+  dataPrefix?: string; // "data_"
 
   // marker filename
-  markerFile?: string;    // "marker.png"
+  markerFile?: string; // "marker.png"
 
   // optional fallback
-  emptyFile?: string;     // "empty.png"
+  emptyFile?: string; // "empty.png"
 };
 
 export type GlobeOptions = {
@@ -85,7 +85,11 @@ function easeInOutCubic(t: number) {
 function delay(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms));
 }
-function fadeMaterialOpacity(mat: THREE.Material & { opacity: number }, to: number, ms = 700) {
+function fadeMaterialOpacity(
+  mat: THREE.Material & { opacity: number },
+  to: number,
+  ms = 700,
+) {
   const from = mat.opacity;
   const t0 = performance.now();
   const step = (now: number) => {
@@ -130,18 +134,18 @@ export class GlobeEngine {
   private autorotate = true;
 
   // --- autorotate (avoid "jump" when enabling spin later) ---
-  private autorotateT0: number | null = null;           // seconds (engine t) when spin started
-  private autorotateQuat0 = new THREE.Quaternion();     // earth orientation at spin start
-  private tmpYawQ = new THREE.Quaternion();             // scratch quaternion
-  private axisY = new THREE.Vector3(0, 1, 0);           // world up axis
-  private autorotateSpeed = 0.08;                       // rad/sec (default)
+  private autorotateT0: number | null = null; // seconds (engine t) when spin started
+  private autorotateQuat0 = new THREE.Quaternion(); // earth orientation at spin start
+  private tmpYawQ = new THREE.Quaternion(); // scratch quaternion
+  private axisY = new THREE.Vector3(0, 1, 0); // world up axis
+  private autorotateSpeed = 0.08; // rad/sec (default)
 
   // --- tilt reset (gradually remove pitch/roll while spinning) ---
   private autorotateUprightQuat0 = new THREE.Quaternion(); // same yaw, no tilt
-  private tmpBaseQ = new THREE.Quaternion();               // scratch base quaternion
-  private tmpV = new THREE.Vector3();                      // scratch vector
-  private tiltResetT0: number | null = null;               // seconds (engine t)
-  private tiltResetDuration = 12.0;                         // seconds to become upright
+  private tmpBaseQ = new THREE.Quaternion(); // scratch base quaternion
+  private tmpV = new THREE.Vector3(); // scratch vector
+  private tiltResetT0: number | null = null; // seconds (engine t)
+  private tiltResetDuration = 12.0; // seconds to become upright
 
   // --- shader grid control (grid is drawn in fragment shader via gridOpacity uniform) ---
   private gridOpacitySaved: number | null = null;
@@ -169,7 +173,11 @@ export class GlobeEngine {
     this.startRotY = opts.startRotY ?? Math.PI;
 
     // renderer/camera/scene
-    this.renderer = new THREE.WebGLRenderer({ canvas: opts.canvas, antialias: true, alpha: true });
+    this.renderer = new THREE.WebGLRenderer({
+      canvas: opts.canvas,
+      antialias: true,
+      alpha: true,
+    });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -177,7 +185,12 @@ export class GlobeEngine {
     this.scene = new THREE.Scene();
 
     const fov = opts.fov ?? 35;
-    this.camera = new THREE.PerspectiveCamera(fov, window.innerWidth / window.innerHeight, 0.1, 100);
+    this.camera = new THREE.PerspectiveCamera(
+      fov,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      100,
+    );
     this.camera.position.set(0, 0, opts.cameraZ ?? 4.0);
 
     this.sun = new THREE.DirectionalLight(0xffffff, 0.9);
@@ -188,7 +201,10 @@ export class GlobeEngine {
     this.lonShiftDeg = opts.lonShiftDeg ?? 90;
 
     // keep CSS and JS fade duration in sync (same as your main.js)
-    document.documentElement.style.setProperty("--globe-fade-ms", `${this.timings.globeFadeMs}ms`);
+    document.documentElement.style.setProperty(
+      "--globe-fade-ms",
+      `${this.timings.globeFadeMs}ms`,
+    );
   }
 
   destroy() {
@@ -252,7 +268,8 @@ export class GlobeEngine {
 
     if (!visible) {
       // Save current opacity once, then force to 0
-      if (this.gridOpacitySaved == null) this.gridOpacitySaved = u.value as number;
+      if (this.gridOpacitySaved == null)
+        this.gridOpacitySaved = u.value as number;
       u.value = 0.0;
       return;
     }
@@ -267,7 +284,12 @@ export class GlobeEngine {
     this.camera.position.z = z;
   }
 
-  setPalette(p: { ocean?: string; land?: string; grid?: string; border?: string }) {
+  setPalette(p: {
+    ocean?: string;
+    land?: string;
+    grid?: string;
+    border?: string;
+  }) {
     if (p.ocean) this.uniforms.oceanColor.value.set(p.ocean);
     if (p.land) this.uniforms.landColor.value.set(p.land);
     if (p.grid) this.uniforms.gridColor.value.set(p.grid);
@@ -286,7 +308,7 @@ export class GlobeEngine {
 
     // derivative wrt lat of your latLonToVec3 formula
     const x = -Math.sin(latR) * Math.sin(lonR);
-    const y =  Math.cos(latR);
+    const y = Math.cos(latR);
     const z = -Math.sin(latR) * Math.cos(lonR);
 
     return new THREE.Vector3(x, y, z).normalize();
@@ -298,7 +320,11 @@ export class GlobeEngine {
    * - keeps north pointing up (+Y)
    * starting from baseQuat.
    */
-  private quatToFrontNorthUp(lat: number, lon: number, baseQuat: THREE.Quaternion) {
+  private quatToFrontNorthUp(
+    lat: number,
+    lon: number,
+    baseQuat: THREE.Quaternion,
+  ) {
     // location & north direction in *local* (unrotated) space
     const L_local = this.ll(lat, lon, 1.0).normalize();
     const N_local = this.northTangentLocal(lat, lon);
@@ -335,7 +361,9 @@ export class GlobeEngine {
     const zAxis = new THREE.Vector3(0, 0, 1);
 
     // “home” orientation matches hero’s startRotY
-    const qHome = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, this.startRotY, 0));
+    const qHome = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(0, this.startRotY, 0),
+    );
     const qTo = this.quatToFrontNorthUp(lat, lon, qHome);
 
     this.earth.quaternion.copy(qTo);
@@ -392,16 +420,16 @@ export class GlobeEngine {
   }
 
   stopDataRevealCycle() {
-   this.dataCycleT0 = null;
+    this.dataCycleT0 = null;
   }
 
   runWarmingSequence(opts: {
     lat: number;
     lon: number;
-    revealDelayMs?: number;   // wait before blending to data
-    revealFadeMs?: number;    // blend duration
-    spinDelayMs?: number;     // wait after blend before spin
-    spinSpeed?: number;       // if you support this; otherwise ignore
+    revealDelayMs?: number; // wait before blending to data
+    revealFadeMs?: number; // blend duration
+    spinDelayMs?: number; // wait after blend before spin
+    spinSpeed?: number; // if you support this; otherwise ignore
   }) {
     const {
       lat,
@@ -448,7 +476,11 @@ export class GlobeEngine {
     if (!this.enableClouds) return;
     this.cloudsRequestedReveal = true;
     if (this.cloudsTex) {
-      fadeMaterialOpacity(this.cloudsTex.material as any, 0.85, this.timings.cloudsFadeMs);
+      fadeMaterialOpacity(
+        this.cloudsTex.material as any,
+        0.85,
+        this.timings.cloudsFadeMs,
+      );
     }
   }
 
@@ -473,13 +505,17 @@ export class GlobeEngine {
     this.introStarted = true;
     // clouds after globe fade
     void (async () => {
-      await delay(this.timings.globeFadeMs + this.timings.cloudsDelayAfterGlobeMs);
+      await delay(
+        this.timings.globeFadeMs + this.timings.cloudsDelayAfterGlobeMs,
+      );
       this.requestCloudsReveal();
     })();
 
     // data cycle starts after delay
     void (async () => {
-      await delay(this.timings.globeFadeMs + this.timings.dataDelayAfterGlobeMs);
+      await delay(
+        this.timings.globeFadeMs + this.timings.dataDelayAfterGlobeMs,
+      );
       this.startDataRevealCycle();
     })();
   }
@@ -537,9 +573,10 @@ export class GlobeEngine {
 
       // clouds load async; doesn’t block main draw
       if (this.enableClouds) {
-        this.loadClouds(CLOUD_TEX_URL).catch((e) => console.warn("Clouds failed:", e));
+        this.loadClouds(CLOUD_TEX_URL).catch((e) =>
+          console.warn("Clouds failed:", e),
+        );
       }
-
     } catch (e) {
       this.opts.onError?.(e);
       throw e;
@@ -549,14 +586,23 @@ export class GlobeEngine {
   getSnapshot() {
     const q = this.earth.quaternion;
     return {
-        earthQuat: [q.x, q.y, q.z, q.w] as [number, number, number, number],
-        cloudsRotY: this.cloudsTex ? this.cloudsTex.rotation.y : 0,
-        cameraZ: this.camera.position.z,
+      earthQuat: [q.x, q.y, q.z, q.w] as [number, number, number, number],
+      cloudsRotY: this.cloudsTex ? this.cloudsTex.rotation.y : 0,
+      cameraZ: this.camera.position.z,
     };
   }
 
-    applySnapshot(s: { earthQuat: [number, number, number, number]; cloudsRotY: number; cameraZ: number }) {
-    this.earth.quaternion.set(s.earthQuat[0], s.earthQuat[1], s.earthQuat[2], s.earthQuat[3]);
+  applySnapshot(s: {
+    earthQuat: [number, number, number, number];
+    cloudsRotY: number;
+    cameraZ: number;
+  }) {
+    this.earth.quaternion.set(
+      s.earthQuat[0],
+      s.earthQuat[1],
+      s.earthQuat[2],
+      s.earthQuat[3],
+    );
     if (this.cloudsTex) this.cloudsTex.rotation.y = s.cloudsRotY;
     this.camera.position.z = s.cameraZ;
   }
@@ -586,7 +632,6 @@ export class GlobeEngine {
     this.autorotateUprightQuat0.setFromAxisAngle(this.axisY, yaw);
   }
 
-
   private makeLoader() {
     const loader = new THREE.TextureLoader();
     const loadTex = (url: string, colorSpace: THREE.ColorSpace) =>
@@ -601,7 +646,7 @@ export class GlobeEngine {
             resolve(t);
           },
           undefined,
-          reject
+          reject,
         );
       });
 
@@ -631,7 +676,10 @@ export class GlobeEngine {
       }
     };
 
-    const bordersTex = await loadTexSafe(params.enableBorders, params.BORDERS_TEX_URL);
+    const bordersTex = await loadTexSafe(
+      params.enableBorders,
+      params.BORDERS_TEX_URL,
+    );
     const dataTex = await loadTexSafe(params.enableData, params.DATA_TEX_URL);
 
     const COLORS = {
@@ -653,7 +701,9 @@ export class GlobeEngine {
       landColor: { value: new THREE.Color(COLORS.land) },
       gridColor: { value: new THREE.Color(COLORS.grid) },
       borderColor: { value: new THREE.Color(COLORS.border) },
-      lightDir: { value: new THREE.Vector3().copy(this.sun.position).normalize() },
+      lightDir: {
+        value: new THREE.Vector3().copy(this.sun.position).normalize(),
+      },
 
       maskInvert: { value: MASK_INVERT },
 
@@ -661,8 +711,8 @@ export class GlobeEngine {
       brightness: { value: this.opts.brightness ?? 1.05 },
 
       gridEveryDeg: { value: 10.0 },
-      gridWidth: { value: 0.010 },
-      gridOpacity: { value: 0.20 },
+      gridWidth: { value: 0.01 },
+      gridOpacity: { value: 0.2 },
 
       bordersOpacity: { value: 0.22 },
       dataStrength: { value: 1.0 },
@@ -754,7 +804,10 @@ export class GlobeEngine {
       `,
     });
 
-    this.earth = new THREE.Mesh(new THREE.SphereGeometry(1.0, 256, 256), this.earthMat);
+    this.earth = new THREE.Mesh(
+      new THREE.SphereGeometry(1.0, 256, 256),
+      this.earthMat,
+    );
     this.earth.rotation.y = this.startRotY; // ensure same base orientation for hero+mini
     this.scene.add(this.earth);
 
@@ -767,7 +820,11 @@ export class GlobeEngine {
     const { loadTex } = this.makeLoader();
     const markerTex = await loadTex(markerUrl, THREE.SRGBColorSpace);
 
-    const mat = new THREE.SpriteMaterial({ map: markerTex, transparent: true, depthWrite: false });
+    const mat = new THREE.SpriteMaterial({
+      map: markerTex,
+      transparent: true,
+      depthWrite: false,
+    });
     this.marker = new THREE.Sprite(mat);
     this.marker.scale.set(0.18, 0.18, 0.18);
     this.marker.visible = false;
@@ -790,7 +847,7 @@ export class GlobeEngine {
           resolve(t);
         },
         undefined,
-        reject
+        reject,
       );
     });
 
@@ -803,7 +860,10 @@ export class GlobeEngine {
     });
     mat.alphaTest = 0.02;
 
-    this.cloudsTex = new THREE.Mesh(new THREE.SphereGeometry(1.018, 256, 256), mat);
+    this.cloudsTex = new THREE.Mesh(
+      new THREE.SphereGeometry(1.018, 256, 256),
+      mat,
+    );
     this.earth.add(this.cloudsTex);
 
     // prewarm: visible at opacity 0 so first GPU upload happens immediately
@@ -822,9 +882,9 @@ export class GlobeEngine {
     const t = this.getT();
 
     if (this.autorotate) {
-      const t0 = this.autorotateT0 ?? t;            // if missing, start "now"
+      const t0 = this.autorotateT0 ?? t; // if missing, start "now"
       const dt = Math.max(0, t - t0);
-      const ang = dt * this.autorotateSpeed;        // rad/sec
+      const ang = dt * this.autorotateSpeed; // rad/sec
 
       this.tmpYawQ.setFromAxisAngle(this.axisY, ang);
 
@@ -836,7 +896,9 @@ export class GlobeEngine {
         // ease-in-out (optional)
         const k = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
 
-        this.tmpBaseQ.copy(this.autorotateQuat0).slerp(this.autorotateUprightQuat0, k);
+        this.tmpBaseQ
+          .copy(this.autorotateQuat0)
+          .slerp(this.autorotateUprightQuat0, k);
         base = this.tmpBaseQ;
       }
 
@@ -845,7 +907,7 @@ export class GlobeEngine {
 
     // marker pulse
     if (this.marker.visible) {
-      const s = 0.18 * (1.0 + 0.10 * Math.sin(t * 2.2));
+      const s = 0.18 * (1.0 + 0.1 * Math.sin(t * 2.2));
       this.marker.scale.set(s, s, s);
     }
 
@@ -856,7 +918,8 @@ export class GlobeEngine {
 
     if (this.dataCycleT0 != null) {
       // data reveal cycle (starts at 0 when dataCycleT0 is set)
-      const dt = this.dataCycleT0 == null ? 0 : Math.max(0, t - this.dataCycleT0);
+      const dt =
+        this.dataCycleT0 == null ? 0 : Math.max(0, t - this.dataCycleT0);
       const raw = 0.5 + 0.5 * Math.sin(dt * 0.12 - Math.PI / 2); // starts at 0
       const bloom = raw * raw; // your current eased curve
       this.uniforms.dataOpacity.value = bloom;

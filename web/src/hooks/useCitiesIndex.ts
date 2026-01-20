@@ -23,7 +23,8 @@ export function useCitiesIndex() {
         setError(null);
         const url = cacheBustDev("/data/cities_index.json");
         const res = await fetch(url, { cache: "no-store" });
-        if (!res.ok) throw new Error(`Failed to load cities_index.json: ${res.status}`);
+        if (!res.ok)
+          throw new Error(`Failed to load cities_index.json: ${res.status}`);
         const data = (await res.json()) as CityIndexEntry[];
         if (!cancelled) setCities(data);
       } catch (e) {

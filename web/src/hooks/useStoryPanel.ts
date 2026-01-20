@@ -10,7 +10,11 @@ function cacheBustDev(url: string) {
   return url;
 }
 
-export type StoryPanelName = "last_year" | "five_year" | "fifty_year" | "twenty_five_years";
+export type StoryPanelName =
+  | "last_year"
+  | "five_year"
+  | "fifty_year"
+  | "twenty_five_years";
 
 export function useStoryPanel(args: {
   slug: string;
@@ -44,10 +48,15 @@ export function useStoryPanel(args: {
           fetch(capUrl, { cache: "no-store" }),
         ]);
 
-        if (!svgRes.ok) throw new Error(`Failed to load ${panel} SVG: ${svgRes.status}`);
-        if (!capRes.ok) throw new Error(`Failed to load ${panel} caption: ${capRes.status}`);
+        if (!svgRes.ok)
+          throw new Error(`Failed to load ${panel} SVG: ${svgRes.status}`);
+        if (!capRes.ok)
+          throw new Error(`Failed to load ${panel} caption: ${capRes.status}`);
 
-        const [svgText, capText] = await Promise.all([svgRes.text(), capRes.text()]);
+        const [svgText, capText] = await Promise.all([
+          svgRes.text(),
+          capRes.text(),
+        ]);
         if (cancelled) return;
 
         setSvg(svgText);

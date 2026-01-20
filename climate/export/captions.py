@@ -1,6 +1,7 @@
 from __future__ import annotations
 import textwrap
 
+
 def normalize_caption(md: str) -> str:
     """
     Normalize caption markdown for frontend consumption.

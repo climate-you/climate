@@ -29,6 +29,7 @@ WORLD_DATA_DIR = Path("data/world")
 # Public API
 # -------------------------
 
+
 def build_world_map_data(ctx: StoryContext, *, grid_deg: float | None = None) -> dict:
     """
     Load latest warming map raster + manifest produced by scripts/make_warming_map_cds.py.
@@ -101,7 +102,9 @@ def build_world_map_data(ctx: StoryContext, *, grid_deg: float | None = None) ->
     )
 
 
-def build_world_map_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> Tuple[folium.Map, str]:
+def build_world_map_figure(
+    ctx: StoryContext, facts: StoryFacts, data: dict
+) -> Tuple[folium.Map, str]:
     da: xr.DataArray = data["da"]
     manifest: dict = data.get("manifest", {})
     lat_name: str = data["lat_name"]
@@ -133,7 +136,7 @@ def build_world_map_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> 
     ImageOverlay(
         image=img,
         bounds=bounds,
-        opacity=1.0,       # alpha is already in the RGBA
+        opacity=1.0,  # alpha is already in the RGBA
         interactive=False,
         cross_origin=False,
         zindex=1,
@@ -290,7 +293,9 @@ def build_local_inset_data(
     def _nan_stats(a: np.ndarray) -> dict:
         a = a[np.isfinite(a)]
         if a.size == 0:
-            return dict(mean=np.nan, std=np.nan, p10=np.nan, p90=np.nan, min=np.nan, max=np.nan)
+            return dict(
+                mean=np.nan, std=np.nan, p10=np.nan, p90=np.nan, min=np.nan, max=np.nan
+            )
         return dict(
             mean=float(np.mean(a)),
             std=float(np.std(a)),
@@ -304,8 +309,8 @@ def build_local_inset_data(
     stats_window = _nan_stats(arr)
 
     return dict(
-        da_window=da_win,           # still in °C in values; unit conversion is in arr_window
-        arr_window=arr,             # numeric array in ctx.unit
+        da_window=da_win,  # still in °C in values; unit conversion is in arr_window
+        arr_window=arr,  # numeric array in ctx.unit
         lat_name=lat_name,
         lon_name=lon_name,
         unit=ctx.unit,
@@ -317,6 +322,7 @@ def build_local_inset_data(
         window_half_height_deg=half_height_deg,
         nearby_radius_cells=r,
     )
+
 
 def build_local_inset_figure(
     ctx: StoryContext,
@@ -358,7 +364,9 @@ def build_local_inset_figure(
             zmax=vmax,
             colorscale="YlOrRd",
             colorbar=dict(title=f"ΔT ({fmt_unit(ctx.unit)})"),
-            hovertemplate="Lon %{x:.1f}°, Lat %{y:.1f}°<br>ΔT %{z:.2f}" + fmt_unit(ctx.unit) + "<extra></extra>",
+            hovertemplate="Lon %{x:.1f}°, Lat %{y:.1f}°<br>ΔT %{z:.2f}"
+            + fmt_unit(ctx.unit)
+            + "<extra></extra>",
         )
     )
 
@@ -378,7 +386,9 @@ def build_local_inset_figure(
         width=320,
         height=320,
         margin=dict(l=50, r=20, t=40, b=40),
-        title=dict(text=f"<b>Local area around {ctx.location_label}</b>", x=0, xanchor="left"),
+        title=dict(
+            text=f"<b>Local area around {ctx.location_label}</b>", x=0, xanchor="left"
+        ),
     )
     # Keep degrees square (no stretching)
     fig.update_yaxes(
@@ -395,6 +405,7 @@ def build_local_inset_figure(
     )
     return fig, tiny
 
+
 def local_inset_caption(ctx: StoryContext, facts: StoryFacts, inset_data: dict) -> str:
     s = inset_data["stats_near"]
     w = inset_data["stats_window"]
@@ -404,20 +415,34 @@ def local_inset_caption(ctx: StoryContext, facts: StoryFacts, inset_data: dict) 
 
     mean_near = s["mean"]
     std_near = s["std"]
-    spread_near = (s["p90"] - s["p10"]) if (np.isfinite(s["p90"]) and np.isfinite(s["p10"])) else np.nan
+    spread_near = (
+        (s["p90"] - s["p10"])
+        if (np.isfinite(s["p90"]) and np.isfinite(s["p10"]))
+        else np.nan
+    )
 
     # Heuristics (tweakable)
-    high_variance = np.isfinite(spread_near) and (spread_near > (1.0 if not is_fahrenheit(ctx.unit) else 1.8))
-    strong_warming = np.isfinite(mean_near) and (mean_near > (1.5 if not is_fahrenheit(ctx.unit) else 2.7))
+    high_variance = np.isfinite(spread_near) and (
+        spread_near > (1.0 if not is_fahrenheit(ctx.unit) else 1.8)
+    )
+    strong_warming = np.isfinite(mean_near) and (
+        mean_near > (1.5 if not is_fahrenheit(ctx.unit) else 2.7)
+    )
 
     lines = []
     if np.isfinite(mean_near):
         if strong_warming:
-            lines.append(f"Your surrounding region shows **strong warming**: about **{fmt(mean_near)}** on average nearby.")
+            lines.append(
+                f"Your surrounding region shows **strong warming**: about **{fmt(mean_near)}** on average nearby."
+            )
         else:
-            lines.append(f"Your surrounding region has warmed by about **{fmt(mean_near)}** on average nearby.")
+            lines.append(
+                f"Your surrounding region has warmed by about **{fmt(mean_near)}** on average nearby."
+            )
     else:
-        lines.append("We couldn’t estimate local warming around your location (missing data in this window).")
+        lines.append(
+            "We couldn’t estimate local warming around your location (missing data in this window)."
+        )
 
     if high_variance:
         lines.append(
@@ -425,17 +450,23 @@ def local_inset_caption(ctx: StoryContext, facts: StoryFacts, inset_data: dict) 
             "which often happens near coasts, mountains, or strong ocean/land contrasts."
         )
     elif np.isfinite(std_near):
-        lines.append(f"Warming is fairly uniform locally (nearby variability ~**{fmt(std_near)}** standard deviation).")
+        lines.append(
+            f"Warming is fairly uniform locally (nearby variability ~**{fmt(std_near)}** standard deviation)."
+        )
 
     # Optional: include window context (quietly)
     if np.isfinite(w["mean"]):
-        lines.append(f"(In this whole local window, values range from **{fmt(w['min'])}** to **{fmt(w['max'])}**.)")
+        lines.append(
+            f"(In this whole local window, values range from **{fmt(w['min'])}** to **{fmt(w['max'])}**.)"
+        )
 
     return "\n\n".join(lines)
+
 
 # -------------------------
 # Helpers
 # -------------------------
+
 
 def _pick_coord_name(da: xr.DataArray, names: list[str]) -> str | None:
     for n in names:
@@ -456,6 +487,7 @@ def _normalize_longitude(da: xr.DataArray, lon_name: str) -> xr.DataArray:
     else:
         da = da.sortby(lon_name)
     return da
+
 
 def _fmt_period(p: dict | None) -> str | None:
     if not isinstance(p, dict):
@@ -500,6 +532,7 @@ def _to_rgba(arr: np.ndarray) -> tuple[np.ndarray, float, float]:
     rgba[..., 3] = np.where(mask, 0.75, 0.0)
     return rgba, vmin, vmax
 
+
 def _legend_ticks_sequential(vmin: float, vmax: float) -> list[float]:
     lo = float(math.floor(vmin))
     hi = float(math.ceil(vmax))
@@ -509,10 +542,11 @@ def _legend_ticks_sequential(vmin: float, vmax: float) -> list[float]:
         ticks.sort()
     return ticks
 
+
 def _nice_bounds(vmin: float, vmax: float) -> tuple[float, float]:
     # Round legend endpoints to clean integers for readability
     vmin2 = math.floor(vmin)  # e.g. -0.1 -> -1
-    vmax2 = math.ceil(vmax)   # e.g.  3.8 ->  4
+    vmax2 = math.ceil(vmax)  # e.g.  3.8 ->  4
 
     # Optional: if you want the legend to be “warming magnitude”, pin at 0
     # vmin2 = 0.0
@@ -523,7 +557,10 @@ def _nice_bounds(vmin: float, vmax: float) -> tuple[float, float]:
 
     return float(vmin2), float(vmax2)
 
-def _warp_lat_to_mercator(arr_latlon: np.ndarray, lats: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+
+def _warp_lat_to_mercator(
+    arr_latlon: np.ndarray, lats: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Resample a [lat, lon] array from regular-lat spacing to regular Web Mercator y spacing.
 
@@ -566,7 +603,9 @@ def _warp_lat_to_mercator(arr_latlon: np.ndarray, lats: np.ndarray) -> tuple[np.
         col_a = col[order]
         ok = np.isfinite(col_a)
         if ok.sum() >= 2:
-            out[:, j] = np.interp(y_tgt, y_src_a[ok], col_a[ok], left=np.nan, right=np.nan)
+            out[:, j] = np.interp(
+                y_tgt, y_src_a[ok], col_a[ok], left=np.nan, right=np.nan
+            )
 
     # Leaflet expects row 0 = north/top.
     # Our y_tgt is ascending (south->north), so flip to north->south.

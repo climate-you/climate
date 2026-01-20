@@ -8,24 +8,28 @@ from climate.units import fmt_delta, fmt_temp
 # Compute intro data and captions
 # -----------------------------------------------------------
 
+
 def build_intro_data(ctx: StoryContext) -> dict:
     """
     Prepare the data needed for the 'Intro' panel.
 
     Uses:
-    - 
+    -
     Returns a dict so it's easy to plug into other front-ends later.
     """
-    temp_now_c, temp_now_time = fetch_openmeteo_current_temp_c(ctx.location_lat, ctx.location_lon)
+    temp_now_c, temp_now_time = fetch_openmeteo_current_temp_c(
+        ctx.location_lat, ctx.location_lon
+    )
 
     # Keep global as a placeholder for now (swap later when we have a real global series)
     global_delta = 1.0
 
     return {
-        "temp_now_c" : temp_now_c,
-        "temp_now_time" : temp_now_time,
-        "global_delta" : global_delta,
+        "temp_now_c": temp_now_c,
+        "temp_now_time": temp_now_time,
+        "global_delta": global_delta,
     }
+
 
 def intro_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
     """
@@ -55,7 +59,9 @@ def intro_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
         if local_d > global_d + 0.2:
             return "Locally, warming is happening **faster** than the global average."
         if local_d < global_d - 0.2:
-            return "Locally, warming is happening **more slowly** than the global average."
+            return (
+                "Locally, warming is happening **more slowly** than the global average."
+            )
         return "Locally, warming is **broadly similar** to the global average."
 
     local_delta = facts.total_warming_50y

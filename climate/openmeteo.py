@@ -11,8 +11,11 @@ import numpy as np
 
 OPENMETEO_TIMEOUT = 30  # seconds
 
+
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_openmeteo_current_temp_c(lat: float, lon: float) -> tuple[float | None, str | None]:
+def fetch_openmeteo_current_temp_c(
+    lat: float, lon: float
+) -> tuple[float | None, str | None]:
     """
     Returns (temperature_c, iso_time) or (None, None) if unavailable.
     Cached by location for ~1 hour.
@@ -36,12 +39,13 @@ def fetch_openmeteo_current_temp_c(lat: float, lon: float) -> tuple[float | None
     except Exception:
         return None, None
 
+
 @st.cache_data(show_spinner=False)
 def fetch_openmeteo_window(
     kind: str,
     lat: float,
     lon: float,
-    start_date : datetime.date,
+    start_date: datetime.date,
     end_date: datetime.date,
 ) -> dict | None:
     """
@@ -91,7 +95,9 @@ def fetch_openmeteo_window(
         return None
 
 
-def fetch_recent_7d(slug: str, lat: float, lon: float, end_date: datetime.date) -> xr.Dataset | None:
+def fetch_recent_7d(
+    slug: str, lat: float, lon: float, end_date: datetime.date
+) -> xr.Dataset | None:
     """
     Fetch last 7 full days of hourly + daily temps from Open-Meteo ERA5 archive.
     end_date_str is ISO string of the last full day included (YYYY-MM-DD).
@@ -100,7 +106,7 @@ def fetch_recent_7d(slug: str, lat: float, lon: float, end_date: datetime.date) 
     j = fetch_openmeteo_window("hourly_7d", lat, lon, start_date, end_date)
     if j is None:
         return None
-    
+
     # Hourly
     h = j["hourly"]
     t_h = pd.to_datetime(h["time"])
@@ -125,7 +131,9 @@ def fetch_recent_7d(slug: str, lat: float, lon: float, end_date: datetime.date) 
     return ds
 
 
-def fetch_recent_30d(slug: str, lat: float, lon: float, end_date: datetime.date) -> xr.Dataset | None:
+def fetch_recent_30d(
+    slug: str, lat: float, lon: float, end_date: datetime.date
+) -> xr.Dataset | None:
     """
     Fetch last 30 full days of daily temps from Open-Meteo ERA5 archive.
     """

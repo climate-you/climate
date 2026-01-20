@@ -3,7 +3,7 @@
 
 :root {
   --foreground: #171717;
-  
+
   /* match StoryClient light gradient mid-tone */
   --page-bg: linear-gradient(to bottom, #fff, #f8fafc, #fff);
   --page-fg: var(--foreground);
@@ -11,12 +11,12 @@
 
 .dark {
   --foreground: #ededed;
-  
+
   /* ✅ MUST match StoryClient dark background */
   --page-bg: #212121;
 }
 body {
-  background: var(--page-bg);   /* ✅ use page bg */
+  background: var(--page-bg); /* ✅ use page bg */
   color: var(--page-fg);
   font-family: Arial, Helvetica, sans-serif;
 }
@@ -48,5 +48,6 @@ body {
 
 .globe-wash.is-visible {
   opacity: 0;
-  transition: opacity var(--globe-fade-ms, 3500ms) cubic-bezier(0.45, 0.0, 0.55, 1.0);
+  transition: opacity var(--globe-fade-ms, 3500ms)
+    cubic-bezier(0.45, 0, 0.55, 1);
 }

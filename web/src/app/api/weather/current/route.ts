@@ -17,8 +17,11 @@ export async function GET(req: Request) {
   const lon = Number(url.searchParams.get("lon"));
 
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    return Response.json({ error: "lat and lon must be numbers" }, { status: 400 });
-    }
+    return Response.json(
+      { error: "lat and lon must be numbers" },
+      { status: 400 },
+    );
+  }
 
   const key = cacheKey(lat, lon);
   const now = Date.now();
@@ -26,8 +29,12 @@ export async function GET(req: Request) {
   const hit = CACHE.get(key);
   if (hit && hit.expiresAt > now) {
     return Response.json(
-      { ...hit.payload, cached: true, cacheAgeSeconds: Math.round((now - hit.createdAt) / 1000) },
-      { headers: { "Cache-Control": "no-store" } }
+      {
+        ...hit.payload,
+        cached: true,
+        cacheAgeSeconds: Math.round((now - hit.createdAt) / 1000),
+      },
+      { headers: { "Cache-Control": "no-store" } },
     );
   }
 
@@ -47,8 +54,12 @@ export async function GET(req: Request) {
   if (!upstream.ok) {
     const text = await upstream.text().catch(() => "");
     return Response.json(
-      { error: "Open-Meteo request failed", status: upstream.status, details: text.slice(0, 500) },
-      { status: 502 }
+      {
+        error: "Open-Meteo request failed",
+        status: upstream.status,
+        details: text.slice(0, 500),
+      },
+      { status: 502 },
     );
   }
 
@@ -59,7 +70,10 @@ export async function GET(req: Request) {
   const timezone = json?.timezone ?? null;
 
   if (typeof temperature !== "number") {
-    return Response.json({ error: "Open-Meteo response missing current.temperature_2m" }, { status: 502 });
+    return Response.json(
+      { error: "Open-Meteo response missing current.temperature_2m" },
+      { status: 502 },
+    );
   }
 
   const payload = {

@@ -9,6 +9,7 @@ from datetime import datetime
 # Helpers to load precomputed caches
 # -----------------------------------------------------------
 
+
 def discover_locations(clim_dir: str) -> dict:
     """
     Scan story_climatology/clim_*.nc and build a dict:
@@ -48,16 +49,17 @@ def discover_locations(clim_dir: str) -> dict:
             label = city_name
 
         locations[slug] = {
-            "slug": slug,                  # clim_city_gb_london
-            "lat": lat,                    # 51.5074,
-            "lon": lon,                    # -0.1278
-            "path": path,                  # clim_city_gb_london.nc
-            "label": label,                # London, United Kingdom
-            "city_name": city_name,        # London
-            "country_code" : country_code, # GB
+            "slug": slug,  # clim_city_gb_london
+            "lat": lat,  # 51.5074,
+            "lon": lon,  # -0.1278
+            "path": path,  # clim_city_gb_london.nc
+            "label": label,  # London, United Kingdom
+            "city_name": city_name,  # London
+            "country_code": country_code,  # GB
         }
 
     return locations
+
 
 def dataset_coverage_text(ds: xr.Dataset) -> str:
     """Return a short caption like 'Data from 1979 to Sep 2025'."""

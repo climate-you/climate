@@ -61,7 +61,9 @@ def _find_var_and_dims(ds: xr.Dataset) -> tuple[xr.DataArray, str]:
         if set(da.dims) >= {"latitude", "longitude"} and len(da.dims) == 3:
             return da, name
 
-    raise RuntimeError(f"Could not find a suitable 3D temperature variable. data_vars={list(ds.data_vars)}")
+    raise RuntimeError(
+        f"Could not find a suitable 3D temperature variable. data_vars={list(ds.data_vars)}"
+    )
 
 
 def _detect_time_dim(da: xr.DataArray) -> str:

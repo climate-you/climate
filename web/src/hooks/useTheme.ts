@@ -16,7 +16,8 @@ export function useTheme() {
   // Load stored pref
   useEffect(() => {
     const saved = window.localStorage.getItem("theme") as ThemePref | null;
-    if (saved === "light" || saved === "dark" || saved === "system") setPref(saved);
+    if (saved === "light" || saved === "dark" || saved === "system")
+      setPref(saved);
   }, []);
 
   // Apply to <html>
@@ -49,7 +50,13 @@ export function useTheme() {
     });
   };
 
-  const label = pref === "system" ? "Auto" : pref === "light" ? "Light" : "Dark";
+  const label =
+    pref === "system" ? "Auto" : pref === "light" ? "Light" : "Dark";
 
-  return { themePref: pref, setThemePref: setPref, cycleTheme: cycle, themeLabel: label };
+  return {
+    themePref: pref,
+    setThemePref: setPref,
+    cycleTheme: cycle,
+    themeLabel: label,
+  };
 }

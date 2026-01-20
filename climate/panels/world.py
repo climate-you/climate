@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import os
@@ -20,6 +19,7 @@ BASELINE_END = 1990
 
 WORLD_DATA_DIR = Path("data/world")
 
+
 def _load_global_series_meta() -> dict:
     p = WORLD_DATA_DIR / "global_series.meta.json"
     if not p.exists():
@@ -29,6 +29,7 @@ def _load_global_series_meta() -> dict:
     except Exception:
         return {}
 
+
 def build_you_vs_world_data(ctx: StoryContext) -> dict:
     # Local: monthly mean temperature from precomputed city dataset
     t = pd.to_datetime(ctx.ds["time_monthly"].values)
@@ -36,7 +37,9 @@ def build_you_vs_world_data(ctx: StoryContext) -> dict:
     local_monthly = pd.Series(y, index=t).sort_index()
 
     # Local anomalies: month-of-year baseline climatology (removes seasonal cycle)
-    local_anom = _anom_from_baseline_monthly_clim(local_monthly, BASELINE_START, BASELINE_END)
+    local_anom = _anom_from_baseline_monthly_clim(
+        local_monthly, BASELINE_START, BASELINE_END
+    )
 
     # Global: load anomaly series produced by scripts/make_global_series.py
     global_series = WORLD_DATA_DIR / "global_series.csv"
@@ -60,7 +63,10 @@ def build_you_vs_world_data(ctx: StoryContext) -> dict:
         global_anom=global_anom,
     )
 
-def _anomaly_bars(ctx: StoryContext, series: pd.Series, *, title: str, yaxis_title: str) -> go.Figure:
+
+def _anomaly_bars(
+    ctx: StoryContext, series: pd.Series, *, title: str, yaxis_title: str
+) -> go.Figure:
     # Force datetime index -> python datetimes
     x = pd.to_datetime(series.index, errors="coerce")
     mask = x.notna()
@@ -78,7 +84,9 @@ def _anomaly_bars(ctx: StoryContext, series: pd.Series, *, title: str, yaxis_tit
         go.Bar(
             x=x,
             y=y,
-            marker=dict(color=np.where(y >= 0, "rgba(180, 0, 120, 0.8)", "rgba(0, 130, 0, 0.8)")),
+            marker=dict(
+                color=np.where(y >= 0, "rgba(180, 0, 120, 0.8)", "rgba(0, 130, 0, 0.8)")
+            ),
             hoverinfo="skip",
             showlegend=False,
         )
@@ -112,6 +120,7 @@ def _anomaly_bars(ctx: StoryContext, series: pd.Series, *, title: str, yaxis_tit
     fig.update_xaxes(title_text="Year", tickformat="%Y")
     return fig
 
+
 def build_you_vs_world_figures(ctx, facts, data) -> (go.Figure, go.Figure, str):
     y0, y1 = data["baseline"]
     unit = ctx.unit
@@ -131,7 +140,9 @@ def build_you_vs_world_figures(ctx, facts, data) -> (go.Figure, go.Figure, str):
 
     meta = _load_global_series_meta()
     src = meta.get("source_name") or "global temperature anomaly series"
-    tiny = f"Local: ERA5 (Open-Meteo) monthly means. Global: {src}. Baseline: {y0}–{y1}."
+    tiny = (
+        f"Local: ERA5 (Open-Meteo) monthly means. Global: {src}. Baseline: {y0}–{y1}."
+    )
     return fig_local, fig_global, tiny
 
 
@@ -146,10 +157,12 @@ def _trend_per_decade(s: pd.Series) -> float:
     slope_per_year = np.polyfit(x, y, 1)[0]
     return float(slope_per_year * 10.0)
 
+
 def _fmt(v: float, unit: str) -> str:
     if not np.isfinite(v):
         return "n/a"
     return f"{v:+.2f}{fmt_unit(unit)}"
+
 
 def you_vs_world_caption(ctx, facts, data) -> str:
     local: pd.Series = data["local_anom"].dropna()
@@ -183,7 +196,15 @@ def you_vs_world_caption(ctx, facts, data) -> str:
     # Compare trends (avoid division; use absolute thresholds)
     # “Similar rate” means within ~0.05 units/decade (tweakable)
     rate_delta = tr_local - tr_global
-    same_direction = np.isfinite(tr_local) and np.isfinite(tr_global) and (np.sign(tr_local) == np.sign(tr_global) or abs(tr_local) < 1e-6 or abs(tr_global) < 1e-6)
+    same_direction = (
+        np.isfinite(tr_local)
+        and np.isfinite(tr_global)
+        and (
+            np.sign(tr_local) == np.sign(tr_global)
+            or abs(tr_local) < 1e-6
+            or abs(tr_global) < 1e-6
+        )
+    )
 
     if diverges:
         headline = "Your local swings don’t line up closely with the global pattern."
@@ -231,7 +252,9 @@ def you_vs_world_caption(ctx, facts, data) -> str:
         f"global from {src})."
     )
 
+
 # ---------- helpers ----------
+
 
 def _anom_from_baseline_monthly_clim(s: pd.Series, y0: int, y1: int) -> pd.Series:
     base = s[(s.index.year >= y0) & (s.index.year <= y1)]
@@ -251,19 +274,29 @@ def _rebase_anomaly_series(s: pd.Series, y0: int, y1: int) -> pd.Series:
 def _load_global_series(path_csv: Path) -> pd.Series:
     df = pd.read_csv(path_csv)
     if "date" not in df.columns:
-        raise RuntimeError(f"global_series.csv missing 'date' column. cols={list(df.columns)}")
+        raise RuntimeError(
+            f"global_series.csv missing 'date' column. cols={list(df.columns)}"
+        )
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df[df["date"].notna()].sort_values("date")
 
     # choose anomaly column robustly
-    candidates = [c for c in df.columns if c.lower() in ("anomaly_c", "anom_c", "ano_91-20", "ano_pi", "anomaly")]
+    candidates = [
+        c
+        for c in df.columns
+        if c.lower() in ("anomaly_c", "anom_c", "ano_91-20", "ano_pi", "anomaly")
+    ]
     if not candidates:
         # fallback: first numeric column that isn't year/month
         candidates = [
-            c for c in df.columns
-            if c not in ("date", "year", "month", "month_num") and pd.api.types.is_numeric_dtype(df[c])
+            c
+            for c in df.columns
+            if c not in ("date", "year", "month", "month_num")
+            and pd.api.types.is_numeric_dtype(df[c])
         ]
     if not candidates:
-        raise RuntimeError(f"Couldn't find anomaly column in global_series.csv. cols={list(df.columns)}")
+        raise RuntimeError(
+            f"Couldn't find anomaly column in global_series.csv. cols={list(df.columns)}"
+        )
 
     return pd.Series(df[candidates[0]].astype("float64").values, index=df["date"])

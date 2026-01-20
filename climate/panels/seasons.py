@@ -10,6 +10,7 @@ from climate.units import fmt_delta, convert_temp, convert_delta, fmt_unit
 # Compute seasons data, graph and captions
 # -----------------------------------------------------------
 
+
 def build_seasons_then_now_data(ctx: StoryContext) -> dict:
     """
     Prepare data for the 'How your seasons have shifted' panel AND the side-by-side
@@ -33,16 +34,42 @@ def build_seasons_then_now_data(ctx: StoryContext) -> dict:
 
     # Convert to pandas series indexed by timestamps
     s_mean = ctx.ds["t2m_monthly_mean_c"].to_series()
-    s_min  = ctx.ds["t2m_monthly_min_c"].to_series()
-    s_max  = ctx.ds["t2m_monthly_max_c"].to_series()
+    s_min = ctx.ds["t2m_monthly_min_c"].to_series()
+    s_max = ctx.ds["t2m_monthly_max_c"].to_series()
 
     # Ensure datetime index
     s_mean.index = pd.to_datetime(s_mean.index)
-    s_min.index  = pd.to_datetime(s_min.index)
-    s_max.index  = pd.to_datetime(s_max.index)
+    s_min.index = pd.to_datetime(s_min.index)
+    s_max.index = pd.to_datetime(s_max.index)
 
-    month_names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-    month_names_long = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+    month_names = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ]
+    month_names_long = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ]
 
     def _eval_month_trend(series: pd.Series, month: int):
         """
@@ -52,17 +79,22 @@ def build_seasons_then_now_data(ctx: StoryContext) -> dict:
         """
         sm = series[series.index.month == month].dropna()
         if sm.empty:
-            return np.nan, np.nan, np.nan, np.nan  # early, recent, early_year, recent_year
+            return (
+                np.nan,
+                np.nan,
+                np.nan,
+                np.nan,
+            )  # early, recent, early_year, recent_year
 
         years = sm.index.year.astype(float).to_numpy()
-        vals  = sm.to_numpy(dtype="float64")
+        vals = sm.to_numpy(dtype="float64")
 
         # Need at least a few points to fit
         if len(vals) < 8:
             # fallback: use simple mean of first/last up to 10 values
             order = np.argsort(years)
             years_s = years[order]
-            vals_s  = vals[order]
+            vals_s = vals[order]
             k = min(10, len(vals_s))
             early = float(np.nanmean(vals_s[:k]))
             recent = float(np.nanmean(vals_s[-k:]))
@@ -97,12 +129,12 @@ def build_seasons_then_now_data(ctx: StoryContext) -> dict:
         emin, rmin, _, _ = _eval_month_trend(s_min, m)
         emax, rmax, _, _ = _eval_month_trend(s_max, m)
 
-        past_mean[m-1] = em
-        recent_mean[m-1] = rm
-        past_min[m-1] = emin
-        recent_min[m-1] = rmin
-        past_max[m-1] = emax
-        recent_max[m-1] = rmax
+        past_mean[m - 1] = em
+        recent_mean[m - 1] = rm
+        past_min[m - 1] = emin
+        recent_min[m - 1] = rmin
+        past_max[m - 1] = emax
+        recent_max[m - 1] = rmax
         early_years.append(ey)
         recent_years.append(ry)
 
@@ -130,41 +162,51 @@ def build_seasons_then_now_data(ctx: StoryContext) -> dict:
     recent_max_r = roll(recent_max)
 
     delta_mean_r = recent_mean_r - past_mean_r
-    
+
     # Pre-format the delta as a STRING so Plotly doesn’t fight formatting
-    delta_str = np.array([fmt_delta(v, ctx.unit, decimals=2) for v in delta_mean_r], dtype=object)
+    delta_str = np.array(
+        [fmt_delta(v, ctx.unit, decimals=2) for v in delta_mean_r], dtype=object
+    )
 
     # customdata per point: [past, recent, delta_numeric, delta_string]
-    past_mean_r_local = np.asarray([convert_temp(v, ctx.unit) for v in past_mean_r], dtype="float64")
-    recent_mean_r_local = np.asarray([convert_temp(v, ctx.unit) for v in recent_mean_r], dtype="float64")
-    delta_mean_r_local = np.asarray([convert_temp(v, ctx.unit) for v in delta_mean_r], dtype="float64")
-    custom_overlay = np.column_stack([past_mean_r_local, recent_mean_r_local, delta_mean_r_local, delta_str]).tolist() # (12,4)
+    past_mean_r_local = np.asarray(
+        [convert_temp(v, ctx.unit) for v in past_mean_r], dtype="float64"
+    )
+    recent_mean_r_local = np.asarray(
+        [convert_temp(v, ctx.unit) for v in recent_mean_r], dtype="float64"
+    )
+    delta_mean_r_local = np.asarray(
+        [convert_temp(v, ctx.unit) for v in delta_mean_r], dtype="float64"
+    )
+    custom_overlay = np.column_stack(
+        [past_mean_r_local, recent_mean_r_local, delta_mean_r_local, delta_str]
+    ).tolist()  # (12,4)
 
     return {
         "x": x,
         "month_labels": month_labels_shifted,
-        "month_labels_long" : month_labels_long_shifted,
+        "month_labels_long": month_labels_long_shifted,
         "shift": shift,
         "ihot": ihot,
-
         # mean overlay (trend-evaluated)
         "past_mean": past_mean_r,
         "recent_mean": recent_mean_r,
         "delta_mean": delta_mean_r,
         "custom_overlay": custom_overlay,
-
         # envelopes (trend-evaluated)
         "past_min": past_min_r,
         "past_max": past_max_r,
         "recent_min": recent_min_r,
         "recent_max": recent_max_r,
-
         # optional metadata if you want it later
         "early_years_by_month": early_years,
         "recent_years_by_month": recent_years,
     }
 
-def build_seasons_then_now_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> go.Figure:
+
+def build_seasons_then_now_figure(
+    ctx: StoryContext, facts: StoryFacts, data: dict
+) -> go.Figure:
     """
     Overlay: earlier vs recent monthly mean climatology (trend-evaluated),
     already rotated so warmest recent month is centered.
@@ -178,7 +220,9 @@ def build_seasons_then_now_figure(ctx: StoryContext, facts: StoryFacts, data: di
     fig = go.Figure()
 
     # Earlier climate – blue
-    past_r_local = np.asarray([convert_temp(v, ctx.unit) for v in past_r], dtype="float64")
+    past_r_local = np.asarray(
+        [convert_temp(v, ctx.unit) for v in past_r], dtype="float64"
+    )
     fig.add_trace(
         go.Scatter(
             x=x,
@@ -199,7 +243,9 @@ def build_seasons_then_now_figure(ctx: StoryContext, facts: StoryFacts, data: di
     )
 
     # Recent climate – red
-    recent_r_local = np.asarray([convert_temp(v, ctx.unit) for v in recent_r], dtype="float64")
+    recent_r_local = np.asarray(
+        [convert_temp(v, ctx.unit) for v in recent_r], dtype="float64"
+    )
     fig.add_trace(
         go.Scatter(
             x=x,
@@ -253,8 +299,12 @@ def build_seasons_then_now_figure(ctx: StoryContext, facts: StoryFacts, data: di
         ),
     )
 
-    label_early = data.get("early_label", f"{facts.data_start_year}–{facts.data_start_year + 9}")
-    label_recent = data.get("recent_label", f"{facts.data_end_year - 9}–{facts.data_end_year}")
+    label_early = data.get(
+        "early_label", f"{facts.data_start_year}–{facts.data_start_year + 9}"
+    )
+    label_recent = data.get(
+        "recent_label", f"{facts.data_end_year - 9}–{facts.data_end_year}"
+    )
     caption = (
         f"Earlier climate: {label_early}, recent climate: {label_recent} "
         "(based on ERA5 2m temperature via Open-Meteo)."
@@ -262,7 +312,10 @@ def build_seasons_then_now_figure(ctx: StoryContext, facts: StoryFacts, data: di
 
     return fig, caption
 
-def build_seasons_then_now_separate_figures(ctx: StoryContext, facts: StoryFacts, data: dict) -> tuple[go.Figure, go.Figure]:
+
+def build_seasons_then_now_separate_figures(
+    ctx: StoryContext, facts: StoryFacts, data: dict
+) -> tuple[go.Figure, go.Figure]:
     """
     Returns (fig_env_past, fig_env_recent) for min/mean/max monthly envelopes,
     using the SAME shifted month axis as the overlay figure.
@@ -282,7 +335,9 @@ def build_seasons_then_now_separate_figures(ctx: StoryContext, facts: StoryFacts
         fig = go.Figure()
 
         # 1) Min line
-        mmin_local = np.asarray([convert_temp(v, ctx.unit) for v in mmin], dtype="float64")
+        mmin_local = np.asarray(
+            [convert_temp(v, ctx.unit) for v in mmin], dtype="float64"
+        )
         fig.add_trace(
             go.Scatter(
                 x=months,
@@ -290,11 +345,15 @@ def build_seasons_then_now_separate_figures(ctx: StoryContext, facts: StoryFacts
                 mode="lines",
                 name="Monthly min",
                 line=dict(color="rgba(38,139,210,1.0)", width=2, shape="spline"),
-                hovertemplate="%{x}<br>Minimum: %{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>"
+                hovertemplate="%{x}<br>Minimum: %{y:.1f}"
+                + fmt_unit(ctx.unit)
+                + "<extra></extra>",
             )
         )
         # 2) Mean line (grey), fill between min and mean in blue
-        mmean_local = np.asarray([convert_temp(v, ctx.unit) for v in mmean], dtype="float64")
+        mmean_local = np.asarray(
+            [convert_temp(v, ctx.unit) for v in mmean], dtype="float64"
+        )
         fig.add_trace(
             go.Scatter(
                 x=months,
@@ -304,11 +363,13 @@ def build_seasons_then_now_separate_figures(ctx: StoryContext, facts: StoryFacts
                 line=dict(color="rgba(120,120,120,1.0)", width=2, shape="spline"),
                 fill="tonexty",
                 fillcolor="rgba(158,202,225,0.3)",
-                hovertemplate="%{x}<br>Mean: %{y:.1f}" + ctx.unit + "<extra></extra>"
+                hovertemplate="%{x}<br>Mean: %{y:.1f}" + ctx.unit + "<extra></extra>",
             )
         )
         # 3) Max line, fill between mean and max in red
-        mmax_local = np.asarray([convert_temp(v, ctx.unit) for v in mmax], dtype="float64")
+        mmax_local = np.asarray(
+            [convert_temp(v, ctx.unit) for v in mmax], dtype="float64"
+        )
         fig.add_trace(
             go.Scatter(
                 x=months,
@@ -318,7 +379,9 @@ def build_seasons_then_now_separate_figures(ctx: StoryContext, facts: StoryFacts
                 line=dict(color="rgba(220,50,47,1.0)", width=2, shape="spline"),
                 fill="tonexty",
                 fillcolor="rgba(244,165,130,0.3)",
-                hovertemplate="%{x}<br>Maximum: %{y:.1f}" + fmt_unit(ctx.unit) + "<extra></extra>"
+                hovertemplate="%{x}<br>Maximum: %{y:.1f}"
+                + fmt_unit(ctx.unit)
+                + "<extra></extra>",
             )
         )
 
@@ -339,8 +402,12 @@ def build_seasons_then_now_separate_figures(ctx: StoryContext, facts: StoryFacts
         )
         return fig
 
-    fig_env_past = _env_figure("Earlier climate (monthly min–mean–max)", past_min, past_mean, past_max)
-    fig_env_recent = _env_figure("Recent climate (monthly min–mean–max)", recent_min, recent_mean, recent_max)
+    fig_env_past = _env_figure(
+        "Earlier climate (monthly min–mean–max)", past_min, past_mean, past_max
+    )
+    fig_env_recent = _env_figure(
+        "Recent climate (monthly min–mean–max)", recent_min, recent_mean, recent_max
+    )
 
     return fig_env_past, fig_env_recent
 
@@ -455,7 +522,9 @@ def seasons_then_now_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -
 
     return base + " " + " ".join(extra_parts)
 
+
 EPS = 0.05  # treat anything smaller than 0.05°C as “no change”
+
 
 def clean_zero(x: float) -> float:
     # Avoid printing “-0.0”
@@ -463,21 +532,31 @@ def clean_zero(x: float) -> float:
         return 0.0
     return x
 
+
 def describe_change(ctx: StoryContext, x: float) -> str:
     x = clean_zero(x)
     if abs(x) < EPS:
         return "about the same (≈0.0°C)"
-    return f"{fmt_delta(abs(x), ctx.unit, sign=False)} {'warmer' if x > 0 else 'cooler'}"
+    return (
+        f"{fmt_delta(abs(x), ctx.unit, sign=False)} {'warmer' if x > 0 else 'cooler'}"
+    )
 
-def seasons_then_now_separate_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
+
+def seasons_then_now_separate_caption(
+    ctx: StoryContext, facts: StoryFacts, data: dict
+) -> str:
     labels = list(data["month_labels"])
 
     past_mean = np.asarray(data["past_mean"], dtype="float64")
     recent_mean = np.asarray(data["recent_mean"], dtype="float64")
     delta_mean = np.asarray(data["delta_mean"], dtype="float64")
 
-    past_range = np.asarray(data["past_max"], dtype="float64") - np.asarray(data["past_min"], dtype="float64")
-    recent_range = np.asarray(data["recent_max"], dtype="float64") - np.asarray(data["recent_min"], dtype="float64")
+    past_range = np.asarray(data["past_max"], dtype="float64") - np.asarray(
+        data["past_min"], dtype="float64"
+    )
+    recent_range = np.asarray(data["recent_max"], dtype="float64") - np.asarray(
+        data["recent_min"], dtype="float64"
+    )
     delta_range = recent_range - past_range
 
     # Summer = warmest 3 months in the RECENT climate (robust across hemispheres)
@@ -513,4 +592,3 @@ def seasons_then_now_separate_caption(ctx: StoryContext, facts: StoryFacts, data
         f"{bullets}\n"
         f"{tail}"
     )
-

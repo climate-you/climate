@@ -23,6 +23,7 @@ from climate.units import fmt_delta, convert_delta, fmt_unit
 
 OCEAN_DATA_DIR = Path("data/story_ocean")
 
+
 @lru_cache(maxsize=128)
 def _open_ocean_cache(slug: str) -> xr.Dataset | None:
     """
@@ -40,6 +41,7 @@ def _open_ocean_cache(slug: str) -> xr.Dataset | None:
 # --------------------------------------------------------------------------------------
 # OISST (SST)
 # --------------------------------------------------------------------------------------
+
 
 def build_sst_anom_data(ctx: StoryContext) -> dict:
     """
@@ -62,8 +64,16 @@ def build_sst_anom_data(ctx: StoryContext) -> dict:
 
     baseline_years = (anom_year.index >= 1981) & (anom_year.index <= 1990)
     recent_years = (anom_year.index >= 2016) & (anom_year.index <= 2025)
-    mean_81_90 = float(np.nanmean(anom_year.loc[baseline_years].values)) if baseline_years.any() else None
-    mean_16_25 = float(np.nanmean(anom_year.loc[recent_years].values)) if recent_years.any() else None
+    mean_81_90 = (
+        float(np.nanmean(anom_year.loc[baseline_years].values))
+        if baseline_years.any()
+        else None
+    )
+    mean_16_25 = (
+        float(np.nanmean(anom_year.loc[recent_years].values))
+        if recent_years.any()
+        else None
+    )
 
     return {
         "anom_year_c": anom_year,
@@ -73,7 +83,9 @@ def build_sst_anom_data(ctx: StoryContext) -> dict:
     }
 
 
-def build_sst_anom_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> Tuple[go.Figure, str]:
+def build_sst_anom_figure(
+    ctx: StoryContext, facts: StoryFacts, data: dict
+) -> Tuple[go.Figure, str]:
     fig = go.Figure()
 
     y = data["anom_year_c"].astype("float64").values
@@ -85,7 +97,9 @@ def build_sst_anom_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> T
         x=x,
         y=y_local,
         name="Annual mean anomaly",
-        hovertemplate="Year %{x}<br>Anomaly: %{y:.2f}" + fmt_unit(ctx.unit) + "<extra></extra>",
+        hovertemplate="Year %{x}<br>Anomaly: %{y:.2f}"
+        + fmt_unit(ctx.unit)
+        + "<extra></extra>",
     )
 
     y5 = data["anom_5y_c"].astype("float64").values
@@ -95,7 +109,9 @@ def build_sst_anom_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> T
         x=x,
         y=y5_local,
         name="5-year mean",
-        hovertemplate="Year %{x}<br>5y mean: %{y:.2f}" + fmt_unit(ctx.unit) + "<extra></extra>",
+        hovertemplate="Year %{x}<br>5y mean: %{y:.2f}"
+        + fmt_unit(ctx.unit)
+        + "<extra></extra>",
     )
 
     # Linear trend line (least squares) on annual mean anomaly
@@ -111,7 +127,9 @@ def build_sst_anom_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> T
                 mode="lines",
                 name="Trend",
                 line=dict(color="red", width=2),
-                hovertemplate="Year %{x}<br>Trend: %{y:.2f}" + fmt_unit(ctx.unit) + "<extra></extra>",
+                hovertemplate="Year %{x}<br>Trend: %{y:.2f}"
+                + fmt_unit(ctx.unit)
+                + "<extra></extra>",
             )
         )
 
@@ -135,6 +153,7 @@ def build_sst_anom_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> T
 
     tiny = "Source: NOAA OISST v2.1 (daily) via ERDDAP | Baseline: 1981–2010"
     return fig, tiny
+
 
 def sst_anom_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
     mean_81_90 = data.get("mean_81_90_c", None)
@@ -178,8 +197,16 @@ def build_sst_hotdays_data(ctx: StoryContext) -> dict:
 
     baseline_years = (hot_days_year.index >= 1981) & (hot_days_year.index <= 1990)
     recent_years = (hot_days_year.index >= 2016) & (hot_days_year.index <= 2025)
-    mean_81_90 = float(np.nanmean(hot_days_year.loc[baseline_years].values)) if baseline_years.any() else None
-    mean_16_25 = float(np.nanmean(hot_days_year.loc[recent_years].values)) if recent_years.any() else None
+    mean_81_90 = (
+        float(np.nanmean(hot_days_year.loc[baseline_years].values))
+        if baseline_years.any()
+        else None
+    )
+    mean_16_25 = (
+        float(np.nanmean(hot_days_year.loc[recent_years].values))
+        if recent_years.any()
+        else None
+    )
 
     return {
         "hot_days_year": hot_days_year,
@@ -189,7 +216,9 @@ def build_sst_hotdays_data(ctx: StoryContext) -> dict:
     }
 
 
-def build_sst_hotdays_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> Tuple[go.Figure, str]:
+def build_sst_hotdays_figure(
+    ctx: StoryContext, facts: StoryFacts, data: dict
+) -> Tuple[go.Figure, str]:
     fig = go.Figure()
 
     x = data["hot_days_year"].index.values
@@ -239,6 +268,7 @@ def build_sst_hotdays_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -
     tiny = "Source: NOAA OISST v2.1 (daily) via ERDDAP | Hot day threshold: baseline P90 (1981–2010)"
     return fig, tiny
 
+
 def sst_hotdays_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
     mean_81_90 = data.get("mean_81_90", None)
     mean_16_25 = data.get("mean_16_25", None)
@@ -253,14 +283,14 @@ def sst_hotdays_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str
     return (
         "Averages don’t tell the whole story: ecosystems respond strongly to **extreme days**.\n\n"
         "This chart counts **SST ‘hot days’**: days when the ocean is warmer than the **90th percentile** "
-        "of the 1981–2010 baseline for the same time of year."
-        + extra
+        "of the 1981–2010 baseline for the same time of year." + extra
     )
 
 
 # --------------------------------------------------------------------------------------
 # Coral Reef Watch DHW
 # --------------------------------------------------------------------------------------
+
 
 def build_dhw_data(ctx: StoryContext) -> dict:
     """
@@ -275,9 +305,15 @@ def build_dhw_data(ctx: StoryContext) -> dict:
 
     years = ds["year"].values.astype(int)
 
-    dhw_max = pd.Series(ds["dhw_max_year"].values.astype("float64"), index=years).sort_index()
-    dhw_ge4 = pd.Series(ds["dhw_ge4_days_year"].values.astype("float64"), index=years).sort_index()
-    dhw_ge8 = pd.Series(ds["dhw_ge8_days_year"].values.astype("float64"), index=years).sort_index()
+    dhw_max = pd.Series(
+        ds["dhw_max_year"].values.astype("float64"), index=years
+    ).sort_index()
+    dhw_ge4 = pd.Series(
+        ds["dhw_ge4_days_year"].values.astype("float64"), index=years
+    ).sort_index()
+    dhw_ge8 = pd.Series(
+        ds["dhw_ge8_days_year"].values.astype("float64"), index=years
+    ).sort_index()
 
     dhw_max.name = "dhw_max_year"
     dhw_ge4.name = "dhw_ge4_days_year"
@@ -286,9 +322,19 @@ def build_dhw_data(ctx: StoryContext) -> dict:
     recent_years = (dhw_max.index >= 2016) & (dhw_max.index <= 2025)
     base_years = (dhw_max.index >= 1985) & (dhw_max.index <= 1994)
 
-    dhw_max_85_94 = float(np.nanmean(dhw_max.loc[base_years].values)) if base_years.any() else None
-    dhw_max_16_25 = float(np.nanmean(dhw_max.loc[recent_years].values)) if recent_years.any() else None
-    ge8_16_25 = float(np.nanmean(dhw_ge8.loc[recent_years].values)) if recent_years.any() else None
+    dhw_max_85_94 = (
+        float(np.nanmean(dhw_max.loc[base_years].values)) if base_years.any() else None
+    )
+    dhw_max_16_25 = (
+        float(np.nanmean(dhw_max.loc[recent_years].values))
+        if recent_years.any()
+        else None
+    )
+    ge8_16_25 = (
+        float(np.nanmean(dhw_ge8.loc[recent_years].values))
+        if recent_years.any()
+        else None
+    )
 
     box_deg = float(ds.attrs.get("dhw_box_half_deg", 0.05))
 
@@ -303,7 +349,9 @@ def build_dhw_data(ctx: StoryContext) -> dict:
     }
 
 
-def build_dhw_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> Tuple[go.Figure, str]:
+def build_dhw_figure(
+    ctx: StoryContext, facts: StoryFacts, data: dict
+) -> Tuple[go.Figure, str]:
     fig = go.Figure()
 
     x = data["dhw_ge4_days"].index.values
@@ -377,6 +425,7 @@ def build_dhw_figure(ctx: StoryContext, facts: StoryFacts, data: dict) -> Tuple[
     tiny = f"Source: NOAA Coral Reef Watch DHW (daily) via ERDDAP | Box mean: ±{box_deg:.2f}° | Thresholds: 4 and 8"
     return fig, tiny
 
+
 def build_ocean_context_map_figure(ctx: StoryContext, facts: StoryFacts, data: dict):
     """
     Unit-agnostic context map for ocean panels (Matplotlib + Cartopy).
@@ -402,8 +451,20 @@ def build_ocean_context_map_figure(ctx: StoryContext, facts: StoryFacts, data: d
     lon0, lon1 = lon - span, lon + span
 
     # DHW box polygon (closed ring)
-    box_lons = [lon - box_half, lon + box_half, lon + box_half, lon - box_half, lon - box_half]
-    box_lats = [lat - box_half, lat - box_half, lat + box_half, lat + box_half, lat - box_half]
+    box_lons = [
+        lon - box_half,
+        lon + box_half,
+        lon + box_half,
+        lon - box_half,
+        lon - box_half,
+    ]
+    box_lats = [
+        lat - box_half,
+        lat - box_half,
+        lat + box_half,
+        lat + box_half,
+        lat - box_half,
+    ]
 
     fig = plt.figure(figsize=(5.2, 5.2), dpi=150)
     ax = plt.axes(projection=ccrs.Mercator())
@@ -411,19 +472,27 @@ def build_ocean_context_map_figure(ctx: StoryContext, facts: StoryFacts, data: d
     ax.set_extent([lon0, lon1, lat0, lat1], crs=ccrs.PlateCarree())
 
     # Background (keep it simple + export-friendly)
-    ax.add_feature(cfeature.OCEAN.with_scale("10m"), facecolor=(214/255, 230/255, 245/255), edgecolor="none")
-    ax.add_feature(cfeature.LAND.with_scale("10m"), facecolor=(240/255, 240/255, 240/255), edgecolor="none")
+    ax.add_feature(
+        cfeature.OCEAN.with_scale("10m"),
+        facecolor=(214 / 255, 230 / 255, 245 / 255),
+        edgecolor="none",
+    )
+    ax.add_feature(
+        cfeature.LAND.with_scale("10m"),
+        facecolor=(240 / 255, 240 / 255, 240 / 255),
+        edgecolor="none",
+    )
 
     # Coastline (high-res for small islands)
-    ax.coastlines(resolution="10m", color=(80/255, 80/255, 80/255), linewidth=0.8)
+    ax.coastlines(resolution="10m", color=(80 / 255, 80 / 255, 80 / 255), linewidth=0.8)
 
     # DHW box fill + outline
     ax.fill(
         box_lons,
         box_lats,
         transform=ccrs.PlateCarree(),
-        facecolor=(220/255, 0, 0, 0.18),
-        edgecolor=(220/255, 0, 0, 0.85),
+        facecolor=(220 / 255, 0, 0, 0.18),
+        edgecolor=(220 / 255, 0, 0, 0.85),
         linewidth=1.6,
         zorder=5,
     )
@@ -437,7 +506,7 @@ def build_ocean_context_map_figure(ctx: StoryContext, facts: StoryFacts, data: d
         color=(0.1, 0.1, 0.1, 0.95),
         zorder=6,
     )
-    
+
     # City name
     ax.text(
         lon + span * 0.03,
@@ -448,7 +517,6 @@ def build_ocean_context_map_figure(ctx: StoryContext, facts: StoryFacts, data: d
         color=(0.1, 0.1, 0.1, 0.95),
         zorder=7,
     )
-
 
     # Clean frame
     ax.set_axis_off()
@@ -476,6 +544,5 @@ def dhw_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
         "Corals are stressed by **cumulative marine heat**.\n\n"
         "**Degree Heating Weeks (DHW)** is a widely used indicator of accumulated heat stress that correlates with "
         "bleaching risk. Here we show the **annual max DHW**, plus how many days each year exceeded "
-        "moderate (**≥ 4**) and severe (**≥ 8**) stress thresholds."
-        + extra
+        "moderate (**≥ 4**) and severe (**≥ 8**) stress thresholds." + extra
     )

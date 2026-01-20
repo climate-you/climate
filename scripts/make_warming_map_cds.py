@@ -60,7 +60,12 @@ def _years(b: Baseline) -> List[str]:
     return [str(y) for y in range(b.start_year, b.end_year + 1)]
 
 
-def _download_era5_monthly_means(out_nc: Path, years: List[str], grid_deg: float, area: Tuple[float, float, float, float] | None) -> str:
+def _download_era5_monthly_means(
+    out_nc: Path,
+    years: List[str],
+    grid_deg: float,
+    area: Tuple[float, float, float, float] | None,
+) -> str:
     """Download monthly 2m temperature from CDS into out_nc and return the request dict as JSON string."""
     import cdsapi  # import here so the script can print a helpful error if missing
 
@@ -89,9 +94,19 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--baseline-a", type=str, default="1979-1988")
     ap.add_argument("--baseline-b", type=str, default="2016-2025")
-    ap.add_argument("--grid-deg", type=float, default=1.0, help="Output grid resolution in degrees (e.g. 1.0)")
+    ap.add_argument(
+        "--grid-deg",
+        type=float,
+        default=1.0,
+        help="Output grid resolution in degrees (e.g. 1.0)",
+    )
     ap.add_argument("--out-dir", type=Path, default=Path("data/world"))
-    ap.add_argument("--area", type=str, default=None, help="Optional subset as N,W,S,E (e.g. '90,-180,-90,180')")
+    ap.add_argument(
+        "--area",
+        type=str,
+        default=None,
+        help="Optional subset as N,W,S,E (e.g. '90,-180,-90,180')",
+    )
     args = ap.parse_args()
 
     bA = _parse_baseline(args.baseline_a)
@@ -112,7 +127,9 @@ def main() -> None:
         req_a = _download_era5_monthly_means(tmp_a, _years(bA), args.grid_deg, area)
         req_b = _download_era5_monthly_means(tmp_b, _years(bB), args.grid_deg, area)
     except ModuleNotFoundError as e:
-        raise SystemExit("cdsapi is required. Install with: pip install cdsapi\nThen configure ~/.cdsapirc") from e
+        raise SystemExit(
+            "cdsapi is required. Install with: pip install cdsapi\nThen configure ~/.cdsapirc"
+        ) from e
 
     # Compute warming (convert K -> °C)
     dsA = xr.open_dataset(tmp_a)
@@ -133,19 +150,31 @@ def main() -> None:
 
     warming = (meanB - meanA).astype(np.float32)
     warming.name = "warming_c"
-    warming.attrs.update({
-        "units": "degC",
-        "long_name": f"Warming: {bB.label()} minus {bA.label()} (ERA5 monthly means)",
-    })
+    warming.attrs.update(
+        {
+            "units": "degC",
+            "long_name": f"Warming: {bB.label()} minus {bA.label()} (ERA5 monthly means)",
+        }
+    )
 
     grid_tag = str(args.grid_deg).replace(".", "p")  # 0.25 -> 0p25
-    out_nc = args.out_dir / f"warming_map_{bA.label()}_to_{bB.label()}_grid{grid_tag}.nc"
+    out_nc = (
+        args.out_dir / f"warming_map_{bA.label()}_to_{bB.label()}_grid{grid_tag}.nc"
+    )
     out_nc.parent.mkdir(parents=True, exist_ok=True)
     warming.to_dataset().to_netcdf(out_nc)
 
     # Manifest
-    lat_name = "latitude" if "latitude" in warming.coords else ("lat" if "lat" in warming.coords else None)
-    lon_name = "longitude" if "longitude" in warming.coords else ("lon" if "lon" in warming.coords else None)
+    lat_name = (
+        "latitude"
+        if "latitude" in warming.coords
+        else ("lat" if "lat" in warming.coords else None)
+    )
+    lon_name = (
+        "longitude"
+        if "longitude" in warming.coords
+        else ("lon" if "lon" in warming.coords else None)
+    )
 
     lat = warming[lat_name].values if lat_name else None
     lon = warming[lon_name].values if lon_name else None
@@ -158,17 +187,31 @@ def main() -> None:
         "baseline_b": asdict(bB),
         "grid_deg": args.grid_deg,
         "area": list(area) if area else None,
-        "source_requests": {"baseline_a": json.loads(req_a), "baseline_b": json.loads(req_b)},
+        "source_requests": {
+            "baseline_a": json.loads(req_a),
+            "baseline_b": json.loads(req_b),
+        },
         "output": {
             "netcdf": str(out_nc),
             "value_min": float(np.nanmin(warming.values)),
             "value_max": float(np.nanmax(warming.values)),
-            "lat": {"name": lat_name, "min": float(lat.min()) if lat is not None else None, "max": float(lat.max()) if lat is not None else None},
-            "lon": {"name": lon_name, "min": float(lon.min()) if lon is not None else None, "max": float(lon.max()) if lon is not None else None},
+            "lat": {
+                "name": lat_name,
+                "min": float(lat.min()) if lat is not None else None,
+                "max": float(lat.max()) if lat is not None else None,
+            },
+            "lon": {
+                "name": lon_name,
+                "min": float(lon.min()) if lon is not None else None,
+                "max": float(lon.max()) if lon is not None else None,
+            },
         },
     }
 
-    out_manifest = args.out_dir / f"warming_map_{bA.label()}_to_{bB.label()}_grid{grid_tag}.manifest.json"
+    out_manifest = (
+        args.out_dir
+        / f"warming_map_{bA.label()}_to_{bB.label()}_grid{grid_tag}.manifest.json"
+    )
     out_manifest.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
     print(f"Wrote {out_nc}")

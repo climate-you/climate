@@ -32,6 +32,7 @@ import xarray as xr
 
 import matplotlib.pyplot as plt
 
+
 def _ensure_dir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
 
@@ -43,14 +44,18 @@ def _guess_lat_lon_names(da: xr.DataArray) -> tuple[str, str]:
             lat_name = lat
             break
     else:
-        raise RuntimeError(f"Could not find latitude coord. coords={list(da.coords)} dims={list(da.dims)}")
+        raise RuntimeError(
+            f"Could not find latitude coord. coords={list(da.coords)} dims={list(da.dims)}"
+        )
 
     for lon in ("longitude", "lon"):
         if lon in da.coords or lon in da.dims:
             lon_name = lon
             break
     else:
-        raise RuntimeError(f"Could not find longitude coord. coords={list(da.coords)} dims={list(da.dims)}")
+        raise RuntimeError(
+            f"Could not find longitude coord. coords={list(da.coords)} dims={list(da.dims)}"
+        )
 
     return lat_name, lon_name
 
@@ -88,7 +93,9 @@ def _open_era_dataset(data_dir: Path, *, era_label: str, grid_deg: float) -> xr.
 
         missing = [p for p in year_files if not p.exists()]
         if missing:
-            raise RuntimeError(f"{meta} lists missing year files (first 5): {missing[:5]}")
+            raise RuntimeError(
+                f"{meta} lists missing year files (first 5): {missing[:5]}"
+            )
 
         ds = xr.open_mfdataset([str(p) for p in year_files], combine="by_coords")
         if "time" in ds.coords:
@@ -130,7 +137,6 @@ def _lon_to_180(lon0_360: np.ndarray) -> np.ndarray:
     # -> [-180, 180)
     lon = np.asarray(lon0_360, dtype="float64")
     return ((lon + 180.0) % 360.0) - 180.0
-
 
 
 def _build_equal_area_lat_bands(lat_vals: np.ndarray, n_bands: int) -> list[np.ndarray]:
@@ -231,7 +237,9 @@ def _sample_time_indices_doy_stratified(
         k = int(base[di])
         if k <= 0:
             continue
-        choices = rng.choice(idx_by[d], size=k, replace=True).astype(np.int32, copy=False)
+        choices = rng.choice(idx_by[d], size=k, replace=True).astype(
+            np.int32, copy=False
+        )
         out[pos : pos + k] = choices
         pos += k
 
@@ -275,7 +283,9 @@ def _sample_time_indices_month_stratified(
         k = int(base[mi])
         if k <= 0:
             continue
-        choices = rng.choice(idx_by_month[m], size=k, replace=True).astype(np.int32, copy=False)
+        choices = rng.choice(idx_by_month[m], size=k, replace=True).astype(
+            np.int32, copy=False
+        )
         out[pos : pos + k] = choices
         pos += k
 
@@ -284,7 +294,9 @@ def _sample_time_indices_month_stratified(
     return out
 
 
-def _sample_lat_indices_area_weighted(rng: np.random.Generator, lats: np.ndarray, n: int) -> np.ndarray:
+def _sample_lat_indices_area_weighted(
+    rng: np.random.Generator, lats: np.ndarray, n: int
+) -> np.ndarray:
     # weight proportional to cos(lat)
     w = np.cos(np.deg2rad(lats))
     w = np.clip(w, 0.0, None)
@@ -361,7 +373,7 @@ def _sample_from_ds(
     stop_pos = np.append(start_pos[1:], time_sorted.size)
 
     for t_i, s0, s1 in zip(unique_t, start_pos, stop_pos):
-        if (t_i%100 == 0):
+        if t_i % 100 == 0:
             print("[%s] %d->%d" % (era_name, s0, s1))
         slab = da.isel({time_name: int(t_i)}).values  # (lat, lon)
         # gather in this chunk
@@ -389,29 +401,50 @@ def _sample_from_ds(
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--grid-deg", type=float, default=1.0)
-    ap.add_argument("--n-samples", type=int, default=50_000, help="Samples per era (total rows = 2 * n_samples)")
+    ap.add_argument(
+        "--n-samples",
+        type=int,
+        default=50_000,
+        help="Samples per era (total rows = 2 * n_samples)",
+    )
     ap.add_argument("--experiment-id", type=int, default=1)
     ap.add_argument("--seed", type=int, default=12345)
-    ap.add_argument("--shuffle-first", type=int, default=200, help="Only shuffle first K rows in playback order (for varying early detail)")
-    ap.add_argument("--visualise", action="store_true", help="Write a convergence plot PNG after sampling.")
-    ap.add_argument("--skip-write", action="store_true", help="Skip writing Parquet samples (still writes meta + optional plots)")
-    ap.add_argument("--viz-out", type=Path, default=None, help="Optional output PNG path.")
+    ap.add_argument(
+        "--shuffle-first",
+        type=int,
+        default=200,
+        help="Only shuffle first K rows in playback order (for varying early detail)",
+    )
+    ap.add_argument(
+        "--visualise",
+        action="store_true",
+        help="Write a convergence plot PNG after sampling.",
+    )
+    ap.add_argument(
+        "--skip-write",
+        action="store_true",
+        help="Skip writing Parquet samples (still writes meta + optional plots)",
+    )
+    ap.add_argument(
+        "--viz-out", type=Path, default=None, help="Optional output PNG path."
+    )
     ap.add_argument("--in-dir", type=Path, default=Path("data/mc"))
     ap.add_argument("--out-dir", type=Path, default=Path("data/mc/experiments"))
-    ap.add_argument("--time-sampling",
+    ap.add_argument(
+        "--time-sampling",
         choices=["random", "month", "doy"],
         default="month",
         help="How to sample time indices. "
-            "'random' = uniform over days, "
-            "'month' = stratified by month proportional to available days, "
-            "'doy' = stratified by day-of-year proportional to available days.",
+        "'random' = uniform over days, "
+        "'month' = stratified by month proportional to available days, "
+        "'doy' = stratified by day-of-year proportional to available days.",
     )
     ap.add_argument(
         "--space-sampling",
         choices=["area", "latbands"],
         default="area",
         help="How to sample space. 'area' = your current cos(lat) area-weighted sampling. "
-            "'latbands' = equal-area latitude-band stratification (lower variance).",
+        "'latbands' = equal-area latitude-band stratification (lower variance).",
     )
     ap.add_argument(
         "--n-lat-bands",
@@ -437,13 +470,35 @@ def main() -> None:
     print(f"[open] era={era_recent} grid={args.grid_deg}")
     ds_recent = _open_era_dataset(in_dir, era_label=era_recent, grid_deg=args.grid_deg)
 
-    print(f"[sample] {n_each} past + {n_each} recent (total={2*n_each}, seed={args.seed}, sampling={args.time_sampling})")
+    print(
+        f"[sample] {n_each} past + {n_each} recent (total={2*n_each}, seed={args.seed}, sampling={args.time_sampling})"
+    )
     if args.space_sampling == "latbands":
-        print(f"[sampling] time={args.time_sampling} space={args.space_sampling} n_lat_bands={args.n_lat_bands}")
+        print(
+            f"[sampling] time={args.time_sampling} space={args.space_sampling} n_lat_bands={args.n_lat_bands}"
+        )
     else:
         print(f"[sampling] time={args.time_sampling} space={args.space_sampling}")
-    df_past = _sample_from_ds(ds=ds_past, era_name="past", era_id=0, n=n_each, rng=rng, time_sampling=args.time_sampling, space_sampling=args.space_sampling, n_lat_bands=args.n_lat_bands)
-    df_recent = _sample_from_ds(ds=ds_recent, era_name="recent", era_id=1, n=n_each, rng=rng, time_sampling=args.time_sampling, space_sampling=args.space_sampling, n_lat_bands=args.n_lat_bands)
+    df_past = _sample_from_ds(
+        ds=ds_past,
+        era_name="past",
+        era_id=0,
+        n=n_each,
+        rng=rng,
+        time_sampling=args.time_sampling,
+        space_sampling=args.space_sampling,
+        n_lat_bands=args.n_lat_bands,
+    )
+    df_recent = _sample_from_ds(
+        ds=ds_recent,
+        era_name="recent",
+        era_id=1,
+        n=n_each,
+        rng=rng,
+        time_sampling=args.time_sampling,
+        space_sampling=args.space_sampling,
+        n_lat_bands=args.n_lat_bands,
+    )
 
     # Running means per era (in the per-era draw order; order doesn't matter for convergence)
     past_vals = df_past["t_c"].to_numpy(dtype=np.float64)
@@ -467,8 +522,12 @@ def main() -> None:
         recent_running = np.array([recent_mean], dtype=np.float64)
         delta_running = np.array([recent_mean - past_mean], dtype=np.float64)
     else:
-        past_running = np.cumsum(past_vals, dtype=np.float64) / np.arange(1, n + 1, dtype=np.float64)
-        recent_running = np.cumsum(recent_vals, dtype=np.float64) / np.arange(1, n + 1, dtype=np.float64)
+        past_running = np.cumsum(past_vals, dtype=np.float64) / np.arange(
+            1, n + 1, dtype=np.float64
+        )
+        recent_running = np.cumsum(recent_vals, dtype=np.float64) / np.arange(
+            1, n + 1, dtype=np.float64
+        )
         delta_running = recent_running - past_running
 
     print(f"sd_past={sd_p:.2f}°C sd_recent={sd_r:.2f}°C")
@@ -480,16 +539,23 @@ def main() -> None:
         # Resolve output paths
         out_means = args.viz_out
         if out_means is None:
-            out_means = out_dir / f"experiment_{args.experiment_id:02d}_convergence_means.png"
+            out_means = (
+                out_dir / f"experiment_{args.experiment_id:02d}_convergence_means.png"
+            )
         else:
             out_means = Path(out_means)
             if out_means.suffix.lower() == ".png":
                 pass
             else:
                 # treat as directory-like prefix
-                out_means = out_means / f"experiment_{args.experiment_id:02d}_convergence_means.png"
+                out_means = (
+                    out_means
+                    / f"experiment_{args.experiment_id:02d}_convergence_means.png"
+                )
 
-        out_delta = out_means.with_name(out_means.stem.replace("_means", "") + "_delta.png")
+        out_delta = out_means.with_name(
+            out_means.stem.replace("_means", "") + "_delta.png"
+        )
 
         # Plot 1: past + recent running means
         fig1 = plt.figure(figsize=(8, 4.5))
@@ -497,7 +563,9 @@ def main() -> None:
         plt.plot(x, recent_running, label="Recent (area-weighted)")
         plt.xlabel("Samples per era")
         plt.ylabel("Temperature (°C)")
-        plt.title(f"Monte Carlo convergence (means) — exp {args.experiment_id}, grid {args.grid_deg}°")
+        plt.title(
+            f"Monte Carlo convergence (means) — exp {args.experiment_id}, grid {args.grid_deg}°"
+        )
         plt.legend()
         fig1.tight_layout()
         fig1.savefig(out_means, dpi=150)
@@ -507,16 +575,23 @@ def main() -> None:
         # Plot 2: delta only (readable scale)
         fig2 = plt.figure(figsize=(8, 4.5))
         plt.plot(x, delta_running, label="Δ (recent − past)")
-        plt.axhline(float(delta_running[-1]), linestyle="--", linewidth=1.0, label=f"final ≈ {delta_running[-1]:.2f}°C")
+        plt.axhline(
+            float(delta_running[-1]),
+            linestyle="--",
+            linewidth=1.0,
+            label=f"final ≈ {delta_running[-1]:.2f}°C",
+        )
         plt.xlabel("Samples per era")
         plt.ylabel("Δ Temperature (°C)")
-        plt.title(f"Monte Carlo convergence (delta) — exp {args.experiment_id}, grid {args.grid_deg}°")
+        plt.title(
+            f"Monte Carlo convergence (delta) — exp {args.experiment_id}, grid {args.grid_deg}°"
+        )
         plt.legend()
         fig2.tight_layout()
         fig2.savefig(out_delta, dpi=150)
         plt.close(fig2)
         print(f"[viz] {out_delta}")
- 
+
     if not args.skip_write:
         # Interleave (past/recent alternating) so both eras appear early in the animation
         df_past["__k"] = np.arange(len(df_past), dtype=np.int32)
@@ -551,7 +626,7 @@ def main() -> None:
 
         n_samples_total = len(df)
     else:
-        n_samples_total = 2*n_each
+        n_samples_total = 2 * n_each
 
     meta_past = in_dir / f"era5_daily_t2m_{era_past}_grid{args.grid_deg}.meta.json"
     meta_recent = in_dir / f"era5_daily_t2m_{era_recent}_grid{args.grid_deg}.meta.json"
@@ -563,13 +638,40 @@ def main() -> None:
         "n_samples_total": int(n_samples_total),
         "grid_deg": float(args.grid_deg),
         "eras": [
-            asdict(EraSpec("past", 1979, 1988, str(meta_past if meta_past.exists() else (in_dir / f"era5_daily_t2m_{era_past}_grid{args.grid_deg}.nc")))),
-            asdict(EraSpec("recent", 2016, 2025, str(meta_recent if meta_recent.exists() else (in_dir / f"era5_daily_t2m_{era_recent}_grid{args.grid_deg}.nc")))),
+            asdict(
+                EraSpec(
+                    "past",
+                    1979,
+                    1988,
+                    str(
+                        meta_past
+                        if meta_past.exists()
+                        else (
+                            in_dir / f"era5_daily_t2m_{era_past}_grid{args.grid_deg}.nc"
+                        )
+                    ),
+                )
+            ),
+            asdict(
+                EraSpec(
+                    "recent",
+                    2016,
+                    2025,
+                    str(
+                        meta_recent
+                        if meta_recent.exists()
+                        else (
+                            in_dir
+                            / f"era5_daily_t2m_{era_recent}_grid{args.grid_deg}.nc"
+                        )
+                    ),
+                )
+            ),
         ],
         "variable": "2m_temperature",
         "statistic": "daily_mean",
         "units": "degC",
-        "time_sampling" : args.time_sampling,
+        "time_sampling": args.time_sampling,
         "running_mean_final": {
             "past_c": float(past_running[-1]),
             "recent_c": float(recent_running[-1]),

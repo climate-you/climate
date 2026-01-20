@@ -41,7 +41,9 @@ def _roll_lon_0_to_180(lon0_360: np.ndarray, arr: np.ndarray):
     return lon2, arr2
 
 
-def _normalize_to_rgb(arr: np.ndarray, *, cmap_name: str, vmin: float, vmax: float) -> np.ndarray:
+def _normalize_to_rgb(
+    arr: np.ndarray, *, cmap_name: str, vmin: float, vmax: float
+) -> np.ndarray:
     """
     Map numeric array to uint8 RGB image (H,W,3).
     NaNs become transparent-ish background color (we'll just paint them black here).
@@ -63,13 +65,37 @@ def _normalize_to_rgb(arr: np.ndarray, *, cmap_name: str, vmin: float, vmax: flo
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--nc", required=True, help="Input warming map NetCDF")
-    ap.add_argument("--var", default="warming_c", help="Variable name in NetCDF (default: warming_c)")
-    ap.add_argument("--out", required=True, help="Output basename (no extension). Writes .webp + .json")
-    ap.add_argument("--cmap", default="YlOrRd", help="Matplotlib colormap name (default: YlOrRd)")
-    ap.add_argument("--qlo", type=float, default=0.05, help="Lower quantile for scaling (default: 0.05)")
-    ap.add_argument("--qhi", type=float, default=0.98, help="Upper quantile for scaling (default: 0.98)")
-    ap.add_argument("--size", default="4096x2048", help="Texture size WxH (default: 4096x2048)")
-    ap.add_argument("--quality", type=int, default=85, help="WebP quality (default: 85)")
+    ap.add_argument(
+        "--var",
+        default="warming_c",
+        help="Variable name in NetCDF (default: warming_c)",
+    )
+    ap.add_argument(
+        "--out",
+        required=True,
+        help="Output basename (no extension). Writes .webp + .json",
+    )
+    ap.add_argument(
+        "--cmap", default="YlOrRd", help="Matplotlib colormap name (default: YlOrRd)"
+    )
+    ap.add_argument(
+        "--qlo",
+        type=float,
+        default=0.05,
+        help="Lower quantile for scaling (default: 0.05)",
+    )
+    ap.add_argument(
+        "--qhi",
+        type=float,
+        default=0.98,
+        help="Upper quantile for scaling (default: 0.98)",
+    )
+    ap.add_argument(
+        "--size", default="4096x2048", help="Texture size WxH (default: 4096x2048)"
+    )
+    ap.add_argument(
+        "--quality", type=int, default=85, help="WebP quality (default: 85)"
+    )
     args = ap.parse_args()
 
     in_nc = Path(args.nc)
@@ -81,7 +107,9 @@ def main():
 
     ds = xr.open_dataset(in_nc)
     if args.var not in ds:
-        raise RuntimeError(f"Variable {args.var!r} not found. Vars: {list(ds.data_vars)}")
+        raise RuntimeError(
+            f"Variable {args.var!r} not found. Vars: {list(ds.data_vars)}"
+        )
 
     da = ds[args.var]
     # Expect dims (latitude, longitude) or similar; infer names

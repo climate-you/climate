@@ -8,7 +8,7 @@ function applyGlobeTheme(engine: GlobeEngine) {
     // tweak to taste
     ocean: isDark ? "#2a2d33" : "#e0e0e0",
     // optional: also tweak grid/borders slightly in dark
-    grid:  isDark ? "#8a8a8d" : "#49494b",
+    grid: isDark ? "#8a8a8d" : "#49494b",
     border: isDark ? "#101010" : "#ffffff",
   });
 }
@@ -54,7 +54,11 @@ export function Globe({
 
     const engine = new GlobeEngine({
       canvas,
-      assets: { basePath: "/data/textures", markerFile: "marker.png", emptyFile: "empty.png" },
+      assets: {
+        basePath: "/data/textures",
+        markerFile: "marker.png",
+        emptyFile: "empty.png",
+      },
       enableBorders: true,
       enableData: true,
       enableClouds: variant !== "warming",
@@ -102,13 +106,19 @@ export function Globe({
         // mini defaults
         engine.setAutorotate(false);
         engine.requestCloudsReveal(); // instant clouds
-        if (targetLatLon) engine.ready.then(() => engine.setFixedLocation(targetLatLon.lat, targetLatLon.lon));
+        if (targetLatLon)
+          engine.ready.then(() =>
+            engine.setFixedLocation(targetLatLon.lat, targetLatLon.lon),
+          );
         // do NOT call runIntroSequence in mini
       }
-    
+
       applyGlobeTheme(engine);
       obs = new MutationObserver(() => applyGlobeTheme(engine));
-      obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+      obs.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
 
       ro = new ResizeObserver(() => engine.resize());
       ro.observe(canvas);
@@ -145,7 +155,9 @@ export function Globe({
     if (variant !== "mini") return;
     if (!targetLatLon) return;
 
-    eng.ready.then(() => eng.setFixedLocation(targetLatLon.lat, targetLatLon.lon));
+    eng.ready.then(() =>
+      eng.setFixedLocation(targetLatLon.lat, targetLatLon.lon),
+    );
   }, [variant, targetLatLon?.lat, targetLatLon?.lon]);
 
   useEffect(() => {
@@ -191,5 +203,3 @@ export function Globe({
     </div>
   );
 }
-
-

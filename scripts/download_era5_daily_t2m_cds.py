@@ -108,7 +108,10 @@ def _retrieve_era_daily_mean_t2m(
     """
     dataset = "derived-era5-single-levels-daily-statistics"
 
-    out_meta = out_dir / f"era5_daily_t2m_{era.start_year}-{era.end_year}_grid{grid_deg}.meta.json"
+    out_meta = (
+        out_dir
+        / f"era5_daily_t2m_{era.start_year}-{era.end_year}_grid{grid_deg}.meta.json"
+    )
     _ensure_dir(out_dir)
     _ensure_dir(tmp_dir)
 
@@ -180,20 +183,37 @@ def _retrieve_era_daily_mean_t2m(
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--grid-deg", type=float, default=1.0, help="Output grid resolution in degrees (e.g. 1.0, 0.5, 0.25)")
+    ap.add_argument(
+        "--grid-deg",
+        type=float,
+        default=1.0,
+        help="Output grid resolution in degrees (e.g. 1.0, 0.5, 0.25)",
+    )
     ap.add_argument("--out-dir", type=Path, default=Path("data/mc"))
     ap.add_argument("--tmp-dir", type=Path, default=Path("data/mc/_tmp"))
-    ap.add_argument("--timeout", type=int, default=300, help="CDS client read timeout seconds (default: 300)")
-    ap.add_argument("--keep-zip", action="store_true", help="Keep downloaded zip files (default: delete after extraction)")
+    ap.add_argument(
+        "--timeout",
+        type=int,
+        default=300,
+        help="CDS client read timeout seconds (default: 300)",
+    )
+    ap.add_argument(
+        "--keep-zip",
+        action="store_true",
+        help="Keep downloaded zip files (default: delete after extraction)",
+    )
     args = ap.parse_args()
-   
+
     eras = [
         Era(name="past", start_year=1979, end_year=1988),
         Era(name="recent", start_year=2016, end_year=2025),
     ]
 
     for j, era in enumerate(eras, start=1):
-        print(f"[era] {j}/{len(eras)}: {era.name} ({era.start_year}-{era.end_year})", flush=True)
+        print(
+            f"[era] {j}/{len(eras)}: {era.name} ({era.start_year}-{era.end_year})",
+            flush=True,
+        )
         _retrieve_era_daily_mean_t2m(
             era=era,
             grid_deg=args.grid_deg,
