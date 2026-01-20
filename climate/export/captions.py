@@ -4,16 +4,7 @@ import textwrap
 def normalize_caption(md: str) -> str:
     """
     Normalize caption markdown for frontend consumption.
-
-    Why:
-    - Many captions are written with triple-quoted strings, which often introduce
-      indentation and accidental code blocks in Markdown.
-    - We want stable, renderer-friendly markdown assets.
-
-    Policy (v1):
-    - Dedent common indentation
-    - Strip ALL leading whitespace per line (prevents accidental code blocks)
-    - Trim outer whitespace
+    ...
     """
     if md is None:
         return ""
@@ -25,3 +16,28 @@ def normalize_caption(md: str) -> str:
     md = "\n".join(line.lstrip() for line in md.splitlines())
 
     return md.strip() + "\n"
+
+
+def caption_md_to_json(
+    md: str,
+    *,
+    title: str | None = None,
+    header: str | None = None,
+    source: str | None = None,
+    url: str | None = None,
+) -> dict:
+    """
+    Phase-1 caption schema (v1):
+    - Keep markdown in `description` so we can migrate the web renderer gradually.
+    - Add structured fields for future slide layout (title/header/source/url).
+
+    The frontend can keep using *.caption.md for now.
+    """
+    return {
+        "version": 1,
+        "title": title or "",
+        "header": header or "",
+        "description": normalize_caption(md),
+        "source": source or "",
+        "url": url or "",
+    }

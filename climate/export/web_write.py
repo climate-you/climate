@@ -22,3 +22,15 @@ def write_plotly_svg(path: Path, fig) -> None:
     ensure_dir(path.parent)
     svg_bytes = fig.to_image(format="svg")
     path.write_bytes(svg_bytes)
+
+def write_matplotlib_svg(path: Path, fig, *, transparent: bool = True) -> None:
+    """
+    Write a Matplotlib (or Cartopy-backed Matplotlib) figure to SVG.
+    """
+    ensure_dir(path.parent)
+    fig.savefig(
+        path,
+        format="svg",
+        bbox_inches="tight",
+        transparent=transparent,
+    )
