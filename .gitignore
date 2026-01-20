@@ -5,4 +5,5 @@ data/story_climatology/*.nc
 data/world/*
 data/mc/*
 data/cache/*
+data/spike_phase1_outputs/*
 web/public/data/*
