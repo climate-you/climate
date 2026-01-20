@@ -11,13 +11,18 @@ import { Sun, Moon, Monitor } from "lucide-react";
 import { useCitiesIndex } from "@/hooks/useCitiesIndex";
 import { useIntroCaption } from "@/hooks/useIntroCaption";
 import Caption from "@/components/Caption";
+
+// Hardcoded slides for now
 import LastWeekPanel from "@/components/panels/LastWeekPanel";
 import LastMonthPanel from "@/components/panels/LastMonthPanel";
-import StoryPanel from "@/components/panels/StoryPanel";
-import SeasonsShiftPanel from "@/components/panels/SeasonsShiftPanel";
-import SeasonsRangePanel from "@/components/panels/SeasonsRangePanel";
-import YouVsWorldPanel from "@/components/panels/YouVsWorldPanel";
 import WarmingGlobePanel from "@/components/panels/WarmingGlobePanel";
+
+// Generic slides
+import ManifestSlide, {
+  type ManifestSlideDef,
+} from "@/components/panels/ManifestSlide";
+import PanelFigure from "@/components/PanelFigure";
+import LeftSvg from "@/components/LeftSvg";
 
 type Phase = "landing" | "flying" | "arrived";
 
@@ -134,7 +139,7 @@ export default function StoryClient() {
 
   // Header section (drives the subtitle)
   const [activeSection, setActiveSection] = useState<
-    "intro" | "zoomout" | "seasons" | "world" | "warming"
+    "intro" | "zoomout" | "seasons" | "world" | "warming" | "ocean"
   >("intro");
 
   // Header animation (scroll-driven)
@@ -448,6 +453,72 @@ export default function StoryClient() {
     enabled: !!storySlug,
   });
 
+  type StoryManifestV1 = {
+    version: number;
+    slug: string;
+    slides: ManifestSlideDef[];
+  };
+
+  function cacheBustDev(url: string) {
+    if (process.env.NODE_ENV !== "development") return url;
+    const u = new URL(url, window.location.origin);
+    u.searchParams.set("_ts", String(Date.now()));
+    return u.pathname + u.search;
+  }
+
+  const [manifest, setManifest] = useState<StoryManifestV1 | null>(null);
+  const [manifestLoading, setManifestLoading] = useState(false);
+  const [manifestError, setManifestError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!storySlug) return;
+
+    let cancelled = false;
+    setManifest(null);
+    setManifestError(null);
+    setManifestLoading(true);
+
+    const url = cacheBustDev(`/data/story/${storySlug}/story.json`);
+
+    fetch(url, { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) {
+          const t = await r.text().catch(() => "");
+          throw new Error(`Failed to load story.json (${r.status}) ${t}`);
+        }
+        return (await r.json()) as StoryManifestV1;
+      })
+      .then((j) => {
+        if (cancelled) return;
+        setManifest(j);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setManifestError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setManifestLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storySlug]);
+
+  const manifestSlides = useMemo(() => {
+    const slides = manifest?.slides ?? [];
+    return slides.filter((s) => s.id !== "intro");
+  }, [manifest]);
+
+  function sectionForSlideId(id: string) {
+    if (id.startsWith("ocean")) return "ocean" as const;
+    if (id.startsWith("seasons")) return "seasons" as const;
+    if (id.startsWith("you_vs_world")) return "world" as const;
+    if (id === "intro") return "intro" as const;
+    return "zoomout" as const;
+  }
+
   // --- Debug logs (dev only)
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
@@ -570,12 +641,14 @@ export default function StoryClient() {
                 style={{ opacity: headerCompact ? 1 : 0 }}
               >
                 {activeSection === "seasons"
-                  ? "Seasons then and now"
+                  ? "Seasons then vs now"
                   : activeSection === "world"
                     ? "You vs the world"
-                    : activeSection === "warming"
-                      ? "Warming around the world"
-                      : "Zooming out: from days to decades"}
+                    : activeSection === "ocean"
+                      ? "Ocean stress"
+                      : activeSection === "warming"
+                        ? "World map"
+                        : "Zooming out"}
               </div>
 
               <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
@@ -660,27 +733,64 @@ export default function StoryClient() {
           >
             {isLg && (
               <div className="lg:grid lg:grid-cols-[420px_1fr]">
-                {/* LEFT: mini globe (lg only), sticky */}
+                {/* LEFT: globe or slide-provided SVG (lg only), sticky */}
                 <div className="hidden lg:block">
                   <div className="sticky top-0 h-[calc(100vh-56px)]">
                     <div className="flex h-full items-center justify-center px-6">
-                      <div
-                        className={[
-                          "aspect-square w-full max-w-[420px]",
-                          "pointer-events-none [&_*]:pointer-events-none",
-                          "transition-opacity duration-700",
-                          showStory && activeSection !== "warming"
-                            ? "opacity-100"
-                            : "opacity-0",
-                        ].join(" ")}
-                      >
-                        <Globe
-                          variant="mini"
-                          targetLatLon={target}
-                          phase={"arrived"}
-                          onArrive={() => {}}
-                        />
-                      </div>
+                      {(() => {
+                        // Order here must match DOM slide order on lg:
+                        // 0 intro (lg), 1 last_week, 2 last_month, then manifest slides, then warming
+                        const metas = [
+                          { left: { kind: "globe" as const } },
+                          { left: { kind: "globe" as const } },
+                          { left: { kind: "globe" as const } },
+                          ...manifestSlides.map((s) => ({
+                            left: s.left ?? ({ kind: "globe" } as const),
+                          })),
+                          { left: { kind: "none" as const } },
+                        ];
+
+                        const idx = Math.min(activeSlide, metas.length - 1);
+                        const left = metas[idx]?.left;
+
+                        if (
+                          !showStory ||
+                          left?.kind === "none" ||
+                          activeSection === "warming"
+                        ) {
+                          return (
+                            <div className="aspect-square w-full max-w-[420px] opacity-0 transition-opacity duration-700" />
+                          );
+                        }
+
+                        if (left?.kind === "svg") {
+                          return (
+                            <LeftSvg
+                              slug={storySlug ?? ""}
+                              unit={unit}
+                              src={left.asset}
+                            />
+                          );
+                        }
+
+                        return (
+                          <div
+                            className={[
+                              "aspect-square w-full max-w-[420px]",
+                              "pointer-events-none [&_*]:pointer-events-none",
+                              "transition-opacity duration-700",
+                              "opacity-100",
+                            ].join(" ")}
+                          >
+                            <Globe
+                              variant="mini"
+                              targetLatLon={target}
+                              phase={"arrived"}
+                              onArrive={() => {}}
+                            />
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -819,88 +929,45 @@ export default function StoryClient() {
                         </div>
                       </div>
 
-                      <div
-                        data-story-section="zoomout"
-                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
-                      >
-                        <div className="mx-auto w-full max-w-7xl px-6">
-                          <StoryPanel
-                            slug={storySlug}
-                            unit={unit}
-                            panel="last_year"
-                            title="Last year - the seasonal cycle"
-                          />
+                      {manifestLoading && (
+                        <div
+                          data-story-section="zoomout"
+                          className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
+                        >
+                          <div className="mx-auto w-full max-w-3xl px-6 text-neutral-700 dark:text-neutral-200">
+                            Loading story slides…
+                          </div>
                         </div>
-                      </div>
+                      )}
 
-                      <div
-                        data-story-section="zoomout"
-                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
-                      >
-                        <div className="mx-auto w-full max-w-7xl px-6">
-                          <StoryPanel
-                            slug={storySlug}
-                            unit={unit}
-                            panel="five_year"
-                            title="Last 5 years - from seasons to climate"
-                          />
+                      {manifestError && (
+                        <div
+                          data-story-section="zoomout"
+                          className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
+                        >
+                          <div className="mx-auto w-full max-w-4xl px-6">
+                            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
+                              {manifestError}
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      )}
 
-                      <div
-                        data-story-section="zoomout"
-                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
-                      >
-                        <div className="mx-auto w-full max-w-7xl px-6">
-                          <StoryPanel
-                            slug={storySlug}
-                            unit={unit}
-                            panel="fifty_year"
-                            title="Last 50 years - long term trend"
-                          />
+                      {manifestSlides.map((s) => (
+                        <div
+                          key={s.id}
+                          data-story-section={sectionForSlideId(s.id)}
+                          className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
+                        >
+                          <div className="mx-auto w-full max-w-7xl px-6">
+                            <ManifestSlide
+                              slug={storySlug}
+                              unit={unit}
+                              slide={s}
+                            />
+                          </div>
                         </div>
-                      </div>
-
-                      <div
-                        data-story-section="zoomout"
-                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
-                      >
-                        <div className="mx-auto w-full max-w-7xl px-6">
-                          <StoryPanel
-                            slug={storySlug}
-                            unit={unit}
-                            panel="twenty_five_years"
-                            title="25 years ahead"
-                          />
-                        </div>
-                      </div>
-
-                      <div
-                        data-story-section="seasons"
-                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
-                      >
-                        <div className="mx-auto w-full max-w-7xl px-6">
-                          <SeasonsShiftPanel slug={storySlug} unit={unit} />
-                        </div>
-                      </div>
-
-                      <div
-                        data-story-section="seasons"
-                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
-                      >
-                        <div className="mx-auto w-full max-w-7xl px-6">
-                          <SeasonsRangePanel slug={storySlug} unit={unit} />
-                        </div>
-                      </div>
-
-                      <div
-                        data-story-section="world"
-                        className="snap-start [scroll-snap-stop:always] min-h-[calc(100vh-56px)] flex items-center"
-                      >
-                        <div className="mx-auto w-full max-w-7xl px-6">
-                          <YouVsWorldPanel slug={storySlug} unit={unit} />
-                        </div>
-                      </div>
+                      ))}
 
                       <div
                         data-story-section="warming"

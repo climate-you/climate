@@ -41,7 +41,13 @@ function splitBlocks(md: string): string[] {
 
 function isPlainParagraphBlock(block: string) {
   const t = block.trim();
+
+  // If it contains list syntax anywhere, don't sentence-split it
+  const hasListInside =
+    t.includes("\n- ") || t.includes("\n* ") || /\n\d+\.\s/.test(t);
+
   return !(
+    hasListInside ||
     t.startsWith("#") ||
     t.startsWith("- ") ||
     t.startsWith("* ") ||
@@ -316,7 +322,7 @@ export default function Caption(props: {
 
             // Paragraph split into sentences
             return (
-              <p key={`p-${blockIdx}`} className="leading-relaxed">
+              <div key={`p-${blockIdx}`} className="leading-relaxed">
                 {blockItems.map((it) => {
                   const idx = items.indexOf(it);
                   const show = idx < visibleCount;
@@ -333,7 +339,7 @@ export default function Caption(props: {
                     </span>
                   );
                 })}
-              </p>
+              </div>
             );
           })}
         </div>

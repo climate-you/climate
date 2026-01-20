@@ -187,35 +187,35 @@ def build_story_manifest_v1(slug: str, *, has_ocean: bool) -> dict:
         {
             "id": "last_year",
             "layout": "single",
-            "figures": [{"panel": "last_year"}],
+            "figures": [{"panel": "last_year", "kind": "svg", "animate": True}],
             "caption_panel": "last_year",
             "left": {"kind": "globe"},
         },
         {
             "id": "five_year",
             "layout": "single",
-            "figures": [{"panel": "five_year"}],
+            "figures": [{"panel": "five_year", "kind": "svg", "animate": True}],
             "caption_panel": "five_year",
             "left": {"kind": "globe"},
         },
         {
             "id": "twenty_five_years",
             "layout": "single",
-            "figures": [{"panel": "twenty_five_years"}],
+            "figures": [{"panel": "twenty_five_years", "kind": "svg", "animate": True}],
             "caption_panel": "twenty_five_years",
             "left": {"kind": "globe"},
         },
         {
             "id": "fifty_year",
             "layout": "single",
-            "figures": [{"panel": "fifty_year"}],
+            "figures": [{"panel": "fifty_year", "kind": "svg", "animate": True}],
             "caption_panel": "fifty_year",
             "left": {"kind": "globe"},
         },
         {
             "id": "seasons_shift",
             "layout": "single",
-            "figures": [{"panel": "seasons_shift"}],
+            "figures": [{"panel": "seasons_shift", "kind": "svg", "animate": True}],
             "caption_panel": "seasons_shift",
             "left": {"kind": "globe"},
         },
@@ -223,8 +223,18 @@ def build_story_manifest_v1(slug: str, *, has_ocean: bool) -> dict:
             "id": "seasons_range",
             "layout": "two_up",
             "figures": [
-                {"panel": "seasons_range_earlier", "slot": "left"},
-                {"panel": "seasons_range_recent", "slot": "right"},
+                {
+                    "panel": "seasons_range_earlier",
+                    "slot": "left",
+                    "kind": "svg",
+                    "animate": True,
+                },
+                {
+                    "panel": "seasons_range_recent",
+                    "slot": "right",
+                    "kind": "svg",
+                    "animate": True,
+                },
             ],
             "caption_panel": "seasons_range",
             "left": {"kind": "globe"},
@@ -233,8 +243,18 @@ def build_story_manifest_v1(slug: str, *, has_ocean: bool) -> dict:
             "id": "you_vs_world",
             "layout": "two_up",
             "figures": [
-                {"panel": "you_vs_world_local", "slot": "left"},
-                {"panel": "you_vs_world_global", "slot": "right"},
+                {
+                    "panel": "you_vs_world_local",
+                    "slot": "left",
+                    "kind": "svg",
+                    "animate": False,
+                },
+                {
+                    "panel": "you_vs_world_global",
+                    "slot": "right",
+                    "kind": "svg",
+                    "animate": False,
+                },
             ],
             "caption_panel": "you_vs_world",
             "left": {"kind": "globe"},
@@ -247,21 +267,27 @@ def build_story_manifest_v1(slug: str, *, has_ocean: bool) -> dict:
                 {
                     "id": "ocean_sst_anom",
                     "layout": "single",
-                    "figures": [{"panel": "ocean_sst_anom"}],
+                    "figures": [
+                        {"panel": "ocean_sst_anom", "kind": "svg", "animate": True}
+                    ],
                     "caption_panel": "ocean_sst_anom",
                     "left": {"kind": "svg", "asset": "maps/ocean_sst_map.svg"},
                 },
                 {
                     "id": "ocean_sst_hotdays",
                     "layout": "single",
-                    "figures": [{"panel": "ocean_sst_hotdays"}],
+                    "figures": [
+                        {"panel": "ocean_sst_hotdays", "kind": "svg", "animate": False}
+                    ],
                     "caption_panel": "ocean_sst_hotdays",
                     "left": {"kind": "svg", "asset": "maps/ocean_sst_map.svg"},
                 },
                 {
                     "id": "ocean_dhw",
                     "layout": "single",
-                    "figures": [{"panel": "ocean_dhw"}],
+                    "figures": [
+                        {"panel": "ocean_dhw", "kind": "svg", "animate": False}
+                    ],
                     "caption_panel": "ocean_dhw",
                     "left": {"kind": "svg", "asset": "maps/ocean_context_map.svg"},
                 },
