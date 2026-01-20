@@ -15,8 +15,8 @@ from climate.analytics import compute_story_facts
 from climate.models import StoryContext
 from climate.export.web_write import write_json, write_text
 from climate.export.web_paths import story_slug_dir, panel_paths
-from climate.export.captions import normalize_caption
-from climate.export.web_write import write_plotly_svg
+from climate.export.captions import normalize_caption, caption_md_to_json
+from climate.export.web_write import write_plotly_svg, write_matplotlib_svg
 
 from climate.panels.intro import intro_caption  # we will build intro "data" ourselves
 from climate.panels.zoomout import (
@@ -36,6 +36,18 @@ from climate.panels.world import (
     build_you_vs_world_data,
     build_you_vs_world_figures,
     you_vs_world_caption,
+)
+from climate.panels.ocean import (
+    build_sst_anom_data,
+    build_sst_anom_figure,
+    sst_anom_caption,
+    build_sst_hotdays_data,
+    build_sst_hotdays_figure,
+    sst_hotdays_caption,
+    build_dhw_data,
+    build_dhw_figure,
+    dhw_caption,
+    build_ocean_context_map_figure,
 )
 
 def parse_args() -> argparse.Namespace:
@@ -111,6 +123,130 @@ def strip_intro_now_paragraph(md: str) -> str:
     return md.strip()
 
 
+def write_panel_caption(slug_dir: Path, panel: str, unit: str, md: str, *, title: str = "", header: str = "", source: str = "", url: str = "") -> None:
+    """
+    Backwards-compatible caption export:
+    - Always write legacy caption.md (used by current web app)
+    - Also write caption.json (future structured captions)
+    """
+    p = panel_paths(slug_dir / "panels", panel, unit)
+    md_norm = normalize_caption(md)
+    write_text(p.caption_md, md_norm)
+    write_json(
+        p.caption_json,
+        caption_md_to_json(md_norm, title=title, header=header, source=source, url=url),
+    )
+
+
+def build_story_manifest_v1(slug: str, *, has_ocean: bool) -> dict:
+    """
+    Static story manifest (v1). This describes slide order and how many figures each slide has.
+
+    Note: live panels (last_week/last_month) are exported separately by build_live_panels.py,
+    so they are not included here yet.
+
+    Ocean Stress slides are included only when ocean cache exists for the slug.
+    """
+    slides = [
+        {
+            "id": "intro",
+            "layout": "none",
+            "figures": [],
+            "caption_panel": "intro",
+            "left": {"kind": "globe"},
+        },
+        {
+            "id": "last_year",
+            "layout": "single",
+            "figures": [{"panel": "last_year"}],
+            "caption_panel": "last_year",
+            "left": {"kind": "globe"},
+        },
+        {
+            "id": "five_year",
+            "layout": "single",
+            "figures": [{"panel": "five_year"}],
+            "caption_panel": "five_year",
+            "left": {"kind": "globe"},
+        },
+        {
+            "id": "twenty_five_years",
+            "layout": "single",
+            "figures": [{"panel": "twenty_five_years"}],
+            "caption_panel": "twenty_five_years",
+            "left": {"kind": "globe"},
+        },
+        {
+            "id": "fifty_year",
+            "layout": "single",
+            "figures": [{"panel": "fifty_year"}],
+            "caption_panel": "fifty_year",
+            "left": {"kind": "globe"},
+        },
+        {
+            "id": "seasons_shift",
+            "layout": "single",
+            "figures": [{"panel": "seasons_shift"}],
+            "caption_panel": "seasons_shift",
+            "left": {"kind": "globe"},
+        },
+        {
+            "id": "seasons_range",
+            "layout": "two_up",
+            "figures": [
+                {"panel": "seasons_range_earlier", "slot": "left"},
+                {"panel": "seasons_range_recent", "slot": "right"},
+            ],
+            "caption_panel": "seasons_range",
+            "left": {"kind": "globe"},
+        },
+        {
+            "id": "you_vs_world",
+            "layout": "two_up",
+            "figures": [
+                {"panel": "you_vs_world_local", "slot": "left"},
+                {"panel": "you_vs_world_global", "slot": "right"},
+            ],
+            "caption_panel": "you_vs_world",
+            "left": {"kind": "globe"},
+        },
+    ]
+
+    if has_ocean:
+        slides.extend(
+            [
+                {
+                    "id": "ocean_sst_anom",
+                    "layout": "single",
+                    "figures": [{"panel": "ocean_sst_anom"}],
+                    "caption_panel": "ocean_sst_anom",
+                    "left": {"kind": "svg", "asset": "maps/ocean_sst_map.svg"},
+                },
+                {
+                    "id": "ocean_sst_hotdays",
+                    "layout": "single",
+                    "figures": [{"panel": "ocean_sst_hotdays"}],
+                    "caption_panel": "ocean_sst_hotdays",
+                    "left": {"kind": "svg", "asset": "maps/ocean_sst_map.svg"},
+                },
+                {
+                    "id": "ocean_dhw",
+                    "layout": "single",
+                    "figures": [{"panel": "ocean_dhw"}],
+                    "caption_panel": "ocean_dhw",
+                    "left": {"kind": "svg", "asset": "maps/ocean_context_map.svg"},
+                },
+            ]
+        )
+
+    return {
+        "version": 1,
+        "slug": slug,
+        "slides": slides,
+    }
+
+
+
 def main() -> None:
     args = parse_args()
     locations_csv = Path(args.locations_csv)
@@ -173,9 +309,7 @@ def main() -> None:
 
             md = intro_caption(ctx, facts, intro_data)
             md = strip_intro_now_paragraph(md)
-            p = panel_paths(slug_dir / "panels", "intro", unit)
-            write_text(p.caption_md, normalize_caption(md))
-
+            write_panel_caption(slug_dir, "intro", unit, md, title="", header="", source="", url="")
 
             # Compute unit-neutral data once per panel (uses ctx.ds; independent of ctx.unit)
             ctx_data = StoryContext(
@@ -215,7 +349,8 @@ def main() -> None:
 
                     p = panel_paths(slug_dir / "panels", panel_name, unit)
                     write_plotly_svg(p.svg, fig)
-                    write_text(p.caption_md, normalize_caption(cap))
+                    write_panel_caption(slug_dir, panel_name, unit, cap, source="ERA5 (climatology) / local processing")
+
             
             # ---------------------------------------------------------------------
             # Seasons then vs now (2 slides in web):
@@ -240,7 +375,7 @@ def main() -> None:
                     fig_shift, _tiny = build_seasons_then_now_figure(ctx_u, facts, seasons_data)
                     p = panel_paths(slug_dir / "panels", "seasons_shift", unit)
                     write_plotly_svg(p.svg, fig_shift)
-                    write_text(p.caption_md, normalize_caption(seasons_then_now_caption(ctx_u, facts, seasons_data)))
+                    write_panel_caption(slug_dir, "seasons_shift", unit, seasons_then_now_caption(ctx_u, facts, seasons_data), source="ERA5 (climatology) / local processing")
 
                     # Slide 2: two figures side-by-side + shared caption
                     fig_past, fig_recent = build_seasons_then_now_separate_figures(ctx_u, facts, seasons_data)
@@ -250,11 +385,7 @@ def main() -> None:
                     write_plotly_svg(p_past.svg, fig_past)
                     write_plotly_svg(p_recent.svg, fig_recent)
 
-                    p_cap = panel_paths(slug_dir / "panels", "seasons_range", unit)
-                    write_text(
-                        p_cap.caption_md,
-                        normalize_caption(seasons_then_now_separate_caption(ctx_u, facts, seasons_data)),
-                    )
+                    write_panel_caption(slug_dir, "seasons_range", unit, seasons_then_now_separate_caption(ctx_u, facts, seasons_data), source="ERA5 (climatology) / local processing")
             else:
                 print(f"[info] monthly climatologies unavailable for {slug}; skipping seasons panels")
 
@@ -290,18 +421,97 @@ def main() -> None:
 
                 p_local = panel_paths(slug_dir / "panels", "you_vs_world_local", unit)
                 p_global = panel_paths(slug_dir / "panels", "you_vs_world_global", unit)
-                p_cap = panel_paths(slug_dir / "panels", "you_vs_world", unit)
 
                 write_plotly_svg(p_local.svg, fig_local)
                 write_plotly_svg(p_global.svg, fig_global)
-                write_text(p_cap.caption_md, normalize_caption(cap))
+                write_panel_caption(slug_dir, "you_vs_world", unit, cap, source="ERA5 (climatology) / local processing")
+            
+            # -----------------------------------------------------------
+            # OCEAN STRESS (SST anomaly, SST hot-days, coral heat stress / DHW)
+            #
+            # Writes per unit:
+            #   - ocean_sst_anom.<UNIT>.svg + ocean_sst_anom.<UNIT>.caption.md
+            #   - ocean_sst_hotdays.<UNIT>.svg + ocean_sst_hotdays.<UNIT>.caption.md
+            #   - ocean_dhw.<UNIT>.svg + ocean_dhw.<UNIT>.caption.md
+            #
+            # Writes unit-agnostic maps (SVG):
+            #   - maps/ocean_context_map.svg
+            #   - maps/ocean_sst_map.svg   (reserved for later; not written yet)
+            # -----------------------------------------------------------
+            try:
+                sst_anom_data = build_sst_anom_data(ctx_data)
+                sst_hotdays_data = build_sst_hotdays_data(ctx_data)
+                dhw_data = build_dhw_data(ctx_data)
+            except Exception as e:
+                sst_anom_data = None
+                sst_hotdays_data = None
+                dhw_data = None
+                print(f"[info] ocean cache unavailable for {slug}; skipping ocean exports ({type(e).__name__}: {e})")
 
-                    
+            if sst_anom_data is not None:
+                # Map (unit-agnostic): current “context” map (DHW box / coastline context)
+                try:
+                    fig_map, tiny = build_ocean_context_map_figure(ctx_data, facts, dhw_data)
+                    map_path = slug_dir / "maps" / "ocean_context_map.svg"
+                    write_matplotlib_svg(map_path, fig_map)
+                except Exception as e:
+                    print(f"[info] ocean context map failed for {slug} ({type(e).__name__}: {e})")
+
+                # Reserve room for later (SST anomaly map), but don't write anything yet:
+                # slug_dir / "maps" / "ocean_sst_map.svg"
+
+                for unit in ("C", "F"):
+                    ctx_u = StoryContext(
+                        today=today,
+                        slug=slug,
+                        location_label=city["label"],
+                        city_name=city["city_name"],
+                        location_lat=float(city["lat"]),
+                        location_lon=float(city["lon"]),
+                        unit=unit,
+                        ds=ds,
+                    )
+
+                    # SST anomaly
+                    fig, tiny = build_sst_anom_figure(ctx_u, facts, sst_anom_data)
+                    cap = sst_anom_caption(ctx_u, facts, sst_anom_data)
+                    if tiny:
+                        cap = cap.rstrip() + "\n\n" + f"_{tiny}_"
+                    p = panel_paths(slug_dir / "panels", "ocean_sst_anom", unit)
+                    write_plotly_svg(p.svg, fig)
+                    write_text(p.caption_md, normalize_caption(cap))
+
+                    # SST hot days (baseline P90)
+                    fig, tiny = build_sst_hotdays_figure(ctx_u, facts, sst_hotdays_data)
+                    cap = sst_hotdays_caption(ctx_u, facts, sst_hotdays_data)
+                    if tiny:
+                        cap = cap.rstrip() + "\n\n" + f"_{tiny}_"
+                    p = panel_paths(slug_dir / "panels", "ocean_sst_hotdays", unit)
+                    write_plotly_svg(p.svg, fig)
+                    write_text(p.caption_md, normalize_caption(cap))
+
+                    # DHW (coral heat stress)
+                    fig, tiny = build_dhw_figure(ctx_u, facts, dhw_data)
+                    cap = dhw_caption(ctx_u, facts, dhw_data)
+                    if tiny:
+                        cap = cap.rstrip() + "\n\n" + f"_{tiny}_"
+                    p = panel_paths(slug_dir / "panels", "ocean_dhw", unit)
+                    write_plotly_svg(p.svg, fig)
+                    write_text(p.caption_md, normalize_caption(cap))
+
+        # story manifest (static bundle)
+        ocean_path = Path("data/story_ocean") / f"ocean_{slug}.nc"
+        has_ocean = ocean_path.exists()
+        write_json(slug_dir / "story.json", build_story_manifest_v1(slug, has_ocean=has_ocean))
+
         # meta (optional, useful for debugging)
+        ocean_path = Path("data/story_ocean") / f"ocean_{slug}.nc"
+        has_ocean = ocean_path.exists()
         write_json(slug_dir / "meta.json", {
             "slug": slug,
             "generated_at": datetime.utcnow().isoformat() + "Z",
             "climatology_file": str(clim_path),
+            "ocean_file": str(ocean_path) if has_ocean else None,
             "today": today.isoformat(),
         })
 
