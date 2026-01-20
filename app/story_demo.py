@@ -130,6 +130,7 @@ with st.sidebar:
             "Zoom out",
             "Seasons then vs now",
             "You vs the world",
+            "Ocean Stress",
             "World map",
             "Monte Carlo: how global warming is estimated",
         ],
@@ -385,6 +386,86 @@ if step == "You vs the world":
     st.caption(tiny)
     st.markdown(you_vs_world_caption(ctx, facts, data))
     # ################################################################################
+
+# -----------------------------------------------------------
+# STEP: OCEAN STRESS
+# -----------------------------------------------------------
+
+# -----------------------------------------------------------
+# STEP: OCEAN STRESS
+# -----------------------------------------------------------
+if step == "Ocean Stress":
+    st.header("Ocean Stress")
+
+    st.markdown(
+        """
+This step is for **coastal ocean indicators** (Phase 1: tested on `city_mu_tamarin`).
+
+We’ll show:
+- **SST anomaly** (vs 1981–2010 baseline)
+- **SST hot days** (days above baseline P90)
+- **Coral heat stress** (DHW: annual max + days above thresholds)
+
+Once `climate/panels/ocean.py` exists, this section will render the real figures + captions using the standard panel pattern.
+"""
+    )
+
+    try:
+        from climate.panels.ocean import (
+            build_sst_anom_data, build_sst_anom_figure, sst_anom_caption,
+            build_sst_hotdays_data, build_sst_hotdays_figure, sst_hotdays_caption,
+            build_dhw_data, build_dhw_figure, dhw_caption, build_ocean_context_map_figure,
+        )
+
+        sst_anom_data = build_sst_anom_data(ctx)
+        sst_hot_data = build_sst_hotdays_data(ctx)
+        dhw_data = build_dhw_data(ctx)
+
+        col_map, col_right = st.columns([1, 4], gap="large")
+        with col_map:
+            fig_map, tiny_map = build_ocean_context_map_figure(ctx, facts, dhw_data)
+            st.pyplot(fig_map, clear_figure=False)
+            st.caption(tiny_map)
+    
+        with col_right:
+            # -------------------------
+            # 1) SST anomaly
+            st.subheader("Sea surface temperature anomaly")
+            if sst_anom_data:
+                fig, tiny = build_sst_anom_figure(ctx, facts, sst_anom_data)
+                st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+                st.caption(tiny)
+                st.markdown(sst_anom_caption(ctx, facts, sst_anom_data))
+            else:
+                st.info("SST anomaly data not available for this location yet.")
+
+            # -------------------------
+            # 2) SST hot days (baseline P90)
+            st.subheader("SST hot days (above baseline P90)")
+            if sst_hot_data:
+                fig, tiny = build_sst_hotdays_figure(ctx, facts, sst_hot_data)
+                st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+                st.caption(tiny)
+                st.markdown(sst_hotdays_caption(ctx, facts, sst_hot_data))
+            else:
+                st.info("SST hot-day data not available for this location yet.")
+
+            # -------------------------
+            # 3) DHW (coral heat stress)
+            st.subheader("Coral heat stress (DHW)")
+            if dhw_data:
+                fig, tiny = build_dhw_figure(ctx, facts, dhw_data)
+                st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+                st.caption(tiny)
+                st.markdown(dhw_caption(ctx, facts, dhw_data))
+            else:
+                st.info("DHW data not available for this location yet.")
+
+
+    except Exception as e:
+        st.warning("Ocean Stress panels aren’t implemented yet (expected until `climate/panels/ocean.py` is added).")
+        st.caption(f"Import/wiring error: {type(e).__name__}: {e}")
+
 
 # -----------------------------------------------------------
 # STEP: WORLD MAP IDEA
