@@ -1,275 +1,388 @@
-# Climate Story — Updated Handoff Summary (2026-01)
+# Climate Story — Updated Instructions / Handoff (2026-01)
 
 This repo builds a **climate scrollytelling experience** driven by **Python-generated data + figures + captions**, rendered in a **Next.js/React** front-end.
 
 Core contract:
 
 - **Python is the single source of truth** for:
-  - panel logic
-  - caption text (Markdown)
-  - figure generation (Plotly → SVG)
-  - unit-specific wording/value formatting (C/F)
+  - story/panel logic
+  - captions (Markdown today)
+  - figure generation (Plotly → SVG; plus matplotlib/cartopy for context maps)
+  - unit-specific wording/formatting (C/F)
 
 - **Web app is a renderer**:
-  - loads exported assets (SVG + Markdown captions) from `web/public/data/...`
-  - implements narrative UX: scroll-snapped slides, progressive caption reveal, SVG draw animation, dark/light/system theme, globe visuals.
+  - reads exported assets from `web/public/data/...`
+  - renders slides with scroll-snapping + progressive captions + SVG draw animations
+  - supports **manifest-driven** slide definitions (no hardcoded slide list)
 
----
+## 0) Goals and current phase
+
+### Overall product direction
+
+Go beyond “temperature history” into **interesting climate stories**, potentially using:
+
+- coastal: SST anomalies, DHW/coral stress, precipitation/dry spells, storms
+- inland: heatwaves, hot nights, drought indicators
+- big city: extremes + air quality correlations
+
+Primary test slugs (familiar locations):
+
+- coastal: `city_mu_tamarin` (Tamarin, Mauritius)
+- inland: `city_fr_troyes` (Troyes, France)
+- big city: `city_gb_london` (London, UK)
+
+### Phase 1 (current)
+
+Deliver a new story step **Ocean Stress** (coastal) end-to-end:
+
+- precompute data to disk
+- panel module loads cached data and builds SVGs + captions + context map(s)
+- exporter writes assets + updates `story.json`
+- React loads `story.json` and renders slides dynamically
+
+**Milestone achieved:** React now loads slides from `story.json` manifest (not a hardcoded list).
 
 ## 1) Repository structure (what matters now)
 
 ### Python (source of truth)
 
 - `climate/panels/`
-  - Panel modules (e.g. `intro.py`, `zoomout.py`, `seasons.py`, `world.py`, etc.)
-  - Conceptual pattern per panel:
+  - Panel modules (existing: `intro.py`, `zoomout.py`, `seasons.py`, `world.py`, etc.)
+  - New: `ocean.py` for Ocean Stress (loads cached ocean `.nc`, no network calls)
+  - Typical panel pattern:
     - `build_*_data(ctx) -> dict`
     - `build_*_figure(ctx, facts, data) -> (fig or figs, tiny_caption?)`
     - `*_caption(ctx, facts, data) -> markdown`
-  - For the web we primarily export **SVG + caption.md** (data.json is not needed for v1).
 
 - `climate/export/`
   - `web_paths.py`: path conventions for exported web bundle
-  - `web_write.py`: write helpers (`write_json`, `write_text`, etc.)
-  - `normalize_caption()` helper strips indentation / normalizes markdown output for React markdown.
+  - `web_write.py`: write helpers
+  - `captions.py` / `normalize_caption()`: fixes indentation / normalizes Markdown
 
 - `scripts/`
-  - `build_frontend_bundle.py`
-    - Reads per-city `.nc` files and exports the **long-term/static panels** for each slug.
-  - `build_live_panels.py`
-    - Fetches Open-Meteo data for short-term panels (last week/month) and exports them daily per slug.
-    - Writes a `latest.json` so web can find the newest available “as-of” directory per slug.
+  - `precompute_story_cities.py`: existing pipeline for climatology `.nc` per city (2m temps, etc.)
+  - `precompute_ocean_cities.py`: precompute Ocean Stress cached `.nc files` (SST + DHW metrics)
+  - `build_frontend_bundle.py`: exports static story assets (SVG + caption.md + `story.json`)
+  - `build_live_panels.py`: exports last_week/last_month live assets and `live/latest.json`
 
 ### Web (renderer)
 
 - Next.js app under `web/`
-- Story route:
-  - `/story/[slug]` for explicit slug
-  - `/story/auto` (and `/`) resolves location (geolocation) then selects nearest supported slug
+- Routes:
+  - `/story/[slug]` explicit slug
+  - `/story/auto` and `/` choose nearest supported slug
 
-Key components/hooks:
+Key components:
 
 - `web/src/components/StoryClient.tsx`
-  Orchestrates routing, unit/theme, scroller + slides layout, asset fetching for captions/SVGs, header transitions, and globe behavior.
+  - loads `story.json` and renders slides dynamically
+  - manages unit/theme/scroller/globe/left column
+- `web/src/components/panels/ManifestSlide.tsx`
+  - renders one slide based on manifest entry (layout, figures, caption panel, left)
+- `web/src/components/LeftSvg.tsx`
+  - loads left-side SVG specified by `left.asset`
+  - should soft-fail gracefully for missing assets (maps not exported yet)
 - `web/src/components/Caption.tsx`
-  `react-markdown` renderer + progressive reveal support (`reveal="sentences"` etc.) + typography styling.
+  - react-markdown + progressive reveal logic (sentence splitting)
 - `web/src/components/PanelFigure.tsx`
-  Renders injected SVG safely, applies scoped CSS, supports SVG stroke-dash draw animations (including sequencing, markers timing, dashed-line preservation).
-- `web/src/components/Globe.tsx` + `web/src/components/GlobeEngine.ts`
-  Three.js globe and shader-based rendering, with multiple “roles” (hero/mini/warming).
-- Theme:
-  - `web/src/hooks/useTheme.ts` provides System/Light/Dark (localStorage) and toggles Tailwind’s `.dark` on `<html>`.
+  - injects SVG safely + applies theme fixups + supports draw animation
 
----
+Theme:
 
-## 2) Slugs and file naming conventions (current consensus)
+- `web/src/hooks/useTheme.ts` toggles `.dark` on `<html>`
 
-- **Slug is the canonical ID everywhere** and includes the `city_` prefix:
-  - e.g. `city_gb_london`, `city_jp_tokyo`, `city_mu_tamarin`
+## 2) Export format & file conventions
 
-- City climatology files:
-  - `data/story_climatology/clim_<slug>.nc`
+### Slugs
 
-- Web story bundle output:
-  - `web/public/data/story/<slug>/facts.json`
-  - `web/public/data/story/<slug>/meta.json`
-  - `web/public/data/story/<slug>/panels/<panel>.<unit>.caption.md`
-  - `web/public/data/story/<slug>/panels/<panel>.<unit>.svg`
+Slug is canonical everywhere and includes `city_` prefix, e.g.
 
-Units are `"C"` and `"F"`. We export **both SVG and caption** in both units because numbers/units are embedded in both.
+- `city_mu_tamarin`, `city_fr_troyes`, `city_gb_london`
 
----
+### Static story bundle output (per slug)
 
-## 3) Export format and pipeline
+- `web/public/data/story/<slug>/facts.json`
+- `web/public/data/story/<slug>/meta.json`
+- `web/public/data/story/<slug>/story.json` ← story manifest
+- `web/public/data/story/<slug>/panels/<panel>.<unit>.svg`
+- `web/public/data/story/<slug>/panels/<panel>.<unit>.caption.md`
+- Maps (unit-agnostic) exported as SVG too:
+  - `web/public/data/story/<slug>/maps/ocean_context_map.svg`
+  - (future) `web/public/data/story/<slug>/maps/ocean_sst_map.svg`
 
-### A) Long-term/static panels export
+Units are `"C"` and `"F"`. We export both variants for SVG + caption where units/values appear.
 
-Run via `scripts/build_frontend_bundle.py` (typically monthly/quarterly):
+### Live bundle output
 
-- Inputs: `data/story_climatology/clim_<slug>.nc`
-- Produces per slug:
-  - `facts.json` + `meta.json`
-  - panel assets: `panels/*.svg` and `panels/*.caption.md`
-  - **both C and F variants**
+- `web/public/data/live/<YYYY-MM-DD>/<slug>/last_week.<unit>.svg` + `.caption.md`
+- `web/public/data/live/<YYYY-MM-DD>/<slug>/last_month.<unit>.svg` + `.caption.md`
+- `web/public/data/live/latest.json` maps `{ slug -> "YYYY-MM-DD" }`
 
-Plotly SVG export tweaks required for web:
+## 3) `story.json` manifest (current direction)
 
-- enforce Plotly layout `width/height/margins`
-- ensure y-axis ticks are visible (`margin.l` etc.)
+Manifest drives slide order and rendering (no hardcoded slide list in React).
 
-### B) Live panels export (short-term)
+Key ideas:
 
-Run via `scripts/build_live_panels.py` (daily, for selected slugs):
+- Each slide has an `id`, `layout`, `figures`, `caption_panel`, and `left`.
+- Each figure can include:
+  - `panel`: panel id used for asset resolution
+  - `kind`: currently `"svg"`
+  - `animate`: boolean to control SVG draw animation (renderer should not guess)
 
-- Outputs per date (“as-of”) directory:
-  - `web/public/data/live/<YYYY-MM-DD>/<slug>/`
-    - `last_week.<unit>.svg`, `last_week.<unit>.caption.md`
-    - `last_month.<unit>.svg`, `last_month.<unit>.caption.md`
-    - `meta.json`
-- Writes:
-  - `web/public/data/live/latest.json` mapping `{ slug -> "YYYY-MM-DD" }`
-- Web reads `latest.json` to choose the most recent available as-of date.
+Example:
 
-Compromise for v1:
+```json
+{
+  "id": "ocean_sst_hotdays",
+  "layout": "single",
+  "figures": [
+    { "panel": "ocean_sst_hotdays", "kind": "svg", "animate": false }
+  ],
+  "caption_panel": "ocean_sst_hotdays",
+  "left": { "kind": "svg", "asset": "maps/ocean_sst_map.svg" }
+}
+```
 
-- Precompute live panels daily for “popular” locations.
-- For other locations: generate on-demand server-side later (not implemented yet).
-- Current temperature is fetched via a **Next.js API proxy** (not browser → Open-Meteo) to centralize caching/troubleshooting.
+Left panel kinds:
 
----
+```json
+{ "kind": "globe" }
+{ "kind": "svg", "asset": "maps/..." }
+{ "kind": "none" }
+```
 
-## 4) Slides currently implemented in the web app
+## 4) Phase 1 — Ocean Stress (what was built)
 
-Story is a scroll-snapped scrollytelling sequence with “slides”, roughly:
+### Precompute: `scripts/precompute_ocean_cities.py`
 
-### Intro + short-term weather
+Produces cached per-city ocean dataset:
 
-- Intro caption is exported from Python; the “now temperature” line is removed from exported intro caption (web has its own “It’s currently …” from the live proxy).
-- Short-term slides use live bundle assets:
-  - Last week (SVG + caption)
-  - Last month (SVG + caption)
+- output: `data/story_ocean/ocean_<slug>.nc` (exact folder/name may vary)
+- includes annual metrics for:
+  - SST anomaly vs baseline
+  - SST “hot days” counts (baseline P90 by day-of-year)
+  - DHW annual metrics (>=4 days, >=8 days, etc.)
+- cache attrs include DHW box size, dataset ids, baseline range, etc.
+- overwrite-safe behavior expected (write temp + replace)
 
-### Zoom-out temperature history (from `zoomout.py`)
+### Panel: `climate/panels/ocean.py`
 
-- Last year
-- Last 5 years
-- Last 50 years
-- Future/trend panels (depending on export)
+- loads ocean `.nc` from disk (NO network calls)
+- builds three slides:
+  - SST anomaly
+  - SST hot days
+  - DHW stress
+- builds a context map figure for DHW box (matplotlib/cartopy)
+- exports SVGs + captions via the standard exporter
 
-### Seasons then vs now (from `seasons.py`)
+### Exporter: `scripts/build_frontend_bundle.py`
 
-Two slides:
+- exports standard panels + Ocean Stress panels + maps
+- updates:
+  - `story.json` to include new Ocean Stress slides
+  - `meta.json` to include reference to ocean cached `.nc` (for debugging/provenance)
 
-1. One main figure + caption
-2. Two side-by-side envelope figures + caption (markdown lists render correctly)
+### React
 
-### You vs the world (from `world.py`)
+- loads `story.json` and renders slides dynamically
+- left-side map loads via `left.asset`
+- missing map assets should be handled gracefully (soft-fail 404)
 
-- Two side-by-side anomaly charts (local vs global) + caption
+## 5) Spike 1 findings (dataset access + operational lessons)
 
-### Warming globe slide (new)
+### ERA5/CDS
 
-- Dedicated “warming” mode:
-  - transitions to warming “data” texture, then spins
-  - grid lines hidden in warming mode (`gridOpacity` uniform)
-  - marker visible initially, then disappears when spinning starts
-  - spin time anchored to avoid “jump”
-  - optional “tilt reset”: spinning gradually removes pitch/roll so equator becomes horizontal
+- Large CDS requests can hit “cost limits exceeded”.
+- Splitting into smaller requests (often 1-year chunks) avoids 403/cost errors.
 
----
+### NOAA OISST via ERDDAP (SST)
 
-## 5) Front-end UX decisions and compromises
+- Network reliability can be flaky (timeouts / remote disconnects); retries/backoff required.
+- Some environments may require VPN/alternate network (observed: requests worked on hotspot/VPN).
+- Correct ERDDAP query details mattered:
+  - dataset requires `zlev=0.0` constraint (otherwise axis range errors)
+  - chunking strategy matters (smaller blocks were sometimes more reliable than large pulls)
 
-### Scroll snapping
+### NOAA Coral Reef Watch DHW via ERDDAP
 
-- Single scroll container with CSS snap:
-  - `snap-y snap-mandatory`
-  - `scroll-snap-stop: always` on slides (prevents skipping with trackpads)
-- Wheel event hacks were tried and removed; CSS snap works best.
-- Scroll container wraps both columns so scrolling works when pointer is over the globe column.
+- Variable is `degree_heating_week` (not `dhw`).
+- Dataset time minimum starts at `1985-03-25T12:00:00Z` (requests earlier return “axis minimum” errors).
+- Multi-year box requests can trigger 500/502 proxy errors; 1-year chunks were reliable.
+- Use `curl -g` when testing bracketed ERDDAP URLs to avoid curl “bad range specification”.
 
-### Progressive captions
+### Summary insight from Phase 1 test
 
-- Captions via `react-markdown`.
-- `Caption` supports progressive reveal (sentence-by-sentence).
-- Markdown splitting issues (emphasis across sentence splits) fixed by normalization.
+- Tamarin shows stronger signals in **ocean stress** than in air temperature:
+  - SST anomalies increased substantially vs 1980s baseline.
+  - DHW >=4 days emerged strongly from late 2000s onward; DHW >=8 appears in recent years.
 
-### SVG draw animations
+## 6) Runbook (common workflows)
 
-- `PanelFigure` can animate curves sequentially; markers/annotations can appear after lines.
-- Dashed lines require special handling to preserve dash patterns during stroke-dash animation.
-- Plotly hover tooltips are not available in SVG mode (future: embed data for hover / switch to Plotly.js / custom overlays).
+### A) Run web app locally
 
-### Theme
+```bash
+cd web
+npm install
+npm run dev
+```
 
-- System/Light/Dark toggle works; Tailwind dark mode via `.dark` on `<html>`.
-- SVGs are post-processed / CSS-overridden to remove Plotly white rects and adapt axis/text colors.
+Open:
 
-### Globe
+- `http://localhost:3000/`
+- `http://localhost:3000/story/city_mu_tamarin`
 
-- Multiple globe roles: hero, mini (docked), warming globe panel.
-- Engine is shader-based; visual toggles are mostly uniforms.
+### B) Precompute climatology bundle (existing pipeline)
 
----
+```bash
+python scripts/precompute_story_cities.py --slugs city_mu_tamarin
+```
 
-## 6) Known sharp edges / gotchas
+Outputs:
 
-- Dev caching: sometimes stale `cities_index.json` or assets require hard reload / server restart.
-- `cities_index.json` may list more locations than actually exported; auto-selection must avoid missing slugs.
-- Exported markdown can include leading indentation from triple-quoted strings; fixed by `normalize_caption`.
-- Live date logic must use `latest.json` (not “yesterday”) to be robust.
+- `data/story_climatology/clim_<slug>.nc`
 
----
+### C) test Precompute Ocean Stress cache
 
-## 7) Instructions for code changes (how to request patches)
+```bash
+python scripts/precompute_ocean_cities.py --slugs city_mu_tamarin
+```
+
+Outputs:
+
+- `data/story_ocean/ocean_<slug>.nc` (or equivalent)
+
+### D) Export static story bundle (including Ocean Stress)
+
+Test
+
+```bash
+python scripts/build_frontend_bundle.py --slugs city_mu_tamarin
+```
+
+Outputs:
+
+- `web/public/data/story/<slug>/story.json`
+- `web/public/data/story/<slug>/panels/*.svg`
+- `web/public/data/story/<slug>/panels/*.caption.md`
+- `web/public/data/story/<slug>/maps/*.svg` (context maps)
+- `web/public/data/cities_index.json`
+
+### E) Export live panels
+
+```bash
+python scripts/build_live_panels.py --slugs city_mu_tamarin
+```
+
+Outputs:
+
+- `web/public/data/live/<YYYY-MM-DD>/<slug>/last_week.*`
+- `web/public/data/live/latest.json`
+
+## 7) How to request code changes (critical)
 
 Prefer **surgical patches**:
 
 - Specify **file path**
-- Copy/paste the **exact block** to change (“before”)
-- Provide the “after” code for that block
+- Include the **exact “BEFORE” block** (unless replacing the entire function body)
+- Provide the **AFTER** block
 - Include required imports + wiring
 - Avoid duplicate/conflicting `useEffect` blocks
-- For Plotly export tweaks, keep changes minimal:
-  - `fig.update_layout(width=..., height=..., margin=...)` in Python panel code
+- Keep Plotly tweaks minimal (`update_layout(...)` etc.)
 
----
+Never provide unified diff blocks.
 
-## 8) Runbook (common workflows)
+## 8) Next planned improvements (mentioned during Phase 1)
 
-### A) Run the web app locally
+### A) Refactor dataset access into `climate.datasets`
 
-From repo root:
+Current state: dataset logic exists inside precompute scripts.
+Goal: move reusable dataset querying into:
 
-- `cd web`
-- `npm install`
-- `npm run dev`
-  Open:
-- `http://localhost:3000/`
-- `http://localhost:3000/story/city_mu_tamarin`
+- `climate/datasets/specs.py` (dataset IDs, variable names, axis constraints, start dates)
+- `climate/datasets/erddap.py` (URL building, robust download, CSV parsing, chunking helpers)
+- `climate/datasets/openmeteo.py` (migrate from existing `climate/openmeteo.py`)
 
-### B) Build the long-term/static web bundle for a slug
+Motivation: “spike learnings” (zlev=0, time mins, chunk sizing, retries) must live in one place.
 
-From repo root:
+### B) Add SST anomaly left map for SST slides
 
-- Ensure `data/story_climatology/clim_<slug>.nc` exists
-- `python scripts/build_frontend_bundle.py --slugs city_mu_tamarin`
-  Expected:
-- `web/public/data/story/<slug>/facts.json`
-- `web/public/data/story/<slug>/meta.json`
-- `web/public/data/story/<slug>/panels/<panel>.<C|F>.svg`
-- `web/public/data/story/<slug>/panels/<panel>.<C|F>.caption.md`
-- `web/public/data/cities_index.json`
+- Export `maps/ocean_sst_map.svg`
+- Left-side for SST slides should display SST anomaly field (grid-res, warm=red)
+- Keep DHW slide left map as “context box” map
 
-### C) Build daily live panels for a slug
+### C) DHW heatmap design (optional new slide or replace bars)
 
-From repo root:
+- A heatmap image where each pixel = day, color = DHW value
+- Compare layouts:
+  - 365px high (one column per year)
+  - wrapped year into 4–5 strips
+  - chronological vs sorted-by-DHW
+- Export as SVG (or raster) and ensure React can load it as an asset
+- Likely added as an additional slide first (don’t delete the simpler bars until heatmap is validated)
 
-- `python scripts/build_live_panels.py --slugs city_mu_tamarin`
-  Expected (example):
-- `web/public/data/live/<YYYY-MM-DD>/<slug>/last_week.C.svg`
-- `web/public/data/live/<YYYY-MM-DD>/<slug>/last_week.C.caption.md`
-- `web/public/data/live/<YYYY-MM-DD>/<slug>/last_month.F.svg`
-- `web/public/data/live/<YYYY-MM-DD>/<slug>/meta.json`
-- `web/public/data/live/latest.json`
+## 9) Phase 2 starter plan (inland + big city)
 
-### D) Quick sanity checks
+Goal: extend the “interesting stories” beyond coastal/ocean.
 
-- Open raw assets:
-  - `/data/story/<slug>/panels/<panel>.C.caption.md`
-  - `/data/live/latest.json`
-- Restart dev server if cached:
-  - stop `npm run dev`, rerun
-- Hard refresh:
-  - Cmd+Shift+R / Ctrl+Shift+R
+### Phase 2A — Troyes: heat + hot nights + dry spells
 
----
+**Candidate metrics**
 
-## 9) Future directions (discussed)
+- Hot days per year (e.g. Tmax ≥ 30°C / 35°C thresholds)
+- Tropical nights per year (Tmin ≥ 20°C)
+- Heatwave duration indicators (e.g. consecutive days above threshold)
+- Summer dry spells (max consecutive days with precipitation < X mm)
 
-- Better slide layout hierarchy + timed text tied to curve drawing (timeline API)
-- More datasets beyond 2m temperature (SST, precipitation, pollution)
-- Location comparisons (“my city vs another city”)
-- Scalable precompute / on-demand generation strategy
-- Case-study / headline pages about recent events
-- Monte Carlo simulation port to React (start as Python-exported assets, later interactive)
+**Data sources**
+
+- Start with the same pipeline style as Phase 1:
+  - Use existing climatology `.nc` (if it already has daily temps/precip) or extend `precompute_story_cities.py` to store what’s missing.
+  - If using CDS derived daily stats, prefer 1-year chunks to avoid “cost limits exceeded”.
+
+**Story step**
+
+- Add a new step after Zoom-out (or after Seasons):
+  - “Heat stress” (single-slide or 2 slides: hot days + hot nights)
+  - “Dry spells” (if it shows a clear change)
+
+### Phase 2B — London: heat extremes + air quality
+
+**Candidate metrics**
+
+- Hot days above a high threshold (UK heat extremes, e.g. ≥ 30°C / ≥ 35°C)
+- Air quality indicators (PM2.5, NO2, O3) if a reliable dataset is available at usable resolution/time span
+- Compare pollution on extreme hot days vs typical summer days (distribution / anomaly)
+
+**Data sources**
+
+- Temperature: continue with ERA5/Open-Meteo/your climatology dataset.
+- Air quality: pick a source that:
+  - has multi-year coverage
+  - supports point/box extraction efficiently
+  - has an API or bulk format we can cache (avoid per-day tiny-file downloads)
+
+**Story step**
+
+- “City air + heat”:
+  - one slide shows increasing hot extremes
+  - one slide shows pollution metrics (or “pollution on hot days”)
+
+### Phase 2 deliverable shape
+
+- Repeat the Phase 1 “pattern”:
+  1. spike script(s) to validate access + compute metrics
+  2. precompute cache `.nc` per slug
+  3. panel module (loads cache) + exporter + `story.json` entries
+  4. React automatically renders via manifest
+
+## 10) Definition of done for Phase 1
+
+Phase 1 is “done” when:
+
+- Ocean Stress step is fully integrated:
+  - precompute works reliably
+  - exporter emits all Ocean Stress assets + maps
+  - story manifest includes Ocean Stress slides with correct left assets and animation flags
+  - React renders everything from manifest
+- and there is a clear plan for Phase 2 (Troyes/London stories + new datasets)
