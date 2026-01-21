@@ -497,6 +497,8 @@ Once `climate/panels/ocean.py` exists, this section will render the real figures
             sst_hotdays_caption,
             build_dhw_data,
             build_dhw_figure,
+            build_dhw_figure_with_trend,
+            build_dhw_heatmap_figure,
             dhw_caption,
             build_ocean_context_map_figure,
         )
@@ -538,9 +540,43 @@ Once `climate/panels/ocean.py` exists, this section will render the real figures
             # 3) DHW (coral heat stress)
             st.subheader("Coral heat stress (DHW)")
             if dhw_data:
-                fig, tiny = build_dhw_figure(ctx, facts, dhw_data)
-                st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-                st.caption(tiny)
+                # Prototype the front-end UX in Streamlit:
+                # - default = bars (no trend)
+                # - optional toggle = bars + trend (dual-axis)
+                # - optional toggle = heatmap (Design 2)
+                mode = st.radio(
+                    "DHW view",
+                    ["📊 Bars", "〰️ Bars + trend", "🟧 Heatmap"],
+                    horizontal=True,
+                    label_visibility="collapsed",
+                    key=f"dhw_view_{ctx.slug}",
+                )
+
+                if mode == "📊 Bars":
+                    fig, tiny = build_dhw_figure(ctx, facts, dhw_data)
+                    st.plotly_chart(
+                        fig, width="stretch", config={"displayModeBar": False}
+                    )
+                    st.caption(tiny)
+
+                elif mode == "〰️ Bars + trend":
+                    fig, tiny = build_dhw_figure_with_trend(ctx, facts, dhw_data)
+                    st.plotly_chart(
+                        fig, width="stretch", config={"displayModeBar": False}
+                    )
+                    st.caption(tiny)
+
+                else:
+                    fig_hm, tiny_hm = build_dhw_heatmap_figure(
+                        ctx, facts, dhw_data, use_threshold_jumps=True
+                    )
+                    if fig_hm is not None:
+                        st.pyplot(fig_hm, clear_figure=False)
+                        st.caption(tiny_hm)
+                    else:
+                        st.info("Daily DHW not available for heatmap yet.")
+
+                # Keep the story text stable regardless of view
                 st.markdown(dhw_caption(ctx, facts, dhw_data))
             else:
                 st.info("DHW data not available for this location yet.")
