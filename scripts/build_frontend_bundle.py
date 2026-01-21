@@ -9,6 +9,7 @@ from typing import Any
 import textwrap
 
 import xarray as xr
+import matplotlib.pyplot as plt
 
 
 from climate.analytics import compute_story_facts
@@ -54,6 +55,8 @@ from climate.panels.ocean import (
     sst_hotdays_caption,
     build_dhw_data,
     build_dhw_figure,
+    build_dhw_figure_with_trend,
+    build_dhw_heatmap_figure,
     dhw_caption,
     build_ocean_context_map_figure,
 )
@@ -286,7 +289,23 @@ def build_story_manifest_v1(slug: str, *, has_ocean: bool) -> dict:
                     "id": "ocean_dhw",
                     "layout": "single",
                     "figures": [
-                        {"panel": "ocean_dhw", "kind": "svg", "animate": False}
+                        {
+                            "panel": "ocean_dhw",
+                            "kind": "svg",
+                            "animate": False,
+                            "variants": [
+                                {
+                                    "panel": "ocean_dhw_with_trend",
+                                    "kind": "svg",
+                                    "icon": "curve",
+                                },
+                                {
+                                    "panel": "ocean_dhw_heatmap",
+                                    "kind": "webp",
+                                    "icon": "heatmap",
+                                },
+                            ],
+                        }
                     ],
                     "caption_panel": "ocean_dhw",
                     "left": {"kind": "svg", "asset": "maps/ocean_context_map.svg"},
@@ -607,7 +626,7 @@ def main() -> None:
                     write_plotly_svg(p.svg, fig)
                     write_text(p.caption_md, normalize_caption(cap))
 
-                    # DHW (coral heat stress)
+                    # DHW (coral heat stress) — default bars
                     fig, tiny = build_dhw_figure(ctx_u, facts, dhw_data)
                     cap = dhw_caption(ctx_u, facts, dhw_data)
                     if tiny:
@@ -615,6 +634,28 @@ def main() -> None:
                     p = panel_paths(slug_dir / "panels", "ocean_dhw", unit)
                     write_plotly_svg(p.svg, fig)
                     write_text(p.caption_md, normalize_caption(cap))
+
+                    # Variant A: bars + max-DHW trend (dual axis) — SVG only, no caption
+                    fig2, _tiny2 = build_dhw_figure_with_trend(ctx_u, facts, dhw_data)
+                    p2 = panel_paths(slug_dir / "panels", "ocean_dhw_with_trend", unit)
+                    write_plotly_svg(p2.svg, fig2)
+
+                    # Variant B: heatmap (Design 2) — WEBP raster, no caption
+                    fig_hm, _tiny_hm = build_dhw_heatmap_figure(
+                        ctx_u, facts, dhw_data, use_threshold_jumps=True
+                    )
+                    if fig_hm is not None:
+                        p3 = panel_paths(slug_dir / "panels", "ocean_dhw_heatmap", unit)
+                        heat_path = p3.svg.with_suffix(".webp")
+                        heat_path.parent.mkdir(parents=True, exist_ok=True)
+                        fig_hm.savefig(
+                            heat_path,
+                            format="webp",
+                            dpi=220,
+                            bbox_inches="tight",
+                            transparent=True,
+                        )
+                        plt.close(fig_hm)
 
         # story manifest (static bundle)
         ocean_path = Path("data/story_ocean") / f"ocean_{slug}.nc"
