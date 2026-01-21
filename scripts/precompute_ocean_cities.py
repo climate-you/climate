@@ -545,6 +545,7 @@ def write_ocean_cache(
     end_date: str,
     sst_anom_year_c: pd.Series,
     sst_hotdays_p90_year: pd.Series,
+    dhw_daily: pd.Series,
     dhw_max_year: pd.Series,
     dhw_ge4_days_year: pd.Series,
     dhw_ge8_days_year: pd.Series,
@@ -558,6 +559,11 @@ def write_ocean_cache(
         | set(dhw_ge8_days_year.index.tolist())
     )
 
+    # Daily DHW (box-mean) — store raw daily time series (including Feb 29 if present).
+    dhw_daily = dhw_daily.sort_index()
+    dhw_time = pd.DatetimeIndex(dhw_daily.index).to_numpy(dtype="datetime64[ns]")
+    dhw_vals = dhw_daily.astype("float32").to_numpy()
+
     ds = xr.Dataset(
         data_vars=dict(
             sst_anom_year_c=(
@@ -568,6 +574,9 @@ def write_ocean_cache(
                 "year",
                 [float(sst_hotdays_p90_year.get(y, np.nan)) for y in years],
             ),
+            # Daily DHW needed for heatmaps
+            dhw_daily=("time", dhw_vals),
+            # Annual DHW metrics (already used by current panel)
             dhw_max_year=("year", [float(dhw_max_year.get(y, np.nan)) for y in years]),
             dhw_ge4_days_year=(
                 "year",
@@ -580,6 +589,7 @@ def write_ocean_cache(
         ),
         coords=dict(
             year=("year", np.asarray(years, dtype=np.int32)),
+            time=("time", dhw_time),
         ),
         attrs=dict(
             slug=slug,
@@ -684,6 +694,7 @@ def main() -> None:
             end_date=sst_end,
             sst_anom_year_c=sst_anom_year_c,
             sst_hotdays_p90_year=sst_hotdays_p90_year,
+            dhw_daily=dhw,
             dhw_max_year=dhw_max_year,
             dhw_ge4_days_year=dhw_ge4_days_year,
             dhw_ge8_days_year=dhw_ge8_days_year,
