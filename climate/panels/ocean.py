@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional, Dict
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
 import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap, Normalize
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from functools import lru_cache
@@ -349,69 +350,80 @@ def build_dhw_data(ctx: StoryContext) -> dict:
     }
 
 
-def build_dhw_figure(
-    ctx: StoryContext, facts: StoryFacts, data: dict
-) -> Tuple[go.Figure, str]:
+def _build_dhw_bars(
+    *,
+    x: np.ndarray,
+    y_ok: np.ndarray,
+    y_mod: np.ndarray,
+    y8: np.ndarray,
+) -> go.Figure:
     fig = go.Figure()
-
-    x = data["dhw_ge4_days"].index.values
-
-    y4 = data["dhw_ge4_days"].astype("float64").values
-    y8 = data["dhw_ge8_days"].astype("float64").values
-    y_max = data["dhw_max"].astype("float64").values
-
-    # Moderate-only (avoid double-counting)
-    y_mod = y4 - y8
-    y_mod = np.clip(y_mod, 0, None)
-
-    # No-risk days (fill to 365 for strong visual)
-    y_ok = 365.0 - y4
-    y_ok = np.clip(y_ok, 0, 365)
-
     fig.add_trace(
         go.Bar(
             x=x,
             y=y_ok,
             name="No risk (< 4)",
             marker=dict(color="#88E788"),
-            customdata=y_max,
-            hovertemplate="Year %{x}<br>No risk: %{y:.0f}<br>Max DHW: %{customdata:.2f}<extra></extra>",
+            hovertemplate="Year=%{x}<br>No risk days=%{y:.0f}<extra></extra>",
         )
     )
-
     fig.add_trace(
         go.Bar(
             x=x,
             y=y_mod,
             name="Moderate (4–8)",
-            marker=dict(color="#FFAD00"),
-            customdata=y_max,
-            hovertemplate="Year %{x}<br>Moderate (4–8): %{y:.0f}<br>Max DHW: %{customdata:.2f}<extra></extra>",
+            marker=dict(color="#FFD166"),
+            hovertemplate="Year=%{x}<br>Moderate days=%{y:.0f}<extra></extra>",
         )
     )
-
     fig.add_trace(
         go.Bar(
             x=x,
             y=y8,
-            name="Severe (≥ 8)",
-            marker=dict(color="#F01E2C"),
-            customdata=y_max,
-            hovertemplate="Year %{x}<br>Severe (≥ 8): %{y:.0f}<br>Max DHW: %{customdata:.2f}<extra></extra>",
+            name="High (≥ 8)",
+            marker=dict(color="#EF476F"),
+            hovertemplate="Year=%{x}<br>High days=%{y:.0f}<extra></extra>",
         )
     )
+    return fig
+
+
+def _dhw_tiny(data: dict) -> str:
+    box_deg = data.get("box_deg", 0.05)
+    return (
+        f"Source: NOAA Coral Reef Watch DHW (daily) via ERDDAP | "
+        f"Box mean: ±{box_deg:.2f}° | Thresholds: 4 and 8"
+    )
+
+
+def build_dhw_figure(
+    ctx: StoryContext, facts: StoryFacts, data: dict
+) -> Tuple[go.Figure, str]:
+    """
+    Bars-only DHW panel (default view).
+    """
+    x = data["dhw_ge4_days"].index.values
+
+    y4 = data["dhw_ge4_days"].astype("float64").values
+    y8 = data["dhw_ge8_days"].astype("float64").values
+
+    # Moderate-only (avoid double-counting)
+    y_mod = np.clip(y4 - y8, 0, None)
+
+    # No-risk days (fill to 365 for strong visual)
+    y_ok = np.clip(365.0 - y4, 0, 365)
+
+    fig = _build_dhw_bars(x=x, y_ok=y_ok, y_mod=y_mod, y8=y8)
 
     fig.update_layout(
-        width=1350,
-        height=350,
-        margin=dict(l=70, r=30, t=30, b=30),
-        showlegend=True,
         barmode="stack",
-        xaxis=dict(
-            title="Year",
-            showgrid=True,
-            gridcolor="rgba(200,200,200,0.3)",
-        ),
+        title=f"Heat stress days per year — {ctx.location_label}",
+        height=560,
+        margin=dict(l=60, r=40, t=80, b=60),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        xaxis=dict(title="Year", showgrid=False),
         yaxis=dict(
             title="Days / year",
             range=[0, 365],
@@ -421,9 +433,218 @@ def build_dhw_figure(
         ),
     )
 
-    box_deg = data.get("box_deg", 0.05)
-    tiny = f"Source: NOAA Coral Reef Watch DHW (daily) via ERDDAP | Box mean: ±{box_deg:.2f}° | Thresholds: 4 and 8"
-    return fig, tiny
+    return fig, _dhw_tiny(data)
+
+
+def build_dhw_figure_with_trend(
+    ctx: StoryContext, facts: StoryFacts, data: dict
+) -> Tuple[go.Figure, str]:
+    """
+    Dual-axis variant (bars + annual max DHW line).
+    """
+    x = data["dhw_ge4_days"].index.values
+
+    y4 = data["dhw_ge4_days"].astype("float64").values
+    y8 = data["dhw_ge8_days"].astype("float64").values
+    y_max = data["dhw_max"].astype("float64").values
+
+    y_mod = np.clip(y4 - y8, 0, None)
+    y_ok = np.clip(365.0 - y4, 0, 365)
+
+    fig = _build_dhw_bars(x=x, y_ok=y_ok, y_mod=y_mod, y8=y8)
+
+    # Overlay: annual max DHW line (right axis)
+    fig.add_trace(
+        go.Scatter(
+            x=x,
+            y=y_max,
+            name="Max DHW",
+            mode="lines",
+            line=dict(color="white", width=2),
+            yaxis="y2",
+            hovertemplate="Year=%{x}<br>Max DHW=%{y:.2f}<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        barmode="stack",
+        title=f"Heat stress days per year — {ctx.location_label}",
+        height=560,
+        margin=dict(l=60, r=60, t=80, b=60),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        xaxis=dict(title="Year", showgrid=False),
+        yaxis=dict(
+            title="Days / year",
+            range=[0, 365],
+            zeroline=False,
+            showgrid=True,
+            gridcolor="rgba(200,200,200,0.3)",
+        ),
+        yaxis2=dict(
+            title="Max DHW",
+            overlaying="y",
+            side="right",
+            showgrid=False,
+            rangemode="tozero",
+        ),
+    )
+
+    return fig, _dhw_tiny(data)
+
+
+# --------------------------------------------------------------------------------------
+# DHW daily heatmap (Design 2)
+# --------------------------------------------------------------------------------------
+
+
+def _dhw_heatmap_cmap() -> LinearSegmentedColormap:
+    # Green -> Yellow -> Orange -> Red
+    return LinearSegmentedColormap.from_list(
+        "dhw_gyr",
+        [
+            (0.00, "#2e7d32"),  # green
+            (0.35, "#cddc39"),  # yellow-green
+            (0.55, "#ffeb3b"),  # yellow
+            (0.75, "#ff9800"),  # orange
+            (1.00, "#d32f2f"),  # red
+        ],
+    )
+
+
+class _JumpNorm(Normalize):
+    """
+    Piecewise linear normalization with visible 'jumps' at 4 and 8 DHW.
+
+      0..4   -> 0.00..0.45
+      4..8   -> 0.55..0.80   (gap => jump at 4)
+      8..16  -> 0.86..1.00   (gap => jump at 8)
+    """
+
+    def __init__(self, vmin: float = 0.0, vmax: float = 16.0, clip: bool = False):
+        super().__init__(vmin=vmin, vmax=vmax, clip=clip)
+
+    def __call__(self, value, clip=None):
+        v = np.asarray(value, dtype=float)
+        v = np.clip(v, self.vmin, self.vmax)
+
+        out = np.empty_like(v, dtype=float)
+
+        m1 = v <= 4.0
+        out[m1] = 0.00 + (v[m1] / 4.0) * 0.45
+
+        m2 = (v > 4.0) & (v <= 8.0)
+        out[m2] = 0.55 + ((v[m2] - 4.0) / 4.0) * (0.80 - 0.55)
+
+        m3 = v > 8.0
+        out[m3] = 0.86 + ((v[m3] - 8.0) / 8.0) * (1.00 - 0.86)
+
+        return out
+
+
+def _find_dhw_daily_var(ds: xr.Dataset) -> Optional[str]:
+    if "dhw_daily" in ds:
+        return "dhw_daily"
+    if "degree_heating_week" in ds and "time" in ds["degree_heating_week"].dims:
+        return "degree_heating_week"
+
+    for name, da in ds.data_vars.items():
+        if "time" in da.dims and ("dhw" in name.lower() or "heating" in name.lower()):
+            return name
+    return None
+
+
+def _build_dhw_daily_matrix(ds: xr.Dataset) -> Optional[Dict[str, object]]:
+    var = _find_dhw_daily_var(ds)
+    if var is None:
+        return None
+
+    da = ds[var]
+    if "time" not in da.dims:
+        return None
+
+    t = pd.DatetimeIndex(da["time"].values)
+    s = pd.Series(da.values.astype("float32"), index=t).sort_index()
+
+    # Drop Feb 29 (keep 365-day matrix)
+    s = s[~((s.index.month == 2) & (s.index.day == 29))]
+
+    years = np.arange(int(s.index.year.min()), int(s.index.year.max()) + 1, dtype=int)
+    mat = np.full((len(years), 365), np.nan, dtype=np.float32)
+
+    for yi, y in enumerate(years):
+        sy = s[s.index.year == y]
+        if sy.empty:
+            continue
+
+        doy = sy.index.dayofyear.values.astype(int)
+        if pd.Timestamp(f"{y}-12-31").is_leap_year:
+            doy = doy.copy()
+            doy[doy > 59] -= 1  # shift after Feb 28 back by 1
+
+        mask = (doy >= 1) & (doy <= 365)
+        mat[yi, doy[mask] - 1] = sy.values[mask]
+
+    return {"years": years, "mat": mat, "var": var}
+
+
+def build_dhw_heatmap_figure(
+    ctx: StoryContext,
+    facts: StoryFacts,
+    data: dict,
+    *,
+    vmax: float = 16.0,
+    use_threshold_jumps: bool = True,
+    with_axes: bool = True,
+    transparent: bool = True,
+) -> Tuple[Optional[plt.Figure], str]:
+    """
+    Design 2 heatmap: years on Y, day-of-year on X.
+
+    Returns (fig_or_None, tiny).
+    """
+    ds = _open_ocean_cache(ctx.slug)
+    if ds is None:
+        return None, _dhw_tiny(data)
+
+    m = _build_dhw_daily_matrix(ds)
+    if not m:
+        return None, _dhw_tiny(data)
+
+    years = m["years"]
+    mat = m["mat"]
+
+    cmap = _dhw_heatmap_cmap()
+    norm = (
+        _JumpNorm(vmin=0.0, vmax=vmax)
+        if use_threshold_jumps
+        else Normalize(vmin=0.0, vmax=vmax)
+    )
+
+    fig = plt.figure(figsize=(12.5, 5.2))
+    ax = fig.add_axes([0.06, 0.12, 0.88, 0.80])
+    ax.imshow(mat, aspect="auto", interpolation="nearest", cmap=cmap, norm=norm)
+
+    if transparent:
+        fig.patch.set_alpha(0.0)
+        ax.set_facecolor("none")
+
+    if with_axes:
+        ax.set_title(f"DHW daily heatmap — {ctx.location_label}", fontsize=12, pad=10)
+        ax.set_ylabel("Year")
+        ax.set_xlabel("Day of year")
+
+        yt = np.linspace(0, len(years) - 1, 9).round().astype(int)
+        ax.set_yticks(yt)
+        ax.set_yticklabels(years[yt])
+
+        ax.set_xticks([0, 59, 120, 181, 243, 304, 364])
+        ax.set_xticklabels(["Jan", "Mar", "May", "Jul", "Sep", "Nov", "Dec"])
+    else:
+        ax.set_axis_off()
+
+    return fig, _dhw_tiny(data)
 
 
 def build_ocean_context_map_figure(ctx: StoryContext, facts: StoryFacts, data: dict):
