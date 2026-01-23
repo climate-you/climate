@@ -47,7 +47,7 @@ function panelAssetUrl(
 }
 
 function VariantIcon({ icon }: { icon?: "curve" | "heatmap" }) {
-  const cls = "h-4 w-4";
+  const cls = "h-5 w-5";
   if (icon === "curve")
     return <TrendingUp className={cls} aria-hidden="true" />;
   if (icon === "heatmap") return <Grid3x3 className={cls} aria-hidden="true" />;
@@ -149,7 +149,8 @@ export default function ManifestSlide({
               key={`${c.panel}-${i}`}
               onClick={() => onChange(i)}
               className={[
-                "h-8 w-9 rounded-lg border text-base",
+                "h-8 w-9 rounded-lg border p-0",
+                "inline-flex items-center justify-center", // ✅ center the icon
                 active
                   ? "border-neutral-400 bg-white dark:border-neutral-500 dark:bg-neutral-800"
                   : "border-transparent hover:border-neutral-300 hover:bg-white/70 dark:hover:border-neutral-700 dark:hover:bg-neutral-800/70",
