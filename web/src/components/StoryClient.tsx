@@ -21,7 +21,6 @@ import WarmingGlobePanel from "@/components/panels/WarmingGlobePanel";
 import ManifestSlide, {
   type ManifestSlideDef,
 } from "@/components/panels/ManifestSlide";
-import PanelFigure from "@/components/PanelFigure";
 import LeftSvg from "@/components/LeftSvg";
 
 type Phase = "landing" | "flying" | "arrived";
