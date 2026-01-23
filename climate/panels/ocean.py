@@ -416,10 +416,10 @@ def build_dhw_figure(
     fig = _build_dhw_bars(x=x, y_ok=y_ok, y_mod=y_mod, y8=y8)
 
     fig.update_layout(
+        width=1350,
+        height=510,
+        margin=dict(l=50, r=30, t=80, b=30),
         barmode="stack",
-        title=f"Heat stress days per year — {ctx.location_label}",
-        height=560,
-        margin=dict(l=60, r=40, t=80, b=60),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
@@ -467,10 +467,10 @@ def build_dhw_figure_with_trend(
     )
 
     fig.update_layout(
+        width=1350,
+        height=510,
+        margin=dict(l=50, r=30, t=80, b=30),
         barmode="stack",
-        title=f"Heat stress days per year — {ctx.location_label}",
-        height=560,
-        margin=dict(l=60, r=60, t=80, b=60),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
