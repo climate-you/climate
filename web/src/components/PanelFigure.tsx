@@ -3,7 +3,17 @@
 import { useEffect, useMemo, useRef } from "react";
 
 type PanelFigureProps = {
-  svg: string | null;
+  /**
+   * Inline SVG markup string (Plotly-exported SVG). If provided, we inject it.
+   */
+  svg?: string | null;
+
+  /**
+   * Raster image asset URL (e.g. webp heatmap). If provided, we render <img>.
+   */
+  imgSrc?: string | null;
+  imgAlt?: string;
+
   className?: string;
 
   animate?: "draw";
@@ -329,7 +339,9 @@ function applyPlotlySvgDarkFix(svgEl: SVGSVGElement) {
 }
 
 export default function PanelFigure({
-  svg,
+  svg = null,
+  imgSrc = null,
+  imgAlt = "",
   className,
   animate,
   drawMs = 2400,
@@ -348,8 +360,11 @@ export default function PanelFigure({
 
   const reduced = useMemo(() => prefersReducedMotion(), []);
 
+  const usingImg = !!imgSrc;
+
   // Inject SVG (+ apply dark background fix immediately)
   useEffect(() => {
+    if (usingImg) return; // <img> mode, no injection
     const host = hostRef.current;
     if (!host) return;
 
@@ -362,10 +377,11 @@ export default function PanelFigure({
       lastSvgRef.current = svg;
       hasPlayedRef.current = false;
     }
-  }, [svg]);
+  }, [svg, usingImg]);
 
   // Re-apply dark SVG fix when theme toggles (so you don't need to reload SVG)
   useEffect(() => {
+    if (usingImg) return;
     const host = hostRef.current;
     if (!host) return;
 
@@ -380,10 +396,11 @@ export default function PanelFigure({
       attributeFilter: ["class"],
     });
     return () => obs.disconnect();
-  }, []);
+  }, [usingImg]);
 
   // Pre-arm on inject: hide markers + hide annotations + arm masks so nothing "leaks"
   useEffect(() => {
+    if (usingImg) return;
     if (animate !== "draw") return;
     if (!svg) return;
     if (reduced) return;
@@ -422,10 +439,11 @@ export default function PanelFigure({
     // Flush
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     svgEl.getBoundingClientRect();
-  }, [svg, animate, reduced, annotationsSelector]);
+  }, [svg, animate, reduced, annotationsSelector, usingImg]);
 
   // Animate when visible
   useEffect(() => {
+    if (usingImg) return;
     if (animate !== "draw") return;
     if (!svg) return;
     if (reduced) return;
@@ -570,7 +588,20 @@ export default function PanelFigure({
     timingFunction,
     annotationsSelector,
     onDrawComplete,
+    usingImg,
   ]);
+
+  if (usingImg) {
+    return (
+      <img
+        src={imgSrc!}
+        alt={imgAlt}
+        className={["panel-figure-img w-full", className]
+          .filter(Boolean)
+          .join(" ")}
+      />
+    );
+  }
 
   return (
     <div
@@ -586,6 +617,12 @@ export function PanelFigureStyles() {
       :global(.panel-figure svg) {
         width: 100% !important;
         height: auto !important;
+        display: block;
+      }
+
+      :global(.panel-figure-img) {
+        width: 100%;
+        height: auto;
         display: block;
       }
 
