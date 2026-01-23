@@ -6,6 +6,7 @@ from datetime import date  # , datetime, timedelta
 import folium
 
 import pandas as pd
+import matplotlib.pyplot as plt
 
 # streamlit
 import streamlit as st
@@ -573,6 +574,7 @@ Once `climate/panels/ocean.py` exists, this section will render the real figures
                     if fig_hm is not None:
                         st.pyplot(fig_hm, clear_figure=False)
                         st.caption(tiny_hm)
+                        plt.close(fig_hm)
                     else:
                         st.info("Daily DHW not available for heatmap yet.")
 
