@@ -59,6 +59,7 @@ from climate.panels.ocean import (
     build_dhw_heatmap_figure,
     dhw_caption,
     build_ocean_context_map_figure,
+    build_ocean_sst_map_figure,
 )
 
 
@@ -274,7 +275,10 @@ def build_story_manifest_v1(slug: str, *, has_ocean: bool) -> dict:
                         {"panel": "ocean_sst_anom", "kind": "svg", "animate": True}
                     ],
                     "caption_panel": "ocean_sst_anom",
-                    "left": {"kind": "svg", "asset": "maps/ocean_sst_map.svg"},
+                    "left": {
+                        "kind": "svg",
+                        "asset": "maps/ocean_sst_map.{unit}.svg",
+                    },
                 },
                 {
                     "id": "ocean_sst_hotdays",
@@ -283,7 +287,10 @@ def build_story_manifest_v1(slug: str, *, has_ocean: bool) -> dict:
                         {"panel": "ocean_sst_hotdays", "kind": "svg", "animate": False}
                     ],
                     "caption_panel": "ocean_sst_hotdays",
-                    "left": {"kind": "svg", "asset": "maps/ocean_sst_map.svg"},
+                    "left": {
+                        "kind": "svg",
+                        "asset": "maps/ocean_sst_map.{unit}.svg",
+                    },
                 },
                 {
                     "id": "ocean_dhw",
@@ -308,7 +315,10 @@ def build_story_manifest_v1(slug: str, *, has_ocean: bool) -> dict:
                         }
                     ],
                     "caption_panel": "ocean_dhw",
-                    "left": {"kind": "svg", "asset": "maps/ocean_context_map.svg"},
+                    "left": {
+                        "kind": "svg",
+                        "asset": "maps/ocean_context_map.svg",
+                    },
                 },
             ]
         )
@@ -581,6 +591,9 @@ def main() -> None:
                 )
 
             if sst_anom_data is not None:
+                # Ensure maps dir exists
+                (slug_dir / "maps").mkdir(parents=True, exist_ok=True)
+
                 # Map (unit-agnostic): current “context” map (DHW box / coastline context)
                 try:
                     fig_map, tiny = build_ocean_context_map_figure(
@@ -607,6 +620,22 @@ def main() -> None:
                         unit=unit,
                         ds=ds,
                     )
+
+                    # Map (unit-agnostic): SST anomaly map (recent vs baseline)
+                    try:
+                        fig_sst_map, tiny_sst = build_ocean_sst_map_figure(
+                            ctx_u, facts, sst_anom_data
+                        )
+                        if fig_sst_map is not None:
+                            sst_map_path = (
+                                slug_dir / "maps" / f"ocean_sst_map.{unit}.svg"
+                            )
+                            write_matplotlib_svg(sst_map_path, fig_sst_map)
+                            plt.close(fig_sst_map)
+                    except Exception as e:
+                        print(
+                            f"[info] ocean sst map failed for {slug} ({type(e).__name__}: {e})"
+                        )
 
                     # SST anomaly
                     fig, tiny = build_sst_anom_figure(ctx_u, facts, sst_anom_data)

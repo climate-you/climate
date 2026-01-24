@@ -747,6 +747,140 @@ def build_ocean_context_map_figure(ctx: StoryContext, facts: StoryFacts, data: d
     return fig, tiny
 
 
+def build_ocean_sst_map_figure(ctx: StoryContext, facts: StoryFacts, data: dict):
+    """
+    Unit-agnostic SST anomaly map (Matplotlib + Cartopy), built from cached gridded data
+    stored in data/story_ocean/ocean_<slug>.nc.
+
+    Requires variables:
+      - sst_map_recent_anom_c (sst_lat, sst_lon)
+      - coords: sst_lat, sst_lon
+    """
+    ds = _open_ocean_cache(ctx.slug)
+    if ds is None or "sst_map_recent_anom_c" not in ds:
+        return None, ""
+
+    if "sst_lat" not in ds.coords or "sst_lon" not in ds.coords:
+        return None, ""
+
+    lat = float(ctx.location_lat)
+    lon = float(ctx.location_lon)
+
+    # Quick iteration knobs (plot-time crop, no re-fetch needed)
+    # Using "cells" avoids the "mask < 2 points" problem when cached grid is coarse.
+    SST_MAP_HALF_CELLS = 2  # 3 => (2*3+1)=7 cells across; try 2,3,4,6
+
+    lats = ds["sst_lat"].values.astype("float64")
+    lons = ds["sst_lon"].values.astype("float64")
+    anom = ds["sst_map_recent_anom_c"].values.astype("float64")
+
+    # Find nearest grid index to the city and take a window of cells around it
+    i0 = int(np.nanargmin(np.abs(lats - lat)))
+    j0 = int(np.nanargmin(np.abs(lons - lon)))
+
+    i_min = max(0, i0 - SST_MAP_HALF_CELLS)
+    i_max = min(len(lats), i0 + SST_MAP_HALF_CELLS + 1)
+    j_min = max(0, j0 - SST_MAP_HALF_CELLS)
+    j_max = min(len(lons), j0 + SST_MAP_HALF_CELLS + 1)
+
+    lats = lats[i_min:i_max]
+    lons = lons[j_min:j_max]
+    anom = anom[i_min:i_max, j_min:j_max]
+
+    lon0, lon1 = float(np.nanmin(lons)), float(np.nanmax(lons))
+    lat0, lat1 = float(np.nanmin(lats)), float(np.nanmax(lats))
+
+    v = anom[np.isfinite(anom)]
+    if v.size == 0:
+        return None, ""
+
+    vmax = float(np.nanpercentile(np.abs(v), 95))
+    vmax = max(0.25, vmax)
+
+    fig = plt.figure(figsize=(5.2, 5.2), dpi=150)
+    ax = plt.axes(projection=ccrs.Mercator())
+    ax.set_extent([lon0, lon1, lat0, lat1], crs=ccrs.PlateCarree())
+
+    ax.add_feature(
+        cfeature.OCEAN.with_scale("10m"),
+        facecolor=(214 / 255, 230 / 255, 245 / 255),
+        edgecolor="none",
+        zorder=0,
+    )
+
+    # Field first
+    mesh = ax.pcolormesh(
+        lons,
+        lats,
+        anom,
+        transform=ccrs.PlateCarree(),
+        shading="auto",
+        cmap="RdBu_r",
+        vmin=-vmax,
+        vmax=vmax,
+        zorder=1,
+    )
+    # Then land on top to visually mask inland pixels
+    ax.add_feature(
+        cfeature.LAND.with_scale("10m"),
+        facecolor=(0.92, 0.92, 0.92, 1.0),
+        edgecolor="none",
+        zorder=2,
+    )
+    # Coastlines on top
+    ax.coastlines(
+        resolution="10m", color=(0.25, 0.25, 0.25, 1.0), linewidth=1.0, zorder=3
+    )
+
+    ax.scatter(
+        [lon],
+        [lat],
+        transform=ccrs.PlateCarree(),
+        s=28,
+        color=(0.1, 0.1, 0.1, 0.95),
+        zorder=4,
+    )
+
+    b0 = ds.attrs.get("sst_map_baseline_start", "1981-01-01")
+    b1 = ds.attrs.get("sst_map_baseline_end", "2010-12-31")
+    r0 = ds.attrs.get("sst_map_recent_start", "2016-01-01")
+    r1 = ds.attrs.get("sst_map_recent_end", "")
+
+    title = (
+        f"SST anomaly ({fmt_unit(ctx.unit)})\n{r0}–{r1} vs {b0}–{b1}"
+        if r1
+        else f"SST anomaly ({fmt_unit(ctx.unit)})\n{r0}–… vs {b0}–{b1}"
+    )
+
+    # Put this in the left margin (acts like a legend block)
+    fig.text(
+        0.04,
+        0.915,
+        title,
+        ha="left",
+        va="top",
+        fontsize=10,
+        bbox=dict(
+            facecolor="white", edgecolor="none", alpha=0.85, boxstyle="round,pad=0.35"
+        ),
+    )
+
+    # Reserve right margin for the colorbar (tight_layout() fights manual cax placement)
+    ax.set_axis_off()
+    fig.subplots_adjust(left=0.02, right=0.84, top=0.98, bottom=0.02)
+
+    # Colorbar further to the right
+    cax = fig.add_axes([0.87, 0.18, 0.04, 0.64])
+    cax.set_facecolor("white")
+
+    cb = fig.colorbar(mesh, cax=cax)
+    cb.ax.tick_params(labelsize=9, colors="black")
+    cb.outline.set_edgecolor("black")
+
+    tiny = "SST anomaly map: NOAA OISST v2.1 via ERDDAP (sampled) | recent mean minus baseline mean"
+    return fig, tiny
+
+
 def dhw_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
     max_85_94 = data.get("dhw_max_85_94", None)
     max_16_25 = data.get("dhw_max_16_25", None)

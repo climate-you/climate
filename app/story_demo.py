@@ -502,41 +502,87 @@ Once `climate/panels/ocean.py` exists, this section will render the real figures
             build_dhw_heatmap_figure,
             dhw_caption,
             build_ocean_context_map_figure,
+            build_ocean_sst_map_figure,
         )
 
+        # Build all data
         sst_anom_data = build_sst_anom_data(ctx)
         sst_hot_data = build_sst_hotdays_data(ctx)
         dhw_data = build_dhw_data(ctx)
 
+        # Build all maps
+        fig_sst_map, tiny_sst_map = build_ocean_sst_map_figure(ctx, facts, sst_hot_data)
+        if fig_sst_map is None:
+            tiny_sst_map = "SST anomaly map not available"
+        fig_dhw_map, tiny_dhw_map = build_ocean_context_map_figure(ctx, facts, dhw_data)
+        if tiny_dhw_map is None:
+            tiny_dhw_map = "DHW data not available for this location yet."
+
+        def _show_map_graph(
+            header, fig_left, tiny_left, fig_right, tiny_right, caption_right
+        ):
+            col_map, col_right = st.columns([1, 4], gap="large")
+            with col_map:
+                if fig_left:
+                    st.pyplot(fig_left, clear_figure=False)
+                st.caption(tiny_left)
+
+            with col_right:
+                st.subheader(header)
+                if fig_right:
+                    st.plotly_chart(
+                        fig, width="stretch", config={"displayModeBar": False}
+                    )
+                    st.caption(tiny_right)
+                    st.markdown(caption_right)
+                else:
+                    st.caption(tiny_right)
+
+        # -------------------------
+        # 1) SST anomaly
+        if sst_anom_data:
+            fig, tiny = build_sst_anom_figure(ctx, facts, sst_anom_data)
+            caption = sst_anom_caption(ctx, facts, sst_anom_data)
+        else:
+            fig = None
+            tiny = "SST anomaly data not available for this location yet."
+            caption = ""
+        _show_map_graph(
+            "Sea surface temperature anomaly",
+            fig_sst_map,
+            tiny_sst_map,
+            fig,
+            tiny,
+            caption,
+        )
+
+        # -------------------------
+        # 2) SST hot days (baseline P90)
+        if sst_hot_data:
+            fig, tiny = build_sst_hotdays_figure(ctx, facts, sst_hot_data)
+            caption = sst_hotdays_caption(ctx, facts, sst_hot_data)
+        else:
+            fig = None
+            tiny = "SST hot-day data not available for this location yet."
+            caption = ""
+        _show_map_graph(
+            "SST hot days (above baseline P90)",
+            fig_sst_map,
+            tiny_sst_map,
+            fig,
+            tiny,
+            caption,
+        )
+
+        # -------------------------
+        # 3) DHW (coral heat stress)
         col_map, col_right = st.columns([1, 4], gap="large")
         with col_map:
-            fig_map, tiny_map = build_ocean_context_map_figure(ctx, facts, dhw_data)
-            st.pyplot(fig_map, clear_figure=False)
-            st.caption(tiny_map)
+            if fig_dhw_map:
+                st.pyplot(fig_dhw_map, clear_figure=False)
+            st.caption(tiny_dhw_map)
 
         with col_right:
-            # -------------------------
-            # 1) SST anomaly
-            st.subheader("Sea surface temperature anomaly")
-            if sst_anom_data:
-                fig, tiny = build_sst_anom_figure(ctx, facts, sst_anom_data)
-                st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-                st.caption(tiny)
-                st.markdown(sst_anom_caption(ctx, facts, sst_anom_data))
-            else:
-                st.info("SST anomaly data not available for this location yet.")
-
-            # -------------------------
-            # 2) SST hot days (baseline P90)
-            st.subheader("SST hot days (above baseline P90)")
-            if sst_hot_data:
-                fig, tiny = build_sst_hotdays_figure(ctx, facts, sst_hot_data)
-                st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-                st.caption(tiny)
-                st.markdown(sst_hotdays_caption(ctx, facts, sst_hot_data))
-            else:
-                st.info("SST hot-day data not available for this location yet.")
-
             # -------------------------
             # 3) DHW (coral heat stress)
             st.subheader("Coral heat stress (DHW)")

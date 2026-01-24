@@ -99,6 +99,13 @@ BASELINE_END = "2010-12-31"
 # Default DHW box: half-width degrees (=> 0.1° x 0.1° box when 0.05)
 DEFAULT_DHW_BOX_HALF_DEG = 0.05
 
+# SST anomaly map (cached gridded anomaly around the city, for left-side map export)
+DEFAULT_SST_MAP_SPAN_DEG = 5.0
+DEFAULT_SST_MAP_TIME_STRIDE = 30  # ~monthly sampling (daily index stride)
+DEFAULT_SST_MAP_LATLON_STRIDE = 2  # subsample grid
+RECENT_START = "2016-01-01"
+RECENT_CAP_END = "2025-12-31"
+
 # -------------------------
 # Helpers
 # -------------------------
@@ -193,6 +200,9 @@ def build_erddap_griddap_query_from_spec(
     lat1: float,
     lon0: float,
     lon1: float,
+    stride_time: int = 1,
+    stride_lat: int = 1,
+    stride_lon: int = 1,
 ) -> str:
     """
     Build a griddap constraint string in the correct dimension order for the variable,
@@ -210,13 +220,15 @@ def build_erddap_griddap_query_from_spec(
 
     for dim in dims:
         if dim == "time":
-            parts.append(f"[({a_date}T{time_hms}):1:({b_date}T{time_hms})]")
+            parts.append(
+                f"[({a_date}T{time_hms}):{int(stride_time)}:({b_date}T{time_hms})]"
+            )
         elif dim in fixed:
             parts.append(f"[({fixed[dim]})]")
         elif dim in ("latitude", "lat"):
-            parts.append(f"[({lat0}):1:({lat1})]")
+            parts.append(f"[({lat0}):{int(stride_lat)}:({lat1})]")
         elif dim in ("longitude", "lon"):
-            parts.append(f"[({lon0}):1:({lon1})]")
+            parts.append(f"[({lon0}):{int(stride_lon)}:({lon1})]")
         else:
             # If we ever add a dataset with a new dim, we must encode how to constrain it.
             raise RuntimeError(
@@ -447,6 +459,105 @@ def compute_sst_anom_and_hotdays(sst_daily: pd.Series) -> tuple[pd.Series, pd.Se
     return anom_year, hotdays_year
 
 
+def fetch_oisst_grid_sst_mean(
+    lat: float,
+    lon: float,
+    start: str,
+    end: str,
+    *,
+    span_deg: float,
+    stride_time: int,
+    stride_lat: int,
+    stride_lon: int,
+) -> xr.DataArray:
+    """
+    Fetch a small OISST gridded subset around (lat, lon) and return time-mean SST (°C).
+
+    This is used to build a cached left-side SST anomaly map (recent mean minus baseline mean).
+    We intentionally sample coarsely (stride_time, stride_lat/lon) to keep downloads small.
+    """
+    spec = ERDDAP_DATASETS["oisst_sst_v21_daily"]
+    dataset_id = spec["dataset_id"]
+    var = spec["var"]
+
+    lon_pm = _lon_pm180(lon)
+
+    # Clamp to dataset availability
+    start = max(start, spec.get("dataset_start", start))
+
+    lat0, lat1 = lat - span_deg, lat + span_deg
+    lon0, lon1 = lon_pm - span_deg, lon_pm + span_deg
+
+    # Safeguard against invalid ranges
+    lat0 = max(-89.9, float(lat0))
+    lat1 = min(89.9, float(lat1))
+
+    variants = [
+        (lat0, lat1, lon0, lon1),
+        (lat1, lat0, lon0, lon1),
+        (lat0, lat1, lon1, lon0),
+        (lat1, lat0, lon1, lon0),
+    ]
+
+    last_err: Optional[Exception] = None
+
+    for base in OISST_BASES:
+        for la0, la1, lo0, lo1 in variants:
+            query = build_erddap_griddap_query_from_spec(
+                spec,
+                a_date=start,
+                b_date=end,
+                lat0=la0,
+                lat1=la1,
+                lon0=lo0,
+                lon1=lo1,
+                stride_time=stride_time,
+                stride_lat=stride_lat,
+                stride_lon=stride_lon,
+            )
+            url = erddap_griddap_url(base, dataset_id, query, "nc")
+
+            cache_path = (
+                CACHE_DIR
+                / "oisst_grid"
+                / f"oisst_grid_{dataset_id}_{lat:.4f}_{lon:.4f}_span{span_deg:.2f}"
+                / f"{start}_{end}_t{int(stride_time)}_xy{int(stride_lat)}.nc"
+            )
+
+            try:
+                download_to(
+                    url,
+                    cache_path,
+                    retries=6,
+                    timeout=(30, 300),
+                    label=f"[OISST-GRID {start[:4]}]",
+                )
+                ds = xr.open_dataset(cache_path)
+                if var not in ds:
+                    raise RuntimeError(
+                        f"OISST grid nc missing '{var}'. vars={list(ds.data_vars)}"
+                    )
+
+                da = ds[var]
+                # OISST uses zlev; it should be length-1
+                if "zlev" in da.dims:
+                    da = da.isel(zlev=0)
+
+                # Mean over time; keep lat/lon as provided
+                if "time" in da.dims:
+                    da = da.mean("time", skipna=True)
+
+                da = da.load()
+                ds.close()
+                return da
+
+            except Exception as e:
+                last_err = e
+                continue
+
+    raise RuntimeError(f"OISST grid fetch failed for {start}..{end}: {last_err}")
+
+
 # -------------------------
 # CRW DHW fetch + metrics
 # -------------------------
@@ -550,6 +661,10 @@ def write_ocean_cache(
     dhw_ge4_days_year: pd.Series,
     dhw_ge8_days_year: pd.Series,
     dhw_box_half_deg: float,
+    sst_map_baseline_mean_c: xr.DataArray | None = None,
+    sst_map_recent_mean_c: xr.DataArray | None = None,
+    sst_map_recent_anom_c: xr.DataArray | None = None,
+    sst_map_meta: dict | None = None,
 ) -> None:
     years = sorted(
         set(sst_anom_year_c.index.tolist())
@@ -607,6 +722,44 @@ def write_ocean_cache(
         ),
     )
 
+    # Optional cached gridded SST map inputs (for left-side SST anomaly map export)
+    if (
+        sst_map_baseline_mean_c is not None
+        and sst_map_recent_mean_c is not None
+        and sst_map_recent_anom_c is not None
+    ):
+        # Normalize dim names into explicit coords for stable panel code
+        lat_name = "latitude" if "latitude" in sst_map_recent_anom_c.dims else "lat"
+        lon_name = "longitude" if "longitude" in sst_map_recent_anom_c.dims else "lon"
+
+        ds = ds.assign_coords(
+            sst_lat=(
+                "sst_lat",
+                sst_map_recent_anom_c[lat_name].values.astype("float64"),
+            ),
+            sst_lon=(
+                "sst_lon",
+                sst_map_recent_anom_c[lon_name].values.astype("float64"),
+            ),
+        )
+
+        ds["sst_map_baseline_mean_c"] = (
+            ("sst_lat", "sst_lon"),
+            sst_map_baseline_mean_c.values.astype("float64"),
+        )
+        ds["sst_map_recent_mean_c"] = (
+            ("sst_lat", "sst_lon"),
+            sst_map_recent_mean_c.values.astype("float64"),
+        )
+        ds["sst_map_recent_anom_c"] = (
+            ("sst_lat", "sst_lon"),
+            sst_map_recent_anom_c.values.astype("float64"),
+        )
+
+        if sst_map_meta:
+            for k, v in sst_map_meta.items():
+                ds.attrs[f"sst_map_{k}"] = v
+
     # lightweight compression
     enc = {k: {"zlib": True, "complevel": 4} for k in ds.data_vars.keys()}
 
@@ -629,6 +782,14 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--slugs", nargs="*", default=None)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--dhw-box-half-deg", type=float, default=DEFAULT_DHW_BOX_HALF_DEG)
+
+    ap.add_argument("--sst-map-span-deg", type=float, default=DEFAULT_SST_MAP_SPAN_DEG)
+    ap.add_argument(
+        "--sst-map-time-stride", type=int, default=DEFAULT_SST_MAP_TIME_STRIDE
+    )
+    ap.add_argument(
+        "--sst-map-latlon-stride", type=int, default=DEFAULT_SST_MAP_LATLON_STRIDE
+    )
     return ap.parse_args()
 
 
@@ -675,6 +836,43 @@ def main() -> None:
         sst = fetch_oisst_daily_sst_point(lat, lon, BASELINE_START, sst_end)
         sst_anom_year_c, sst_hotdays_p90_year = compute_sst_anom_and_hotdays(sst)
 
+        # Cached SST anomaly map (regional gridded mean, sampled)
+        recent_end = min(pd.Timestamp(sst_end), pd.Timestamp(RECENT_CAP_END)).strftime(
+            "%Y-%m-%d"
+        )
+
+        sst_map_baseline = fetch_oisst_grid_sst_mean(
+            lat,
+            lon,
+            BASELINE_START,
+            BASELINE_END,
+            span_deg=float(args.sst_map_span_deg),
+            stride_time=int(args.sst_map_time_stride),
+            stride_lat=int(args.sst_map_latlon_stride),
+            stride_lon=int(args.sst_map_latlon_stride),
+        )
+        sst_map_recent = fetch_oisst_grid_sst_mean(
+            lat,
+            lon,
+            RECENT_START,
+            recent_end,
+            span_deg=float(args.sst_map_span_deg),
+            stride_time=int(args.sst_map_time_stride),
+            stride_lat=int(args.sst_map_latlon_stride),
+            stride_lon=int(args.sst_map_latlon_stride),
+        )
+        sst_map_anom = sst_map_recent - sst_map_baseline
+
+        sst_map_meta = dict(
+            span_deg=float(args.sst_map_span_deg),
+            baseline_start=BASELINE_START,
+            baseline_end=BASELINE_END,
+            recent_start=RECENT_START,
+            recent_end=str(recent_end),
+            stride_time=int(args.sst_map_time_stride),
+            stride_latlon=int(args.sst_map_latlon_stride),
+        )
+
         # DHW
         dhw_end = sst_end
         dhw = fetch_crw_dhw_box_mean(
@@ -699,6 +897,10 @@ def main() -> None:
             dhw_ge4_days_year=dhw_ge4_days_year,
             dhw_ge8_days_year=dhw_ge8_days_year,
             dhw_box_half_deg=args.dhw_box_half_deg,
+            sst_map_baseline_mean_c=sst_map_baseline,
+            sst_map_recent_mean_c=sst_map_recent,
+            sst_map_recent_anom_c=sst_map_anom,
+            sst_map_meta=sst_map_meta,
         )
 
         print(f"[ok] wrote {out_path}")
