@@ -590,7 +590,7 @@ def main() -> None:
                     f"[info] ocean cache unavailable for {slug}; skipping ocean exports ({type(e).__name__}: {e})"
                 )
 
-            if sst_anom_data is not None:
+            if sst_anom_data:
                 # Ensure maps dir exists
                 (slug_dir / "maps").mkdir(parents=True, exist_ok=True)
 
