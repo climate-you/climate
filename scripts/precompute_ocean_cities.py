@@ -100,7 +100,7 @@ BASELINE_END = "2010-12-31"
 DEFAULT_DHW_BOX_HALF_DEG = 0.05
 
 # SST anomaly map (cached gridded anomaly around the city, for left-side map export)
-DEFAULT_SST_MAP_SPAN_DEG = 5.0
+DEFAULT_SST_MAP_SPAN_DEG = 1.5
 DEFAULT_SST_MAP_TIME_STRIDE = 30  # ~monthly sampling (daily index stride)
 DEFAULT_SST_MAP_LATLON_STRIDE = 2  # subsample grid
 RECENT_START = "2016-01-01"
