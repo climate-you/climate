@@ -8,3 +8,4 @@ data/mc/*
 data/cache/*
 data/spike_phase1_outputs/*
 web/public/data/*
+web/package-lock.json
