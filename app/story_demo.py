@@ -51,6 +51,9 @@ from climate.panels.world import (
     build_you_vs_world_data,
     build_you_vs_world_figures,
     you_vs_world_caption,
+    build_t2m_annual_anom_data,
+    build_t2m_annual_anom_figure,
+    t2m_annual_anom_caption,
 )
 from climate.panels.worldmap import (
     build_world_map_data,
@@ -457,6 +460,15 @@ if step == "You vs the world":
         st.plotly_chart(fig_global, width="stretch", config={"displayModeBar": False})
     st.caption(tiny)
     st.markdown(you_vs_world_caption(ctx, facts, data))
+
+    # ################################################################################
+    # 3B. Annual mean T2M anomaly vs 1981–1991 + trend
+    st.header("4. Annual mean anomaly (1981–1991 baseline)")
+    data2 = build_t2m_annual_anom_data(ctx)
+    fig2, tiny2 = build_t2m_annual_anom_figure(ctx, facts, data2)
+    st.plotly_chart(fig2, width="stretch", config={"displayModeBar": False})
+    st.caption(tiny2)
+    st.markdown(t2m_annual_anom_caption(ctx, facts, data2))
     # ################################################################################
 
 # -----------------------------------------------------------

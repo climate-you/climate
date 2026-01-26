@@ -18,6 +18,12 @@ from climate.models import StoryContext, StoryFacts
 from climate.panels.helpers import add_trace, add_mean_trace
 from climate.units import fmt_delta, convert_delta, fmt_unit
 
+BASELINE_START = 1981
+BASELINE_END = 1991
+
+RECENT_YEARS_START = 2016
+RECENT_YEARS_END = 2025
+
 # --------------------------------------------------------------------------------------
 # Cache helpers
 # --------------------------------------------------------------------------------------
@@ -63,8 +69,8 @@ def build_sst_anom_data(ctx: StoryContext) -> dict:
     anom_5y = anom_year.rolling(window=5, center=True, min_periods=2).mean()
     anom_5y.name = "sst_anom_5y_c"
 
-    baseline_years = (anom_year.index >= 1981) & (anom_year.index <= 1990)
-    recent_years = (anom_year.index >= 2016) & (anom_year.index <= 2025)
+    baseline_years = (anom_year.index >= BASELINE_START) & (anom_year.index <= BASELINE_END)
+    recent_years = (anom_year.index >= RECENT_YEARS_START) & (anom_year.index <= RECENT_YEARS_END)
     mean_81_90 = (
         float(np.nanmean(anom_year.loc[baseline_years].values))
         if baseline_years.any()
@@ -152,7 +158,7 @@ def build_sst_anom_figure(
         ),
     )
 
-    tiny = "Source: NOAA OISST v2.1 (daily) via ERDDAP | Baseline: 1981–2010"
+    tiny = f"Source: NOAA OISST v2.1 (daily) via ERDDAP | Baseline: {BASELINE_START}–{BASELINE_END}"
     return fig, tiny
 
 
@@ -165,13 +171,13 @@ def sst_anom_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
         delta = mean_16_25 - mean_81_90
         sign = "higher" if delta >= 0 else "lower"
         extra = (
-            f"\n\nCompared to the 1980s, the 2016–2025 average sea-surface temperature "
+            f"\n\nCompared to the 1980s, the {RECENT_YEARS_START}–{RECENT_YEARS_END} average sea-surface temperature "
             f"here is about **{fmt_delta(delta, ctx.unit, sign=False)} {sign}**."
         )
 
     return (
         "This chart shows **sea surface temperature (SST) anomaly** near this location, "
-        "relative to a **1981–2010** baseline. Even small-looking shifts in the mean can "
+        f"relative to a **{BASELINE_START}–{BASELINE_END}** baseline. Even small-looking shifts in the mean can "
         "translate into **much more frequent heat stress** for coral ecosystems."
         + extra
     )
@@ -196,8 +202,8 @@ def build_sst_hotdays_data(ctx: StoryContext) -> dict:
     hot_5y = hot_days_year.rolling(window=5, center=True, min_periods=2).mean()
     hot_5y.name = "sst_hotdays_5y"
 
-    baseline_years = (hot_days_year.index >= 1981) & (hot_days_year.index <= 1990)
-    recent_years = (hot_days_year.index >= 2016) & (hot_days_year.index <= 2025)
+    baseline_years = (hot_days_year.index >= BASELINE_START) & (hot_days_year.index <= BASELINE_END)
+    recent_years = (hot_days_year.index >= RECENT_YEARS_START) & (hot_days_year.index <= RECENT_YEARS_END)
     mean_81_90 = (
         float(np.nanmean(hot_days_year.loc[baseline_years].values))
         if baseline_years.any()
@@ -266,7 +272,7 @@ def build_sst_hotdays_figure(
         ),
     )
 
-    tiny = "Source: NOAA OISST v2.1 (daily) via ERDDAP | Hot day threshold: baseline P90 (1981–2010)"
+    tiny = f"Source: NOAA OISST v2.1 (daily) via ERDDAP | Hot day threshold: baseline P90 ({BASELINE_START}–{BASELINE_END})"
     return fig, tiny
 
 
@@ -278,13 +284,13 @@ def sst_hotdays_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str
     if (mean_81_90 is not None) and (mean_16_25 is not None):
         extra = (
             f"\n\nIn the 1980s this location averaged about **{mean_81_90:.1f}** hot days/year. "
-            f"From 2016–2025 it’s closer to **{mean_16_25:.1f}** hot days/year."
+            f"From {RECENT_YEARS_START}–{RECENT_YEARS_END} it’s closer to **{mean_16_25:.1f}** hot days/year."
         )
 
     return (
         "Averages don’t tell the whole story: ecosystems respond strongly to **extreme days**.\n\n"
         "This chart counts **SST ‘hot days’**: days when the ocean is warmer than the **90th percentile** "
-        "of the 1981–2010 baseline for the same time of year." + extra
+        f"of the {BASELINE_START}–{BASELINE_END} baseline for the same time of year." + extra
     )
 
 
@@ -320,8 +326,8 @@ def build_dhw_data(ctx: StoryContext) -> dict:
     dhw_ge4.name = "dhw_ge4_days_year"
     dhw_ge8.name = "dhw_ge8_days_year"
 
-    recent_years = (dhw_max.index >= 2016) & (dhw_max.index <= 2025)
-    base_years = (dhw_max.index >= 1985) & (dhw_max.index <= 1994)
+    recent_years = (dhw_max.index >= RECENT_YEARS_START) & (dhw_max.index <= RECENT_YEARS_END)
+    base_years = (dhw_max.index >= BASELINE_START) & (dhw_max.index <= BASELINE_END)
 
     dhw_max_85_94 = (
         float(np.nanmean(dhw_max.loc[base_years].values)) if base_years.any() else None
@@ -890,10 +896,10 @@ def dhw_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
     if (max_85_94 is not None) and (max_16_25 is not None):
         extra += (
             f"\n\nAverage annual **max DHW** rose from about **{max_85_94:.2f}** (1985–1994) "
-            f"to **{max_16_25:.2f}** (2016–2025)."
+            f"to **{max_16_25:.2f}** ({RECENT_YEARS_START}–{RECENT_YEARS_END})."
         )
     if ge8_16_25 is not None:
-        extra += f"\n\nIn 2016–2025 there were about **{ge8_16_25:.1f} days/year** with **DHW ≥ 8**."
+        extra += f"\n\nIn {RECENT_YEARS_START}–{RECENT_YEARS_END} there were about **{ge8_16_25:.1f} days/year** with **DHW ≥ 8**."
 
     return (
         "Corals are stressed by **cumulative marine heat**.\n\n"

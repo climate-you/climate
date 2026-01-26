@@ -13,9 +13,17 @@ from plotly.subplots import make_subplots
 
 from climate.models import StoryContext, StoryFacts
 from climate.units import is_fahrenheit, fmt_unit
+from climate.panels.helpers import add_trace, add_mean_trace
 
 BASELINE_START = 1979
 BASELINE_END = 1990
+
+# New: annual mean anomaly baseline for “T2M annual anomaly” panel
+T2M_ANOM_BASELINE_START = 1981
+T2M_ANOM_BASELINE_END = 1991
+
+RECENT_YEARS_START = 2016
+RECENT_YEARS_END = 2025
 
 WORLD_DATA_DIR = Path("data/world")
 
@@ -149,8 +157,8 @@ def build_you_vs_world_figures(ctx, facts, data) -> (go.Figure, go.Figure, str):
 def _trend_per_decade(s: pd.Series) -> float:
     """Linear trend in units/decade."""
     s = s.dropna()
-    if len(s) < 24:
-        return float("nan")
+    # if len(s) < 24: # why 24 ?
+        # return float("nan")
     # convert datetime to fractional year
     x = s.index.year + (s.index.dayofyear - 1) / 365.25
     y = s.values.astype("float64")
@@ -178,12 +186,10 @@ def you_vs_world_caption(ctx, facts, data) -> str:
             "(missing overlapping data)."
         )
 
-    # Use a “recent climate” window: last 30 years if possible, else whatever we have
-    end = df.index.max()
-    start = max(df.index.min(), end - pd.DateOffset(years=30))
-    dfr = df[df.index >= start]
-    if len(dfr) < 60:  # if too short, fall back to full overlap
-        dfr = df
+    # Use a “recent climate” window: use recent years with RECENT_YEARS globals
+    dfr = df[(df.index.year >= RECENT_YEARS_START) & (df.index.year <= RECENT_YEARS_END)]
+    # if len(dfr) < 60:  # if too short, fall back to full overlap
+        # dfr = df
 
     corr = float(dfr["local"].corr(dfr["global"]))
     tr_local = _trend_per_decade(dfr["local"])
@@ -250,6 +256,139 @@ def you_vs_world_caption(ctx, facts, data) -> str:
         f"- {corr_line}\n\n"
         f"Both charts are anomalies relative to **{y0}–{y1}** (local from the city ERA5 series; "
         f"global from {src})."
+    )
+
+
+def build_t2m_annual_anom_data(ctx: StoryContext) -> dict:
+    """
+    Annual mean T2M anomaly relative to the 1981–2010 annual-mean baseline.
+    Uses local monthly means from the city dataset (ctx.ds).
+    """
+    # Monthly mean temperature from precomputed city dataset
+    t = pd.to_datetime(ctx.ds["time_monthly"].values)
+    y = ctx.ds["t2m_monthly_mean_c"].values.astype("float64")
+    monthly = pd.Series(y, index=t).sort_index()
+
+    # Annual mean temperature from monthly means
+    annual_mean_c = monthly.groupby(monthly.index.year).mean().astype("float64")
+
+    y0, y1 = T2M_ANOM_BASELINE_START, T2M_ANOM_BASELINE_END
+    base = annual_mean_c[(annual_mean_c.index >= y0) & (annual_mean_c.index <= y1)]
+    if base.empty:
+        raise RuntimeError(f"No annual baseline data available for {y0}–{y1}")
+
+    # Anomaly vs baseline annual mean (delta °C)
+    print(f"-------{base.mean()}-------")
+    anom_c = annual_mean_c - float(base.mean())
+
+    # Plotly x-axis as datetimes (Jan 1 each year)
+    x = pd.to_datetime([f"{int(yr)}-01-01" for yr in anom_c.index])
+    anom = pd.Series(anom_c.values, index=x, name="t2m_anom_year_c").sort_index()
+
+    # Unit conversion for display only (delta)
+    if is_fahrenheit(ctx.unit):
+        anom = anom * 9.0 / 5.0
+
+    return dict(
+        baseline=(y0, y1),
+        anom_year=anom,
+    )
+
+
+def build_t2m_annual_anom_figure(
+    ctx: StoryContext, facts: StoryFacts, data: dict
+) -> tuple[go.Figure, str]:
+    (y0, y1) = data["baseline"]
+    s: pd.Series = data["anom_year"].dropna()
+    unit = ctx.unit
+
+    # Annual anomaly as a line (instead of bars)
+    fig = go.Figure()
+
+    add_trace(fig,
+        x=s.index.to_pydatetime(),
+        y=s.values.astype("float64"),
+        name="Annual mean anomaly",
+        hovertemplate="%{x|%Y}<br>Anomaly: %{y:.2f}" + fmt_unit(unit) + "<extra></extra>",
+    )
+
+    # 5-year mean (centered rolling mean on annual values)
+    s5 = s.rolling(5, center=True, min_periods=3).mean()
+    fig.add_trace(
+        go.Scatter(
+            x=s5.index.to_pydatetime(),
+            y=s5.values.astype("float64"),
+            mode="lines",
+            name="5-year mean",
+            line=dict(width=4),
+            hovertemplate="%{x|%Y}<br>5y mean: %{y:+.2f}"
+            + fmt_unit(unit)
+            + "<extra></extra>",
+        )
+    )
+
+    # Add a linear trend line (units/decade) when there’s enough data
+    tr = _trend_per_decade(s)
+    if np.isfinite(tr):
+        years = s.index.year + (s.index.dayofyear - 1) / 365.25
+        y = s.values.astype("float64")
+        slope_per_year, intercept = np.polyfit(years, y, 1)
+        yfit = slope_per_year * years + intercept
+
+        fig.add_trace(
+            go.Scatter(
+                x=s.index.to_pydatetime(),
+                y=yfit,
+                mode="lines",
+                line=dict(width=3),
+                name=f"Trend {_fmt(tr, unit)}/decade",
+                hovertemplate="%{x|%Y}<br>Trend: %{y:+.2f}"
+                + fmt_unit(unit)
+                + "<extra></extra>",
+            )
+        )
+
+    fig.update_layout(
+        title=dict(text="<b>Annual mean temperature anomaly</b>", x=0, xanchor="left"),
+        height=260,
+        margin=dict(l=40, r=20, t=48, b=40),
+        hovermode="x",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+    )
+    fig.update_xaxes(title_text="Year", tickformat="%Y", type="date")
+    fig.update_yaxes(title_text=f"Anomaly vs {y0}–{y1} ({fmt_unit(unit)})")
+
+    tiny = f"Annual mean T2M anomaly relative to {y0}–{y1} baseline; linear trend shown when enough years are available."
+    return fig, tiny
+
+
+def t2m_annual_anom_caption(ctx: StoryContext, facts: StoryFacts, data: dict) -> str:
+    s: pd.Series = data["anom_year"].dropna()
+    (y0, y1) = data["baseline"]
+    unit = ctx.unit
+
+    if s.empty:
+        return "We couldn’t compute annual anomalies for this location yet (missing data)."
+
+    # Recent trend over using recent years macros
+    # end = s.index.max()
+    # start = max(s.index.min(), end - pd.DateOffset(years=30))
+    sr = s[(s.index.year >= RECENT_YEARS_START) & (s.index.year <= RECENT_YEARS_END)]
+    # if len(sr) < 10:
+        # sr = s
+
+    tr = _trend_per_decade(sr)
+    trend_line = (
+        f"Recent trend over {RECENT_YEARS_START}-{RECENT_YEARS_END}: **{_fmt(tr, unit)}/decade**."
+        if np.isfinite(tr)
+        else "Not enough data to estimate a stable recent trend."
+    )
+
+    return (
+        f"This chart shows the **annual mean** temperature anomaly at this location "
+        f"relative to **{y0}–{y1}**.\n\n"
+        f"- {trend_line}\n\n"
+        "Using annual averages makes it easier to see the long-term signal above year-to-year variability."
     )
 
 
