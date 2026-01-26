@@ -1,7 +1,7 @@
 import xarray as xr
 
 from climate.models import StoryContext, StoryFacts
-from climate.openmeteo import fetch_openmeteo_current_temp_c
+from climate.datasets.sources.openmeteo import fetch_current_temp_c
 from climate.units import fmt_delta, fmt_temp
 
 # -----------------------------------------------------------
@@ -17,9 +17,7 @@ def build_intro_data(ctx: StoryContext) -> dict:
     -
     Returns a dict so it's easy to plug into other front-ends later.
     """
-    temp_now_c, temp_now_time = fetch_openmeteo_current_temp_c(
-        ctx.location_lat, ctx.location_lon
-    )
+    temp_now_c, temp_now_time = fetch_current_temp_c(ctx.location_lat, ctx.location_lon)
 
     # Keep global as a placeholder for now (swap later when we have a real global series)
     global_delta = 1.0

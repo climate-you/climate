@@ -16,12 +16,6 @@ from streamlit_folium import st_folium
 from climate.models import StoryFacts, StoryContext
 from climate.units import default_unit_for_country, fmt_temp, fmt_delta
 from climate.io import discover_locations, dataset_coverage_text
-from climate.datasets.sources.openmeteo import (
-    fetch_openmeteo_current_temp_c,
-    fetch_openmeteo_window,
-    fetch_recent_7d,
-    fetch_recent_30d,
-)
 from climate.analytics import estimate_30d_trend, season_phrase, compute_story_facts
 
 # panels

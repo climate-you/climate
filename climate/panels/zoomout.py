@@ -6,7 +6,7 @@ import numpy as np
 
 from climate.models import StoryFacts, StoryContext
 from climate.panels.helpers import add_trace, add_mean_trace, annotate_minmax_on_series
-from climate.openmeteo import fetch_recent_7d, fetch_recent_30d
+from climate.datasets.sources.openmeteo import fetch_recent_7d, fetch_recent_30d
 from climate.units import fmt_temp, fmt_delta, convert_temp, convert_delta, fmt_unit
 from climate.analytics import estimate_30d_trend, season_phrase
 from climate.io import dataset_coverage_text
