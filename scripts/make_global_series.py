@@ -22,66 +22,35 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-from datetime import datetime, timezone
 import json
 import re
 from pathlib import Path
-from typing import Optional, Tuple
-
-import pandas as pd
+from typing import Optional
 import requests
 
+import pandas as pd
 
-BULLETIN_ROOT = "https://sites.ecmwf.int/data/c3sci/bulletin/"
+from climate.datasets.sources.ecmwf_bulletin import (
+    latest_bulletin_dir,
+    find_best_global_series_csv,
+)
 
-# Prefer the "Fig2 ... monthly global surface temperature anomaly preindustrial" CSV in press_release/
 PREFERRED_FILENAMES = [
     re.compile(
         r"Fig2_.*monthly_global_surface_temperature_anomaly_preindustrial.*\.csv$", re.I
     ),
+    re.compile(
+        r"Fig2b_.*ref1850-1900.*global_allmonths.*_DATA\.csv$", re.I
+    ),  # <- add this
     re.compile(r"Monthly global temperature anomalies since 1940\.csv$", re.I),
     re.compile(r"timeseries_era5_monthly_2t_global.*\.csv$", re.I),
 ]
 
 
-def _http_get(url: str, timeout_s: int = 60) -> requests.Response:
-    r = requests.get(url, timeout=timeout_s)
-    r.raise_for_status()
-    return r
-
-
-def _find_latest_bulletin_dir(timeout_s: int = 60) -> str:
-    html = _http_get(BULLETIN_ROOT, timeout_s=timeout_s).text
-    # Directory names look like 202511/
-    dirs = sorted({m.group(1) for m in re.finditer(r'href="(\d{6})/"', html)})
-    if not dirs:
-        raise RuntimeError(f"Could not find any YYYYMM directories at {BULLETIN_ROOT}")
-    return dirs[-1]
-
-
-def _find_best_csv_in_press_release(
-    yyyymm: str, timeout_s: int = 60
-) -> Tuple[str, str]:
-    press_url = f"{BULLETIN_ROOT}{yyyymm}/press_release/"
-    html = _http_get(press_url, timeout_s=timeout_s).text
-    # Extract hrefs (file names)
-    files = [m.group(1) for m in re.finditer(r'href="([^"]+\.(?:csv|CSV))"', html)]
-    if not files:
-        raise RuntimeError(f"No CSV files found at {press_url}")
-    # Find preferred
-    for pat in PREFERRED_FILENAMES:
-        for f in files:
-            if pat.search(f):
-                return press_url, f
-    # Fallback: first CSV
-    return press_url, files[0]
-
-
 def _read_upstream_csv(url: str) -> pd.DataFrame:
-    text = _http_get(url, timeout_s=120).text
-    # comment='#' skips the descriptive header lines
+    # keep this as-is (no caching in this script yet)
+    text = requests.get(url, timeout=120).text
     df = pd.read_csv(pd.io.common.StringIO(text), comment="#")
-    # Normalize columns (strip whitespace)
     df.columns = [c.strip() for c in df.columns]
     return df
 
@@ -199,9 +168,13 @@ def main() -> None:
     ap.add_argument("--timeout", type=int, default=60)
     args = ap.parse_args()
 
-    yyyymm = args.yyyymm or _find_latest_bulletin_dir(timeout_s=args.timeout)
-    press_url, fname = _find_best_csv_in_press_release(yyyymm, timeout_s=args.timeout)
-    src_url = press_url + fname
+    yyyymm = args.yyyymm or latest_bulletin_dir(timeout_s=args.timeout)
+    base_url, fname, section = find_best_global_series_csv(
+        yyyymm,
+        preferred_patterns=PREFERRED_FILENAMES,
+        timeout_s=args.timeout,
+    )
+    src_url = base_url + fname
 
     df_up = _read_upstream_csv(src_url)
     df_out = _to_app_schema(df_up)
