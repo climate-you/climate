@@ -13,12 +13,12 @@ import xarray as xr  # only for StoryContext typing; ds not used for these panel
 from climate.models import (
     StoryContext,
     StoryFacts,
-)  # :contentReference[oaicite:1]{index=1}
+)
 from climate.export.web_paths import live_slug_dir, panel_paths
 from climate.export.web_write import write_plotly_svg, write_text, write_json
 from climate.export.captions import normalize_caption
 
-# Live panels live in zoomout.py in your prototype :contentReference[oaicite:2]{index=2}
+# Live panels live in zoomout.py in your prototype
 from climate.panels.zoomout import (
     build_last_week_data,
     build_last_week_figure,
@@ -85,7 +85,7 @@ def main() -> None:
     else:
         asof = date.today() - timedelta(days=1)
 
-    # IMPORTANT: your live builders use ctx.today - 1 day as the end date :contentReference[oaicite:3]{index=3}
+    # IMPORTANT: your live builders use ctx.today - 1 day as the end date
     # So we set ctx.today = asof + 1, making end date exactly `asof`.
     ctx_today = asof + timedelta(days=1)
 

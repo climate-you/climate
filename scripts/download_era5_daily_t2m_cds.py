@@ -4,7 +4,7 @@ Download ERA5 daily mean 2m temperature from CDS, for two eras, to local NetCDFs
 
 Uses CDS dataset:
   derived-era5-single-levels-daily-statistics
-which aggregates hourly ERA5 to daily during retrieval. :contentReference[oaicite:1]{index=1}
+which aggregates hourly ERA5 to daily during retrieval.
 """
 
 from __future__ import annotations
