@@ -525,7 +525,7 @@ Once `climate/panels/ocean.py` exists, this section will render the real figures
                 st.subheader(header)
                 if fig_right:
                     st.plotly_chart(
-                        fig, width="stretch", config={"displayModeBar": False}
+                        fig_right, width="stretch", config={"displayModeBar": False},
                     )
                     st.caption(tiny_right)
                     st.markdown(caption_right)
