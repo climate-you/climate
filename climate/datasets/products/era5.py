@@ -1,7 +1,9 @@
-import cdsapi
+import os
 import json
 from pathlib import Path
 from typing import List, Tuple
+
+import cdsapi
 import pandas as pd
 import zipfile
 
@@ -17,7 +19,7 @@ def download_monthly_means(
     c = cdsapi.Client()
     req = {
         "product_type": "monthly_averaged_reanalysis",
-        "format": "netcdf",
+        "data_format": "netcdf",
         "variable": ["2m_temperature"],
         "year": years,
         "month": [f"{m:02d}" for m in range(1, 13)],
@@ -30,7 +32,11 @@ def download_monthly_means(
         req["area"] = [area[0], area[1], area[2], area[3]]
 
     out_nc.parent.mkdir(parents=True, exist_ok=True)
-    c.retrieve("reanalysis-era5-single-levels-monthly-means", req, str(out_nc))
+    tmp_nc = out_nc.with_suffix(out_nc.suffix + ".tmp")
+    if tmp_nc.exists():
+        tmp_nc.unlink()
+    c.retrieve("reanalysis-era5-single-levels-monthly-means", req, str(tmp_nc))
+    os.replace(tmp_nc, out_nc)
     return json.dumps(req, indent=2)
 
 
