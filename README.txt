@@ -56,6 +56,26 @@ $ streamlit run app/story_demo.py
 
 ---
 
+6. Run v2 server  
+# Install & Run Redis
+
+# Run FastAPI thin client:
+$ export REDIS_URL='redis://localhost:6379/0'
+$ uvicorn apps.api.climate_api.main:app --reload --port 8001
+
+# Inspect Redis
+$ redis-cli DBSIZE
+$ redis-cli keys 'climate_api:*'
+
+# Query server
+(London)
+$ curl 'http://localhost:8001/api/v/dev/panel?lat=51.101&lon=-0.136&panel_id=overview&unit=C'
+(Tamarin)
+$ curl 'http://localhost:8001/api/v/dev/panel?lat=-20.32556&lon=57.37056&panel_id=ocean&unit=C'
+$ curl 'http://localhost:8001/api/v/dev/panel?lat=-20.32556&lon=57.37056&panel_id=overview&unit=C'
+
+---
+
 Guardian articles:
 URL: https://www.theguardian.com/environment/ng-interactive/2025/dec/18/how-climate-breakdown-is-putting-the-worlds-food-in-peril-in-maps-and-charts
 URL: Wildfires mapped January 2026
