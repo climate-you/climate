@@ -57,7 +57,7 @@ const smallSize = (Math.min(innerWidth, innerHeight) < 700) ? 1024 : 2048;
 const ext = (await supportsAvif()) ? "avif" : "webp";
 
 const LAND_MASK_URL = `./textures/land_${size}.${ext}`;
-const STICKER_TEX_URL = `./textures/sphere.png`; // <-- put your transparent PNG here
+const STICKER_TEX_URL = `./textures/sphere_outline.png`; // <-- put your transparent PNG here
 const CLOUD_TEX_URL = `./textures/clouds_${size}.${ext}`;
 const BORDERS_TEX_URL = `./textures/borders_${size}.webp`; // Use webp for borders for sharpness
 const DATA_TEX_URL = `./textures/data_${smallSize}.${ext}`;
@@ -115,6 +115,7 @@ const uniforms = {
   overlayOpacity: { value: 1.0 }, // 0..1
   overlayScale:   { value: 0.825 },              // < 1 => smaller, > 1 => larger
   overlayOffset:  { value: new THREE.Vector2(0, 0) }, // in UV units
+  overlayViewport: { value: new THREE.Vector2(1, 1) },
 
   oceanColor: { value: new THREE.Color(COLORS.ocean) },
   landColor:  { value: new THREE.Color(COLORS.land)  },
@@ -199,6 +200,7 @@ const earthMat = new THREE.ShaderMaterial({
   uniform float overlayOpacity;
   uniform float overlayScale;
   uniform vec2 overlayOffset;
+  uniform vec2 overlayViewport;
 
   uniform vec3 oceanColor;
   uniform vec3 landColor;
@@ -404,7 +406,8 @@ const earthMat = new THREE.ShaderMaterial({
     vec2 centered = screenUV - 0.5;
 
     // Apply scale
-    centered.x /= overlayScale * 0.465;
+    float ratio = overlayViewport.y / overlayViewport.x;
+    centered.x /= overlayScale * ratio;
     centered.y /= overlayScale;
 
     vec2 uv = centered + 0.5 + overlayOffset;
@@ -555,10 +558,14 @@ function resize(){
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
-  camera.updateProjectionMatrix()
+  camera.updateProjectionMatrix();
+
+  // IMPORTANT: initialize/update this on load too (not only on resize)
+  uniforms.overlayViewport.value.set(w, h);
 }
 window.addEventListener("resize", resize);
 
+resize();
 // Auto rotate for landing (earth rotates, clouds inherit)
 let t0 = performance.now();
 let autorotate = true;
@@ -593,6 +600,9 @@ Promise.all([
   // We sample with screenUV.y flipped in shader, so keep the texture unflipped
   overlayTex.flipY = false;
   overlayTex.needsUpdate = true;
+
+  const sz = renderer.getSize(new THREE.Vector2());
+  uniforms.overlayViewport.value.copy(sz);
 
   uniforms.overlayTex.value = overlayTex;
 
