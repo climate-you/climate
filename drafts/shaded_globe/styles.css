@@ -21,15 +21,12 @@ body {
   color: var(--text);
 }
 
+/*html, body { background: linear-gradient(45deg, #f00, #0f0) !important; }*/
+
 .bg {
   position: fixed;
   inset: 0;
-  background: radial-gradient(
-    1200px 700px at 30% 35%,
-    var(--bg0) 0%,
-    var(--bg1) 65%,
-    #ededed 100%
-  );
+  background: #0000ff;
 }
 
 #c {
@@ -73,6 +70,13 @@ code {
   font-family:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
+}
+/* Ensure the globe container is a positioning context */
+#app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
 }
 
 @media (max-width: 700px) {
