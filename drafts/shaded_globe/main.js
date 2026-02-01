@@ -57,6 +57,7 @@ const smallSize = (Math.min(innerWidth, innerHeight) < 700) ? 1024 : 2048;
 const ext = (await supportsAvif()) ? "avif" : "webp";
 
 const LAND_MASK_URL = `./textures/land_${size}.${ext}`;
+const STICKER_TEX_URL = `./textures/sphere.png`; // <-- put your transparent PNG here
 const CLOUD_TEX_URL = `./textures/clouds_${size}.${ext}`;
 const BORDERS_TEX_URL = `./textures/borders_${size}.webp`; // Use webp for borders for sharpness
 const DATA_TEX_URL = `./textures/data_${smallSize}.${ext}`;
@@ -65,11 +66,7 @@ const DATA_TEX_URL = `./textures/data_${smallSize}.${ext}`;
 const MASK_INVERT = 1.0;
 
 const COLORS = {
-  // monochrome “paper + ink” palette
-  //ocean: 0xE8E6E1,   // paper-ish light grey
-  //land:  0xE8E6E1,   // same as ocean; land will be shown via coastline outline
-  //ink:   0x141414,   // dot “ink”
-  ocean: 0xFFFFFF,   // paper-ish light grey
+  ocean: 0xF0F0F0,   // light grey
   land:  0xFFFFFF,   // same as ocean; land will be shown via coastline outline
   ink:   0x111111,   // dot “ink”
   coast: 0x1A1A1A,   // coastline stroke
@@ -113,6 +110,12 @@ const uniforms = {
   bordersTex: { value: null },
   dataTex: { value: null },
 
+  // NEW: screen-space overlay (sampled in fragment shader)
+  overlayTex: { value: null },
+  overlayOpacity: { value: 1.0 }, // 0..1
+  overlayScale:   { value: 0.825 },              // < 1 => smaller, > 1 => larger
+  overlayOffset:  { value: new THREE.Vector2(0, 0) }, // in UV units
+
   oceanColor: { value: new THREE.Color(COLORS.ocean) },
   landColor:  { value: new THREE.Color(COLORS.land)  },
 
@@ -144,9 +147,9 @@ const uniforms = {
   dataOpacity:    { value: 0.0 },
 
   // Stochastic stipple controls (single-layer)
-  stippleScale:     { value: 500.0 }, // dot density grid; try 700..1400
-  stippleStrength:  { value: 2.9 },  // overall ink amount
-  stippleRadius:    { value: 0.26 },  // dot radius in cell-space; try 0.14..0.22
+  stippleScale:     { value: 0.0 },//500.0 }, // dot density grid; try 700..1400
+  stippleStrength:  { value: 0.0 },//2.9 },  // overall ink amount
+  stippleRadius:    { value: 0.0 },//0.26 },  // dot radius in cell-space; try 0.14..0.22
   stippleSoftness:  { value: 0.16 },  // fade width for in/out; try 0.03..0.10
   stippleGamma:     { value: 0.65 },  // shape shade→density; try 1.0..1.6
 
@@ -168,12 +171,16 @@ const earthMat = new THREE.ShaderMaterial({
     varying vec2 vUv;
     varying vec3 vNormalW;
     varying vec3 vPosW;
+    varying vec4 vClipPos;
+
     void main(){
       vUv = uv;
       vNormalW = normalize(mat3(modelMatrix) * normal);
       vec4 wp = modelMatrix * vec4(position, 1.0);
       vPosW = wp.xyz;
-      gl_Position = projectionMatrix * viewMatrix * wp;
+
+      vClipPos = projectionMatrix * viewMatrix * wp;
+      gl_Position = vClipPos;
     }
   `,
   fragmentShader: `
@@ -181,10 +188,17 @@ const earthMat = new THREE.ShaderMaterial({
   varying vec2 vUv;
   varying vec3 vNormalW;
   varying vec3 vPosW;
+  varying vec4 vClipPos;
 
   uniform sampler2D landMask;
   uniform sampler2D bordersTex;
   uniform sampler2D dataTex;
+
+  // NEW: overlay sampled in screen space
+  uniform sampler2D overlayTex;
+  uniform float overlayOpacity;
+  uniform float overlayScale;
+  uniform vec2 overlayOffset;
 
   uniform vec3 oceanColor;
   uniform vec3 landColor;
@@ -378,11 +392,40 @@ const earthMat = new THREE.ShaderMaterial({
     vec3 withBorders = mix(withData, borderColor, ba);
     vec3 withGrid = mix(withBorders, gridColor, g);
 
-    gl_FragColor = vec4(withGrid * brightness, 1.0);
-    // gl_FragColor = vec4(vec3(shade), 1.0);
+    vec3 outRgb = withGrid * brightness;
 
-    // IMPORTANT: ShaderMaterial does NOT automatically apply output color space conversion.
-    #include <colorspace_fragment>
+    // Screen-space UV in [0,1]
+    vec2 screenUV = (vClipPos.xy / vClipPos.w) * 0.5 + 0.5;
+    // Most PNGs are authored top-left origin
+    screenUV.y = 1.0 - screenUV.y;
+
+    // Scale around center (0.5,0.5)
+    // Aspect-correct scale around center so circles stay circles even if viewport isn't square.
+    vec2 centered = screenUV - 0.5;
+
+    // Apply scale
+    centered.x /= overlayScale * 0.465;
+    centered.y /= overlayScale;
+
+    vec2 uv = centered + 0.5 + overlayOffset;
+
+    // Sample overlay + alpha composite (over)
+    if (overlayOpacity > 0.0) {
+
+      // Hard mask outside [0,1] so we never smear edge pixels
+      float inside =
+          step(0.0, uv.x) * step(0.0, uv.y) *
+          step(uv.x, 1.0) * step(uv.y, 1.0);
+
+      vec2 uvClamped = clamp(uv, 0.0, 1.0);
+      vec4 o = texture2D(overlayTex, uvClamped);
+
+      vec3 oLin = o.rgb;
+      float a = clamp(o.a * overlayOpacity * inside, 0.0, 1.0);
+      outRgb = mix(outRgb, oLin, a);
+    }
+
+    gl_FragColor = vec4(outRgb, 1.0);
   }
 `,
 });
@@ -512,7 +555,7 @@ function resize(){
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
-  camera.updateProjectionMatrix();
+  camera.updateProjectionMatrix()
 }
 window.addEventListener("resize", resize);
 
@@ -535,10 +578,23 @@ Promise.all([
   loadTexSafe(enableBorders, BORDERS_TEX_URL),   // optional
   loadTexSafe(enableData, DATA_TEX_URL),         // optional
   loadTex("./textures/marker.png"),
-]).then(([landMask, bordersTex, dataTex, markerTex]) => {
+  loadTex(STICKER_TEX_URL), // NEW: overlay image
+]).then(([landMask, bordersTex, dataTex, markerTex, overlayTex]) => {
   uniforms.landMask.value = landMask;
   uniforms.bordersTex.value = bordersTex;
   uniforms.dataTex.value = dataTex;
+
+  // Overlay: screen-space sample
+  overlayTex.wrapS = THREE.ClampToEdgeWrapping;
+  overlayTex.wrapT = THREE.ClampToEdgeWrapping;
+  overlayTex.minFilter = THREE.LinearFilter;
+  overlayTex.magFilter = THREE.LinearFilter;
+
+  // We sample with screenUV.y flipped in shader, so keep the texture unflipped
+  overlayTex.flipY = false;
+  overlayTex.needsUpdate = true;
+
+  uniforms.overlayTex.value = overlayTex;
 
   // NEW: coastline edge thickness depends on actual texture resolution
   if (landMask?.image?.width && landMask?.image?.height) {
@@ -551,7 +607,7 @@ Promise.all([
   canvas.classList.add("is-visible");
 
   animate();
-  revealClouds();
+  // revealClouds();
   revealData();
 }).catch((err) => console.error("Texture load failed:", err));
 
