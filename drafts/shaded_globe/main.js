@@ -17,9 +17,6 @@ import * as THREE from "https://esm.sh/three@0.160.0";
 
 let dataCycleT0 = null; // seconds, set when data is revealed
 
-const enableBorders = false;
-const enableData = false;
-
 const TIMING = {
   globeFadeMs: 4000,
 
@@ -59,8 +56,6 @@ const ext = (await supportsAvif()) ? "avif" : "webp";
 const LAND_MASK_URL = `./textures/land_${size}.${ext}`;
 const STICKER_TEX_URL = `./textures/sphere_outline.png`; // <-- put your transparent PNG here
 const CLOUD_TEX_URL = `./textures/clouds_${size}.${ext}`;
-const BORDERS_TEX_URL = `./textures/borders_${size}.webp`; // Use webp for borders for sharpness
-const DATA_TEX_URL = `./textures/data_${smallSize}.${ext}`;
 
 // Invert land/border mask (ocean=white, land=black)
 const MASK_INVERT = 1.0;
@@ -68,10 +63,7 @@ const MASK_INVERT = 1.0;
 const COLORS = {
   ocean: 0xF0F0F0,   // light grey
   land:  0xFFFFFF,   // same as ocean; land will be shown via coastline outline
-  ink:   0x111111,   // dot “ink”
   coast: 0x1A1A1A,   // coastline stroke
-  grid:  0x49494B,
-  border: 0xFFFFFF,
   marker: 0xDB4848,
 };
 
@@ -107,8 +99,6 @@ function loadTex(url){
 // Map look controls
 const uniforms = {
   landMask: { value: null },
-  bordersTex: { value: null },
-  dataTex: { value: null },
 
   // NEW: screen-space overlay (sampled in fragment shader)
   overlayTex: { value: null },
@@ -119,16 +109,12 @@ const uniforms = {
 
   oceanColor: { value: new THREE.Color(COLORS.ocean) },
   landColor:  { value: new THREE.Color(COLORS.land)  },
-
-  // NEW: “ink” + coastline
-  inkColor:   { value: new THREE.Color(COLORS.ink) },
+  // Coastline
   coastColor: { value: new THREE.Color(COLORS.coast) },
 
   // NEW: used to compute coastline thickness in UV space
   landTexel:  { value: new THREE.Vector2(1 / 2048, 1 / 1024) }, // overwritten after texture load
 
-  gridColor:  { value: new THREE.Color(COLORS.grid)  },
-  borderColor:{ value: new THREE.Color(COLORS.border) },
   // Make terminator visible: light comes from the side a bit
   lightDir: { value: new THREE.Vector3( -0.85, 0.55, 1.25 ).normalize() },
 
@@ -137,24 +123,6 @@ const uniforms = {
   // We'll rely on halftone for shading, so keep the smooth shading minimal.
   shadeStrength: { value: 0.0 },
   brightness:    { value: 1.0 },
-
-  // Grid off for the newspaper look
-  gridEveryDeg: { value: 10.0 },
-  gridWidth:    { value: 0.010 },
-  gridOpacity:  { value: 0.0 },
-
-  bordersOpacity: { value: 0.0 },
-  dataStrength:   { value: 1.0 },
-  dataOpacity:    { value: 0.0 },
-
-  // Stochastic stipple controls (single-layer)
-  stippleScale:     { value: 0.0 },//500.0 }, // dot density grid; try 700..1400
-  stippleStrength:  { value: 0.0 },//2.9 },  // overall ink amount
-  stippleRadius:    { value: 0.0 },//0.26 },  // dot radius in cell-space; try 0.14..0.22
-  stippleSoftness:  { value: 0.16 },  // fade width for in/out; try 0.03..0.10
-  stippleGamma:     { value: 0.65 },  // shape shade→density; try 1.0..1.6
-
-  rimFade:          { value: 0.62 },  // keep (reduces crunchy silhouette)
 
   shadeGain: { value: 2.9 },  // increase to get blacker shadows
   shadeBias: { value: -0.05 }, // slight bias to keep highlights cleaner
@@ -192,8 +160,6 @@ const earthMat = new THREE.ShaderMaterial({
   varying vec4 vClipPos;
 
   uniform sampler2D landMask;
-  uniform sampler2D bordersTex;
-  uniform sampler2D dataTex;
 
   // NEW: overlay sampled in screen space
   uniform sampler2D overlayTex;
@@ -204,34 +170,15 @@ const earthMat = new THREE.ShaderMaterial({
 
   uniform vec3 oceanColor;
   uniform vec3 landColor;
-
-  uniform vec3 inkColor;
   uniform vec3 coastColor;
 
-  uniform vec3 gridColor;
-  uniform vec3 borderColor;
   uniform vec3 lightDir;
 
   uniform float maskInvert;
   uniform float shadeStrength;
   uniform float brightness;
 
-  uniform float gridEveryDeg;
-  uniform float gridWidth;
-  uniform float gridOpacity;
-  uniform float bordersOpacity;
-  uniform float dataStrength;
-  uniform float dataOpacity;
-
   uniform vec2  landTexel;
-
-  uniform float stippleScale;
-  uniform float stippleStrength;
-  uniform float stippleRadius;
-  uniform float stippleSoftness;
-  uniform float stippleGamma;
-
-  uniform float rimFade;
 
   uniform float shadeGain;
   uniform float shadeBias;
@@ -239,87 +186,6 @@ const earthMat = new THREE.ShaderMaterial({
 
   uniform float coastStrength;
   uniform float coastSoftness;
-
-  float saturatef(float x){ return clamp(x, 0.0, 1.0); }
-
-  float gridLine(float coord, float linesPerUnit, float width){
-    float x = fract(coord * linesPerUnit);
-    float d = min(x, 1.0 - x);
-    return 1.0 - smoothstep(0.0, width, d);
-  }
-
-  vec2 rot2(vec2 p, float a){
-    float s = sin(a), c = cos(a);
-    return mat2(c,-s,s,c) * p;
-  }
-
-  float hash12(vec2 p){
-    // Stable hash in [0,1)
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-  }
-
-  // Returns 0..1 ink coverage for ONE dot layer.
-  // Dots are randomly placed (1 candidate per cell), density controlled by shade.
-  float stippleInk(vec2 uv, float shade){
-    // compensate for equirectangular stretch towards poles (helps uniform dot size)
-    float lat = (uv.y - 0.5) * 3.14159265;
-    float k = max(0.35, cos(lat));
-    vec2 uvIso = vec2(uv.x * k, uv.y);
-
-    // shade: 0 bright .. 1 dark, shaped by gamma
-    float s0 = clamp(shade, 0.0, 1.0);
-    float s  = pow(s0, stippleGamma);
-
-    // add a little extra boost only in the dark end
-    s = mix(s, 1.0, smoothstep(0.65, 1.0, s0) * 0.25);
-
-    // one candidate dot per cell
-    vec2 p = uvIso * stippleScale;
-    vec2 cell = floor(p);
-
-    // random point within the cell
-    float rx = hash12(cell + 13.2);
-    float ry = hash12(cell + 71.9);
-    vec2  center = vec2(rx, ry);
-
-    // distance to that random point (cell-space)
-    vec2 f = fract(p);
-    float d = length(f - center);
-
-    // dot shape (constant radius)
-    float r = clamp(stippleRadius, 0.02, 0.48);
-    float aa = max(fwidth(d) * 1.35, 0.0025);
-    float dotShape = 1.0 - smoothstep(r - aa, r + aa, d);
-
-    // density gate: probability of dot being "on" grows with shade
-    float t = max(stippleSoftness, 0.001);
-    float gateRand = hash12(cell + 191.7);
-
-    // smooth probabilistic gate (reduces popping as light moves)
-    float gate = smoothstep(gateRand - t, gateRand + t, s);
-
-    float ink = dotShape * gate;
-
-    // In deep shadow, allow a second independent candidate.
-    // Visually it still reads like one stipple layer, just denser.
-    float shadow2 = smoothstep(shadow2Start, 1.0, s);
-    if (shadow2 > 0.0) {
-      float rx2 = hash12(cell + 201.3);
-      float ry2 = hash12(cell + 419.6);
-      vec2  center2 = vec2(rx2, ry2);
-
-      float d2 = length(f - center2);
-      float dot2 = 1.0 - smoothstep(r - aa, r + aa, d2);
-
-      float gateRand2 = hash12(cell + 777.7);
-      float gate2 = smoothstep(gateRand2 - t, gateRand2 + t, s);
-
-      ink += dot2 * gate2 * shadow2;
-    }
-
-    return clamp(ink, 0.0, 1.0);
-  }
-
 
   float coastline(vec2 uv){
     // Land mask edge detector (UV-space). landTexel is 1/textureSize.
@@ -353,22 +219,11 @@ const earthMat = new THREE.ShaderMaterial({
     shade = clamp(shade * shadeGain + shadeBias, 0.0, 1.0);
 
     // extra punch in deep shadow
-    shade = pow(shade, 0.85);  // <1 => darker shadows
+    shade = pow(shade, 0.85);
 
     // Optional smooth shading (kept mostly off by default)
     float sphereShade = mix(0.92, 1.08, day);
     base *= mix(1.0, sphereShade, shadeStrength);
-
-    // Halftone “ink” dots
-    float ink = stippleInk(vUv, shade);
-
-    // rim fade (keep your existing code)
-    vec3 V = normalize(cameraPosition - vPosW);
-    float ndv = clamp(dot(normalize(vNormalW), V), 0.0, 1.0);
-    float rim = smoothstep(0.08, 0.55, ndv);
-    float dotFade = mix(1.0 - rimFade, 1.0, rim);
-
-    base = mix(base, inkColor, ink * stippleStrength * dotFade);
 
     // Coastline outline on top
     float coast = coastline(vUv);
@@ -376,36 +231,17 @@ const earthMat = new THREE.ShaderMaterial({
     float poleFade = smoothstep(1.0, 0.68, abs(vUv.y * 2.0 - 1.0));
     float ca = pow(coast * poleFade, coastSoftness) * coastStrength;
     base = mix(base, coastColor, ca);
-
-    // If you want to keep your existing grid/borders hooks:
-    float linesLon = 360.0 / gridEveryDeg;
-    float linesLat = 180.0 / gridEveryDeg;
-    float glon = gridLine(vUv.x, linesLon, gridWidth);
-    float glat = gridLine(vUv.y, linesLat, gridWidth);
-    float g = max(glon, glat) * gridOpacity * poleFade;
-
-    float ba = texture2D(bordersTex, vUv).a * bordersOpacity * poleFade;
-
-    vec4 d = texture2D(dataTex, vUv);
-    vec3 dataColor = d.rgb;
-    float da = d.a * dataStrength * dataOpacity;
-
-    vec3 withData = mix(base, dataColor, da);
-    vec3 withBorders = mix(withData, borderColor, ba);
-    vec3 withGrid = mix(withBorders, gridColor, g);
-
-    vec3 outRgb = withGrid * brightness;
+    vec3 outRgb = base * brightness;
 
     // Screen-space UV in [0,1]
     vec2 screenUV = (vClipPos.xy / vClipPos.w) * 0.5 + 0.5;
     // Most PNGs are authored top-left origin
     screenUV.y = 1.0 - screenUV.y;
-
     // Scale around center (0.5,0.5)
     // Aspect-correct scale around center so circles stay circles even if viewport isn't square.
     vec2 centered = screenUV - 0.5;
 
-    // Apply scale
+    // Apply scale on overlay image
     float ratio = overlayViewport.y / overlayViewport.x;
     centered.x /= overlayScale * ratio;
     centered.y /= overlayScale;
@@ -582,14 +418,10 @@ function loadTexSafe(enable, url, fallbackUrl = "./textures/empty.png") {
 
 Promise.all([
   loadTex(LAND_MASK_URL),                        // required
-  loadTexSafe(enableBorders, BORDERS_TEX_URL),   // optional
-  loadTexSafe(enableData, DATA_TEX_URL),         // optional
   loadTex("./textures/marker.png"),
-  loadTex(STICKER_TEX_URL), // NEW: overlay image
-]).then(([landMask, bordersTex, dataTex, markerTex, overlayTex]) => {
+  loadTex(STICKER_TEX_URL),
+]).then(([landMask, markerTex, overlayTex]) => {
   uniforms.landMask.value = landMask;
-  uniforms.bordersTex.value = bordersTex;
-  uniforms.dataTex.value = dataTex;
 
   // Overlay: screen-space sample
   overlayTex.wrapS = THREE.ClampToEdgeWrapping;
@@ -655,14 +487,7 @@ function animate(){
     cloudsTex.rotation.y = t * CLOUD_DRIFT_SPEED; // local drift, Earth rotation is inherited
   }
 
-  // Data Texture
-  // e.g. 0..1..0 slow cycle
-  const dt = (dataCycleT0 == null) ? 0 : Math.max(0, t - dataCycleT0);
-  const raw = 0.5 + 0.5 * Math.sin(dt * 0.12 - Math.PI / 2); // starts at 0
-  const bloom = raw * raw; // * raw; // bias toward 0
-  uniforms.dataOpacity.value = bloom;
-
-  // keep fixed; or you can slowly drift it if you like
+  // Keep fixed; or you can slowly drift it if you like
   // uniforms.lightDir.value.set(-1.0, 0.25, 0.35).normalize();
   const lightCam = new THREE.Vector3(-0.85, 0.55, 1.25).normalize();
   const lightWorld = lightCam.clone().applyQuaternion(camera.quaternion);
