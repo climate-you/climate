@@ -37,6 +37,12 @@ body {
   display: block;
   opacity: 0;
   transition: opacity var(--globe-fade-ms, 900ms) ease;
+  touch-action: none;
+  cursor: grab;
+}
+
+#c:active {
+  cursor: grabbing;
 }
 
 #c.is-visible {
