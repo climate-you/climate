@@ -26,9 +26,6 @@ const TIMING = {
 // sync CSS and JS
 document.documentElement.style.setProperty("--globe-fade-ms", `${TIMING.globeFadeMs}ms`);
 
-const isSmall = Math.min(window.innerWidth, window.innerHeight) < 700;
-const dpr = Math.min(window.devicePixelRatio || 1, 2);
-
 function supportsAvif() {
   // quick AVIF decode test
   return new Promise((resolve) => {
@@ -43,15 +40,14 @@ function supportsAvif() {
 
 // Choose size based on desktop size
 const size = (Math.min(innerWidth, innerHeight) < 700) ? 2048 : 4096;
-
-// Use smaller size for data texture
-const smallSize = (Math.min(innerWidth, innerHeight) < 700) ? 1024 : 2048;
+// TODO
+const overlay_size = (Math.min(innerWidth, innerHeight) < 700) ? 1080 : 1400;
 
 // Choose texture format based on compatibility (avif is smaller)
 const ext = (await supportsAvif()) ? "avif" : "webp";
 
 const LAND_MASK_URL = `./textures/land_${size}.${ext}`;
-const STICKER_TEX_URL = `./textures/sphere_outline.png`; // <-- put your transparent PNG here
+const STICKER_TEX_URL = `./textures/sphere_outline.${ext}`;
 const CLOUD_TEX_URL = `./textures/clouds_${size}.${ext}`;
 
 // Invert land/border mask (ocean=white, land=black)
@@ -385,16 +381,6 @@ resize();
 // Auto rotate for landing (earth rotates, clouds inherit)
 let t0 = performance.now();
 let autorotate = true;
-
-function loadTexSafe(enable, url, fallbackUrl = "./textures/empty.png") {
-  if (!enable){
-    return loadTex(fallbackUrl);
-  }
-  return loadTex(url).catch((err) => {
-    console.warn("Texture failed:", url, err);
-    return loadTex(fallbackUrl);
-  });
-}
 
 Promise.all([
   loadTex(LAND_MASK_URL),                        // required
