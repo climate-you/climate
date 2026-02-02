@@ -9,9 +9,6 @@ import * as THREE from "https://esm.sh/three@0.160.0";
 // Land
 // http://shadedrelief.com/natural3/ne3_data/8192/masks/water_8k.png
 
-// Warming
-// Self generated from CDS
-
 // Borders?
 // Matplotlib version3.10.7, https://matplotlib.org/ (TBC)
 
@@ -64,7 +61,6 @@ const COLORS = {
   ocean: 0xF0F0F0,   // light grey
   land:  0xFFFFFF,   // same as ocean; land will be shown via coastline outline
   coast: 0x1A1A1A,   // coastline stroke
-  marker: 0xDB4848,
 };
 
 const START_ROT_Y = Math.PI; // 180° (other side)
@@ -112,8 +108,11 @@ const uniforms = {
   // Coastline
   coastColor: { value: new THREE.Color(COLORS.coast) },
 
-  // NEW: used to compute coastline thickness in UV space
-  landTexel:  { value: new THREE.Vector2(1 / 2048, 1 / 1024) }, // overwritten after texture load
+  // Compute coastline thickness in UV space
+  landTexel:  { value: new THREE.Vector2(1 / 2048, 1 / 1024) },
+  // Coastline intensity/thickness tuning
+  coastStrength: { value: 0.95 }, // 0..1
+  coastSoftness: { value: 1.2 },  // >1 softer
 
   // Make terminator visible: light comes from the side a bit
   lightDir: { value: new THREE.Vector3( -0.85, 0.55, 1.25 ).normalize() },
@@ -127,10 +126,6 @@ const uniforms = {
   shadeGain: { value: 2.9 },  // increase to get blacker shadows
   shadeBias: { value: -0.05 }, // slight bias to keep highlights cleaner
   shadow2Start: { value: 0.45 }, // when second dot candidate starts
-
-  // NEW: coastline intensity/thickness tuning
-  coastStrength: { value: 0.95 }, // 0..1
-  coastSoftness: { value: 1.2 },  // >1 softer
 };
 
 const earthMat = new THREE.ShaderMaterial({
@@ -319,13 +314,6 @@ function fadeMaterialOpacity(mat, to, ms = 700) {
   requestAnimationFrame(step);
 }
 
-// Marker sprite
-const marker = new THREE.Sprite(new THREE.SpriteMaterial({ map: null, transparent: true, depthWrite: false }));
-marker.scale.set(0.18, 0.18, 0.18);
-marker.visible = false;
-earth.add(marker);          // <— attach to earth
-marker.position.set(0,0,0); // local space now
-
 function latLonToVec3(latDeg, lonDeg, r=1.01){
   const lat = THREE.MathUtils.degToRad(latDeg);
   const lon = THREE.MathUtils.degToRad(lonDeg);
@@ -333,11 +321,6 @@ function latLonToVec3(latDeg, lonDeg, r=1.01){
   const y = r * Math.sin(lat);
   const z = r * Math.cos(lat) * Math.cos(lon);
   return new THREE.Vector3(x,y,z);
-}
-
-function setMarker(lat, lon){
-  marker.position.copy(latLonToVec3(lat, lon, 1.05));
-  marker.visible = true;
 }
 
 // Tween + flyTo
@@ -365,8 +348,6 @@ async function flyTo(lat, lon, durationMs=2200){
   const camFrom = camera.position.clone();
   const camTo = new THREE.Vector3(0, 0, 3.2);
 
-  setMarker(lat, lon);
-
   await tween(durationMs, (k) => {
     THREE.Quaternion.slerp(qFrom, qTo, earth.quaternion, k);
     camera.position.lerpVectors(camFrom, camTo, k);
@@ -384,7 +365,6 @@ function setBrightness(x){ uniforms.brightness.value = Math.max(0, x); }
 
 // DEV ONLY
 window.flyTo = flyTo;
-window.setMarker = setMarker;
 window.setClouds = setClouds;
 window.setShadeStrength = setShadeStrength;
 window.setBrightness = setBrightness;
@@ -418,9 +398,8 @@ function loadTexSafe(enable, url, fallbackUrl = "./textures/empty.png") {
 
 Promise.all([
   loadTex(LAND_MASK_URL),                        // required
-  loadTex("./textures/marker.png"),
   loadTex(STICKER_TEX_URL),
-]).then(([landMask, markerTex, overlayTex]) => {
+]).then(([landMask, overlayTex]) => {
   uniforms.landMask.value = landMask;
 
   // Overlay: screen-space sample
@@ -442,9 +421,6 @@ Promise.all([
   if (landMask?.image?.width && landMask?.image?.height) {
     uniforms.landTexel.value.set(1 / landMask.image.width, 1 / landMask.image.height);
   }
-
-  marker.material.map = markerTex;
-  marker.material.needsUpdate = true;
 
   canvas.classList.add("is-visible");
 
@@ -476,11 +452,6 @@ function animate(){
 
   if(autorotate){
     earth.rotation.y = START_ROT_Y + t * 0.08;
-  }
-
-  if(marker.visible){
-    const s = 0.18 * (1.0 + 0.10*Math.sin(t*2.2));
-    marker.scale.set(s, s, s);
   }
 
   if (cloudsTex && cloudsTex.visible) {
