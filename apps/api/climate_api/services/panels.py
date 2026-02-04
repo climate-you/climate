@@ -1,180 +1,201 @@
 from __future__ import annotations
 
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Callable
 import numpy as np
 import xarray as xr
-import pandas as pd
 import math
+from datetime import date
 
-from ..registry import Registry
 from ..schemas import (
     PanelResponse,
     PanelPayload,
     GraphPayload,
     GraphAnnotation,
     SeriesPayload,
-    LocationInfo,
 )
-from ..units import convert_series
-from ..textgen import make_panel_caption
-from ..store.base import Store
 from ..cache import Cache
-from ..config import Settings
-from ..grids import snap_cell
 from ..schemas import QueryPoint, PlaceInfo, DataCell, LocationInfo
-from ..captions.t2m_demo import caption_t2m_demo
-from .derive import linear_trend
 from ..store.place_resolver import PlaceResolver
-from ..store.tile_data_store import (
-    TileDataStore,
-    rolling_mean_centered,
-    linear_trend_line,
-    c_to_f,
-)
+from ..store.tile_data_store import TileDataStore
+from climate.datasets.derive.series import rolling_mean_centered, linear_trend_line, c_to_f
+from climate.registry.panels import DEFAULT_PANELS_PATH, load_panels
+from climate.models import StoryContext, StoryFacts
+from climate.panels.zoomout import fifty_year_caption
 from climate.tiles.layout import locate_tile, cell_center_latlon
-from climate.tiles.layout import tile_path
 
 
-def _ensure_t2m_last50_derived(ds: xr.Dataset) -> tuple[xr.Dataset, dict[str, float]]:
-    """
-    Adds derived variables to ds (in-memory):
-      - t2m_yearly_mean_trend_c
-      - t2m_yearly_coldest_month_trend_c
-      - t2m_yearly_warmest_month_trend_c
-
-    Returns (ds, deltas) where deltas are the trend deltas in C over the period.
-    """
-    needed = {
-        "t2m_yearly_mean_trend_c",
-        "t2m_yearly_coldest_month_trend_c",
-        "t2m_yearly_warmest_month_trend_c",
+def _caption_fn_registry() -> dict[str, Callable[..., str]]:
+    return {
+        "fifty_year_caption": fifty_year_caption,
     }
-    if all(k in ds for k in needed):
-        return ds, {}
 
-    # 1) Yearly mean trend from existing yearly series
-    if "t2m_yearly_mean_c" not in ds:
-        return ds, {}
 
-    y_year = ds["t2m_yearly_mean_c"].values.astype(float)
-    tr = linear_trend(y_year)
-    ds["t2m_yearly_mean_trend_c"] = xr.DataArray(
-        tr.yhat.astype("float32"),
-        dims=ds["t2m_yearly_mean_c"].dims,
-        coords=ds["t2m_yearly_mean_c"].coords,
+def _caption_from_spec(
+    spec: dict[str, Any],
+    *,
+    context: dict[str, Any],
+) -> str | None:
+    if not spec:
+        return None
+    ctype = spec.get("type")
+    if ctype == "static":
+        return str(spec.get("text", "")).strip() or None
+    if ctype != "fn":
+        return None
+
+    fn_name = spec.get("fn")
+    if not fn_name:
+        return None
+
+    fn_map = _caption_fn_registry()
+    fn = fn_map.get(fn_name)
+    if fn is None:
+        raise KeyError(f"Unknown caption function: {fn_name}")
+
+    params = spec.get("params", {})
+    ctx_data = dict(context)
+    ctx_data["params"] = params
+
+    data = dict(ctx_data.get("data", {}))
+    if isinstance(params, dict):
+        data.update(params)
+    facts_data = ctx_data.get("facts", {})
+    place = ctx_data.get("place", {})
+    unit = ctx_data.get("unit", "C")
+
+    ctx = StoryContext(
+        today=date.today(),
+        slug=str(place.get("slug", "")),
+        location_label=str(place.get("label", "")),
+        city_name=str(place.get("label", "")),
+        location_lat=float(place.get("lat", 0.0)),
+        location_lon=float(place.get("lon", 0.0)),
+        unit=str(unit),
+        ds=xr.Dataset(),
+    )
+    facts = StoryFacts(
+        data_start_year=int(facts_data.get("start_year", 0)),
+        data_end_year=int(facts_data.get("end_year", 0)),
+        total_warming_50y=facts_data.get("total_warming_50y"),
+        recent_warming_10y=facts_data.get("recent_warming_10y"),
+        last_year_anomaly=facts_data.get("last_year_anomaly"),
+        hemisphere=str(facts_data.get("hemisphere", "")),
     )
 
-    # 2) Coldest/warmest month per year based on monthly series
-    # We compute annual min/max of monthly means, then fit a trend line over years.
-    if "t2m_monthly_mean_c" in ds and "time_monthly" in ds["t2m_monthly_mean_c"].coords:
-        tm = pd.to_datetime(ds["time_monthly"].values)
-        y_month = ds["t2m_monthly_mean_c"].values.astype(float)
+    return fn(ctx, facts, data)
 
-        df = pd.DataFrame({"time": tm, "y": y_month})
-        df["year"] = df["time"].dt.year
 
-        per_year_min = df.groupby("year")["y"].min().to_numpy()
-        per_year_max = df.groupby("year")["y"].max().to_numpy()
+def _series_key(series_spec: dict[str, Any]) -> str:
+    key = series_spec.get("key")
+    if isinstance(key, str) and key:
+        return key
+    metric = series_spec.get("metric", "series")
+    transform = series_spec.get("transform")
+    if isinstance(transform, dict):
+        fn = transform.get("fn")
+        if fn:
+            return f"{metric}_{fn}"
+    if isinstance(transform, str):
+        return f"{metric}_{transform}"
+    return metric
 
-        # Align to the same year axis as your yearly series if possible
-        years_yearly = (
-            pd.to_datetime(ds["time_yearly"].values).year
-            if "time_yearly" in ds.coords
-            else None
-        )
-        if years_yearly is not None:
-            # build a mapping year -> min/max
-            g = df.groupby("year")["y"]
-            min_map = g.min().to_dict()
-            max_map = g.max().to_dict()
-            per_year_min = np.array(
-                [min_map.get(int(y), np.nan) for y in years_yearly], dtype=float
+
+def _apply_transform(
+    *,
+    x: np.ndarray,
+    y: np.ndarray,
+    transform: dict[str, Any] | str | None,
+) -> np.ndarray:
+    if not transform:
+        return y
+    if isinstance(transform, str):
+        fn = transform
+        params = {}
+    else:
+        fn = transform.get("fn")
+        params = transform.get("params", {})
+
+    if fn == "rolling_mean":
+        window = int(params.get("window", 5))
+        return rolling_mean_centered(y, window=window)
+    if fn == "linear_trend_line":
+        return linear_trend_line(x, y)
+
+    raise ValueError(f"Unsupported transform: {fn}")
+
+
+def _convert_unit(y: np.ndarray, unit_in: str | None, unit_out: str) -> np.ndarray:
+    if not unit_in:
+        return y
+    if unit_in.upper() == unit_out.upper():
+        return y
+    if unit_in.upper() == "C" and unit_out.upper() == "F":
+        return c_to_f(y)
+    if unit_in.upper() == "F" and unit_out.upper() == "C":
+        return (y - 32.0) * (5.0 / 9.0)
+    return y
+
+
+def _annotation_text(kind: str, value: float, unit: str, label: str | None) -> str:
+    prefix = f"{label}: " if label else ""
+    return f"{prefix}{value:.2f}{unit}"
+
+
+def _build_series_annotations(
+    *,
+    series_key: str,
+    y: np.ndarray,
+    unit: str,
+    annotations: list[dict[str, Any]] | None,
+) -> list[GraphAnnotation]:
+    if not annotations:
+        return []
+
+    out: list[GraphAnnotation] = []
+    finite = y[np.isfinite(y)]
+    if finite.size == 0:
+        return out
+
+    for ann in annotations:
+        kind = ann.get("type")
+        label = ann.get("label")
+        if kind == "min":
+            val = float(np.min(finite))
+            out.append(
+                GraphAnnotation(
+                    series_key=series_key,
+                    text=_annotation_text("min", val, unit, label),
+                )
             )
-            per_year_max = np.array(
-                [max_map.get(int(y), np.nan) for y in years_yearly], dtype=float
+        elif kind == "max":
+            val = float(np.max(finite))
+            out.append(
+                GraphAnnotation(
+                    series_key=series_key,
+                    text=_annotation_text("max", val, unit, label),
+                )
             )
-
-        tr_min = linear_trend(per_year_min)
-        tr_max = linear_trend(per_year_max)
-
-        # Use yearly axis coords (time_yearly) for the trend series
-        if "time_yearly" in ds.coords:
-            coords = {"time_yearly": ds["time_yearly"].values}
-            dims = ("time_yearly",)
-        else:
-            # fallback
-            coords = {}
-            dims = ds["t2m_yearly_mean_c"].dims
-
-        ds["t2m_yearly_coldest_month_trend_c"] = xr.DataArray(
-            tr_min.yhat.astype("float32"), dims=dims, coords=coords
-        )
-        ds["t2m_yearly_warmest_month_trend_c"] = xr.DataArray(
-            tr_max.yhat.astype("float32"), dims=dims, coords=coords
-        )
-
-        return ds, {
-            "mean": float(tr.delta),
-            "coldest": float(tr_min.delta),
-            "warmest": float(tr_max.delta),
-        }
-
-    return ds, {"mean": float(tr.delta)}
+    return out
 
 
-def _series_xy_from_da(da: xr.DataArray) -> tuple[list[Any], list[float]]:
-    """
-    Extract (x, y) from a DataArray with any of:
-      - time coord
-      - year coord
-      - month coord
-    No assumptions about length.
-    """
-    # Choose the first coordinate that matches common names
-    for coord in (
-        "time_yearly",
-        "time_monthly",
-        "time",
-        "time_ocean",
-        "year",
-        "year_ocean",
-        "month",
-    ):
-        if coord in da.coords:
-            x = da[coord].values
-            # Convert numpy datetime64 to ISO strings for JSON safety
-            if np.issubdtype(x.dtype, np.datetime64):
-                x_out = [str(v)[:10] for v in x.astype("datetime64[D]")]
-            else:
-                x_list = x.tolist()
-                x_out = [
-                    (
-                        int(v)
-                        if isinstance(v, (int, np.integer))
-                        else float(v) if isinstance(v, (float, np.floating)) else str(v)
-                    )  # e.g. if it's something odd, keep it JSON-safe
-                    for v in x_list
-                ]
-            y = da.values
-            y_list = np.asarray(y).reshape(-1).tolist()
-            y_out: list[float | None] = []
-            for v in y_list:
-                fv = float(v)
-                y_out.append(fv if math.isfinite(fv) else None)
-            return x_out, y_out
-
-    # Fallback: 0..N-1
-    y = da.values
-    y_list = np.asarray(y).reshape(-1).tolist()
-    y_out: list[float | None] = []
-    for v in y_list:
+def _series_to_list(y: np.ndarray) -> list[float | None]:
+    out: list[float | None] = []
+    for v in y.tolist():
         fv = float(v)
-        y_out.append(fv if math.isfinite(fv) else None)
-    x_out = list(range(len(y_out)))
-    return x_out, y_out
+        out.append(fv if math.isfinite(fv) else None)
+    return out
 
 
-def build_panel_tiles_t2m_50y(
+def _series_year_axis(tile_store: TileDataStore, metric: str, length: int) -> list[int]:
+    axis = tile_store.axis(metric)
+    if axis:
+        return [int(v) for v in axis]
+    return list(
+        range(tile_store.start_year_fallback, tile_store.start_year_fallback + length)
+    )
+
+
+def build_panel_tiles_registry(
     *,
     place_resolver: PlaceResolver,
     tile_store: TileDataStore,
@@ -184,122 +205,143 @@ def build_panel_tiles_t2m_50y(
     lat: float,
     lon: float,
     unit: str,
+    panel_id: str,
+    panels_manifest: dict[str, Any] | None = None,
 ) -> PanelResponse:
-    """
-    Build a tile-backed panel for v0:
-      annual mean t2m + 5y mean + trend
-    """
     unit = unit.upper()
-
-    # Snap to the tile grid cell using the grid spec (single source of truth)
-    grid = tile_store.grid
-    cell, t = locate_tile(lat, lon, grid)
-    i_lat, i_lon = cell.i_lat, cell.i_lon
-
-    latc, lonc = cell_center_latlon(i_lat, i_lon, grid)
-    latc = float(latc)
-    lonc = float(lonc)
-
-    half = float(grid.deg) / 2.0
-    lat_min = latc - half
-    lat_max = latc + half
-    lon_min = lonc - half
-    lon_max = lonc + half
-
-    cache_key = f"panel:{release}:t2m_50y:{unit}:{i_lat}:{i_lon}"
+    cache_key = f"panel:{release}:registry:{panel_id}:{unit}:{lat:.4f}:{lon:.4f}"
 
     if cache is not None:
         hit = cache.get_json(cache_key)
         if hit is not None:
             return PanelResponse.model_validate(hit)
 
-    # Place label (nearest from locations.csv)
+    if panels_manifest is None:
+        panels_manifest = load_panels(DEFAULT_PANELS_PATH, validate=True)
+
+    panels = panels_manifest.get("panels", {})
+    panel_spec = panels.get(panel_id)
+    if panel_spec is None:
+        raise KeyError(f"Unknown panel_id: {panel_id}")
+
     place = place_resolver.resolve_place(lat, lon)
 
-    metric = "t2m_yearly_mean_c"
-    expected = tile_path(
-        tile_store.tiles_root,
-        grid,
-        metric=metric,
-        tile_r=t.tile_r,
-        tile_c=t.tile_c,
-        ext=".bin.zst",
-    )
+    series_payload: Dict[str, SeriesPayload] = {}
+    graphs_out: List[GraphPayload] = []
 
-    y_c = tile_store.try_get_metric_vector(metric, lat, lon)
-    if y_c is None:
-        raise FileNotFoundError(
-            f"No tile data for metric={metric} at "
-            f"(i_lat={cell.i_lat}, i_lon={cell.i_lon}) "
-            f"tile=(r={t.tile_r}, c={t.tile_c}) "
-            f"cell_offset=(o_lat={t.o_lat}, o_lon={t.o_lon}); "
-            f"expected file: {expected}"
-        )
+    data_cells_map: dict[str, DataCell] = {}
+    base_series_for_caption: tuple[list[int], np.ndarray] | None = None
 
-    y_c = np.asarray(y_c, dtype=np.float32).reshape(-1)
+    for graph in panel_spec.get("graphs", []):
+        graph_series_keys: list[str] = []
+        graph_annotations: list[GraphAnnotation] = []
+        graph_caption: str | None = None
+        graph_error: str | None = None
+        missing = False
 
-    years = tile_store.yearly_axis(
-        metric
-    )  # per-metric yearly.json (you just implemented this)
-    if not years:
-        # dev fallback if axis missing
-        years = list(
-            range(
-                tile_store.start_year_fallback,
-                tile_store.start_year_fallback + int(y_c.size),
+        for series_spec in graph.get("series", []):
+            metric = series_spec.get("metric")
+            if not metric:
+                continue
+
+            key = _series_key(series_spec)
+            if key in series_payload:
+                graph_series_keys.append(key)
+                continue
+
+            try:
+                vec = tile_store.try_get_metric_vector(metric, lat, lon)
+            except FileNotFoundError:
+                missing = True
+                continue
+            if vec is None:
+                missing = True
+                continue
+
+            vec = np.asarray(vec, dtype=np.float32).reshape(-1)
+            axis_years = _series_year_axis(tile_store, metric, vec.size)
+            x = np.asarray(axis_years, dtype=np.int32)
+            if x.size != vec.size:
+                raise RuntimeError(
+                    f"Axis length {x.size} != series length {vec.size} for {metric}"
+                )
+
+            y = _apply_transform(x=x, y=vec, transform=series_spec.get("transform"))
+            y = _convert_unit(y, series_spec.get("unit"), unit)
+
+            series_payload[key] = SeriesPayload(
+                x=[int(v) for v in x.tolist()],
+                y=_series_to_list(y),
+                unit=unit,
+                style=series_spec.get("style"),
+            )
+            graph_series_keys.append(key)
+
+            if base_series_for_caption is None:
+                base_series_for_caption = (axis_years, y)
+
+            graph_annotations.extend(
+                _build_series_annotations(
+                    series_key=key,
+                    y=y,
+                    unit=unit,
+                    annotations=series_spec.get("annotations"),
+                )
+            )
+
+            grid = tile_store._metric_grid(metric)
+            if grid.grid_id not in data_cells_map:
+                cell, t = locate_tile(lat, lon, grid)
+                latc, lonc = cell_center_latlon(cell.i_lat, cell.i_lon, grid)
+                half = float(grid.deg) / 2.0
+                data_cells_map[grid.grid_id] = DataCell(
+                    grid=grid.grid_id,
+                    i_lat=cell.i_lat,
+                    i_lon=cell.i_lon,
+                    deg=float(grid.deg),
+                    lat_center=float(latc),
+                    lon_center=float(lonc),
+                    lat_min=float(latc - half),
+                    lat_max=float(latc + half),
+                    lon_min=float(lonc - half),
+                    lon_max=float(lonc + half),
+                    tile_r=int(t.tile_r),
+                    tile_c=int(t.tile_c),
+                    o_lat=int(t.o_lat),
+                    o_lon=int(t.o_lon),
+                )
+
+        if missing:
+            graph_error = "Missing data - graph can't be displayed."
+            graph_series_keys = []
+            graph_annotations = []
+        elif graph.get("caption"):
+            caption_ctx = _caption_context_from_series(
+                axis_series=base_series_for_caption,
+                unit=unit,
+                place=place,
+                lat=lat,
+            )
+            graph_caption = _caption_from_spec(graph.get("caption"), context=caption_ctx)
+
+        graphs_out.append(
+            GraphPayload(
+                id=graph.get("id", ""),
+                title=graph.get("title", ""),
+                series_keys=graph_series_keys,
+                annotations=graph_annotations,
+                caption=graph_caption,
+                error=graph_error,
+                x_axis_label=graph.get("x_axis_label"),
+                y_axis_label=graph.get("y_axis_label"),
             )
         )
 
-    x = np.asarray(years, dtype=np.int32)
-    if x.size != y_c.size:
-        raise RuntimeError(
-            f"Year axis length {x.size} != series length {y_c.size} for {metric}"
-        )
-
-    # Derived: 5y mean + trend line
-    y5_c = rolling_mean_centered(y_c, window=5)
-    ytrend_c = linear_trend_line(x, y_c)
-
-    if unit == "F":
-        y = c_to_f(y_c)
-        y5 = c_to_f(y5_c)
-        ytrend = c_to_f(ytrend_c)
-        unit_out = "F"
-    else:
-        y, y5, ytrend = y_c, y5_c, ytrend_c
-        unit_out = "C"
-
-    def to_list(a: np.ndarray) -> list[float | None]:
-        out: list[float | None] = []
-        for v in a.tolist():
-            fv = float(v)
-            out.append(fv if math.isfinite(fv) else None)
-        return out
-
-    x_list = [int(v) for v in x.tolist()]
-
-    series_payload: Dict[str, SeriesPayload] = {
-        "t2m_yearly_mean": SeriesPayload(x=x_list, y=to_list(y), unit=unit_out),
-        "t2m_yearly_mean_5y": SeriesPayload(x=x_list, y=to_list(y5), unit=unit_out),
-        "t2m_yearly_trend": SeriesPayload(x=x_list, y=to_list(ytrend), unit=unit_out),
-    }
-
-    graphs_out: List[GraphPayload] = [
-        GraphPayload(
-            id="t2m_annual_mean",
-            title="Annual mean + 5-year mean + trend",
-            series_keys=["t2m_yearly_mean", "t2m_yearly_mean_5y", "t2m_yearly_trend"],
-            annotations=[],
-        )
-    ]
-
-    caption = make_panel_caption(panel_id="t2m_50y", slug=place.slug)
-
     panel_out = PanelPayload(
-        id="t2m_50y",
-        title="Air temperature",
+        id=panel_id,
+        title=panel_spec.get("title", panel_id),
         graphs=graphs_out,
-        text_md=caption,
+        text_md=None,
     )
 
     loc_out = LocationInfo(
@@ -311,29 +353,12 @@ def build_panel_tiles_t2m_50y(
             lon=float(place.lon),
             distance_km=float(place.distance_km),
         ),
-        data_cells=[
-            DataCell(
-                grid=grid.grid_id,  # e.g. "global_0p25"
-                i_lat=i_lat,
-                i_lon=i_lon,
-                deg=float(grid.deg),
-                lat_center=latc,
-                lon_center=lonc,
-                lat_min=float(lat_min),
-                lat_max=float(lat_max),
-                lon_min=float(lon_min),
-                lon_max=float(lon_max),
-                tile_r=int(t.tile_r),
-                tile_c=int(t.tile_c),
-                o_lat=int(t.o_lat),
-                o_lon=int(t.o_lon),
-            )
-        ],
+        data_cells=list(data_cells_map.values()),
     )
 
     resp = PanelResponse(
         release=release,
-        unit=unit_out,
+        unit=unit,
         location=loc_out,
         panel=panel_out,
         series=series_payload,
@@ -345,183 +370,47 @@ def build_panel_tiles_t2m_50y(
     return resp
 
 
-def build_panel(
-    store: Store,
-    registry: Registry,
-    cache: Cache | None,
-    ttl_panel_s: int,
-    release: str,
-    lat: float,
-    lon: float,
-    panel_id: str,
+def _caption_context_from_series(
+    *,
+    axis_series: tuple[list[int], np.ndarray] | None,
     unit: str,
-) -> PanelResponse:
-    place_slug, place_d_km = store.resolve_place(lat, lon)
-    cache_key = f"panel:{release}:{panel_id}:{unit.upper()}:{place_slug}"
-    if cache is not None:
-        hit = cache.get_json(cache_key)
-        if hit is not None:
-            # Pydantic v2:
-            return PanelResponse.model_validate(hit)
-    meta = store.location_meta(place_slug)
-    ds = store.load_location_dataset(place_slug)
+    place: PlaceInfo,
+    lat: float,
+) -> dict[str, Any]:
+    years: list[int] = []
+    y = np.array([], dtype=np.float32)
+    if axis_series is not None:
+        years, y = axis_series
 
-    panel_spec = registry.panel(panel_id)
-    graph_specs = registry.panel_graphs(panel_id)
+    start_year = int(years[0]) if years else 0
+    end_year = int(years[-1]) if years else 0
+    total_span_years = int(end_year - start_year) if years else 0
 
-    # If this panel includes the last50 graph, compute derived series in-memory
-    deltas_c: dict[str, float] = {}
-    if any(g.id == "t2m_last50_monthly_trend" for g in graph_specs):
-        ds, deltas_c = _ensure_t2m_last50_derived(ds)
+    finite = y[np.isfinite(y)]
+    total_warming = float(finite[-1] - finite[0]) if finite.size >= 2 else None
 
-    data_cells = []
-    if panel_id == "overview":
-        i_lat, i_lon, latc, lonc = snap_cell(lat, lon, grid_deg=0.25, lon_mode="pm180")
-        data_cells.append(
-            DataCell(
-                grid="era5_025",
-                i_lat=i_lat,
-                i_lon=i_lon,
-                lat_center=latc,
-                lon_center=lonc,
-            )
-        )
-    elif panel_id == "ocean":
-        # oisst is pm180 and 0.25, CRW is degrees_east and effectively 0.05
-        i_lat, i_lon, latc, lonc = snap_cell(lat, lon, grid_deg=0.25, lon_mode="pm180")
-        data_cells.append(
-            DataCell(
-                grid="oisst_025",
-                i_lat=i_lat,
-                i_lon=i_lon,
-                lat_center=latc,
-                lon_center=lonc,
-            )
-        )
-        i_lat, i_lon, latc, lonc = snap_cell(lat, lon, grid_deg=0.05, lon_mode="east")
-        data_cells.append(
-            DataCell(
-                grid="crw_005",
-                i_lat=i_lat,
-                i_lon=i_lon,
-                lat_center=latc,
-                lon_center=lonc,
-            )
-        )
+    hemisphere = "N" if lat >= 0 else "S"
 
-    # Collect unique series keys
-    needed: List[tuple[str, str]] = []  # (key, unit_kind)
-    for g in graph_specs:
-        for s in g.series:
-            needed.append((s.key, s.unit_kind))
-
-    series_payload: Dict[str, SeriesPayload] = {}
-    missing: List[str] = []
-
-    for key, unit_kind in needed:
-        if key in series_payload:
-            continue
-
-        if key not in ds:
-            missing.append(key)
-            continue
-
-        da = ds[key]
-        x, y = _series_xy_from_da(da)
-        y2, unit_out = convert_series(unit=unit, unit_kind=unit_kind, y=y)
-
-        series_payload[key] = SeriesPayload(x=x, y=y2, unit=unit_out)
-
-    # For v0, don’t error if some ocean series aren’t present for inland slugs; just omit those graphs later.
-    # Filter out graphs that have missing required series.
-    graphs_out: List[GraphPayload] = []
-    for g in graph_specs:
-        keys = [s.key for s in g.series]
-        if any(k not in series_payload for k in keys):
-            continue
-
-        annotations: List[GraphAnnotation] = []
-        if g.id == "t2m_last50_monthly_trend" and deltas_c:
-            # show as “+0.3°C in 46y”
-            # number of years = len(yearly)-1 if yearly series is present
-            n_years = 0
-            if "t2m_yearly_mean_c" in series_payload:
-                n_years = max(0, len(series_payload["t2m_yearly_mean_c"].x) - 1)
-
-            def fmt(delta_c: float) -> str:
-                sign = "+" if delta_c >= 0 else ""
-                # if unit=F, convert delta as delta (no +32)
-                if unit.upper() == "F":
-                    delta = delta_c * 9.0 / 5.0
-                    return f"{sign}{delta:.1f}°F in {n_years}y"
-                return f"{sign}{delta_c:.1f}°C in {n_years}y"
-
-            if "mean" in deltas_c:
-                annotations.append(
-                    GraphAnnotation(
-                        series_key="t2m_yearly_mean_trend_c", text=fmt(deltas_c["mean"])
-                    )
-                )
-            if "coldest" in deltas_c:
-                annotations.append(
-                    GraphAnnotation(
-                        series_key="t2m_yearly_coldest_month_trend_c",
-                        text=fmt(deltas_c["coldest"]),
-                    )
-                )
-            if "warmest" in deltas_c:
-                annotations.append(
-                    GraphAnnotation(
-                        series_key="t2m_yearly_warmest_month_trend_c",
-                        text=fmt(deltas_c["warmest"]),
-                    )
-                )
-
-        graphs_out.append(
-            GraphPayload(
-                id=g.id, title=g.title, series_keys=keys, annotations=annotations
-            )
-        )
-
-    if panel_id == "t2m_demo":
-        caption = caption_t2m_demo(
-            unit=unit.upper(),
-            series={
-                k: v.model_dump(mode="json") for k, v in series_payload.items()
-            },  # or just series_payload if it's already dict-like
-            place_label=meta.get("label"),
-        )
-    else:
-        caption = make_panel_caption(panel_id=panel_id, slug=place_slug)
-
-    panel_out = PanelPayload(
-        id=panel_spec.id,
-        title=panel_spec.title,
-        graphs=graphs_out,
-        text_md=caption,
-    )
-
-    loc_out = LocationInfo(
-        query=QueryPoint(lat=float(lat), lon=float(lon)),
-        place=PlaceInfo(
-            slug=place_slug,
-            label=meta.get("label"),
-            lat=float(meta["lat"]),
-            lon=float(meta["lon"]),
-            distance_km=float(place_d_km),
-        ),
-        data_cells=data_cells,
-    )
-
-    resp = PanelResponse(
-        release=release,
-        unit=unit.upper(),
-        location=loc_out,
-        panel=panel_out,
-        series=series_payload,
-    )
-
-    if cache is not None:
-        cache.set_json(cache_key, resp.model_dump(mode="json"), ttl_s=ttl_panel_s)
-
-    return resp
+    return {
+        "place": {
+            "slug": place.slug,
+            "label": place.label,
+            "lat": place.lat,
+            "lon": place.lon,
+        },
+        "unit": unit,
+        "facts": {
+            "start_year": start_year,
+            "end_year": end_year,
+            "total_warming_50y": total_warming,
+            "recent_warming_10y": None,
+            "last_year_anomaly": None,
+            "hemisphere": hemisphere,
+        },
+        "data": {
+            "total_span_years": total_span_years,
+            "total_warming": total_warming,
+            "coldest_month_trend_50y": None,
+            "warmest_month_trend_50y": None,
+        },
+    }

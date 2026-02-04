@@ -7,6 +7,8 @@ from typing import Literal, Tuple
 
 import math
 
+from climate.geo import normalize_lon_pm180
+
 
 @dataclass(frozen=True)
 class GridSpec:
@@ -58,19 +60,6 @@ class TileIndex:
     tile_c: int
     o_lat: int
     o_lon: int
-
-
-def normalize_lon_pm180(lon: float) -> float:
-    """
-    Normalize longitude into [-180, 180).
-    """
-    x = float(lon)
-    # Python's modulo works for negatives the way we want when shifting by +180
-    x = ((x + 180.0) % 360.0) - 180.0
-    # keep exactly +180 out of range => map to -180
-    if x == 180.0:
-        x = -180.0
-    return x
 
 
 def snap_to_cell_indices(lat: float, lon: float, grid: GridSpec) -> CellIndex:

@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Climate Panel Registry",
+  "description": "Schema for registry/panels.json defining panels/graphs/series.",
+  "type": "object",
+  "properties": {
+    "version": { "type": "string" },
+    "panels": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-z][a-z0-9_]*$": { "$ref": "#/$defs/panel" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["panels"],
+  "additionalProperties": false,
+  "$defs": {
+    "panel": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "graphs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/graph" },
+          "minItems": 1
+        }
+      },
+      "required": ["title", "graphs"],
+      "additionalProperties": false
+    },
+    "graph": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "title": { "type": "string" },
+        "caption": { "$ref": "#/$defs/caption" },
+        "source": { "type": "string" },
+        "x_axis_label": { "type": "string" },
+        "y_axis_label": { "type": "string" },
+        "series": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/series" },
+          "minItems": 1
+        }
+      },
+      "required": ["id", "title", "series"],
+      "additionalProperties": false
+    },
+    "series": {
+      "type": "object",
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "metric": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "label": { "type": "string" },
+        "unit": { "type": "string" },
+        "transform": { "$ref": "#/$defs/transform" },
+        "style": { "$ref": "#/$defs/series_style" },
+        "annotations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/annotation" }
+        }
+      },
+      "required": ["metric", "label"],
+      "additionalProperties": false
+    },
+    "annotation": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["min", "max", "range", "note"] },
+        "value": { "type": ["number", "string"] },
+        "value2": { "type": ["number", "string"] },
+        "label": { "type": "string" }
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "transform": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "required": ["fn"],
+          "properties": {
+            "fn": { "type": "string" },
+            "params": { "type": "object", "additionalProperties": true, "default": {} }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "caption": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "text"],
+          "properties": {
+            "type": { "const": "static" },
+            "text": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "fn"],
+          "properties": {
+            "type": { "const": "fn" },
+            "fn": { "type": "string" },
+            "params": { "type": "object", "additionalProperties": true, "default": {} }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "series_style": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["line", "bar"] }
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    }
+  }
+}

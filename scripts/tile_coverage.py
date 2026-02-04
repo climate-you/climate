@@ -8,6 +8,7 @@ where "missing" is encoded as NaN for float metrics.
 
 Example:
   python scripts/debug_tile_coverage.py --root data/releases/dev --metric t2m_yearly_mean_c
+  python scripts/debug_tile_coverage.py --root data/releases/dev
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
+from climate.registry.metrics import DEFAULT_METRICS_PATH, DEFAULT_SCHEMA_PATH, load_metrics
 from climate.tiles.layout import GridSpec
 from climate.tiles.spec import read_tile_array
 
@@ -108,42 +110,46 @@ def _count_nonempty_cells(hdr_nyears: int, arr: np.ndarray) -> tuple[int, int]:
     return nonempty, total
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--root", type=Path, default=Path("data/releases/dev"))
-    ap.add_argument("--metric", type=str, required=True)
-    ap.add_argument("--grid", type=str, default="global_0p25")
-    ap.add_argument("--max-tiles", type=int, default=0, help="0 = no limit")
-    ap.add_argument("--summary-only", action="store_true")
-    args = ap.parse_args()
+def _grid_from_id(grid_id: str, tile_size: int) -> GridSpec:
+    if grid_id == "global_0p25":
+        return GridSpec.global_0p25(tile_size=tile_size)
+    raise SystemExit(
+        f"Unsupported grid_id {grid_id!r} (v0 supports 'global_0p25' only)"
+    )
 
-    # v0: only one grid spec used so far
-    if args.grid == "global_0p25":
-        grid = GridSpec.global_0p25(tile_size=64)
-    else:
-        raise SystemExit(
-            f"Unsupported --grid {args.grid!r} (v0 supports 'global_0p25' only)"
-        )
 
-    zdir = args.root / "series" / grid.grid_id / args.metric / f"z{grid.tile_size}"
+def _metric_summary(
+    *,
+    root: Path,
+    metric_id: str,
+    grid_id: str,
+    tile_size: int,
+    max_tiles: int,
+    summary_only: bool,
+) -> None:
+    grid = _grid_from_id(grid_id, tile_size=tile_size)
+    zdir = root / "series" / grid.grid_id / metric_id / f"z{grid.tile_size}"
     if not zdir.exists():
-        raise SystemExit(f"Tile directory not found: {zdir}")
+        print(f"[warn] Tile directory not found: {zdir}")
+        return
 
     files = _iter_tile_files(zdir)
-    if args.max_tiles and args.max_tiles > 0:
-        files = files[: args.max_tiles]
+    if max_tiles and max_tiles > 0:
+        files = files[: max_tiles]
 
     if not files:
-        raise SystemExit(f"No tile files found in: {zdir}")
+        print(f"[warn] No tile files found in: {zdir}")
+        return
 
     total_tiles = 0
+    total_tiles_expected = ((grid.nlat + grid.tile_size - 1) // grid.tile_size) * (
+        (grid.nlon + grid.tile_size - 1) // grid.tile_size
+    )
 
-    # Container fill (includes padding cells)
     total_container_cells = 0
     total_container_nonempty = 0
 
-    # Real-grid fill (excludes padding beyond nlat/nlon)
-    total_real_cells = 0
+    total_real_cells = grid.nlat * grid.nlon
     total_real_nonempty = 0
 
     for p in files:
@@ -154,11 +160,9 @@ def main() -> None:
 
         hdr, arr = read_tile_array(p)
 
-        # Container counts (full 64x64)
         nonempty_c, total_c = _count_nonempty_cells(hdr.nyears, arr)
         frac_c = 100.0 * (nonempty_c / total_c if total_c else 0.0)
 
-        # Real-grid counts (exclude padded rows/cols at edges)
         valid_h, valid_w = _valid_hw(grid, tr, tc)
         nonempty_r, total_r = _count_nonempty_cells_window(
             hdr.nyears, arr, valid_h, valid_w
@@ -166,14 +170,11 @@ def main() -> None:
         frac_r = 100.0 * (nonempty_r / total_r if total_r else 0.0)
 
         total_tiles += 1
-
         total_container_cells += total_c
         total_container_nonempty += nonempty_c
-
-        total_real_cells += total_r
         total_real_nonempty += nonempty_r
 
-        if not args.summary_only:
+        if not summary_only:
             print(
                 f"tile r{tr:03d} c{tc:03d}  nyears={hdr.nyears:>3d}  "
                 f"dtype={str(arr.dtype):>6s}  "
@@ -182,19 +183,71 @@ def main() -> None:
                 f"{p.name}"
             )
 
+    total_container_cells_expected = total_tiles_expected * grid.tile_size * grid.tile_size
     overall_c = 100.0 * (
-        total_container_nonempty / total_container_cells
-        if total_container_cells
+        total_container_nonempty / total_container_cells_expected
+        if total_container_cells_expected
         else 0.0
     )
     overall_r = 100.0 * (
         total_real_nonempty / total_real_cells if total_real_cells else 0.0
     )
     print(
-        f"\nSUMMARY: tiles={total_tiles}  "
-        f"container_nonempty={total_container_nonempty}/{total_container_cells}  ({overall_c:.2f}%)  "
-        f"real_nonempty={total_real_nonempty}/{total_real_cells}  ({overall_r:.2f}%)"
+        f"\nSUMMARY: metric={metric_id} tiles={total_tiles}/{total_tiles_expected}  "
+        f"container_nonempty={total_container_nonempty}/{total_container_cells_expected}  ({overall_c:.2f}%)  "
+        f"real_nonempty={total_real_nonempty}/{total_real_cells}  ({overall_r:.2f}%)\n"
     )
+
+
+def _registry_metrics(metrics_path: Path, schema_path: Path) -> list[tuple[str, dict]]:
+    manifest = load_metrics(metrics_path, schema_path=schema_path, validate=True)
+    items: list[tuple[str, dict]] = []
+    for metric_id, spec in manifest.items():
+        if metric_id == "version":
+            continue
+        storage = spec.get("storage", {})
+        if not storage.get("tiled", True):
+            continue
+        if spec.get("materialize") not in (None, "on_packager"):
+            continue
+        items.append((metric_id, spec))
+    return items
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--root", type=Path, default=Path("data/releases/dev"))
+    ap.add_argument("--metric", type=str, default=None)
+    ap.add_argument("--metrics-path", type=Path, default=DEFAULT_METRICS_PATH)
+    ap.add_argument("--schema-path", type=Path, default=DEFAULT_SCHEMA_PATH)
+    ap.add_argument("--max-tiles", type=int, default=0, help="0 = no limit")
+    ap.add_argument("--summary-only", action="store_true")
+    args = ap.parse_args()
+
+    if args.metric:
+        _metric_summary(
+            root=args.root,
+            metric_id=args.metric,
+            grid_id="global_0p25",
+            tile_size=64,
+            max_tiles=args.max_tiles,
+            summary_only=args.summary_only,
+        )
+        return
+
+    for metric_id, spec in _registry_metrics(args.metrics_path, args.schema_path):
+        storage = spec.get("storage", {})
+        tile_size = int(storage.get("tile_size", 64))
+        grid_id = spec.get("grid_id", "global_0p25")
+        print(f"== metric: {metric_id}  grid={grid_id}  tile_size={tile_size} ==")
+        _metric_summary(
+            root=args.root,
+            metric_id=metric_id,
+            grid_id=grid_id,
+            tile_size=tile_size,
+            max_tiles=args.max_tiles,
+            summary_only=args.summary_only,
+        )
 
 
 if __name__ == "__main__":

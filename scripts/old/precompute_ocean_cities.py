@@ -32,11 +32,11 @@ from climate.datasets.products.oisst import (
     fetch_daily_point as fetch_oisst_daily_sst_point,
     fetch_grid_mean as fetch_oisst_grid_sst_mean,
 )
-from climate.datasets.derive.sst_metrics import (
+from climate.datasets.derive.metrics.sst_metrics import (
     compute_anom_and_hotdays as compute_sst_anom_and_hotdays,
 )
 from climate.datasets.products.crw_dhw import fetch_box_mean as fetch_crw_dhw_box_mean
-from climate.datasets.derive.dhw_metrics import (
+from climate.datasets.derive.metrics.dhw_metrics import (
     compute_annual_metrics as compute_dhw_annual_metrics,
 )
 from climate.datasets.products.erddap_specs import ERDDAP_DATASETS

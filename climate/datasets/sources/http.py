@@ -22,6 +22,7 @@ def download_to(
     timeout: Tuple[int, int] = (30, 300),
     retries: int = 6,
     label: str = "",
+    base_label: str | None = None,
 ) -> Path:
     """
     Download URL -> file with caching + retries.
@@ -35,8 +36,9 @@ def download_to(
     for attempt in range(retries):
         try:
             if label:
+                base_info = f" (base={base_label})" if base_label else ""
                 print(
-                    f"{label} Downloading (attempt {attempt+1}/{retries}) -> {path.name}"
+                    f"{label} Downloading (attempt {attempt+1}/{retries}){base_info} -> {path.name}"
                 )
             r = requests.get(url, timeout=timeout)
             r.raise_for_status()

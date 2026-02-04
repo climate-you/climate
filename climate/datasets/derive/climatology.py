@@ -2,17 +2,13 @@ import pandas as pd
 import xarray as xr
 import numpy as np
 
-
-def _drop_feb29(s: pd.Series) -> pd.Series:
-    idx = pd.DatetimeIndex(s.index)
-    mask = ~((idx.month == 2) & (idx.day == 29))
-    return s.loc[mask]
+from .calendar import drop_feb29
 
 
 def daily_mean_p90(
     s_daily: pd.Series, baseline_start: str, baseline_end: str
 ) -> tuple[pd.Series, pd.Series]:
-    s = _drop_feb29(s_daily)
+    s = drop_feb29(s_daily)
     base = s.loc[
         (s.index >= pd.Timestamp(baseline_start))
         & (s.index <= pd.Timestamp(baseline_end))

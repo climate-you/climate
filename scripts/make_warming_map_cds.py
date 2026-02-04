@@ -162,8 +162,8 @@ def main() -> None:
         "grid_deg": args.grid_deg,
         "area": list(area) if area else None,
         "source_requests": {
-            "baseline_a": json.loads(req_a),
-            "baseline_b": json.loads(req_b),
+            "baseline_a": req_a,
+            "baseline_b": req_b,
         },
         "output": {
             "netcdf": str(out_nc),

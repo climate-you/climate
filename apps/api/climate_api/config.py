@@ -9,9 +9,6 @@ from typing import Optional
 class Settings:
     release: str
     locations_csv: Path
-    climatology_dir: Path
-    ocean_dir: Path
-    manifests_dir: Path
     tiles_series_root: Path
     redis_url: Optional[str]
     ttl_resolve_s: int
@@ -26,15 +23,6 @@ def load_settings() -> Settings:
     locations_csv = Path(
         os.environ.get("LOCATIONS_CSV", repo_root / "locations" / "locations.csv")
     )
-    climatology_dir = Path(
-        os.environ.get("STORY_CLIM_DIR", repo_root / "data" / "story_climatology")
-    )
-    ocean_dir = Path(
-        os.environ.get("STORY_OCEAN_DIR", repo_root / "data" / "story_ocean")
-    )
-    manifests_dir = Path(
-        os.environ.get("MANIFESTS_DIR", repo_root / "apps" / "api" / "manifests")
-    )
     tiles_series_root = Path(
         os.environ.get(
             "TILES_SERIES_ROOT",
@@ -48,9 +36,6 @@ def load_settings() -> Settings:
     return Settings(
         release=release,
         locations_csv=locations_csv,
-        climatology_dir=climatology_dir,
-        ocean_dir=ocean_dir,
-        manifests_dir=manifests_dir,
         tiles_series_root=tiles_series_root,
         redis_url=redis_url,
         ttl_resolve_s=ttl_resolve_s,

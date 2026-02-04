@@ -1,0 +1,161 @@
+{
+  "version": "0.1",
+  "panels": {
+    "overview": {
+      "title": "Overview",
+      "graphs": [
+        {
+          "id": "t2m_annual",
+          "title": "Annual temperature",
+          "x_axis_label": "Year",
+          "y_axis_label": "Temperature (°C)",
+          "caption": { "type": "fn", "fn": "fifty_year_caption", "params": {} },
+          "source": "CDS ERA5 2m temperature monthly means (1979-2025)",
+          "series": [
+            {
+              "key": "t2m_yearly_mean",
+              "metric": "t2m_yearly_mean_c",
+              "label": "Annual mean",
+              "unit": "C"
+            },
+            {
+              "key": "t2m_yearly_mean_5y",
+              "metric": "t2m_yearly_mean_c",
+              "label": "5-year mean",
+              "unit": "C",
+              "transform": {
+                "fn": "rolling_mean",
+                "params": { "window": 5, "centered": true }
+              },
+              "annotations": [
+                { "type": "min", "label": "Minimum" },
+                { "type": "max", "label": "Maximum" }
+              ]
+            },
+            {
+              "key": "t2m_yearly_trend",
+              "metric": "t2m_yearly_mean_c",
+              "label": "Trend",
+              "unit": "C",
+              "transform": { "fn": "linear_trend_line" }
+            }
+          ]
+        },
+        {
+          "id": "sst_annual",
+          "title": "Annual Sea Surface temperature",
+          "x_axis_label": "Year",
+          "y_axis_label": "Temperature (°C)",
+          "caption": {
+            "type": "static",
+            "text": "This graph shows Sea Surface Temperature. "
+          },
+          "source": "ERDDAP SST temperature daily means (2021-2025)",
+          "series": [
+            {
+              "key": "sst_yearly_mean",
+              "metric": "sst_yearly_mean_c",
+              "label": "Annual mean",
+              "unit": "C"
+            },
+            {
+              "key": "sst_yearly_mean_5y",
+              "metric": "sst_yearly_mean_c",
+              "label": "5-year mean",
+              "unit": "C",
+              "transform": {
+                "fn": "rolling_mean",
+                "params": { "window": 5, "centered": true }
+              },
+              "annotations": [
+                { "type": "min", "label": "Minimum" },
+                { "type": "max", "label": "Maximum" }
+              ]
+            },
+            {
+              "key": "sst_yearly_trend",
+              "metric": "sst_yearly_mean_c",
+              "label": "Trend",
+              "unit": "C",
+              "transform": { "fn": "linear_trend_line" }
+            }
+          ]
+        },
+        {
+          "id": "t2m_hot_days",
+          "title": "Hot days per year (air temperature)",
+          "x_axis_label": "Year",
+          "y_axis_label": "Days/year",
+          "caption": {
+            "type": "static",
+            "text": "Hot days are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979. Units: Hot days / year."
+          },
+          "source": "CDS ERA5 2m temperature daily means (1979-2025)",
+          "series": [
+            {
+              "key": "t2m_hotdays",
+              "metric": "t2m_hotdays_per_year",
+              "label": "Hot days",
+              "unit": "days",
+              "style": { "type": "bar" }
+            },
+            {
+              "key": "t2m_hotdays_5y",
+              "metric": "t2m_hotdays_per_year",
+              "label": "5-year mean",
+              "unit": "days",
+              "transform": {
+                "fn": "rolling_mean",
+                "params": { "window": 5, "centered": true }
+              }
+            },
+            {
+              "key": "t2m_hotdays_trend",
+              "metric": "t2m_hotdays_per_year",
+              "label": "Trend",
+              "unit": "days",
+              "transform": { "fn": "linear_trend_line" }
+            }
+          ]
+        },
+        {
+          "id": "sst_hot_days",
+          "title": "Hot days per year (sea surface temperature)",
+          "x_axis_label": "Year",
+          "y_axis_label": "Days/year",
+          "caption": {
+            "type": "static",
+            "text": "Hot days are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979. Units: Hot days / year."
+          },
+          "source": "ERDDAP OISST daily means (2021-2025)",
+          "series": [
+            {
+              "key": "sst_hotdays",
+              "metric": "sst_hotdays_per_year",
+              "label": "Hot days",
+              "unit": "days",
+              "style": { "type": "bar" }
+            },
+            {
+              "key": "sst_hotdays_5y",
+              "metric": "sst_hotdays_per_year",
+              "label": "5-year mean",
+              "unit": "days",
+              "transform": {
+                "fn": "rolling_mean",
+                "params": { "window": 5, "centered": true }
+              }
+            },
+            {
+              "key": "sst_hotdays_trend",
+              "metric": "sst_hotdays_per_year",
+              "label": "Trend",
+              "unit": "days",
+              "transform": { "fn": "linear_trend_line" }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

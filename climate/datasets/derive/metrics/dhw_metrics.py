@@ -1,6 +1,6 @@
 import pandas as pd
 
-from .time_agg import annual_group
+from ..time_agg import annual_group
 
 
 def compute_annual_metrics(

@@ -1,5 +1,6 @@
 import pandas as pd
 import xarray as xr
+import numpy as np
 
 
 def annual_group(s: pd.Series, how: str) -> pd.Series:
@@ -27,3 +28,30 @@ def daily_to_monthly_and_yearly_t2m(ds_daily: xr.Dataset):
     yearly_mean = yearly_mean.rename(time="time_yearly")
 
     return monthly_mean, monthly_min, monthly_max, yearly_mean
+
+
+def find_time_dim(da: xr.DataArray) -> str:
+    for name in ("time", "valid_time", "forecast_time"):
+        if name in da.dims:
+            return name
+    raise RuntimeError(f"Could not find a time dimension in dims={da.dims}")
+
+
+def annual_mean_from_monthly(da: xr.DataArray) -> xr.DataArray:
+    tname = find_time_dim(da)
+    if not np.issubdtype(da[tname].dtype, np.datetime64):
+        da = xr.decode_cf(da.to_dataset(name="v"))["v"]
+    return da.groupby(f"{tname}.year").mean(tname, keep_attrs=False)
+
+
+def monthly_mean_from_daily(da: xr.DataArray) -> xr.DataArray:
+    tname = find_time_dim(da)
+    if not np.issubdtype(da[tname].dtype, np.datetime64):
+        da = xr.decode_cf(da.to_dataset(name="v"))["v"]
+    return da.resample({tname: "1MS"}).mean(keep_attrs=False)
+
+
+def annual_mean_from_daily(da: xr.DataArray) -> xr.DataArray:
+    monthly = monthly_mean_from_daily(da)
+    tname = find_time_dim(monthly)
+    return monthly.groupby(f"{tname}.year").mean(tname, keep_attrs=False)

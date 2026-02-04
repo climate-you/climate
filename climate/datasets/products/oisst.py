@@ -4,6 +4,7 @@ from typing import Optional
 from pathlib import Path
 from typing import Tuple
 
+from climate.geo import normalize_lon_pm180
 
 from .erddap_specs import ERDDAP_DATASETS
 from ..sources.erddap import (
@@ -13,27 +14,7 @@ from ..sources.erddap import (
 )
 from ..sources.http import download_to
 
-# OISST v2.1 daily via ERDDAP
-OISST_BASES = [
-    "https://coastwatch.pfeg.noaa.gov/erddap",
-    "https://upwell.pfeg.noaa.gov/erddap",
-]
-
-
 # -------------------------
-# Helpers
-# -------------------------
-
-
-def _lon_pm180(lon: float) -> float:
-    lon_q = lon
-    if lon_q > 180:
-        lon_q -= 360
-    if lon_q < -180:
-        lon_q += 360
-    return lon_q
-
-
 def _year_blocks(start: str, end: str, block_years: int):
     y0 = int(start[:4])
     y1 = int(end[:4])
@@ -77,7 +58,7 @@ def fetch_daily_point(
     404 "no matching results". So we try both lat-range orders (and lon-range orders
     as a safeguard) when we hit a 404.
     """
-    lon_pm = _lon_pm180(lon)
+    lon_pm = normalize_lon_pm180(lon)
 
     half = 0.26
     lat0, lat1 = lat - half, lat + half
@@ -115,7 +96,10 @@ def fetch_daily_point(
         ]
 
         dataset_id = spec["dataset_id"]
-        for base in OISST_BASES:
+        bases = spec.get("bases")
+        if not bases:
+            raise RuntimeError("ERDDAP spec missing bases for oisst_sst_v21_daily")
+        for base in bases:
             for la0, la1, lo0, lo1 in variants:
                 query = build_query(a, b, la0, la1, lo0, lo1)
                 url = make_griddap_url(base, dataset_id, query, "csv")
@@ -212,7 +196,7 @@ def fetch_grid_mean(
     dataset_id = spec["dataset_id"]
     var = spec["var"]
 
-    lon_pm = _lon_pm180(lon)
+    lon_pm = normalize_lon_pm180(lon)
 
     # Clamp to dataset availability
     start = max(start, spec.get("dataset_start", start))
@@ -233,7 +217,10 @@ def fetch_grid_mean(
 
     last_err: Optional[Exception] = None
 
-    for base in OISST_BASES:
+    bases = spec.get("bases")
+    if not bases:
+        raise RuntimeError("ERDDAP spec missing bases for oisst_sst_v21_daily")
+    for base in bases:
         for la0, la1, lo0, lo1 in variants:
             query = build_griddap_query(
                 spec,

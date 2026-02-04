@@ -1,0 +1,267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Climate Metric Registry",
+  "description": "Schema for registry/metrics.json mapping metric_id to metric spec entries.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Optional manifest version tag."
+    }
+  },
+  "patternProperties": {
+    "^(?!version$)[a-z][a-z0-9_]*$": { "$ref": "#/$defs/metric" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "metric": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Optional self-reference; should match the manifest key."
+        },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "unit": { "type": "string" },
+        "dtype": {
+          "type": "string",
+          "enum": ["float32", "float64", "int16", "int32", "uint16", "uint32"]
+        },
+        "missing": {
+          "type": ["string", "number", "null"],
+          "description": "Representation of missing values (e.g. \"nan\")."
+        },
+        "grid_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_.]+$"
+        },
+        "time_axis": {
+          "type": "string",
+          "enum": ["yearly", "monthly", "daily", "subdaily"]
+        },
+        "axis": { "$ref": "#/$defs/axis" },
+        "source": { "$ref": "#/$defs/source" },
+        "storage": { "$ref": "#/$defs/storage" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "materialize": {
+          "type": "string",
+          "enum": ["on_packager", "on_api", "on_client"],
+          "description": "Placement hint for derived metrics; defaults to on_packager for tiled metrics."
+        },
+        "overrides": { "$ref": "#/$defs/overrides" },
+        "deprecated": { "type": "boolean" }
+      },
+      "required": ["grid_id", "time_axis", "dtype", "missing", "source"],
+      "additionalProperties": false
+    },
+
+    "metric_override": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "unit": { "type": "string" },
+        "dtype": { "type": "string", "enum": ["float32", "float64", "int16", "int32", "uint16", "uint32"] },
+        "missing": { "type": ["string", "number", "null"] },
+        "grid_id": { "type": "string", "pattern": "^[a-z0-9_.]+$" },
+        "time_axis": { "type": "string", "enum": ["yearly", "monthly", "daily", "subdaily"] },
+        "axis": { "$ref": "#/$defs/axis" },
+        "source": { "$ref": "#/$defs/source" },
+        "storage": { "$ref": "#/$defs/storage" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "materialize": { "type": "string", "enum": ["on_packager", "on_api", "on_client"] },
+        "deprecated": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+
+    "axis": {
+      "description": "Optional explicit axis; if omitted, packager/API derive it from source.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["path"],
+          "properties": {
+            "path": { "type": "string", "description": "Path to an existing axis JSON file." }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["values"],
+          "properties": {
+            "values": {
+              "type": "array",
+              "items": { "type": ["string", "number"] }
+            },
+            "calendar": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "overrides": {
+      "type": "object",
+      "description": "Release-specific overrides keyed by release id (e.g. v0.1, current).",
+      "patternProperties": {
+        "^[A-Za-z0-9._-]+$": { "$ref": "#/$defs/metric_override" }
+      },
+      "additionalProperties": false
+    },
+
+    "storage": {
+      "type": "object",
+      "properties": {
+        "tiled": { "type": "boolean", "default": true },
+        "tile_size": { "type": "integer", "minimum": 1, "default": 64 },
+        "compression": { "$ref": "#/$defs/compression" }
+      },
+      "additionalProperties": false
+    },
+
+    "compression": {
+      "type": "object",
+      "properties": {
+        "codec": { "type": "string", "enum": ["zstd", "gzip", "none"] },
+        "level": { "type": "integer" }
+      },
+      "required": ["codec"],
+      "additionalProperties": false
+    },
+
+    "source": {
+      "oneOf": [
+        { "$ref": "#/$defs/source_cds" },
+        { "$ref": "#/$defs/source_derived" },
+        { "$ref": "#/$defs/source_erddap" }
+      ]
+    },
+
+    "postprocess_step": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "required": ["fn"],
+          "properties": {
+            "fn": { "type": "string" },
+            "params": { "type": "object", "additionalProperties": true, "default": {} }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "derive_step": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "required": ["fn"],
+          "properties": {
+            "fn": { "type": "string" },
+            "params": { "type": "object", "additionalProperties": true, "default": {} }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "source_cds": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "cds" },
+        "dataset": { "type": "string" },
+        "variable": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+          ]
+        },
+        "agg": { "type": "string", "description": "Aggregator applied after download, e.g. annual_mean_from_monthly." },
+        "postprocess": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/postprocess_step" },
+          "default": []
+        },
+        "params": { "type": "object", "additionalProperties": true },
+        "block_years": { "type": "integer" },
+        "cache_key": { "type": "string", "description": "Optional key to group downloads across metrics." },
+        "time_range": {
+          "type": "object",
+          "properties": {
+            "start_year": { "type": "integer" },
+            "end_year": { "type": "integer" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": ["type", "dataset", "variable"],
+      "additionalProperties": false
+    },
+
+    "source_derived": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "derived" },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "minItems": 1
+        },
+        "steps": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/derive_step" },
+          "minItems": 1
+        },
+        "axis_from": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Optional metric_id to copy axis from when it differs from inputs[0]."
+        }
+      },
+      "required": ["type", "inputs", "steps"],
+      "additionalProperties": false
+    },
+
+    "source_erddap": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "erddap" },
+        "dataset_key": { "type": "string" },
+        "dataset_id": { "type": "string" },
+        "variable": { "type": "string" },
+        "agg": { "type": "string" },
+        "params": { "type": "object", "additionalProperties": true },
+        "postprocess": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/postprocess_step" },
+          "default": []
+        },
+        "time_range": {
+          "type": "object",
+          "properties": {
+            "start_year": { "type": "integer" },
+            "end_year": { "type": "integer" }
+          },
+          "additionalProperties": false
+        },
+        "stride_time": { "type": "integer" },
+        "stride_lat": { "type": "integer" },
+        "stride_lon": { "type": "integer" },
+        "block_years": { "type": "integer" }
+      },
+      "required": ["type", "dataset_key", "agg"],
+      "additionalProperties": false
+    }
+  }
+}

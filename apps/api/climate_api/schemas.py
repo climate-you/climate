@@ -7,6 +7,7 @@ class SeriesPayload(BaseModel):
     x: List[Any]
     y: List[float | None]
     unit: Optional[str] = None
+    style: Optional[Dict[str, Any]] = None
 
 
 class GraphAnnotation(BaseModel):
@@ -19,6 +20,10 @@ class GraphPayload(BaseModel):
     title: str
     series_keys: List[str]
     annotations: List[GraphAnnotation] = []
+    caption: Optional[str] = None
+    error: Optional[str] = None
+    x_axis_label: Optional[str] = None
+    y_axis_label: Optional[str] = None
 
 
 class PanelPayload(BaseModel):

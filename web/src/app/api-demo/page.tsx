@@ -3,8 +3,9 @@
 import React, { useMemo, useState } from "react";
 import {
   ResponsiveContainer,
-  LineChart,
+  ComposedChart,
   Line,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
@@ -23,6 +24,10 @@ type GraphPayload = {
   title: string;
   series_keys: string[];
   annotations?: GraphAnnotation[];
+  caption?: string | null;
+  error?: string | null;
+  x_axis_label?: string | null;
+  y_axis_label?: string | null;
 };
 type DataCell = {
   grid: string;
@@ -78,24 +83,57 @@ function mergeSeries(series: Record<string, SeriesPayload>, keys: string[]) {
   );
 }
 
+const LINE_COLORS = [
+  "#2563eb",
+  "#dc2626",
+  "#16a34a",
+  "#7c3aed",
+  "#f59e0b",
+  "#0ea5e9",
+  "#db2777",
+  "#65a30d",
+  "#9333ea",
+  "#334155",
+];
+
+function colorForKey(key: string) {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  }
+  const idx = Math.abs(hash) % LINE_COLORS.length;
+  return LINE_COLORS[idx];
+}
+
+function axisLabel(label: string | null | undefined, unit: "C" | "F") {
+  if (!label) return undefined;
+  if (unit === "F") {
+    return label.replace("°C", "°F");
+  }
+  return label;
+}
+
 export default function ApiDemoPage() {
   const [lat, setLat] = useState<number>(-20.32556);
   const [lon, setLon] = useState<number>(57.37056);
   const [unit, setUnit] = useState<"C" | "F">("C");
+  const [panelId, setPanelId] = useState<string>("overview");
   const [resp, setResp] = useState<PanelResponse | null>(null);
   const cell = resp?.location?.data_cells?.[0] ?? null;
 
-  const graph = resp?.panel.graphs?.[0];
-  const data = useMemo(() => {
-    if (!resp || !graph) return [];
-    return mergeSeries(resp.series, graph.series_keys);
-  }, [resp, graph]);
+  const graphData = useMemo(() => {
+    if (!resp) return [];
+    return resp.panel.graphs.map((graph) => ({
+      graph,
+      data: mergeSeries(resp.series, graph.series_keys),
+    }));
+  }, [resp]);
 
   // update load() to use numbers
   async function load(nextLat = lat, nextLon = lon) {
     const url = `http://localhost:8001/api/v/dev/panel?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
       nextLon,
-    )}&panel_id=t2m_50y&unit=${unit}`;
+    )}&panel_id=${encodeURIComponent(panelId)}&unit=${unit}`;
     const r = await fetch(url);
     if (!r.ok) throw new Error(await r.text());
     setResp(await r.json());
@@ -166,6 +204,14 @@ export default function ApiDemoPage() {
             <option value="F">°F</option>
           </select>
         </label>
+        <label>
+          Panel{" "}
+          <input
+            value={panelId}
+            onChange={(e) => setPanelId(e.target.value)}
+            style={{ width: 140 }}
+          />
+        </label>
         <button onClick={() => load()} style={{ padding: "6px 10px" }}>
           Load
         </button>
@@ -176,67 +222,104 @@ export default function ApiDemoPage() {
           Place: {resp.location.place.label ?? "—"} • Panel: {resp.panel.title}
         </div>
       )}
-      {graph && (
-        <div style={{ marginTop: 16 }}>
+      {graphData.map(({ graph, data }) => (
+        <div key={graph.id} style={{ marginTop: 16 }}>
           <h2 style={{ fontSize: 16, fontWeight: 600 }}>{graph.title}</h2>
 
           <div style={{ width: "100%", height: 420 }}>
             <ResponsiveContainer>
-              <LineChart
+              <ComposedChart
                 data={data}
                 margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
               >
-                <XAxis dataKey="x" minTickGap={24} />
+                <XAxis
+                  dataKey="x"
+                  minTickGap={24}
+                  label={
+                    graph.x_axis_label
+                      ? {
+                          value: graph.x_axis_label,
+                          position: "insideBottom",
+                          offset: -5,
+                        }
+                      : undefined
+                  }
+                />
                 <YAxis
                   domain={[
                     (dataMin: number) => Math.floor((dataMin - 0.5) * 10) / 10,
                     (dataMax: number) => Math.ceil((dataMax + 0.5) * 10) / 10,
                   ]}
+                  label={
+                    graph.y_axis_label
+                      ? {
+                          value: axisLabel(graph.y_axis_label, unit),
+                          angle: -90,
+                          position: "insideLeft",
+                        }
+                      : undefined
+                  }
                 />
                 <Tooltip />
                 <Legend />
 
-                {/* Annual mean (grey) */}
-                <Line
-                  type="monotone"
-                  dataKey="t2m_yearly_mean"
-                  dot={false}
-                  stroke="#999"
-                  connectNulls
-                />
-
-                {/* 5-year mean (blue) */}
-                <Line
-                  type="monotone"
-                  dataKey="t2m_yearly_mean_5y"
-                  dot={false}
-                  stroke="#2563eb"
-                  connectNulls
-                />
-
-                {/* Trend (red) */}
-                <Line
-                  type="monotone"
-                  dataKey="t2m_yearly_trend"
-                  dot={false}
-                  stroke="#dc2626"
-                  connectNulls
-                />
-              </LineChart>
+                {graph.series_keys.map((key) => {
+                  const style = resp?.series?.[key]?.style?.type ?? "line";
+                  if (style === "bar") {
+                    return (
+                      <Bar
+                        key={key}
+                        dataKey={key}
+                        fill={colorForKey(key)}
+                        opacity={0.65}
+                      />
+                    );
+                  }
+                  return (
+                    <Line
+                      key={key}
+                      type="monotone"
+                      dataKey={key}
+                      dot={false}
+                      stroke={colorForKey(key)}
+                      connectNulls
+                    />
+                  );
+                })}
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
 
+          {graph.error ? (
+            <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>
+              {graph.error}
+            </div>
+          ) : null}
           {graph.annotations?.length ? (
             <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>
               {graph.annotations.map((a) => (
-                <div key={a.series_key}>
+                <div key={`${graph.id}:${a.series_key}:${a.text}`}>
                   <code>{a.series_key}</code>: {a.text}
                 </div>
               ))}
             </div>
           ) : null}
+          {graph.caption ? (
+            <div
+              style={{
+                marginTop: 8,
+                padding: 10,
+                border: "1px solid rgba(0,0,0,0.1)",
+                borderRadius: 8,
+                fontSize: 13,
+                opacity: 0.85,
+              }}
+            >
+              {graph.caption}
+            </div>
+          ) : null}
         </div>
-      )}
+      ))}
       {resp?.panel?.text_md ? (
         <div
           style={{

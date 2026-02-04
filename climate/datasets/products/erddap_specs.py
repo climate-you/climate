@@ -3,6 +3,11 @@ ERDDAP_DATASETS = {
         "dataset_id": "ncdcOisst21Agg_LonPM180",
         "var": "sst",
         "dataset_start": "1981-09-01",
+        "recommended_block_years": 5,
+        "bases": [
+            "https://upwell.pfeg.noaa.gov/erddap",
+            "https://coastwatch.pfeg.noaa.gov/erddap",
+        ],
         # IMPORTANT: OISST sst uses a zlev axis; constrain it explicitly
         "dims": ["time", "zlev", "latitude", "longitude"],
         "fixed": {"zlev": 0.0},
@@ -17,6 +22,10 @@ ERDDAP_DATASETS = {
     "crw_dhw_daily": {
         "dataset_id": "noaacrwdhwDaily",
         "var": "degree_heating_week",
+        "bases": [
+            "https://upwell.pfeg.noaa.gov/erddap",
+            "https://coastwatch.pfeg.noaa.gov/erddap",
+        ],
         # CRW DHW uses daily time at 12:00Z (as observed from curl)
         "dims": ["time", "latitude", "longitude"],
         "time_hms": "12:00:00Z",

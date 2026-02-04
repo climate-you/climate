@@ -1,4 +1,4 @@
-import streamlit as st
+# import streamlit as st
 from datetime import datetime, timedelta
 import xarray as xr
 import requests
@@ -12,7 +12,7 @@ import numpy as np
 OPENMETEO_TIMEOUT = 30  # seconds
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+# @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_current_temp_c(lat: float, lon: float) -> tuple[float | None, str | None]:
     """
     Returns (temperature_c, iso_time) or (None, None) if unavailable.
@@ -38,7 +38,7 @@ def fetch_current_temp_c(lat: float, lon: float) -> tuple[float | None, str | No
         return None, None
 
 
-@st.cache_data(show_spinner=False)
+# @st.cache_data(show_spinner=False)
 def fetch_window(
     kind: str,
     lat: float,
@@ -81,15 +81,15 @@ def fetch_window(
         r = requests.get(base, params=params, timeout=OPENMETEO_TIMEOUT)
         if r.status_code == 429:
             # Soft failure: log and return None
-            st.warning(
-                "Live data from Open-Meteo is temporarily rate-limited "
-                "(HTTP 429). Recent-window graphs may not be available right now."
-            )
+            # st.warning(
+            #    "Live data from Open-Meteo is temporarily rate-limited "
+            #    "(HTTP 429). Recent-window graphs may not be available right now."
+            # )
             return None
         r.raise_for_status()
         return r.json()
     except requests.RequestException as e:
-        st.warning(f"Could not fetch live data right now ({e}).")
+        # st.warning(f"Could not fetch live data right now ({e}).")
         return None
 
 

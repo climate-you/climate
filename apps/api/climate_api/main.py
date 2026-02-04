@@ -9,13 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.logging import AccessFormatter
 
 from .config import load_settings
-from .registry import Registry
-from .services.panels import build_panel, build_panel_tiles_t2m_50y
+from .services.panels import build_panel_tiles_registry
+from climate.registry.panels import load_panels
 from .schemas import PanelResponse, GraphListResponse, LocationInfo
 from .cache import Cache, make_redis_client
 from .logging import configure_access_logger, format_access_line
 
-from .store.nc_points import NcPointsStore
 from .store.place_resolver import PlaceResolver
 from .store.tile_data_store import TileDataStore
 
@@ -42,19 +41,15 @@ def create_app() -> FastAPI:
     settings = load_settings()
 
     cache = Cache(prefix=f"climate_api:{settings.release}")
+    uvicorn_logger = logging.getLogger("uvicorn.error")
     if settings.redis_url:
         cache.redis = make_redis_client(settings.redis_url)
+        uvicorn_logger.info(f"Redis cache enabled: {settings.redis_url}")
+    else:
+        uvicorn_logger.warning(
+            "Redis cache disabled (REDIS_URL not set); using in-process cache only."
+        )
 
-    reg = Registry(settings.manifests_dir)
-    reg.load()
-
-    store = NcPointsStore(
-        locations_csv=settings.locations_csv,
-        clim_dir=settings.climatology_dir,
-        ocean_dir=settings.ocean_dir,
-        cache=cache,
-        ttl_resolve_s=settings.ttl_resolve_s,
-    )
     place_resolver = PlaceResolver(
         locations_csv=settings.locations_csv,
         cache=cache,
@@ -66,6 +61,7 @@ def create_app() -> FastAPI:
         settings.tiles_series_root,
         start_year_fallback=1979,
     )
+    panels_manifest = load_panels()
 
     app = FastAPI(title="Climate API", version="0.1")
     access_logger = configure_access_logger()
@@ -73,6 +69,7 @@ def create_app() -> FastAPI:
     # expose for next step (routes can use these later)
     app.state.place_resolver = place_resolver
     app.state.tile_store = tile_store
+    app.state.panels_manifest = panels_manifest
 
     @app.middleware("http")
     async def access_log_with_timing(request: Request, call_next):
@@ -118,28 +115,18 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Unknown release: {release}")
 
         try:
-            if panel_id == "t2m_50y":
-                return build_panel_tiles_t2m_50y(
-                    place_resolver=place_resolver,
-                    tile_store=tile_store,
-                    cache=cache,
-                    ttl_panel_s=settings.ttl_panel_s,
-                    release=settings.release,
-                    lat=lat,
-                    lon=lon,
-                    unit=unit,
-                )
-
-            return build_panel(
-                store,
-                reg,
+            panels_manifest = app.state.panels_manifest
+            return build_panel_tiles_registry(
+                place_resolver=place_resolver,
+                tile_store=tile_store,
                 cache=cache,
                 ttl_panel_s=settings.ttl_panel_s,
                 release=settings.release,
                 lat=lat,
                 lon=lon,
-                panel_id=panel_id,
                 unit=unit,
+                panel_id=panel_id,
+                panels_manifest=panels_manifest,
             )
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e))

@@ -1,60 +1,57 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import json
 import numpy as np
 
+from climate.registry.metrics import DEFAULT_METRICS_PATH, DEFAULT_SCHEMA_PATH, REPO_ROOT, load_metrics
 from climate.tiles.layout import GridSpec, locate_tile, tile_path
 from climate.tiles.spec import read_cell_series
 
 
-def c_to_f(x: np.ndarray) -> np.ndarray:
-    return x * (9.0 / 5.0) + 32.0
+def _grid_from_id(grid_id: str, *, tile_size: int) -> GridSpec:
+    if grid_id == "global_0p25":
+        return GridSpec.global_0p25(tile_size=tile_size)
+    raise RuntimeError(f"Unknown grid_id={grid_id}. Add a mapping in TileDataStore.")
 
 
-def rolling_mean_centered(y: np.ndarray, window: int) -> np.ndarray:
-    """
-    Centered rolling mean with NaN-aware behavior.
-    Returns array same length, with NaN at edges where window doesn't fit
-    or where all values in window are NaN.
-    """
-    n = int(y.size)
-    w = int(window)
-    out = np.full(n, np.nan, dtype=np.float32)
-    if w <= 1 or n == 0:
-        return y.astype(np.float32, copy=False)
+def _load_registry_metrics(
+    metrics_path: Path | str | None,
+    schema_path: Path | str | None,
+) -> tuple[dict[str, dict[str, Any]], dict[str, GridSpec]]:
+    if metrics_path is None:
+        return {}, {}
+    path = Path(metrics_path)
+    if not path.exists():
+        return {}, {}
+    schema = Path(schema_path) if schema_path is not None else DEFAULT_SCHEMA_PATH
+    manifest = load_metrics(path=path, schema_path=schema, validate=True)
 
-    half = w // 2
-    for i in range(n):
-        lo = i - half
-        hi = i + half + 1
-        if lo < 0 or hi > n:
+    metrics: dict[str, dict[str, Any]] = {}
+    grids: dict[str, GridSpec] = {}
+    for metric_id, spec in manifest.items():
+        if metric_id == "version":
             continue
-        seg = y[lo:hi]
-        if np.all(np.isnan(seg)):
+        if not isinstance(spec, dict):
             continue
-        out[i] = float(np.nanmean(seg))
-    return out
+        storage = spec.get("storage", {})
+        if not storage.get("tiled", True):
+            continue
+        if spec.get("materialize") not in (None, "on_packager"):
+            continue
+        metrics[metric_id] = spec
 
+        grid_id = spec.get("grid_id")
+        if not grid_id:
+            continue
+        tile_size = int(storage.get("tile_size", 64))
+        if grid_id not in grids:
+            grids[grid_id] = _grid_from_id(grid_id, tile_size=tile_size)
 
-def linear_trend_line(x_years: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """
-    Fit y ~ a*x + b using valid (non-NaN) y points.
-    Returns y_hat for all x_years (NaNs if not enough points).
-    """
-    x = x_years.astype(np.float64)
-    yy = y.astype(np.float64)
-
-    mask = np.isfinite(yy)
-    if int(mask.sum()) < 2:
-        return np.full_like(y, np.nan, dtype=np.float32)
-
-    a, b = np.polyfit(x[mask], yy[mask], deg=1)
-    yhat = a * x + b
-    return yhat.astype(np.float32)
+    return metrics, grids
 
 
 @dataclass(frozen=True)
@@ -69,10 +66,17 @@ class TileDataStore:
     tiles_root: Path
     grid: GridSpec
     start_year_fallback: int = 1979  # used only if yearly.json missing
+    metrics: dict[str, dict[str, Any]] = field(default_factory=dict)
+    grids: dict[str, GridSpec] = field(default_factory=dict)
 
     @classmethod
     def discover(
-        cls, tiles_root: Path, *, start_year_fallback: int = 1979
+        cls,
+        tiles_root: Path,
+        *,
+        start_year_fallback: int = 1979,
+        metrics_path: Path | str | None = DEFAULT_METRICS_PATH,
+        schema_path: Path | str | None = DEFAULT_SCHEMA_PATH,
     ) -> "TileDataStore":
         """
         Discover grid_id and tile_size from folder layout.
@@ -81,6 +85,16 @@ class TileDataStore:
           {tiles_root}/{grid_id}/{metric}/z{tile_size}/rXXX_cYYY.bin.zst
         """
         tiles_root = Path(tiles_root)
+        metrics, grids = _load_registry_metrics(metrics_path, schema_path)
+        if grids:
+            grid = grids.get("global_0p25") or next(iter(grids.values()))
+            return cls(
+                tiles_root=tiles_root,
+                grid=grid,
+                start_year_fallback=int(start_year_fallback),
+                metrics=metrics,
+                grids=grids,
+            )
 
         # pick first grid directory (or prefer global_0p25 if present)
         grids = sorted([p for p in tiles_root.iterdir() if p.is_dir()])
@@ -130,6 +144,7 @@ class TileDataStore:
             tiles_root=tiles_root,
             grid=grid,
             start_year_fallback=int(start_year_fallback),
+            grids={grid_id: grid},
         )
 
     def yearly_axis(self, metric: str) -> list[int]:
@@ -141,29 +156,76 @@ class TileDataStore:
         (Optional backward-compat: if the per-metric file is missing, also try the old
         grid-level path for a while.)
         """
-        # New (per-metric) location
-        p = self.tiles_root / self.grid.grid_id / metric / "time" / "yearly.json"
-        if p.exists():
-            years = json.loads(p.read_text(encoding="utf-8"))
-            return [int(v) for v in years]
+        axis = self.axis(metric)
+        if axis and any(isinstance(v, str) for v in axis):
+            raise ValueError(f"Expected numeric years for metric={metric}, got strings")
+        return [int(v) for v in axis]
 
-        # Backward compat (remove later if you want)
-        # TODO(remove)
-        p_old = self.tiles_root / self.grid.grid_id / "time" / "yearly.json"
+    def axis(self, metric: str) -> list[Any]:
+        spec = self.metrics.get(metric)
+        axis_name = None
+        if spec is not None:
+            axis_name = spec.get("time_axis")
+            axis_spec = spec.get("axis")
+            if isinstance(axis_spec, dict):
+                if "values" in axis_spec:
+                    return list(axis_spec["values"])
+                if "path" in axis_spec:
+                    p = Path(axis_spec["path"])
+                    if not p.is_absolute():
+                        p = REPO_ROOT / p
+                    if p.exists():
+                        return json.loads(p.read_text(encoding="utf-8"))
+
+        if not axis_name:
+            axis_name = "yearly"
+
+        grid = self._metric_grid(metric)
+        p = self.tiles_root / grid.grid_id / metric / "time" / f"{axis_name}.json"
+        if p.exists():
+            return json.loads(p.read_text(encoding="utf-8"))
+
+        p_old = self.tiles_root / grid.grid_id / "time" / f"{axis_name}.json"
         if p_old.exists():
-            years = json.loads(p_old.read_text(encoding="utf-8"))
-            return [int(v) for v in years]
+            return json.loads(p_old.read_text(encoding="utf-8"))
 
         return []
 
+    def _metric_grid(self, metric: str) -> GridSpec:
+        spec = self.metrics.get(metric)
+        if spec is None:
+            return self.grid
+        grid_id = spec.get("grid_id")
+        if not grid_id:
+            return self.grid
+        grid = self.grids.get(grid_id)
+        if grid is None:
+            raise RuntimeError(f"No grid spec loaded for grid_id={grid_id}")
+        return grid
+
+    def _metric_tile_ext(self, metric: str) -> str:
+        spec = self.metrics.get(metric)
+        if spec is None:
+            return ".bin.zst"
+        storage = spec.get("storage", {})
+        compression = storage.get("compression", {})
+        codec = compression.get("codec", "zstd")
+        if codec == "zstd":
+            return ".bin.zst"
+        if codec == "none":
+            return ".bin"
+        raise ValueError(f"Unsupported compression codec: {codec}")
+
     def _metric_tile_path(self, metric: str, tile_r: int, tile_c: int) -> Path:
+        grid = self._metric_grid(metric)
+        ext = self._metric_tile_ext(metric)
         return tile_path(
             self.tiles_root,
-            self.grid,
+            grid,
             metric=metric,
             tile_r=tile_r,
             tile_c=tile_c,
-            ext=".bin.zst",
+            ext=ext,
         )
 
     def try_get_metric_vector(
@@ -175,10 +237,11 @@ class TileDataStore:
           - scalar metric -> shape (1,)
         None if tile missing or the cell is NaN-filled (dev harness sparse tiles).
         """
-        _cell, t = locate_tile(lat, lon, self.grid)
+        grid = self._metric_grid(metric)
+        _cell, t = locate_tile(lat, lon, grid)
         p = self._metric_tile_path(metric, t.tile_r, t.tile_c)
         if not p.exists():
-            raise FileNotFoundError(f"Missing tile file: {tile_path}")
+            raise FileNotFoundError(f"Missing tile file: {p}")
 
         hdr, vec = read_cell_series(p, o_lat=t.o_lat, o_lon=t.o_lon)
 
@@ -188,68 +251,3 @@ class TileDataStore:
 
         # for yearly metrics we expect float32 tiles; but allow anything for now
         return np.asarray(vec)
-
-    def panel_t2m_50y(self, lat: float, lon: float, unit: str = "C") -> dict[str, Any]:
-        """
-        Builds series payload for the v0 graph:
-          - annual mean temperature
-          - 5-year mean
-          - linear trend (on annual mean)
-        """
-        metric = "t2m_yearly_mean_c"
-        unit = unit.upper()
-        if unit not in ("C", "F"):
-            raise ValueError(f"unit must be C or F, got {unit}")
-
-        y_c = self.try_get_metric_vector(metric, lat, lon)
-        if y_c is None:
-            raise FileNotFoundError(
-                "No t2m tile data available for this location/cell yet."
-            )
-
-        y_c = y_c.astype(np.float32, copy=False).reshape(-1)
-        years = self.yearly_axis(metric)
-        if not years:
-            # fallback: start_year_fallback + length
-            years = list(
-                range(
-                    self.start_year_fallback, self.start_year_fallback + int(y_c.size)
-                )
-            )
-
-        x = np.asarray(years, dtype=np.int32)
-        if x.size != y_c.size:
-            raise ValueError(
-                f"Year axis length {x.size} does not match series length {y_c.size}"
-            )
-
-        y5_c = rolling_mean_centered(y_c, window=5)
-        ytrend_c = linear_trend_line(x, y_c)
-
-        if unit == "F":
-            y = c_to_f(y_c)
-            y5 = c_to_f(y5_c)
-            ytrend = c_to_f(ytrend_c)
-        else:
-            y, y5, ytrend = y_c, y5_c, ytrend_c
-
-        # convert to JSON-friendly lists (NaN -> None)
-        def to_list(a: np.ndarray) -> list[float | None]:
-            out: list[float | None] = []
-            for v in a.tolist():
-                if v is None:
-                    out.append(None)
-                else:
-                    fv = float(v)
-                    out.append(None if not np.isfinite(fv) else fv)
-            return out
-
-        x_list = [int(v) for v in x.tolist()]
-
-        return {
-            "series": {
-                "t2m_yearly_mean": {"x": x_list, "y": to_list(y), "unit": unit},
-                "t2m_yearly_mean_5y": {"x": x_list, "y": to_list(y5), "unit": unit},
-                "t2m_yearly_trend": {"x": x_list, "y": to_list(ytrend), "unit": unit},
-            }
-        }
