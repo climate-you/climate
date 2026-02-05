@@ -51,6 +51,15 @@ const LAND_MASK_URL = `./textures/land_${size}.${ext}`;
 const STICKER_TEX_URL = `./textures/sphere_outline.${ext}`;
 const CLOUD_TEX_URL = `./textures/clouds_${size}.${ext}`;
 
+
+// High-res borders/coast mask (WEBP). Put your file at this path (or rename here).
+const LAND_MASK_HI_URL = `./textures/borders_${size}.webp`;
+
+// Zoom-based swap rules (scale ~= BASE_DISTANCE / currentDistance)
+const HI_MASK_PREFETCH_SCALE = 1.6; // start loading before we need it
+const HI_MASK_IN_SCALE       = 2.0; // swap to hi when globe looks ~2x bigger
+const HI_MASK_OUT_SCALE      = 1.8; // swap back when zooming out (hysteresis)
+
 // Invert land/border mask (ocean=white, land=black)
 const MASK_INVERT = 1.0;
 
@@ -78,10 +87,15 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.rotateSpeed = 0.6;
-controls.enablePan = false;
-controls.enableZoom = false;   // set true if you want scroll/pinch zoom
+controls.enablePan = true;
+controls.enableZoom = true;
 controls.target.set(0, 0, 0);
+
+// Clamp zoom range (tweak to taste)
+controls.minDistance = 1.2;
+controls.maxDistance = 8.0;
 controls.update();
+const BASE_DISTANCE = controls.getDistance();
 
 const sun = new THREE.DirectionalLight(0xffffff, 0.9);
 sun.position.set(3, 1.5, 2.5);
@@ -91,11 +105,19 @@ scene.add(sun);
 const loader = new THREE.TextureLoader();
 function loadTex(url){
   return new Promise((resolve, reject) => {
-    loader.load(url, (t) => {
-      t.colorSpace = THREE.SRGBColorSpace;
-      t.anisotropy = 8;
-      resolve(t);
-    }, undefined, reject);
+    loader.load(
+      url,
+      (t) => {
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.anisotropy = 8;
+        resolve(t);
+      },
+      undefined,
+      (err) => {
+        console.error("[TextureLoader] failed:", url, err);
+        reject(err);
+      }
+    );
   });
 }
 
@@ -118,8 +140,8 @@ const uniforms = {
   // Compute coastline thickness in UV space
   landTexel:  { value: new THREE.Vector2(1 / 2048, 1 / 1024) },
   // Coastline intensity/thickness tuning
-  coastStrength: { value: 0.95 }, // 0..1
-  coastSoftness: { value: 1.2 },  // >1 softer
+  coastStrength: { value: 0.80 }, // 0..1
+  coastSoftness: { value: 1.4 },  // >1 softer
 
   // Make terminator visible: light comes from the side a bit
   lightDir: { value: new THREE.Vector3( -0.85, 0.55, 1.25 ).normalize() },
@@ -239,7 +261,7 @@ const earthMat = new THREE.ShaderMaterial({
     vec2 screenUV = (vClipPos.xy / vClipPos.w) * 0.5 + 0.5;
     // Most PNGs are authored top-left origin
     screenUV.y = 1.0 - screenUV.y;
-    // Scale around center (0.5,0.5)
+    // Scale around center (0.5, 0.5)
     // Aspect-correct scale around center so circles stay circles even if viewport isn't square.
     vec2 centered = screenUV - 0.5;
 
@@ -416,11 +438,91 @@ controls.addEventListener("end", () => {
   lastUserActionMs = performance.now();
 });
 
+// --- Land mask LOD (swap low/hi based on zoom) ---
+let landMaskLow = null;
+let landMaskHi = null;
+let landMaskHiLoading = null;
+let usingHiMask = false;
+
+function configureLandMask(tex) {
+  // This is mask/data, not a color texture
+  tex.colorSpace = THREE.NoColorSpace;
+
+  // Equirectangular: wrap horizontally (longitude), clamp vertically (latitude)
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+
+  tex.anisotropy = 8;
+  tex.needsUpdate = true;
+
+  // Keep coastline thickness tied to actual texture resolution
+  if (tex?.image?.width && tex?.image?.height) {
+    uniforms.landTexel.value.set(1 / tex.image.width, 1 / tex.image.height);
+  }
+}
+
+function setLandMask(tex) {
+  if (!tex) return;
+  configureLandMask(tex);
+  uniforms.landMask.value = tex;
+}
+
+function currentGlobeScale() {
+  // Scale ~ (apparent size relative to start)
+  const d = controls.getDistance();
+  if (!d) return 1.0;
+  return BASE_DISTANCE / d;
+}
+
+function maybeLoadHiMask() {
+  if (landMaskHi || landMaskHiLoading) return;
+
+  console.log(LAND_MASK_HI_URL)
+  landMaskHiLoading = loadTex(LAND_MASK_HI_URL)
+    .then((t) => {
+      landMaskHi = t;
+      landMaskHiLoading = null;
+      // If we’re already zoomed in enough when it finishes loading, apply now
+      if (currentGlobeScale() >= HI_MASK_IN_SCALE) {
+        setLandMask(landMaskHi);
+        usingHiMask = true;
+      }
+    })
+    .catch((err) => {
+      landMaskHiLoading = null;
+      console.error("Hi-res land mask load failed:", err);
+    });
+}
+
+function maybeSwapLandMaskByZoom() {
+  if (!landMaskLow) return;
+
+  const s = currentGlobeScale();
+  console.log(s)
+
+  // Start loading early to avoid a visible pop-in right at the threshold
+  if (s >= HI_MASK_PREFETCH_SCALE) {
+    maybeLoadHiMask();
+  }
+
+  if (!usingHiMask && s >= HI_MASK_IN_SCALE && landMaskHi) {
+    setLandMask(landMaskHi);
+    usingHiMask = true;
+  } else if (usingHiMask && s <= HI_MASK_OUT_SCALE) {
+    setLandMask(landMaskLow);
+    usingHiMask = false;
+  }
+}
+
 Promise.all([
   loadTex(LAND_MASK_URL),                        // required
   loadTex(STICKER_TEX_URL),
 ]).then(([landMask, overlayTex]) => {
-  uniforms.landMask.value = landMask;
+  landMaskLow = landMask;
+  setLandMask(landMaskLow);
 
   // Overlay: screen-space sample
   overlayTex.wrapS = THREE.ClampToEdgeWrapping;
@@ -494,5 +596,6 @@ function animate(){
   uniforms.lightDir.value.copy(lightWorld).normalize();
 
   controls.update();
+  maybeSwapLandMaskByZoom();
   renderer.render(scene, camera);
 }
