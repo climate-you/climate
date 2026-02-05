@@ -1,12 +1,7 @@
 .DS_Store
 .cache
 __pycache__
-data/story_climatology/*.nc
-data/story_ocean/*.nc
-data/world/*
-data/mc/*
-data/cache/*
-data/releases/*
+data/*
 data/spike_phase1_outputs/*
 web/public/data/*
 web/package-lock.json

@@ -9,6 +9,8 @@ from typing import Optional
 class Settings:
     release: str
     locations_csv: Path
+    kdtree_path: Optional[Path]
+    locations_index_csv: Path
     tiles_series_root: Path
     redis_url: Optional[str]
     ttl_resolve_s: int
@@ -21,7 +23,29 @@ def load_settings() -> Settings:
 
     release = os.environ.get("RELEASE", "dev")
     locations_csv = Path(
-        os.environ.get("LOCATIONS_CSV", repo_root / "locations" / "locations.csv")
+        os.environ.get(
+            "LOCATIONS_CSV", repo_root / "data" / "locations" / "locations.csv"
+        )
+    )
+    kdtree_env = os.environ.get("KDTREE_PATH")
+    if kdtree_env is not None and kdtree_env.strip().lower() in {
+        "",
+        "none",
+        "null",
+        "0",
+        "false",
+    }:
+        kdtree_path = None
+    elif kdtree_env:
+        kdtree_path = Path(kdtree_env)
+    else:
+        kdtree_path = repo_root / "data" / "locations" / "kdtree" / "kdtree.pkl"
+
+    locations_index_csv = Path(
+        os.environ.get(
+            "LOCATIONS_INDEX_CSV",
+            repo_root / "data" / "locations" / "index" / "locations_index.csv",
+        )
     )
     tiles_series_root = Path(
         os.environ.get(
@@ -36,6 +60,8 @@ def load_settings() -> Settings:
     return Settings(
         release=release,
         locations_csv=locations_csv,
+        kdtree_path=kdtree_path,
+        locations_index_csv=locations_index_csv,
         tiles_series_root=tiles_series_root,
         redis_url=redis_url,
         ttl_resolve_s=ttl_resolve_s,

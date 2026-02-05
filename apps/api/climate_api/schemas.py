@@ -37,6 +37,8 @@ class LocationInfo(BaseModel):
     query: QueryPoint
     place: PlaceInfo
     data_cells: list[DataCell]
+    panel_valid_bbox: Optional["PanelValidBBox"] = None
+    panel_cell_indices: Optional[list["PanelCellIndex"]] = None
 
 
 class PanelResponse(BaseModel):
@@ -89,3 +91,35 @@ class DataCell(BaseModel):
     tile_c: Optional[int] = None
     o_lat: Optional[int] = None
     o_lon: Optional[int] = None
+
+
+class PanelValidBBox(BaseModel):
+    lat_min: float
+    lat_max: float
+    lon_min: float
+    lon_max: float
+
+
+class PanelCellIndex(BaseModel):
+    grid: str
+    i_lat: int
+    i_lon: int
+
+
+class LocationAutocompleteItem(BaseModel):
+    geonameid: int
+    slug: str
+    label: str
+    lat: float
+    lon: float
+    country_code: str
+
+
+class LocationAutocompleteResponse(BaseModel):
+    query: str
+    results: List[LocationAutocompleteItem]
+
+
+class LocationResolveResponse(BaseModel):
+    query: str
+    result: Optional[LocationAutocompleteItem] = None

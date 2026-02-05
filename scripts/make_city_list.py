@@ -480,7 +480,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=str, default="locations/locations.csv")
     ap.add_argument("--favorites", type=str, default="locations/favorites.txt")
-    ap.add_argument("--cache-dir", type=str, default=".cache/geonames")
+    ap.add_argument("--cache-dir", type=str, default="cache/geonames")
     ap.add_argument("--top-world", type=int, default=200)
     ap.add_argument("--top-per-country", type=int, default=3)
     ap.add_argument("--write-favorites", action="store_true")

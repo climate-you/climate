@@ -15,6 +15,8 @@ from climate.tiles.spec import read_cell_series
 def _grid_from_id(grid_id: str, *, tile_size: int) -> GridSpec:
     if grid_id == "global_0p25":
         return GridSpec.global_0p25(tile_size=tile_size)
+    if grid_id == "global_0p05":
+        return GridSpec.global_0p05(tile_size=tile_size)
     raise RuntimeError(f"Unknown grid_id={grid_id}. Add a mapping in TileDataStore.")
 
 
@@ -135,6 +137,8 @@ class TileDataStore:
         # Convert grid_id -> GridSpec (centralize the knowledge here, not in main)
         if grid_id == "global_0p25":
             grid = GridSpec.global_0p25(tile_size=tile_size)
+        elif grid_id == "global_0p05":
+            grid = GridSpec.global_0p05(tile_size=tile_size)
         else:
             raise RuntimeError(
                 f"Unknown grid_id={grid_id}. Add a mapping in TileDataStore.discover()."

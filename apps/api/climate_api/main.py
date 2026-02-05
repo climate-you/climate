@@ -11,11 +11,19 @@ from uvicorn.logging import AccessFormatter
 from .config import load_settings
 from .services.panels import build_panel_tiles_registry
 from climate.registry.panels import load_panels
-from .schemas import PanelResponse, GraphListResponse, LocationInfo
+from .schemas import (
+    PanelResponse,
+    GraphListResponse,
+    LocationInfo,
+    LocationAutocompleteResponse,
+    LocationAutocompleteItem,
+    LocationResolveResponse,
+)
 from .cache import Cache, make_redis_client
 from .logging import configure_access_logger, format_access_line
 
 from .store.place_resolver import PlaceResolver
+from .store.location_index import LocationIndex
 from .store.tile_data_store import TileDataStore
 
 logging.getLogger("uvicorn.access").disabled = True
@@ -52,10 +60,12 @@ def create_app() -> FastAPI:
 
     place_resolver = PlaceResolver(
         locations_csv=settings.locations_csv,
+        kdtree_path=settings.kdtree_path,
         cache=cache,
         ttl_resolve_s=settings.ttl_resolve_s,
         round_decimals=2,
     )
+    location_index = LocationIndex(settings.locations_index_csv)
 
     tile_store = TileDataStore.discover(
         settings.tiles_series_root,
@@ -68,6 +78,7 @@ def create_app() -> FastAPI:
 
     # expose for next step (routes can use these later)
     app.state.place_resolver = place_resolver
+    app.state.location_index = location_index
     app.state.tile_store = tile_store
     app.state.panels_manifest = panels_manifest
 
@@ -134,6 +145,71 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get(
+        "/api/v/{release}/locations/autocomplete",
+        response_model=LocationAutocompleteResponse,
+    )
+    def autocomplete_locations(
+        release: str,
+        q: str = Query(..., min_length=2),
+        limit: int = Query(10, ge=1, le=50),
+    ):
+        if release != settings.release and settings.release != "dev":
+            raise HTTPException(status_code=404, detail=f"Unknown release: {release}")
+
+        hits = app.state.location_index.autocomplete(q, limit=limit)
+        results = [
+            LocationAutocompleteItem(
+                geonameid=h.geonameid,
+                slug=h.slug,
+                label=h.label,
+                lat=h.lat,
+                lon=h.lon,
+                country_code=h.country_code,
+            )
+            for h in hits
+        ]
+        return LocationAutocompleteResponse(query=q, results=results)
+
+    @app.get(
+        "/api/v/{release}/locations/resolve",
+        response_model=LocationResolveResponse,
+    )
+    def resolve_location(
+        release: str,
+        geonameid: int | None = Query(None),
+        slug: str | None = Query(None),
+        label: str | None = Query(None),
+    ):
+        if release != settings.release and settings.release != "dev":
+            raise HTTPException(status_code=404, detail=f"Unknown release: {release}")
+
+        idx = app.state.location_index
+        hit = None
+        if geonameid is not None:
+            hit = idx.resolve_by_id(geonameid)
+        elif slug:
+            hit = idx.resolve_by_slug(slug)
+        elif label:
+            hit = idx.resolve_by_label(label)
+        else:
+            raise HTTPException(
+                status_code=400, detail="Provide geonameid, slug, or label."
+            )
+
+        result = None
+        if hit is not None:
+            result = LocationAutocompleteItem(
+                geonameid=hit.geonameid,
+                slug=hit.slug,
+                label=hit.label,
+                lat=hit.lat,
+                lon=hit.lon,
+                country_code=hit.country_code,
+            )
+
+        return LocationResolveResponse(query=str(geonameid or slug or label or ""), result=result)
 
     @app.get("/api/v/{release}/location/graphs", response_model=GraphListResponse)
     def list_graphs(

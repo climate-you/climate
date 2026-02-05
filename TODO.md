@@ -67,46 +67,12 @@ For later:
 
 NEXT:
 
--
-
-Place Resolver:
-
-- check if locations.csv can add more places from geonames (check if available for <500)
-- add search bar with autocomplete for place names: add index to be able to search quickly
-- check if we should use KD tree for place lookup
-- what location to use in the middle of the oceans?
-
-Caching:
-
-- we should cache panels per cell not per (lat,lon), we can change the cache key but should we do a redirect (lat,lon)->(cell_i,cell_j) so that browser requests can be cached too?
-
---
-
-Queue status
-
-My jobs on CDS are staying in `Accepted` (not moving to `Running`) for a long time (~30 minutes at the moment). When I display more information I see this information:
-
-```
-- Requests for ERA5 daily statistics datasets is limited to 60 concurrent requests | Running: 60 — Queued: 1468
-- The maximum number of requests that access the CDS-MARS archive is 400 | Running: 400 — Queued: 5945
-- Large (> two variables, one months) requests for ERA5 daily statistics datasets are limited to 40 | Running: 40 — Queued: 1162
-```
-
-I'm not sure what I can do about the maximum number of requests (the 60 and 400) but I wonder about the last point about large requests. Because I'm doing 6 month at a time, I guess the jobs are considered large. Would they go faster if they were just one month at a time?
-
---
-for oisst
-
-SST: both PFEL ERDDAP hosts timing out — what I recommend
-
-At this point it looks like your network path to pfeg.noaa.gov is unreliable (timeouts on both coastwatch.pfeg.noaa.gov and upwell.pfeg.noaa.gov). Increasing timeouts might help, but you’ll still get brittle runs.
-
-So for the spike, I’d switch SST acquisition to NCEI direct daily NetCDF files, and download a reduced set of years first (to prove it works + already likely relevant to coral stress).
-
-Why this is reasonable:
-
-NCEI explicitly provides OISST v2.1 daily data and notes it’s updated daily.
-
-There’s a browsable directory of daily files like oisst-avhrr-v02r01.YYYYMMDD.nc.
-
-NCEI also warns there can be access delays due to outages, so you want caching + retries anyway.
+- for resolve/autocomplete:
+   - Return geonameid only and drop slugs from responses entirely
+   - Add a “best match” endpoint for a free‑text query (single request)
+   -Add prefix‑length + fuzziness tuning knobs to autocomplete
+- have a better redis monitoring (only display if changes detected)
+- for ocean locations, maybe the ocean polygons with natural earth make the most sense. But how would we be able to return "Coast off <city>" with this? Would we do:
+- check if water cell, then find nearest city, if less than X km, return "<ocean name> off <city>", otherwise return "<ocean name>"
+- if not water cell, find nearest city and returns it
+So in both cases, we need to check water cell + nearest city.

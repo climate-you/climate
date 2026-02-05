@@ -156,6 +156,39 @@
           ]
         }
       ]
+    },
+    "dummy": {
+      "title": "Dummy Mixed-Grid Panel",
+      "graphs": [
+        {
+          "id": "dummy_025",
+          "title": "Dummy 0.25° metric",
+          "x_axis_label": "Year",
+          "y_axis_label": "Value",
+          "series": [
+            {
+              "key": "dummy1_yearly_mean",
+              "metric": "dummy1_yearly_mean_c",
+              "label": "Dummy 0.25°",
+              "unit": "C"
+            }
+          ]
+        },
+        {
+          "id": "dummy_005",
+          "title": "Dummy 0.05° metric",
+          "x_axis_label": "Year",
+          "y_axis_label": "Value",
+          "series": [
+            {
+              "key": "dummy2_yearly_mean",
+              "metric": "dummy2_yearly_mean_c",
+              "label": "Dummy 0.05°",
+              "unit": "C"
+            }
+          ]
+        }
+      ]
     }
   }
 }

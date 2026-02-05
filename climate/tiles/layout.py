@@ -47,6 +47,19 @@ class GridSpec:
             tile_size=tile_size,
         )
 
+    @staticmethod
+    def global_0p05(tile_size: int = 64) -> "GridSpec":
+        # 0.05° global grid:
+        # lat: 3601 bands (-90..90 inclusive -> 3601 bands)
+        # lon: 7200 bands (-180..180 exclusive -> 7200 bands)
+        return GridSpec(
+            grid_id="global_0p05",
+            deg=0.05,
+            nlat=3601,
+            nlon=7200,
+            tile_size=tile_size,
+        )
+
 
 @dataclass(frozen=True)
 class CellIndex:

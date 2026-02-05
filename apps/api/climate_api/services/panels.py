@@ -14,7 +14,14 @@ from ..schemas import (
     SeriesPayload,
 )
 from ..cache import Cache
-from ..schemas import QueryPoint, PlaceInfo, DataCell, LocationInfo
+from ..schemas import (
+    QueryPoint,
+    PlaceInfo,
+    DataCell,
+    LocationInfo,
+    PanelValidBBox,
+    PanelCellIndex,
+)
 from ..store.place_resolver import PlaceResolver
 from ..store.tile_data_store import TileDataStore
 from climate.datasets.derive.series import rolling_mean_centered, linear_trend_line, c_to_f
@@ -209,12 +216,6 @@ def build_panel_tiles_registry(
     panels_manifest: dict[str, Any] | None = None,
 ) -> PanelResponse:
     unit = unit.upper()
-    cache_key = f"panel:{release}:registry:{panel_id}:{unit}:{lat:.4f}:{lon:.4f}"
-
-    if cache is not None:
-        hit = cache.get_json(cache_key)
-        if hit is not None:
-            return PanelResponse.model_validate(hit)
 
     if panels_manifest is None:
         panels_manifest = load_panels(DEFAULT_PANELS_PATH, validate=True)
@@ -223,6 +224,36 @@ def build_panel_tiles_registry(
     panel_spec = panels.get(panel_id)
     if panel_spec is None:
         raise KeyError(f"Unknown panel_id: {panel_id}")
+
+    # Precompute grid cell indices for cache keying and reuse across series.
+    metrics: set[str] = set()
+    for graph in panel_spec.get("graphs", []):
+        for series_spec in graph.get("series", []):
+            metric = series_spec.get("metric")
+            if metric:
+                metrics.add(metric)
+
+    grid_cells: dict[str, tuple[Any, Any, Any]] = {}
+    for metric in sorted(metrics):
+        grid = tile_store._metric_grid(metric)
+        if grid.grid_id in grid_cells:
+            continue
+        cell, t = locate_tile(lat, lon, grid)
+        grid_cells[grid.grid_id] = (grid, cell, t)
+
+    cache_key_parts = [
+        f"panel:{release}:registry:{panel_id}:{unit}",
+        "cells",
+    ]
+    for grid_id in sorted(grid_cells.keys()):
+        _grid, cell, _t = grid_cells[grid_id]
+        cache_key_parts.append(f"{grid_id}:{cell.i_lat}:{cell.i_lon}")
+    cache_key = ":".join(cache_key_parts)
+
+    if cache is not None:
+        hit = cache.get_json(cache_key)
+        if hit is not None:
+            return PanelResponse.model_validate(hit)
 
     place = place_resolver.resolve_place(lat, lon)
 
@@ -291,7 +322,10 @@ def build_panel_tiles_registry(
 
             grid = tile_store._metric_grid(metric)
             if grid.grid_id not in data_cells_map:
-                cell, t = locate_tile(lat, lon, grid)
+                if grid.grid_id in grid_cells:
+                    _grid, cell, t = grid_cells[grid.grid_id]
+                else:
+                    cell, t = locate_tile(lat, lon, grid)
                 latc, lonc = cell_center_latlon(cell.i_lat, cell.i_lon, grid)
                 half = float(grid.deg) / 2.0
                 data_cells_map[grid.grid_id] = DataCell(
@@ -344,6 +378,30 @@ def build_panel_tiles_registry(
         text_md=None,
     )
 
+    panel_bbox = None
+    if data_cells_map:
+        lat_min = max(c.lat_min for c in data_cells_map.values())
+        lat_max = min(c.lat_max for c in data_cells_map.values())
+        lon_min = max(c.lon_min for c in data_cells_map.values())
+        lon_max = min(c.lon_max for c in data_cells_map.values())
+        panel_bbox = PanelValidBBox(
+            lat_min=float(lat_min),
+            lat_max=float(lat_max),
+            lon_min=float(lon_min),
+            lon_max=float(lon_max),
+        )
+
+    panel_cell_indices = None
+    if grid_cells:
+        panel_cell_indices = [
+            PanelCellIndex(
+                grid=grid_id,
+                i_lat=int(cell.i_lat),
+                i_lon=int(cell.i_lon),
+            )
+            for grid_id, (_grid, cell, _t) in sorted(grid_cells.items())
+        ]
+
     loc_out = LocationInfo(
         query=QueryPoint(lat=float(lat), lon=float(lon)),
         place=PlaceInfo(
@@ -354,6 +412,8 @@ def build_panel_tiles_registry(
             distance_km=float(place.distance_km),
         ),
         data_cells=list(data_cells_map.values()),
+        panel_valid_bbox=panel_bbox,
+        panel_cell_indices=panel_cell_indices,
     )
 
     resp = PanelResponse(

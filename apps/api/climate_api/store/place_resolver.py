@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import pickle
 import math
+import logging
 
 import numpy as np
 import pandas as pd
@@ -50,6 +52,7 @@ class PlaceResolver:
         self,
         locations_csv: Path,
         *,
+        kdtree_path: Path | None = None,
         cache: Cache | None = None,
         ttl_resolve_s: int = 86400,
         round_decimals: int = 2,
@@ -58,6 +61,7 @@ class PlaceResolver:
         self.cache = cache
         self.ttl_resolve_s = int(ttl_resolve_s)
         self.round_decimals = int(round_decimals)
+        self._logger = logging.getLogger("uvicorn.error")
 
         df = pd.read_csv(self.locations_csv)
 
@@ -72,6 +76,8 @@ class PlaceResolver:
         self._lats = df["lat"].to_numpy(dtype=np.float64)
         self._lons = df["lon"].to_numpy(dtype=np.float64)
         self._slugs = df["slug"].astype(str).to_numpy()
+        self._kdtree = None
+        self._kdtree_ready = False
 
         # Prefer explicit label column if present; otherwise build a fallback
         if "label" in df.columns:
@@ -99,6 +105,36 @@ class PlaceResolver:
 
         self._labels = labels
 
+        if kdtree_path is not None:
+            try:
+                with open(kdtree_path, "rb") as f:
+                    self._kdtree = pickle.load(f)
+                self._kdtree_ready = True
+                tree_n = getattr(self._kdtree, "n", None)
+                if tree_n is None and hasattr(self._kdtree, "data"):
+                    tree_n = len(self._kdtree.data)
+                self._logger.info(
+                    "PlaceResolver: KD-tree loaded from %s (%s points)",
+                    kdtree_path,
+                    tree_n if tree_n is not None else "unknown",
+                )
+            except Exception:
+                self._kdtree = None
+                self._kdtree_ready = False
+                self._logger.warning(
+                    "PlaceResolver: KD-tree failed to load from %s; "
+                    "falling back to linear scan.",
+                    kdtree_path,
+                )
+        else:
+            self._logger.info("PlaceResolver: KD-tree not configured.")
+
+        self._logger.info(
+            "PlaceResolver: locations loaded from %s (%s rows)",
+            self.locations_csv,
+            len(df),
+        )
+
     def resolve_place(self, lat: float, lon: float) -> Place:
         qlat = round(float(lat), self.round_decimals)
         qlon = round(float(lon), self.round_decimals)
@@ -115,10 +151,16 @@ class PlaceResolver:
                     distance_km=float(hit["distance_km"]),
                 )
 
-        d = _haversine_km_vec(lat, lon, self._lats, self._lons)
-        i = int(np.argmin(d))
+        if self._kdtree_ready and self._kdtree is not None:
+            _, i = self._kdtree.query([lat, lon], k=1)
+            i = int(i)
+            dist = 0.0
+        else:
+            d = _haversine_km_vec(lat, lon, self._lats, self._lons)
+            i = int(np.argmin(d))
+            dist = float(d[i])
+
         slug = str(self._slugs[i])
-        dist = float(d[i])
 
         label = str(self._labels[i]).strip() if i < len(self._labels) else ""
         if not label:

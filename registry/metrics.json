@@ -108,5 +108,43 @@
       "tile_size": 64,
       "compression": { "codec": "zstd", "level": 10 }
     }
+  },
+  "dummy1_yearly_mean_c": {
+    "id": "dummy1_yearly_mean_c",
+    "title": "Dummy metric (0.25° grid)",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "grid_id": "global_0p25",
+    "time_axis": "yearly",
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_yearly_mean_c"],
+      "steps": ["identity"]
+    },
+    "storage": {
+      "tiled": true,
+      "tile_size": 64,
+      "compression": { "codec": "none" }
+    }
+  },
+  "dummy2_yearly_mean_c": {
+    "id": "dummy2_yearly_mean_c",
+    "title": "Dummy metric (0.05° grid)",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "grid_id": "global_0p05",
+    "time_axis": "yearly",
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_yearly_mean_c"],
+      "steps": ["identity"]
+    },
+    "storage": {
+      "tiled": true,
+      "tile_size": 64,
+      "compression": { "codec": "none" }
+    }
   }
 }
