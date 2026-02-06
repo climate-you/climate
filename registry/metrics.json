@@ -48,17 +48,13 @@
     "time_axis": "yearly",
     "source": {
       "type": "cds",
-      "dataset": "derived-era5-single-levels-daily-statistics",
-      "variable": "2m_temperature",
-      "time_range": { "start_year": 1979, "end_year": 2025 },
+      "dataset_ref": "era5_daily_t2m",
       "agg": "hot_days_per_year",
       "params": {
         "baseline_years": 10,
         "percentile": 90,
-        "daily_statistic": "daily_mean",
-        "block_months": 1
-      },
-      "postprocess": [{ "fn": "k_to_c" }]
+        "daily_statistic": "daily_mean"
+      }
     },
     "storage": {
       "tiled": true,
@@ -76,10 +72,8 @@
     "time_axis": "yearly",
     "source": {
       "type": "erddap",
-      "dataset_key": "oisst_sst_v21_daily",
-      "agg": "annual_mean_from_daily",
-      "block_years": 1,
-      "time_range": { "start_year": 1982, "end_year": 2025 }
+      "dataset_ref": "oisst_sst_v21_daily",
+      "agg": "annual_mean_from_daily"
     },
     "storage": {
       "tiled": true,
@@ -97,11 +91,9 @@
     "time_axis": "yearly",
     "source": {
       "type": "erddap",
-      "dataset_key": "oisst_sst_v21_daily",
+      "dataset_ref": "oisst_sst_v21_daily",
       "agg": "hot_days_per_year",
-      "params": { "baseline_years": 10, "percentile": 90 },
-      "block_years": 1,
-      "time_range": { "start_year": 1982, "end_year": 2025 }
+      "params": { "baseline_years": 10, "percentile": 90 }
     },
     "storage": {
       "tiled": true,

@@ -45,12 +45,13 @@ def main() -> None:
     ap.add_argument("--metric", action="append", default=[], help="Metric id (repeatable)")
     ap.add_argument("--metrics-path", type=Path, default=DEFAULT_METRICS_PATH)
     ap.add_argument("--schema-path", type=Path, default=DEFAULT_SCHEMA_PATH)
+    ap.add_argument("--datasets-path", type=Path, default=None)
 
     ap.add_argument("--start-year", type=int, default=None)
     ap.add_argument("--end-year", type=int, default=None)
     ap.add_argument("--cache-dir", type=Path, default=Path("data/cache"))
 
-    ap.add_argument("--batch-tiles", type=int, default=1)
+    ap.add_argument("--batch-tiles", type=int, default=None)
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--tile-r0", type=int)
     ap.add_argument("--tile-r1", type=int)
@@ -84,6 +85,7 @@ def main() -> None:
         release=args.release,
         metrics_path=args.metrics_path,
         schema_path=args.schema_path,
+        datasets_path=args.datasets_path,
         cache_dir=args.cache_dir,
         start_year=args.start_year,
         end_year=args.end_year,

@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Climate Dataset Registry",
+  "description": "Schema for registry/datasets.json mapping dataset_id to dataset spec entries.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Optional manifest version tag."
+    }
+  },
+  "patternProperties": {
+    "^(?!version$)[a-z][a-z0-9_]*$": { "$ref": "#/$defs/dataset" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "dataset": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "title": { "type": "string" },
+        "source": { "$ref": "#/$defs/source" }
+      },
+      "required": ["source"],
+      "additionalProperties": false
+    },
+    "source": {
+      "oneOf": [
+        { "$ref": "#/$defs/source_cds" },
+        { "$ref": "#/$defs/source_erddap" }
+      ]
+    },
+    "source_cds": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "cds" },
+        "dataset": { "type": "string" },
+        "variable": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+          ]
+        },
+        "postprocess": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/postprocess_step" },
+          "default": []
+        },
+        "params": { "type": "object", "additionalProperties": true },
+        "block_years": { "type": "integer" },
+        "time_range": {
+          "type": "object",
+          "properties": {
+            "start_year": { "type": "integer" },
+            "end_year": { "type": "integer" }
+          },
+          "additionalProperties": false
+        },
+        "block_months": { "type": "integer" },
+        "batch_tiles": { "type": "integer" }
+      },
+      "required": ["type", "dataset", "variable"],
+      "additionalProperties": false
+    },
+    "source_erddap": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "erddap" },
+        "dataset_key": { "type": "string" },
+        "dataset_id": { "type": "string" },
+        "variable": { "type": "string" },
+        "postprocess": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/postprocess_step" },
+          "default": []
+        },
+        "params": { "type": "object", "additionalProperties": true },
+        "time_range": {
+          "type": "object",
+          "properties": {
+            "start_year": { "type": "integer" },
+            "end_year": { "type": "integer" }
+          },
+          "additionalProperties": false
+        },
+        "stride_time": { "type": "integer" },
+        "stride_lat": { "type": "integer" },
+        "stride_lon": { "type": "integer" },
+        "block_years": { "type": "integer" },
+        "batch_tiles": { "type": "integer" }
+      },
+      "required": ["type", "dataset_key"],
+      "additionalProperties": false
+    },
+    "postprocess_step": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "required": ["fn"],
+          "properties": {
+            "fn": { "type": "string" },
+            "params": { "type": "object", "additionalProperties": true, "default": {} }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

@@ -24,6 +24,7 @@ from climate.packager.tiles import normalize_missing_value, write_axis_json
 from climate.registry.metrics import (
     DEFAULT_METRICS_PATH,
     DEFAULT_SCHEMA_PATH,
+    DEFAULT_DATASETS_PATH,
     load_metrics,
 )
 from climate.tiles.layout import GridSpec, cell_center_latlon, tile_counts, tile_path
@@ -980,12 +981,13 @@ def package_registry(
     release: str = "dev",
     metrics_path: Path | str | None = None,
     schema_path: Path | str | None = None,
+    datasets_path: Path | str | None = None,
     cache_dir: Path = Path("data/cache"),
     start_year: int | None = None,
     end_year: int | None = None,
     metric_ids: list[str] | None = None,
     tile_range: TileRange | None = None,
-    batch_tiles: int = 1,
+    batch_tiles: int | None = None,
     resume: bool = False,
     overwrite_download: bool = False,
     debug: bool = False,
@@ -1004,7 +1006,17 @@ def package_registry(
         Path(metrics_path) if metrics_path is not None else DEFAULT_METRICS_PATH
     )
     schema_path = Path(schema_path) if schema_path is not None else DEFAULT_SCHEMA_PATH
-    manifest = load_metrics(path=metrics_path, schema_path=schema_path, validate=True)
+    datasets_path = (
+        Path(datasets_path)
+        if datasets_path is not None
+        else DEFAULT_DATASETS_PATH
+    )
+    manifest = load_metrics(
+        path=metrics_path,
+        schema_path=schema_path,
+        datasets_path=datasets_path,
+        validate=True,
+    )
 
     for metric_id, spec in manifest.items():
         if metric_id == "version":
@@ -1078,6 +1090,9 @@ def package_registry(
                 f"[range] metric={metric_id} years={start_year_eff}..{end_year_eff}"
             )
 
+        batch_tiles_eff = int(
+            source.get("batch_tiles", batch_tiles if batch_tiles is not None else 1)
+        )
         n_batches_processed = 0
         download_count = 0
         total_written = 0
@@ -1111,7 +1126,7 @@ def package_registry(
                 summary_stop = threading.Event()
 
                 batches_to_process: list[TileRange] = []
-                for batch in _iter_batches(metric_tile_range, batch_tiles):
+                for batch in _iter_batches(metric_tile_range, batch_tiles_eff):
                     if resume:
                         missing_tiles = _batch_missing_tiles(
                             out_root, grid, metric_id, batch, compression
@@ -1525,7 +1540,7 @@ def package_registry(
                 )
                 continue
 
-            for batch in _iter_batches(metric_tile_range, batch_tiles):
+            for batch in _iter_batches(metric_tile_range, batch_tiles_eff):
                 if stop_after_current:
                     break
                 if resume:
@@ -1766,7 +1781,7 @@ def package_registry(
                 f"DONE: wrote {total_written} tile(s) for metric={metric_id} "
                 f"tiles r{metric_tile_range.tile_r0}-{metric_tile_range.tile_r1} "
                 f"c{metric_tile_range.tile_c0}-{metric_tile_range.tile_c1} "
-                f"(batch_tiles={batch_tiles})"
+                f"(batch_tiles={batch_tiles_eff})"
             )
         finally:
             signal.signal(signal.SIGINT, prev_handler)

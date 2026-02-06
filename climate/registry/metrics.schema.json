@@ -177,6 +177,7 @@
       "type": "object",
       "properties": {
         "type": { "const": "cds" },
+        "dataset_ref": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "dataset": { "type": "string" },
         "variable": {
           "oneOf": [
@@ -200,9 +201,11 @@
             "end_year": { "type": "integer" }
           },
           "additionalProperties": false
-        }
+        },
+        "block_months": { "type": "integer" },
+        "batch_tiles": { "type": "integer" }
       },
-      "required": ["type", "dataset", "variable"],
+      "required": ["type"],
       "additionalProperties": false
     },
 
@@ -237,6 +240,7 @@
       "type": "object",
       "properties": {
         "type": { "const": "erddap" },
+        "dataset_ref": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "dataset_key": { "type": "string" },
         "dataset_id": { "type": "string" },
         "variable": { "type": "string" },
@@ -258,9 +262,10 @@
         "stride_time": { "type": "integer" },
         "stride_lat": { "type": "integer" },
         "stride_lon": { "type": "integer" },
-        "block_years": { "type": "integer" }
+        "block_years": { "type": "integer" },
+        "batch_tiles": { "type": "integer" }
       },
-      "required": ["type", "dataset_key", "agg"],
+      "required": ["type", "agg"],
       "additionalProperties": false
     }
   }

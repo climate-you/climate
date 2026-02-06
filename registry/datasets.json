@@ -1,0 +1,28 @@
+{
+  "version": "0.1",
+  "era5_daily_t2m": {
+    "id": "era5_daily_t2m",
+    "title": "ERA5 daily 2m temperature",
+    "source": {
+      "type": "cds",
+      "dataset": "derived-era5-single-levels-daily-statistics",
+      "variable": "2m_temperature",
+      "postprocess": [{ "fn": "k_to_c" }],
+      "time_range": { "start_year": 1979, "end_year": 2025 },
+      "block_years": 1,
+      "block_months": 1,
+      "batch_tiles": 24
+    }
+  },
+  "oisst_sst_v21_daily": {
+    "id": "oisst_sst_v21_daily",
+    "title": "OISST v2.1 daily SST",
+    "source": {
+      "type": "erddap",
+      "dataset_key": "oisst_sst_v21_daily",
+      "time_range": { "start_year": 1982, "end_year": 2025 },
+      "block_years": 1,
+      "batch_tiles": 4
+    }
+  }
+}
