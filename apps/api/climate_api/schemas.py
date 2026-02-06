@@ -63,7 +63,7 @@ class QueryPoint(BaseModel):
 
 
 class PlaceInfo(BaseModel):
-    slug: str
+    geonameid: int
     label: str | None = None
     lat: float
     lon: float
@@ -108,7 +108,6 @@ class PanelCellIndex(BaseModel):
 
 class LocationAutocompleteItem(BaseModel):
     geonameid: int
-    slug: str
     label: str
     lat: float
     lon: float

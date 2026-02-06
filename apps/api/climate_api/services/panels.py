@@ -72,7 +72,7 @@ def _caption_from_spec(
 
     ctx = StoryContext(
         today=date.today(),
-        slug=str(place.get("slug", "")),
+        slug=str(place.get("geonameid", "")),
         location_label=str(place.get("label", "")),
         city_name=str(place.get("label", "")),
         location_lat=float(place.get("lat", 0.0)),
@@ -405,7 +405,7 @@ def build_panel_tiles_registry(
     loc_out = LocationInfo(
         query=QueryPoint(lat=float(lat), lon=float(lon)),
         place=PlaceInfo(
-            slug=place.slug,
+            geonameid=int(place.geonameid),
             label=place.label,
             lat=float(place.lat),
             lon=float(place.lon),
@@ -453,7 +453,7 @@ def _caption_context_from_series(
 
     return {
         "place": {
-            "slug": place.slug,
+            "geonameid": place.geonameid,
             "label": place.label,
             "lat": place.lat,
             "lon": place.lon,

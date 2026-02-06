@@ -162,7 +162,6 @@ def create_app() -> FastAPI:
         results = [
             LocationAutocompleteItem(
                 geonameid=h.geonameid,
-                slug=h.slug,
                 label=h.label,
                 lat=h.lat,
                 lon=h.lon,
@@ -179,7 +178,6 @@ def create_app() -> FastAPI:
     def resolve_location(
         release: str,
         geonameid: int | None = Query(None),
-        slug: str | None = Query(None),
         label: str | None = Query(None),
     ):
         if release != settings.release and settings.release != "dev":
@@ -189,27 +187,24 @@ def create_app() -> FastAPI:
         hit = None
         if geonameid is not None:
             hit = idx.resolve_by_id(geonameid)
-        elif slug:
-            hit = idx.resolve_by_slug(slug)
         elif label:
             hit = idx.resolve_by_label(label)
         else:
             raise HTTPException(
-                status_code=400, detail="Provide geonameid, slug, or label."
+                status_code=400, detail="Provide geonameid or label."
             )
 
         result = None
         if hit is not None:
             result = LocationAutocompleteItem(
                 geonameid=hit.geonameid,
-                slug=hit.slug,
                 label=hit.label,
                 lat=hit.lat,
                 lon=hit.lon,
                 country_code=hit.country_code,
             )
 
-        return LocationResolveResponse(query=str(geonameid or slug or label or ""), result=result)
+        return LocationResolveResponse(query=str(geonameid or label or ""), result=result)
 
     @app.get("/api/v/{release}/location/graphs", response_model=GraphListResponse)
     def list_graphs(

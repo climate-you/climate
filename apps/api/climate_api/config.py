@@ -39,12 +39,12 @@ def load_settings() -> Settings:
     elif kdtree_env:
         kdtree_path = Path(kdtree_env)
     else:
-        kdtree_path = repo_root / "data" / "locations" / "kdtree" / "kdtree.pkl"
+        kdtree_path = repo_root / "data" / "locations" / "locations.kdtree.pkl"
 
     locations_index_csv = Path(
         os.environ.get(
             "LOCATIONS_INDEX_CSV",
-            repo_root / "data" / "locations" / "index" / "locations_index.csv",
+            repo_root / "data" / "locations" / "locations.index.csv",
         )
     )
     tiles_series_root = Path(

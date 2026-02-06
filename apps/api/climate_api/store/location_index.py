@@ -11,7 +11,6 @@ from typing import List, Dict, Optional, Iterable
 @dataclass(frozen=True)
 class LocationHit:
     geonameid: int
-    slug: str
     label: str
     lat: float
     lon: float
@@ -44,14 +43,12 @@ class LocationIndex:
         self._labels: List[str] = []
         self._norm_labels: List[str] = []
         self._norm_cities: List[str] = []
-        self._slugs: List[str] = []
         self._ids: List[int] = []
         self._lats: List[float] = []
         self._lons: List[float] = []
         self._country_codes: List[str] = []
         self._populations: List[int] = []
         self._by_id: Dict[int, int] = {}
-        self._by_slug: Dict[str, int] = {}
         self._prefix_map: Dict[str, List[int]] = {}
 
         self._load()
@@ -64,7 +61,6 @@ class LocationIndex:
             reader = csv.DictReader(f)
             for row in reader:
                 geonameid = int(row.get("geonameid") or 0)
-                slug = (row.get("slug") or "").strip()
                 label = (row.get("label") or "").strip()
                 lat = float(row.get("lat") or 0.0)
                 lon = float(row.get("lon") or 0.0)
@@ -77,7 +73,6 @@ class LocationIndex:
                 self._labels.append(label)
                 self._norm_labels.append(norm_label)
                 self._norm_cities.append(norm_city)
-                self._slugs.append(slug)
                 self._ids.append(geonameid)
                 self._lats.append(lat)
                 self._lons.append(lon)
@@ -86,8 +81,6 @@ class LocationIndex:
 
                 if geonameid:
                     self._by_id[geonameid] = i
-                if slug:
-                    self._by_slug[slug] = i
 
                 self._add_prefixes(i, norm_label)
                 self._add_prefixes(i, norm_city)
@@ -103,7 +96,6 @@ class LocationIndex:
     def _hit(self, i: int) -> LocationHit:
         return LocationHit(
             geonameid=self._ids[i],
-            slug=self._slugs[i],
             label=self._labels[i],
             lat=self._lats[i],
             lon=self._lons[i],
@@ -135,12 +127,6 @@ class LocationIndex:
 
     def resolve_by_id(self, geonameid: int) -> Optional[LocationHit]:
         idx = self._by_id.get(int(geonameid))
-        if idx is None:
-            return None
-        return self._hit(idx)
-
-    def resolve_by_slug(self, slug: str) -> Optional[LocationHit]:
-        idx = self._by_slug.get(slug)
         if idx is None:
             return None
         return self._hit(idx)

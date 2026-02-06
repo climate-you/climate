@@ -14,7 +14,7 @@ from ..cache import Cache
 
 @dataclass(frozen=True)
 class Place:
-    slug: str
+    geonameid: int
     label: str
     lat: float
     lon: float
@@ -65,7 +65,7 @@ class PlaceResolver:
 
         df = pd.read_csv(self.locations_csv)
 
-        for col in ("slug", "lat", "lon"):
+        for col in ("geonameid", "lat", "lon"):
             if col not in df.columns:
                 raise ValueError(f"locations.csv missing required column: {col}")
 
@@ -75,7 +75,7 @@ class PlaceResolver:
         self._df = df
         self._lats = df["lat"].to_numpy(dtype=np.float64)
         self._lons = df["lon"].to_numpy(dtype=np.float64)
-        self._slugs = df["slug"].astype(str).to_numpy()
+        self._ids = df["geonameid"].astype(int).to_numpy()
         self._kdtree = None
         self._kdtree_ready = False
 
@@ -144,7 +144,7 @@ class PlaceResolver:
             hit = self.cache.get_json(cache_key)
             if hit is not None:
                 return Place(
-                    slug=str(hit["slug"]),
+                    geonameid=int(hit["geonameid"]),
                     label=str(hit["label"]),
                     lat=float(hit["lat"]),
                     lon=float(hit["lon"]),
@@ -160,14 +160,14 @@ class PlaceResolver:
             i = int(np.argmin(d))
             dist = float(d[i])
 
-        slug = str(self._slugs[i])
+        geonameid = int(self._ids[i])
 
         label = str(self._labels[i]).strip() if i < len(self._labels) else ""
         if not label:
-            label = slug
+            label = str(geonameid)
 
         place = Place(
-            slug=slug,
+            geonameid=geonameid,
             label=label,
             lat=float(self._lats[i]),
             lon=float(self._lons[i]),
@@ -178,7 +178,7 @@ class PlaceResolver:
             self.cache.set_json(
                 cache_key,
                 {
-                    "slug": place.slug,
+                    "geonameid": place.geonameid,
                     "label": place.label,
                     "lat": place.lat,
                     "lon": place.lon,

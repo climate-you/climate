@@ -32,7 +32,6 @@ CITIES_SOURCES: Dict[str, str] = {
 }
 
 OUT_COLS = [
-    "slug",
     "city_name",
     "country_name",
     "country_code",
@@ -40,9 +39,9 @@ OUT_COLS = [
     "lon",
     "timezone",
     "population",
-    "geonameid",
     "kind",
     "label",
+    "geonameid",
 ]
 
 # GeoNames geoname table columns (index-based for speed)
@@ -144,21 +143,6 @@ def _iter_geonames_rows(zip_path: Path) -> Iterable[Tuple[str, str, str, str, st
                 yield geonameid, name, cc, lat, lon, timezone, population
 
 
-_slug_re = re.compile(r"[^a-z0-9]+")
-
-
-def slugify(s: str) -> str:
-    s = s.strip().lower()
-    s = s.replace("&", " and ")
-    s = _slug_re.sub("_", s)
-    s = s.strip("_")
-    return s or "unknown"
-
-
-def make_slug(country_code: str, city_name: str) -> str:
-    return f"city_{country_code.lower()}_{slugify(city_name)}"
-
-
 def _norm_index(s: str) -> str:
     s = (s or "").strip()
     s = unicodedata.normalize("NFKD", s)
@@ -167,14 +151,6 @@ def _norm_index(s: str) -> str:
     s = re.sub(r"[^a-z0-9\\s]+", " ", s)
     s = re.sub(r"\\s+", " ", s)
     return s.strip()
-
-
-def build_slug_counts(zip_path: Path) -> Dict[str, int]:
-    counts: Dict[str, int] = {}
-    for _, name, cc, _, _, _, _ in _iter_geonames_rows(zip_path):
-        base_slug = make_slug(cc, name)
-        counts[base_slug] = counts.get(base_slug, 0) + 1
-    return counts
 
 
 def write_locations_csv(
@@ -186,7 +162,6 @@ def write_locations_csv(
     index_csv: Optional[Path] = None,
 ) -> Tuple[int, Optional[List[Tuple[float, float]]]]:
     out_csv.parent.mkdir(parents=True, exist_ok=True)
-    slug_counts = build_slug_counts(zip_path)
     total = 0
     points: Optional[List[Tuple[float, float]]] = [] if collect_points else None
     index_writer = None
@@ -198,7 +173,6 @@ def write_locations_csv(
             index_file,
             fieldnames=[
                 "geonameid",
-                "slug",
                 "label",
                 "city_name",
                 "country_name",
@@ -218,12 +192,6 @@ def write_locations_csv(
         w = csv.DictWriter(f, fieldnames=OUT_COLS)
         w.writeheader()
         for geonameid, name, cc, lat, lon, tz, pop in _iter_geonames_rows(zip_path):
-            base_slug = make_slug(cc, name)
-            if slug_counts.get(base_slug, 0) > 1:
-                slug = f"{base_slug}_{geonameid}"
-            else:
-                slug = base_slug
-
             ctry = country_names.get(cc, cc)
             label = f"{name}, {ctry}"
             lat_f = float(lat)
@@ -231,7 +199,6 @@ def write_locations_csv(
             pop_i = int(float(pop) or 0)
             w.writerow(
                 {
-                    "slug": slug,
                     "city_name": name,
                     "country_name": ctry,
                     "country_code": cc,
@@ -248,7 +215,6 @@ def write_locations_csv(
                 index_writer.writerow(
                     {
                         "geonameid": geonameid,
-                        "slug": slug,
                         "label": label,
                         "city_name": name,
                         "country_name": ctry,
@@ -270,7 +236,7 @@ def write_locations_csv(
     return total, points
 
 
-def write_kdtree(points: List[Tuple[float, float]], out_dir: Path) -> None:
+def write_kdtree(points: List[Tuple[float, float]], out_path: Path) -> None:
     try:
         import numpy as np
         from scipy.spatial import cKDTree
@@ -280,13 +246,13 @@ def write_kdtree(points: List[Tuple[float, float]], out_dir: Path) -> None:
             "Install scipy and re-run with --write-kdtree."
         ) from exc
 
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     data = np.asarray(points, dtype=np.float64)
     tree = cKDTree(data)
 
     import pickle
 
-    with open(out_dir / "kdtree.pkl", "wb") as f:
+    with open(out_path, "wb") as f:
         pickle.dump(tree, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
@@ -301,8 +267,8 @@ def main() -> None:
     ap.add_argument(
         "--cache-dir",
         type=str,
-        default="cache/geonames",
-        help='GeoNames cache directory (default: "cache/geonames").',
+        default="data/cache/geonames",
+        help='GeoNames cache directory (default: "data/cache/geonames").',
     )
     ap.add_argument(
         "--write-kdtree",
@@ -310,10 +276,10 @@ def main() -> None:
         help="Build a KD-tree for nearest-location queries.",
     )
     ap.add_argument(
-        "--kdtree-dir",
+        "--kdtree-path",
         type=str,
-        default="data/locations/kdtree",
-        help='KD-tree output directory (default: "data/locations/kdtree").',
+        default="data/locations/locations.kdtree.pkl",
+        help='KD-tree output path (default: "data/locations/locations.kdtree.pkl").',
     )
     ap.add_argument(
         "--write-index",
@@ -321,10 +287,10 @@ def main() -> None:
         help="Write an autocomplete/resolve index CSV.",
     )
     ap.add_argument(
-        "--index-dir",
+        "--index-path",
         type=str,
-        default="data/locations/index",
-        help='Index output directory (default: "data/locations/index").',
+        default="data/locations/locations.index.csv",
+        help='Index output path (default: "data/locations/locations.index.csv").',
     )
     ap.add_argument(
         "--source",
@@ -343,7 +309,7 @@ def main() -> None:
     out_csv = Path(args.out)
     index_csv = None
     if args.write_index:
-        index_csv = Path(args.index_dir) / "locations_index.csv"
+        index_csv = Path(args.index_path)
 
     count, points = write_locations_csv(
         out_csv,
@@ -356,7 +322,7 @@ def main() -> None:
     if args.write_kdtree:
         if points is None:
             raise RuntimeError("KD-tree requested but no points were collected.")
-        write_kdtree(points, Path(args.kdtree_dir))
+        write_kdtree(points, Path(args.kdtree_path))
 
     print(f"[ok] wrote {out_csv} ({count} locations)", file=sys.stderr)
 
