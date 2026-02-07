@@ -71,11 +71,8 @@ $ redis-cli keys 'climate_api:*'
 
 Tests
 
-# Unit tests
+# Unit tests + Registry validation + Coverage check
 PYTHONPATH=. pytest -q
-
-# Registry validation
-PYTHONPATH=. python scripts/validate/all.py
 
 ---
 
