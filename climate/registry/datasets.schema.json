@@ -22,9 +22,11 @@
           "pattern": "^[a-z][a-z0-9_]*$"
         },
         "title": { "type": "string" },
+        "grid_id": { "type": "string", "pattern": "^[a-z0-9_.]+$" },
+        "tile_size": { "type": "integer", "minimum": 1 },
         "source": { "$ref": "#/$defs/source" }
       },
-      "required": ["source"],
+      "required": ["grid_id", "tile_size", "source"],
       "additionalProperties": false
     },
     "source": {

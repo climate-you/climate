@@ -106,6 +106,7 @@ def _compute_tiles_from_cds_downloads(
     dask_enabled: bool,
     dask_chunk_lat: int,
     dask_chunk_lon: int,
+    output_years: list[int],
 ) -> int:
     agg_fn = _agg_map().get(agg)
     if agg_fn is None:
@@ -146,7 +147,6 @@ def _compute_tiles_from_cds_downloads(
                 f"for years {years_parts[0]}..{years_parts[-1]}"
             )
         da_ann = agg_fn(da_daily, params)
-        da_ann = da_ann.sel(year=years_parts)
         da_parts.append(da_ann)
     else:
         for years_part, paths in downloads:
@@ -221,6 +221,7 @@ def _compute_tiles_from_cds_downloads(
     written = _concat_and_write_yearly_tiles(
         da_parts=da_parts,
         years_parts=years_parts,
+        output_years=output_years,
         out_root=out_root,
         grid=grid,
         metric_id=metric_id,
@@ -256,6 +257,7 @@ def _compute_tiles_from_erddap_downloads(
     dask_enabled: bool,
     dask_chunk_lat: int,
     dask_chunk_lon: int,
+    output_years: list[int],
 ) -> int:
     agg_fn = _agg_map().get(agg)
     if agg_fn is None:
@@ -298,7 +300,6 @@ def _compute_tiles_from_erddap_downloads(
                 f"for years {years_parts[0]}..{years_parts[-1]}"
             )
         da_ann = agg_fn(da_daily, params)
-        da_ann = da_ann.sel(year=years_parts)
         da_parts.append(da_ann)
     else:
         for years_part, paths in downloads:
@@ -336,6 +337,7 @@ def _compute_tiles_from_erddap_downloads(
     written = _concat_and_write_yearly_tiles(
         da_parts=da_parts,
         years_parts=years_parts,
+        output_years=output_years,
         out_root=out_root,
         grid=grid,
         metric_id=metric_id,
@@ -480,6 +482,7 @@ def _concat_and_write_yearly_tiles(
     *,
     da_parts: list[xr.DataArray],
     years_parts: list[int],
+    output_years: list[int],
     out_root: Path,
     grid: GridSpec,
     metric_id: str,
@@ -493,9 +496,17 @@ def _concat_and_write_yearly_tiles(
     if not da_parts:
         raise RuntimeError(f"No data blocks for metric={metric_id}")
     da_ann = xr.concat(da_parts, dim="year")
+    da_ann = da_ann.sortby("year")
+    try:
+        da_ann = da_ann.sel(year=output_years)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to select requested analysis years for {metric_id}: "
+            f"{output_years[0]}..{output_years[-1]}"
+        ) from exc
     return _tiles_from_yearly_da(
         da_ann=da_ann,
-        years_int=years_parts,
+        years_int=output_years,
         out_root=out_root,
         grid=grid,
         metric_id=metric_id,
@@ -559,6 +570,74 @@ def _month_blocks(block_months: int) -> list[list[str]]:
         blocks.append([f"{mm:02d}" for mm in range(m, end_m + 1)])
         m = end_m + 1
     return blocks
+
+
+def _parse_year_range(raw: Any) -> tuple[int, int] | None:
+    if not isinstance(raw, dict):
+        return None
+    if "start_year" not in raw or "end_year" not in raw:
+        return None
+    return (int(raw["start_year"]), int(raw["end_year"]))
+
+
+def _align_to_dataset_blocks(
+    *,
+    analysis_start: int,
+    analysis_end: int,
+    dataset_start: int,
+    dataset_end: int,
+    block_years: int,
+) -> tuple[int, int]:
+    block_years = max(1, int(block_years))
+    analysis_start = max(dataset_start, analysis_start)
+    analysis_end = min(dataset_end, analysis_end)
+    offset_start = (analysis_start - dataset_start) // block_years
+    offset_end = (analysis_end - dataset_start) // block_years
+    download_start = dataset_start + offset_start * block_years
+    download_end = dataset_start + offset_end * block_years + (block_years - 1)
+    download_end = min(download_end, dataset_end)
+    return (download_start, download_end)
+
+
+def _resolve_year_ranges(
+    *,
+    source: dict[str, Any],
+    cli_start_year: int | None,
+    cli_end_year: int | None,
+) -> tuple[int, int, int, int]:
+    download_range = _parse_year_range(source.get("time_range")) or (1979, 2025)
+    analysis_range = (
+        _parse_year_range(source.get("_analysis_time_range")) or download_range
+    )
+
+    analysis_start = int(cli_start_year) if cli_start_year is not None else analysis_range[0]
+    analysis_end = int(cli_end_year) if cli_end_year is not None else analysis_range[1]
+    if analysis_start > analysis_end:
+        raise ValueError(
+            f"Invalid analysis year range: {analysis_start}..{analysis_end}"
+        )
+
+    analysis_start = max(download_range[0], analysis_start)
+    analysis_end = min(download_range[1], analysis_end)
+    if analysis_start > analysis_end:
+        raise ValueError(
+            f"Analysis range {analysis_start}..{analysis_end} is outside download range "
+            f"{download_range[0]}..{download_range[1]}"
+        )
+
+    if source.get("_dataset_ref"):
+        block_years = int(source.get("block_years", 1))
+        download_start, download_end = _align_to_dataset_blocks(
+            analysis_start=analysis_start,
+            analysis_end=analysis_end,
+            dataset_start=download_range[0],
+            dataset_end=download_range[1],
+            block_years=block_years,
+        )
+    else:
+        download_start, download_end = analysis_start, analysis_end
+
+    return (analysis_start, analysis_end, download_start, download_end)
 
 
 def _tiles_from_yearly_da(
@@ -1059,22 +1138,17 @@ def package_registry(
         missing = spec.get("missing", "nan")
         compression = storage.get("compression")
 
-        time_range = (
-            source.get("time_range", {})
-            if isinstance(source.get("time_range", {}), dict)
-            else {}
+        (
+            analysis_start_year,
+            analysis_end_year,
+            download_start_year,
+            download_end_year,
+        ) = _resolve_year_ranges(
+            source=source,
+            cli_start_year=start_year,
+            cli_end_year=end_year,
         )
-        start_year_eff = (
-            int(start_year)
-            if start_year is not None
-            else int(time_range.get("start_year", 1979))
-        )
-        end_year_eff = (
-            int(end_year)
-            if end_year is not None
-            else int(time_range.get("end_year", 2025))
-        )
-        years_int = list(range(start_year_eff, end_year_eff + 1))
+        years_int = list(range(analysis_start_year, analysis_end_year + 1))
         axis_path = write_axis_json(
             out_root,
             grid,
@@ -1087,7 +1161,8 @@ def package_registry(
                 f"Axis: {axis_path} ({years_int[0]}..{years_int[-1]}, n={len(years_int)})"
             )
             print(
-                f"[range] metric={metric_id} years={start_year_eff}..{end_year_eff}"
+                f"[range] metric={metric_id} analysis={analysis_start_year}..{analysis_end_year} "
+                f"download={download_start_year}..{download_end_year}"
             )
 
         batch_tiles_eff = int(
@@ -1148,25 +1223,24 @@ def package_registry(
                             block_years = int(
                                 source.get(
                                     "block_years",
-                                    end_year_eff - start_year_eff + 1,
+                                    download_end_year - download_start_year + 1,
                                 )
                             )
                             blocks = _year_blocks(
-                                start_year_eff,
-                                end_year_eff,
+                                download_start_year,
+                                download_end_year,
                                 block_years,
                                 dataset_start=None,
                             )
                             return len(blocks)
                         block_years = int(source.get("block_years", 1))
                         blocks = _year_blocks(
-                            start_year_eff,
-                            end_year_eff,
+                            download_start_year,
+                            download_end_year,
                             block_years,
                             dataset_start=None,
                         )
-                        params = source.get("params", {}) or {}
-                        month_blocks = _month_blocks(int(params.get("block_months", 1)))
+                        month_blocks = _month_blocks(int(source.get("block_months", 1)))
                         return len(blocks) * len(month_blocks)
                     if source_type == "erddap":
                         dataset_key = source.get("dataset_key")
@@ -1179,8 +1253,8 @@ def package_registry(
                             )
                         )
                         blocks = _year_blocks(
-                            start_year_eff,
-                            end_year_eff,
+                            download_start_year,
+                            download_end_year,
                             block_years,
                             dataset_start=dataset_start,
                         )
@@ -1268,18 +1342,18 @@ def package_registry(
                                 block_years = int(
                                     source.get(
                                         "block_years",
-                                        end_year_eff - start_year_eff + 1,
+                                        download_end_year - download_start_year + 1,
                                     )
                                 )
                             blocks = _year_blocks(
-                                start_year_eff,
-                                end_year_eff,
+                                download_start_year,
+                                download_end_year,
                                 block_years,
                                 dataset_start=None,
                             )
                             if not blocks:
                                 raise ValueError(
-                                    f"No valid CDS blocks for {start_year_eff}-{end_year_eff}"
+                                    f"No valid CDS blocks for {download_start_year}-{download_end_year}"
                                 )
 
                             params = source.get("params", {}) or {}
@@ -1313,7 +1387,7 @@ def package_registry(
                                         stop_downloads = True
                                         break
                                 else:
-                                    block_months = int(params.get("block_months", 1))
+                                    block_months = int(source.get("block_months", 1))
                                     month_blocks = _month_blocks(block_months)
                                     paths: list[Path] = []
                                     for months in month_blocks:
@@ -1396,6 +1470,7 @@ def package_registry(
                                     dask_enabled=dask_enabled,
                                     dask_chunk_lat=dask_chunk_lat,
                                     dask_chunk_lon=dask_chunk_lon,
+                                    output_years=years_int,
                                 )
                             )
                             futures[-1].add_done_callback(_on_future_done)
@@ -1415,14 +1490,14 @@ def package_registry(
                                 )
                             )
                             blocks = _year_blocks(
-                                start_year_eff,
-                                end_year_eff,
+                                download_start_year,
+                                download_end_year,
                                 block_years,
                                 dataset_start=dataset_start,
                             )
                             if not blocks:
                                 raise ValueError(
-                                    f"No valid ERDDAP blocks for {dataset_key} {start_year_eff}-{end_year_eff}"
+                                    f"No valid ERDDAP blocks for {dataset_key} {download_start_year}-{download_end_year}"
                                 )
 
                             params = source.get("params", {}) or {}
@@ -1502,6 +1577,7 @@ def package_registry(
                                     dask_enabled=dask_enabled,
                                     dask_chunk_lat=dask_chunk_lat,
                                     dask_chunk_lon=dask_chunk_lon,
+                                    output_years=years_int,
                                 )
                             )
                             futures[-1].add_done_callback(_on_future_done)
@@ -1536,7 +1612,7 @@ def package_registry(
                     f"DONE: wrote {total_written} tile(s) for metric={metric_id} "
                     f"tiles r{metric_tile_range.tile_r0}-{metric_tile_range.tile_r1} "
                     f"c{metric_tile_range.tile_c0}-{metric_tile_range.tile_c1} "
-                    f"(batch_tiles={batch_tiles})"
+                    f"(batch_tiles={batch_tiles_eff})"
                 )
                 continue
 
@@ -1589,18 +1665,18 @@ def package_registry(
                     else:
                         block_years = int(
                             source.get(
-                                "block_years", end_year_eff - start_year_eff + 1
+                                "block_years", download_end_year - download_start_year + 1
                             )
                         )
                     blocks = _year_blocks(
-                        start_year_eff,
-                        end_year_eff,
+                        download_start_year,
+                        download_end_year,
                         block_years,
                         dataset_start=None,
                     )
                     if not blocks:
                         raise ValueError(
-                            f"No valid CDS blocks for {start_year_eff}-{end_year_eff}"
+                            f"No valid CDS blocks for {download_start_year}-{download_end_year}"
                         )
 
                     params = source.get("params", {}) or {}
@@ -1630,7 +1706,7 @@ def package_registry(
                             download_count += 1
                             downloads.append((years_part, [dl_path]))
                         else:
-                            block_months = int(params.get("block_months", 1))
+                            block_months = int(source.get("block_months", 1))
                             month_blocks = _month_blocks(block_months)
                             paths: list[Path] = []
                             for months in month_blocks:
@@ -1686,6 +1762,7 @@ def package_registry(
                         dask_enabled=dask_enabled,
                         dask_chunk_lat=dask_chunk_lat,
                         dask_chunk_lon=dask_chunk_lon,
+                        output_years=years_int,
                     )
 
                     n_batches_processed += 1
@@ -1705,14 +1782,14 @@ def package_registry(
                     )
 
                     blocks = _year_blocks(
-                        start_year_eff,
-                        end_year_eff,
+                        download_start_year,
+                        download_end_year,
                         block_years,
                         dataset_start=dataset_start,
                     )
                     if not blocks:
                         raise ValueError(
-                            f"No valid ERDDAP blocks for {dataset_key} {start_year_eff}-{end_year_eff}"
+                            f"No valid ERDDAP blocks for {dataset_key} {download_start_year}-{download_end_year}"
                         )
 
                     params = source.get("params", {}) or {}
@@ -1768,6 +1845,7 @@ def package_registry(
                         dask_enabled=dask_enabled,
                         dask_chunk_lat=dask_chunk_lat,
                         dask_chunk_lon=dask_chunk_lon,
+                        output_years=years_int,
                     )
 
                     n_batches_processed += 1

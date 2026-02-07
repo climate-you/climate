@@ -17,6 +17,22 @@ class MetricsSchemaError(ValueError):
     pass
 
 
+_SOURCE_DOWNLOAD_FIELDS = {
+    "dataset",
+    "dataset_id",
+    "dataset_key",
+    "variable",
+    "postprocess",
+    "block_years",
+    "block_months",
+    "batch_tiles",
+    "time_range",
+    "stride_time",
+    "stride_lat",
+    "stride_lon",
+}
+
+
 def load_schema(path: Path | str = DEFAULT_SCHEMA_PATH) -> dict[str, Any]:
     schema_path = Path(path)
     with schema_path.open("r", encoding="utf-8") as handle:
@@ -69,7 +85,7 @@ def validate_datasets(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
     if errors:
         formatted = "\n".join(_format_error(err) for err in errors)
         raise MetricsSchemaError(f"datasets.json failed schema validation:\n{formatted}")
-    _validate_ids_match_keys(manifest)
+    _validate_ids_match_keys(manifest, manifest_name="datasets.json")
 
 
 def validate_metrics(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
@@ -79,10 +95,12 @@ def validate_metrics(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         formatted = "\n".join(_format_error(err) for err in errors)
         raise MetricsSchemaError(f"metrics.json failed schema validation:\n{formatted}")
 
-    _validate_ids_match_keys(manifest)
+    _validate_ids_match_keys(manifest, manifest_name="metrics.json")
 
 
-def _validate_ids_match_keys(manifest: dict[str, Any]) -> None:
+def _validate_ids_match_keys(
+    manifest: dict[str, Any], *, manifest_name: str
+) -> None:
     mismatches: list[str] = []
     for key, spec in manifest.items():
         if key == "version":
@@ -92,51 +110,164 @@ def _validate_ids_match_keys(manifest: dict[str, Any]) -> None:
 
     if mismatches:
         raise MetricsSchemaError(
-            "metrics.json has id fields that do not match their keys:\n"
+            f"{manifest_name} has id fields that do not match their keys:\n"
             + "\n".join(mismatches)
         )
 
 
-def _apply_dataset_refs(
-    metrics: dict[str, Any], datasets: dict[str, Any]
-) -> dict[str, Any]:
-    if not datasets:
-        return metrics
+def _apply_dataset_refs(metrics: dict[str, Any], datasets: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = dict(metrics)
 
-    def _merge_source(source: dict[str, Any]) -> dict[str, Any]:
+    for key, spec in metrics.items():
+        if key == "version" or not isinstance(spec, dict):
+            continue
+
+        source = spec.get("source")
+        if not isinstance(source, dict):
+            continue
+
+        source_type = source.get("type")
+        if source_type in {"cds", "erddap"} and not source.get("dataset_ref"):
+            raise MetricsSchemaError(
+                f"Metric {key} source.type={source_type} must set dataset_ref."
+            )
+
         dataset_ref = source.get("dataset_ref")
         if not dataset_ref:
-            return source
+            out[key] = dict(spec)
+            continue
+
         dataset = datasets.get(dataset_ref)
-        if not dataset:
+        if not isinstance(dataset, dict):
             raise MetricsSchemaError(f"Unknown dataset_ref: {dataset_ref}")
+
         ds_source = dict(dataset.get("source", {}))
         if not ds_source:
-            raise MetricsSchemaError(
-                f"dataset_ref {dataset_ref} missing source definition"
-            )
+            raise MetricsSchemaError(f"dataset_ref {dataset_ref} missing source definition")
         if ds_source.get("type") != source.get("type"):
             raise MetricsSchemaError(
                 f"dataset_ref {dataset_ref} type mismatch: "
                 f"{ds_source.get('type')} != {source.get('type')}"
             )
-        merged = dict(ds_source)
-        merged.update({k: v for k, v in source.items() if k != "dataset_ref"})
-        return merged
 
-    out: dict[str, Any] = dict(metrics)
+        merged_source = dict(ds_source)
+        metric_time_range = source.get("time_range")
+        for k2, v2 in source.items():
+            if k2 in {"dataset_ref", "time_range"}:
+                continue
+            if k2 in _SOURCE_DOWNLOAD_FIELDS:
+                continue
+            merged_source[k2] = v2
+        if isinstance(metric_time_range, dict):
+            merged_source["_analysis_time_range"] = metric_time_range
+        merged_source["_dataset_ref"] = dataset_ref
+
+        merged_spec = dict(spec)
+        merged_spec["source"] = merged_source
+
+        ds_grid_id = dataset.get("grid_id")
+        if ds_grid_id is not None:
+            metric_grid_id = merged_spec.get("grid_id")
+            if metric_grid_id is None:
+                merged_spec["grid_id"] = ds_grid_id
+            elif metric_grid_id != ds_grid_id:
+                raise MetricsSchemaError(
+                    f"Metric {key} grid_id={metric_grid_id} does not match "
+                    f"dataset_ref {dataset_ref} grid_id={ds_grid_id}."
+                )
+
+        ds_tile_size = dataset.get("tile_size")
+        if ds_tile_size is not None:
+            storage = dict(merged_spec.get("storage", {}))
+            metric_tile_size = storage.get("tile_size")
+            if metric_tile_size is None:
+                storage["tile_size"] = ds_tile_size
+            elif int(metric_tile_size) != int(ds_tile_size):
+                raise MetricsSchemaError(
+                    f"Metric {key} storage.tile_size={metric_tile_size} does not match "
+                    f"dataset_ref {dataset_ref} tile_size={ds_tile_size}."
+                )
+            merged_spec["storage"] = storage
+
+        out[key] = merged_spec
+
+    return _apply_derived_inheritance(out)
+
+
+def _apply_derived_inheritance(metrics: dict[str, Any]) -> dict[str, Any]:
+    out = dict(metrics)
     for key, spec in metrics.items():
-        if key == "version":
-            continue
-        if not isinstance(spec, dict):
+        if key == "version" or not isinstance(spec, dict):
             continue
         source = spec.get("source")
-        if isinstance(source, dict):
-            merged = _merge_source(source)
-            if merged is not source:
-                spec = dict(spec)
-                spec["source"] = merged
-                out[key] = spec
+        if not isinstance(source, dict) or source.get("type") != "derived":
+            continue
+
+        inputs = source.get("inputs", [])
+        if not inputs:
+            continue
+        input_specs = []
+        for input_id in inputs:
+            input_spec = out.get(input_id)
+            if not isinstance(input_spec, dict):
+                raise MetricsSchemaError(f"Metric {key} references missing input metric: {input_id}")
+            input_specs.append(input_spec)
+
+        base_grid = input_specs[0].get("grid_id")
+        base_tile_size = (
+            input_specs[0].get("storage", {}).get("tile_size")
+            if isinstance(input_specs[0].get("storage"), dict)
+            else None
+        )
+        for input_id, input_spec in zip(inputs[1:], input_specs[1:]):
+            grid_id = input_spec.get("grid_id")
+            tile_size = (
+                input_spec.get("storage", {}).get("tile_size")
+                if isinstance(input_spec.get("storage"), dict)
+                else None
+            )
+            if grid_id != base_grid:
+                raise MetricsSchemaError(
+                    f"Metric {key} derived inputs have mismatched grid_id: "
+                    f"{inputs[0]}={base_grid}, {input_id}={grid_id}"
+                )
+            if tile_size != base_tile_size:
+                raise MetricsSchemaError(
+                    f"Metric {key} derived inputs have mismatched tile_size: "
+                    f"{inputs[0]}={base_tile_size}, {input_id}={tile_size}"
+                )
+
+        merged = dict(spec)
+        if merged.get("grid_id") is None and base_grid is not None:
+            merged["grid_id"] = base_grid
+        elif (
+            merged.get("grid_id") is not None
+            and base_grid is not None
+            and merged.get("grid_id") != base_grid
+        ):
+            raise MetricsSchemaError(
+                f"Metric {key} grid_id={merged.get('grid_id')} does not match "
+                f"derived input grid_id={base_grid}"
+            )
+
+        storage = dict(merged.get("storage", {}))
+        metric_tile_size = storage.get("tile_size")
+        if metric_tile_size is None and base_tile_size is not None:
+            storage["tile_size"] = base_tile_size
+        elif (
+            metric_tile_size is not None
+            and base_tile_size is not None
+            and int(metric_tile_size) != int(base_tile_size)
+        ):
+            raise MetricsSchemaError(
+                f"Metric {key} storage.tile_size={metric_tile_size} does not match "
+                f"derived input tile_size={base_tile_size}"
+            )
+        if storage:
+            merged["storage"] = storage
+
+        out[key] = merged
+
     return out
 
 

@@ -56,7 +56,7 @@
         "overrides": { "$ref": "#/$defs/overrides" },
         "deprecated": { "type": "boolean" }
       },
-      "required": ["grid_id", "time_axis", "dtype", "missing", "source"],
+      "required": ["time_axis", "dtype", "missing", "source"],
       "additionalProperties": false
     },
 
@@ -178,22 +178,8 @@
       "properties": {
         "type": { "const": "cds" },
         "dataset_ref": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
-        "dataset": { "type": "string" },
-        "variable": {
-          "oneOf": [
-            { "type": "string" },
-            { "type": "array", "items": { "type": "string" }, "minItems": 1 }
-          ]
-        },
         "agg": { "type": "string", "description": "Aggregator applied after download, e.g. annual_mean_from_monthly." },
-        "postprocess": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/postprocess_step" },
-          "default": []
-        },
         "params": { "type": "object", "additionalProperties": true },
-        "block_years": { "type": "integer" },
-        "cache_key": { "type": "string", "description": "Optional key to group downloads across metrics." },
         "time_range": {
           "type": "object",
           "properties": {
@@ -201,11 +187,9 @@
             "end_year": { "type": "integer" }
           },
           "additionalProperties": false
-        },
-        "block_months": { "type": "integer" },
-        "batch_tiles": { "type": "integer" }
+        }
       },
-      "required": ["type"],
+      "required": ["type", "dataset_ref", "agg"],
       "additionalProperties": false
     },
 
@@ -241,16 +225,8 @@
       "properties": {
         "type": { "const": "erddap" },
         "dataset_ref": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
-        "dataset_key": { "type": "string" },
-        "dataset_id": { "type": "string" },
-        "variable": { "type": "string" },
         "agg": { "type": "string" },
         "params": { "type": "object", "additionalProperties": true },
-        "postprocess": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/postprocess_step" },
-          "default": []
-        },
         "time_range": {
           "type": "object",
           "properties": {
@@ -258,14 +234,9 @@
             "end_year": { "type": "integer" }
           },
           "additionalProperties": false
-        },
-        "stride_time": { "type": "integer" },
-        "stride_lat": { "type": "integer" },
-        "stride_lon": { "type": "integer" },
-        "block_years": { "type": "integer" },
-        "batch_tiles": { "type": "integer" }
+        }
       },
-      "required": ["type", "agg"],
+      "required": ["type", "dataset_ref", "agg"],
       "additionalProperties": false
     }
   }
