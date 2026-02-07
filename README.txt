@@ -67,12 +67,15 @@ $ uvicorn apps.api.climate_api.main:app --reload --port 8001
 $ redis-cli DBSIZE
 $ redis-cli keys 'climate_api:*'
 
-# Query server
-(London)
-$ curl 'http://localhost:8001/api/v/dev/panel?lat=51.101&lon=-0.136&panel_id=overview&unit=C'
-(Tamarin)
-$ curl 'http://localhost:8001/api/v/dev/panel?lat=-20.32556&lon=57.37056&panel_id=ocean&unit=C'
-$ curl 'http://localhost:8001/api/v/dev/panel?lat=-20.32556&lon=57.37056&panel_id=overview&unit=C'
+---
+
+Tests
+
+# Unit tests
+PYTHONPATH=. pytest -q
+
+# Registry validation
+PYTHONPATH=. python scripts/validate/all.py
 
 ---
 

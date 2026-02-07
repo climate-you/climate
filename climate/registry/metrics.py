@@ -59,6 +59,8 @@ def load_metrics(
         path=datasets_path, schema_path=datasets_schema_path, validate=validate
     )
     manifest = _apply_dataset_refs(manifest, datasets)
+    if validate:
+        validate_metric_dependencies(manifest)
     return manifest
 
 
@@ -269,6 +271,84 @@ def _apply_derived_inheritance(metrics: dict[str, Any]) -> dict[str, Any]:
         out[key] = merged
 
     return out
+
+
+def validate_metric_dependencies(manifest: dict[str, Any]) -> None:
+    metrics = {
+        key: spec
+        for key, spec in manifest.items()
+        if key != "version" and isinstance(spec, dict)
+    }
+
+    deps: dict[str, list[str]] = {}
+    for metric_id, spec in metrics.items():
+        source = spec.get("source", {})
+        source_type = source.get("type")
+        if source_type == "derived":
+            inputs = source.get("inputs", [])
+            if not isinstance(inputs, list) or not inputs:
+                raise MetricsSchemaError(
+                    f"Metric {metric_id} derived source must define non-empty inputs"
+                )
+            deps[metric_id] = [str(x) for x in inputs]
+        else:
+            deps[metric_id] = []
+
+    state: dict[str, int] = {}
+    stack: list[str] = []
+
+    def _visit(node: str) -> None:
+        s = state.get(node, 0)
+        if s == 1:
+            if node in stack:
+                i = stack.index(node)
+                cycle = stack[i:] + [node]
+                raise MetricsSchemaError(
+                    "Cyclic metric dependency detected: " + " -> ".join(cycle)
+                )
+            raise MetricsSchemaError(f"Cyclic metric dependency detected at {node}")
+        if s == 2:
+            return
+
+        state[node] = 1
+        stack.append(node)
+        for dep in deps.get(node, []):
+            if dep not in metrics:
+                raise MetricsSchemaError(
+                    f"Metric {node} depends on missing metric: {dep}"
+                )
+            _visit(dep)
+        stack.pop()
+        state[node] = 2
+
+    for metric_id in metrics:
+        _visit(metric_id)
+
+    memo: dict[str, bool] = {}
+
+    def _has_dataset_ancestor(metric_id: str) -> bool:
+        cached = memo.get(metric_id)
+        if cached is not None:
+            return cached
+        spec = metrics[metric_id]
+        source = spec.get("source", {})
+        source_type = source.get("type")
+        if source_type in {"cds", "erddap"}:
+            ok = bool(source.get("_dataset_ref") or source.get("dataset_ref"))
+            memo[metric_id] = ok
+            return ok
+        if source_type == "derived":
+            ok = any(_has_dataset_ancestor(dep) for dep in deps[metric_id])
+            memo[metric_id] = ok
+            return ok
+        memo[metric_id] = False
+        return False
+
+    missing = [m for m in metrics if not _has_dataset_ancestor(m)]
+    if missing:
+        raise MetricsSchemaError(
+            "Metrics without dataset ancestor: " + ", ".join(sorted(missing))
+        )
 
 
 def _error_sort_key(error) -> tuple[int, str]:
