@@ -72,14 +72,9 @@ NEXT:
   - Add a “best match” endpoint for a free‑text query (single request)
     -Add prefix‑length + fuzziness tuning knobs to autocomplete
 - for ocean locations, maybe the ocean polygons with natural earth make the most sense. But how would we be able to return "Coast off <city>" with this? Would we do:
-- check if water cell, then find nearest city, if less than X km, return "<ocean name> off <city>", otherwise return "<ocean name>"
-- if not water cell, find nearest city and returns it
-  So in both cases, we need to check water cell + nearest city.
-- add `maps.json` to generate maps from metrics:
-  - `source: metric_id`
-  - type: `png` for textures (linear option, colour palette)
-  - type: `png` black/white for interestingness
-  - type: `binary` for interestingness (to do lookups: `(lat,lon)->(cell_i, cell_j)->interesting?`)
+  - check if water cell, then find nearest city, if less than X km, return "<ocean name> off <city>", otherwise return "<ocean name>"
+  - if not water cell, find nearest city and returns it
+    So in both cases, we need to check water cell + nearest city.
 - add animated graphs:
   - add steps, each step a different graph
   - how to handle the animation: we need to keep series from one step to another, so a true zoomout animation can be performed, is that supported?
