@@ -1091,6 +1091,7 @@ def package_registry(
     maps_schema_path: Path | str | None = None,
     maps_out_root: Path | None = None,
     map_ids: list[str] | None = None,
+    all_maps: bool = False,
     skip_maps: bool = False,
 ) -> int:
     metrics_path = (
@@ -1126,16 +1127,19 @@ def package_registry(
         print(f"[maps] No maps registry found at {maps_path_eff}; skipping map packaging.")
 
     effective_metric_ids: set[str] | None = set(metric_ids) if metric_ids else None
-    if effective_metric_ids is None and maps_manifest is not None and map_ids:
+    if effective_metric_ids is None and maps_manifest is not None and (map_ids or all_maps):
         maps_specs = {
             key: spec
             for key, spec in maps_manifest.items()
             if key != "version" and isinstance(spec, dict)
         }
-        missing_maps = [mid for mid in map_ids if mid not in maps_specs]
+        selected_map_ids = list(maps_specs.keys()) if all_maps else list(map_ids or [])
+        missing_maps = [mid for mid in selected_map_ids if mid not in maps_specs]
         if missing_maps:
             raise ValueError(f"Unknown map id(s): {', '.join(sorted(missing_maps))}")
-        effective_metric_ids = {str(maps_specs[mid]["source_metric"]) for mid in map_ids}
+        effective_metric_ids = {
+            str(maps_specs[mid]["source_metric"]) for mid in selected_map_ids
+        }
         if debug:
             print(
                 "[maps] Restricting metric packaging to selected maps' source metrics: "

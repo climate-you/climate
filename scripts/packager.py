@@ -57,6 +57,11 @@ def main() -> None:
     )
     ap.add_argument("--maps", type=str, default=None, help="Comma list of map ids")
     ap.add_argument("--map", action="append", default=[], help="Map id (repeatable)")
+    ap.add_argument(
+        "--all-maps",
+        action="store_true",
+        help="Select all maps from registry/maps.json (equivalent to listing every --map).",
+    )
     ap.add_argument("--skip-maps", action="store_true")
 
     ap.add_argument("--start-year", type=int, default=None)
@@ -91,6 +96,10 @@ def main() -> None:
 
     metric_ids = _parse_ids(args.metrics, args.metric)
     map_ids = _parse_ids(args.maps, args.map)
+    if args.all_maps and map_ids:
+        raise SystemExit("Do not combine --all-maps with --maps/--map.")
+    if args.all_maps:
+        map_ids = None
     tile_range = _parse_tile_range(args)
 
     package_registry(
@@ -122,6 +131,7 @@ def main() -> None:
         maps_schema_path=args.maps_schema_path,
         maps_out_root=args.maps_out_root,
         map_ids=map_ids,
+        all_maps=args.all_maps,
         skip_maps=args.skip_maps,
     )
 
