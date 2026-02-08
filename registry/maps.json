@@ -1,0 +1,91 @@
+{
+  "version": "0.1",
+  "t2m_warming_2025_vs_1979_2000_texture": {
+    "id": "t2m_warming_2025_vs_1979_2000_texture",
+    "title": "Air temperature anomaly in 2025 vs 1979-2000",
+    "type": "texture_png",
+    "source_metric": "t2m_yearly_mean_c",
+    "reducer": {
+      "op": "anomaly_vs_mean",
+      "target_year": 2025,
+      "baseline_start_year": 1979,
+      "baseline_end_year": 2000
+    },
+    "palette": {
+      "colors": ["#313695", "#74add1", "#f7f7f7", "#f46d43", "#a50026"],
+      "nan_color": "#000000"
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": -3.0,
+      "vmax": 3.0
+    },
+    "output": {
+      "filename": "warming_2025_vs_1979_2000.png"
+    }
+  },
+  "t2m_trend_positive_interestingness": {
+    "id": "t2m_trend_positive_interestingness",
+    "title": "Cells with positive long-term trend",
+    "type": "interestingness",
+    "source_metric": "t2m_yearly_mean_c",
+    "reducer": {
+      "op": "trend_slope",
+      "start_year": 1979,
+      "end_year": 2025
+    },
+    "predicate": {
+      "op": "gt",
+      "threshold": 0.1
+    },
+    "output": {
+      "png_filename": "trend_positive.png",
+      "binary_filename": "trend_positive.bitset.bin",
+      "pack_bits": true
+    }
+  },
+  "sst_warming_2025_vs_1982_2000_texture": {
+    "id": "sst_warming_2025_vs_1982_2000_texture",
+    "title": "Sea surface temperature anomaly in 2025 vs 1982-2000",
+    "type": "texture_png",
+    "source_metric": "sst_yearly_mean_c",
+    "reducer": {
+      "op": "anomaly_vs_mean",
+      "target_year": 2025,
+      "baseline_start_year": 1982,
+      "baseline_end_year": 2000
+    },
+    "palette": {
+      "colors": ["#313695", "#74add1", "#f7f7f7", "#f46d43", "#a50026"],
+      "nan_color": "#000000"
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": -3.0,
+      "vmax": 3.0
+    },
+    "output": {
+      "filename": "sst_warming_2025_vs_1982_2000.png"
+    }
+  },
+  "sst_trend_positive_interestingness": {
+    "id": "sst_trend_positive_interestingness",
+    "title": "SST cells with positive long-term trend",
+    "type": "interestingness",
+    "source_metric": "sst_yearly_mean_c",
+    "reducer": {
+      "op": "trend_slope",
+      "start_year": 1982,
+      "end_year": 2025
+    },
+    "predicate": {
+      "op": "gt",
+      "threshold": 0.0
+    },
+    "output": {
+      "png_filename": "sst_trend_positive.png",
+      "binary_filename": "sst_trend_positive.bitset.bin",
+      "pack_bits": true
+    }
+  }
+}

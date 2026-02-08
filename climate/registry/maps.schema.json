@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Climate Map Registry",
+  "description": "Schema for registry/maps.json mapping map_id to map asset entries.",
+  "type": "object",
+  "properties": {
+    "version": { "type": "string" }
+  },
+  "patternProperties": {
+    "^(?!version$)[a-z][a-z0-9_]*$": { "$ref": "#/$defs/map_asset" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "map_asset": {
+      "oneOf": [
+        { "$ref": "#/$defs/texture_map" },
+        { "$ref": "#/$defs/interestingness_map" }
+      ]
+    },
+
+    "texture_map": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "const": "texture_png" },
+        "source_metric": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "grid_id": { "type": "string", "pattern": "^[a-z0-9_.]+$" },
+        "reducer": { "$ref": "#/$defs/reducer" },
+        "palette": { "$ref": "#/$defs/palette" },
+        "scale": { "$ref": "#/$defs/scale" },
+        "output": { "$ref": "#/$defs/texture_output" }
+      },
+      "required": ["type", "source_metric"],
+      "additionalProperties": false
+    },
+
+    "interestingness_map": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "const": "interestingness" },
+        "source_metric": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "grid_id": { "type": "string", "pattern": "^[a-z0-9_.]+$" },
+        "reducer": { "$ref": "#/$defs/reducer" },
+        "predicate": { "$ref": "#/$defs/predicate" },
+        "output": { "$ref": "#/$defs/interestingness_output" }
+      },
+      "required": ["type", "source_metric", "predicate"],
+      "additionalProperties": false
+    },
+
+    "reducer": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "op": { "const": "latest_year" }
+          },
+          "required": ["op"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": { "const": "year" },
+            "year": { "type": "integer" }
+          },
+          "required": ["op", "year"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": { "const": "mean" },
+            "start_year": { "type": "integer" },
+            "end_year": { "type": "integer" }
+          },
+          "required": ["op", "start_year", "end_year"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": { "const": "anomaly_vs_mean" },
+            "target_year": { "type": "integer" },
+            "baseline_start_year": { "type": "integer" },
+            "baseline_end_year": { "type": "integer" }
+          },
+          "required": [
+            "op",
+            "target_year",
+            "baseline_start_year",
+            "baseline_end_year"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": { "const": "trend_slope" },
+            "start_year": { "type": "integer" },
+            "end_year": { "type": "integer" }
+          },
+          "required": ["op"],
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "palette": {
+      "type": "object",
+      "properties": {
+        "colors": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          }
+        },
+        "nan_color": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        }
+      },
+      "required": ["colors"],
+      "additionalProperties": false
+    },
+
+    "scale": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["linear"] },
+        "vmin": { "type": "number" },
+        "vmax": { "type": "number" },
+        "qlo": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "qhi": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+      },
+      "additionalProperties": false
+    },
+
+    "texture_output": {
+      "type": "object",
+      "properties": {
+        "filename": { "type": "string" },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+
+    "interestingness_output": {
+      "type": "object",
+      "properties": {
+        "png_filename": { "type": "string" },
+        "binary_filename": { "type": "string" },
+        "pack_bits": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+
+    "predicate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "op": { "enum": ["gt", "gte", "lt", "lte", "eq", "neq"] },
+            "threshold": { "type": "number" }
+          },
+          "required": ["op", "threshold"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": { "const": "between" },
+            "min": { "type": "number" },
+            "max": { "type": "number" },
+            "inclusive": { "type": "boolean" }
+          },
+          "required": ["op", "min", "max"],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

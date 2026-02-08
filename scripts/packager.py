@@ -6,13 +6,14 @@ from pathlib import Path
 
 from climate.packager.registry import TileRange, package_registry
 from climate.registry.metrics import DEFAULT_METRICS_PATH, DEFAULT_SCHEMA_PATH
+from climate.registry.maps import DEFAULT_MAPS_PATH, DEFAULT_MAPS_SCHEMA_PATH
 
 
-def _parse_metric_ids(metrics: str | None, metric_list: list[str]) -> list[str] | None:
+def _parse_ids(ids_csv: str | None, ids_list: list[str]) -> list[str] | None:
     ids: list[str] = []
-    if metrics:
-        ids.extend([m.strip() for m in metrics.split(",") if m.strip()])
-    ids.extend(metric_list)
+    if ids_csv:
+        ids.extend([m.strip() for m in ids_csv.split(",") if m.strip()])
+    ids.extend(ids_list)
     return ids or None
 
 
@@ -46,6 +47,17 @@ def main() -> None:
     ap.add_argument("--metrics-path", type=Path, default=DEFAULT_METRICS_PATH)
     ap.add_argument("--schema-path", type=Path, default=DEFAULT_SCHEMA_PATH)
     ap.add_argument("--datasets-path", type=Path, default=None)
+    ap.add_argument("--maps-path", type=Path, default=DEFAULT_MAPS_PATH)
+    ap.add_argument("--maps-schema-path", type=Path, default=DEFAULT_MAPS_SCHEMA_PATH)
+    ap.add_argument(
+        "--maps-out-root",
+        type=Path,
+        default=None,
+        help="Output maps root (default: data/releases/<release>/maps)",
+    )
+    ap.add_argument("--maps", type=str, default=None, help="Comma list of map ids")
+    ap.add_argument("--map", action="append", default=[], help="Map id (repeatable)")
+    ap.add_argument("--skip-maps", action="store_true")
 
     ap.add_argument("--start-year", type=int, default=None)
     ap.add_argument("--end-year", type=int, default=None)
@@ -77,7 +89,8 @@ def main() -> None:
     if out_root is None:
         out_root = Path("data/releases") / args.release / "series"
 
-    metric_ids = _parse_metric_ids(args.metrics, args.metric)
+    metric_ids = _parse_ids(args.metrics, args.metric)
+    map_ids = _parse_ids(args.maps, args.map)
     tile_range = _parse_tile_range(args)
 
     package_registry(
@@ -105,6 +118,11 @@ def main() -> None:
         workers=args.workers,
         summary_interval_s=args.summary_interval,
         download_only=args.download_only,
+        maps_path=args.maps_path,
+        maps_schema_path=args.maps_schema_path,
+        maps_out_root=args.maps_out_root,
+        map_ids=map_ids,
+        skip_maps=args.skip_maps,
     )
 
 

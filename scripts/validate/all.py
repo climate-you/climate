@@ -16,6 +16,7 @@ def main() -> int:
 
     commands = [
         ["python", str(scripts_dir / "metrics.py")],
+        ["python", str(scripts_dir / "maps.py")],
         ["python", str(scripts_dir / "panels.py")],
     ]
 

@@ -20,7 +20,14 @@ from climate.datasets.products.era5 import (
     build_daily_stats_request,
 )
 from climate.datasets.sources.cds import retrieve
+from climate.packager.maps import package_maps
 from climate.packager.tiles import normalize_missing_value, write_axis_json
+from climate.registry.maps import (
+    DEFAULT_MAPS_PATH,
+    DEFAULT_MAPS_SCHEMA_PATH,
+    load_maps,
+    validate_maps_against_metrics,
+)
 from climate.registry.metrics import (
     DEFAULT_METRICS_PATH,
     DEFAULT_SCHEMA_PATH,
@@ -1080,6 +1087,11 @@ def package_registry(
     workers: int | None = None,
     summary_interval_s: int = 30,
     download_only: bool = False,
+    maps_path: Path | str | None = None,
+    maps_schema_path: Path | str | None = None,
+    maps_out_root: Path | None = None,
+    map_ids: list[str] | None = None,
+    skip_maps: bool = False,
 ) -> int:
     metrics_path = (
         Path(metrics_path) if metrics_path is not None else DEFAULT_METRICS_PATH
@@ -1096,11 +1108,44 @@ def package_registry(
         datasets_path=datasets_path,
         validate=True,
     )
+    maps_manifest: dict[str, Any] | None = None
+    maps_path_eff = Path(maps_path) if maps_path is not None else DEFAULT_MAPS_PATH
+    maps_schema_path_eff = (
+        Path(maps_schema_path)
+        if maps_schema_path is not None
+        else DEFAULT_MAPS_SCHEMA_PATH
+    )
+    if not skip_maps and maps_path_eff.exists():
+        maps_manifest = load_maps(
+            path=maps_path_eff,
+            schema_path=maps_schema_path_eff,
+            validate=True,
+        )
+        validate_maps_against_metrics(maps_manifest, manifest)
+    elif not skip_maps and debug:
+        print(f"[maps] No maps registry found at {maps_path_eff}; skipping map packaging.")
+
+    effective_metric_ids: set[str] | None = set(metric_ids) if metric_ids else None
+    if effective_metric_ids is None and maps_manifest is not None and map_ids:
+        maps_specs = {
+            key: spec
+            for key, spec in maps_manifest.items()
+            if key != "version" and isinstance(spec, dict)
+        }
+        missing_maps = [mid for mid in map_ids if mid not in maps_specs]
+        if missing_maps:
+            raise ValueError(f"Unknown map id(s): {', '.join(sorted(missing_maps))}")
+        effective_metric_ids = {str(maps_specs[mid]["source_metric"]) for mid in map_ids}
+        if debug:
+            print(
+                "[maps] Restricting metric packaging to selected maps' source metrics: "
+                + ", ".join(sorted(effective_metric_ids))
+            )
 
     for metric_id, spec in manifest.items():
         if metric_id == "version":
             continue
-        if metric_ids and metric_id not in metric_ids:
+        if effective_metric_ids and metric_id not in effective_metric_ids:
             continue
 
         if dask_enabled:
@@ -1863,6 +1908,26 @@ def package_registry(
             )
         finally:
             signal.signal(signal.SIGINT, prev_handler)
+
+    if not download_only and not skip_maps and maps_manifest is not None:
+        maps_out_root_eff = (
+            Path(maps_out_root)
+            if maps_out_root is not None
+            else out_root.parent / "maps"
+        )
+        maps_written = package_maps(
+            series_root=out_root,
+            maps_root=maps_out_root_eff,
+            maps_manifest=maps_manifest,
+            metrics_manifest=manifest,
+            map_ids=map_ids,
+            metric_ids=sorted(effective_metric_ids) if effective_metric_ids else None,
+            resume=resume,
+            debug=debug,
+        )
+        print(f"DONE: wrote {maps_written} map asset(s) into {maps_out_root_eff}")
+
+    return 0
 
 
 def _compression_ext(compression: dict | None) -> str:
