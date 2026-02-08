@@ -71,7 +71,6 @@ NEXT:
   - Return geonameid only and drop slugs from responses entirely
   - Add a “best match” endpoint for a free‑text query (single request)
     -Add prefix‑length + fuzziness tuning knobs to autocomplete
-- have a better redis monitoring (only display if changes detected)
 - for ocean locations, maybe the ocean polygons with natural earth make the most sense. But how would we be able to return "Coast off <city>" with this? Would we do:
 - check if water cell, then find nearest city, if less than X km, return "<ocean name> off <city>", otherwise return "<ocean name>"
 - if not water cell, find nearest city and returns it
