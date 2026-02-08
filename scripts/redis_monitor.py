@@ -37,6 +37,7 @@ def main() -> int:
     last_hits = None
     last_misses = None
     last_time = None
+    last_print_signature = None
 
     try:
         while True:
@@ -62,12 +63,17 @@ def main() -> int:
                 dt = max(1e-6, time.time() - (last_time or time.time()))
                 miss_rate = (misses - last_misses) / dt
 
-            print(
+            signature = (
                 f"keys={keys} climate_keys={climate_keys} "
                 f"hits={hits} misses={misses} "
-                f"hit_rate={hit_rate:.1f}/s miss_rate={miss_rate:.1f}/s "
-                f"mem={used_human} ({used_mem} bytes) uptime={uptime}s"
+                f"hit_rate={hit_rate:.1f}/s miss_rate={miss_rate:.1f}/s"
             )
+            if signature != last_print_signature:
+                print(
+                    f"{signature} "
+                    f"mem={used_human} ({used_mem} bytes) uptime={uptime}s"
+                )
+                last_print_signature = signature
 
             last_hits = hits
             last_misses = misses
