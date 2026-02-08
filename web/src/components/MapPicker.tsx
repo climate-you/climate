@@ -1,12 +1,13 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import {
   CircleMarker,
   MapContainer,
   Rectangle,
   TileLayer,
   useMapEvents,
+  useMap,
 } from "react-leaflet";
 
 type PickPoint = { lat: number; lon: number };
@@ -28,6 +29,26 @@ function ClickHandler({
       onPick(e.latlng.lat, e.latlng.lng);
     },
   });
+  return null;
+}
+
+function ViewUpdater({
+  center,
+  zoom,
+}: {
+  center?: [number, number];
+  zoom?: number;
+}) {
+  const map = useMap();
+  useEffect(() => {
+    if (center && typeof zoom === "number") {
+      map.setView(center, zoom, { animate: true });
+    } else if (center) {
+      map.setView(center, map.getZoom(), { animate: true });
+    } else if (typeof zoom === "number") {
+      map.setZoom(zoom, { animate: true });
+    }
+  }, [center?.[0], center?.[1], zoom, map]);
   return null;
 }
 
@@ -95,8 +116,9 @@ export default function MapPicker({
         center={center}
         zoom={zoom}
         scrollWheelZoom
-        style={{ height: "100%", width: "100%" }}
+        style={{ height: "100%", width: "100%", position: "relative", zIndex: 1 }}
       >
+        <ViewUpdater center={center} zoom={zoom} />
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

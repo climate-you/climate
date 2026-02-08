@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -61,6 +61,19 @@ type PanelResponse = {
   series: Record<string, SeriesPayload>;
 };
 
+type AutocompleteItem = {
+  geonameid: number;
+  label: string;
+  lat: number;
+  lon: number;
+  country_code: string;
+};
+
+type AutocompleteResponse = {
+  query: string;
+  results: AutocompleteItem[];
+};
+
 function mergeSeries(series: Record<string, SeriesPayload>, keys: string[]) {
   // Merge into rows keyed by x (ISO date or year). We assume x values are unique per series.
   const rows = new Map<string, any>();
@@ -114,11 +127,21 @@ function axisLabel(label: string | null | undefined, unit: "C" | "F") {
 }
 
 export default function ApiDemoPage() {
+  const FIXED_ZOOM = 5;
   const [lat, setLat] = useState<number>(-20.32556);
   const [lon, setLon] = useState<number>(57.37056);
+  const [mapZoom, setMapZoom] = useState<number>(FIXED_ZOOM);
+  const [forceZoom, setForceZoom] = useState<boolean>(true);
   const [unit, setUnit] = useState<"C" | "F">("C");
   const [panelId, setPanelId] = useState<string>("overview");
   const [resp, setResp] = useState<PanelResponse | null>(null);
+  const [search, setSearch] = useState<string>("");
+  const [suggestions, setSuggestions] = useState<AutocompleteItem[]>([]);
+  const [suggestOpen, setSuggestOpen] = useState<boolean>(false);
+  const [suggestIndex, setSuggestIndex] = useState<number>(-1);
+  const [suggestLoading, setSuggestLoading] = useState<boolean>(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+  const debounceRef = useRef<number | null>(null);
   const cell = resp?.location?.data_cells?.[0] ?? null;
 
   const graphData = useMemo(() => {
@@ -139,9 +162,167 @@ export default function ApiDemoPage() {
     setResp(await r.json());
   }
 
+  async function fetchAutocomplete(q: string) {
+    const url = `http://localhost:8001/api/v/dev/locations/autocomplete?q=${encodeURIComponent(
+      q,
+    )}&limit=8`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(await r.text());
+    const data = (await r.json()) as AutocompleteResponse;
+    return data.results ?? [];
+  }
+
+  async function resolveByLabel(label: string) {
+    const url = `http://localhost:8001/api/v/dev/locations/resolve?label=${encodeURIComponent(
+      label,
+    )}`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(await r.text());
+    const data = (await r.json()) as { result?: AutocompleteItem | null };
+    return data.result ?? null;
+  }
+
+  function applyLocation(item: AutocompleteItem) {
+    setLat(item.lat);
+    setLon(item.lon);
+    setMapZoom(FIXED_ZOOM);
+    setForceZoom(true);
+    load(item.lat, item.lon);
+  }
+
+  useEffect(() => {
+    if (debounceRef.current) {
+      window.clearTimeout(debounceRef.current);
+    }
+    if (search.trim().length < 3) {
+      setSuggestions([]);
+      setSuggestOpen(false);
+      setSuggestIndex(-1);
+      setSuggestLoading(false);
+      setSuggestError(null);
+      return;
+    }
+
+    setSuggestLoading(true);
+    setSuggestError(null);
+    debounceRef.current = window.setTimeout(async () => {
+      try {
+        const results = await fetchAutocomplete(search.trim());
+        setSuggestions(results);
+        setSuggestOpen(true);
+        setSuggestIndex(results.length ? 0 : -1);
+      } catch (err: any) {
+        setSuggestError(err?.message ?? "Autocomplete failed");
+        setSuggestions([]);
+        setSuggestOpen(false);
+        setSuggestIndex(-1);
+      } finally {
+        setSuggestLoading(false);
+      }
+    }, 250);
+  }, [search]);
+
   return (
     <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
       <h1 style={{ fontSize: 20, fontWeight: 700 }}>API Demo</h1>
+      <div
+        style={{
+          marginTop: 12,
+          position: "relative",
+          maxWidth: 520,
+          zIndex: 50,
+        }}
+      >
+        <input
+          placeholder="Search a city (min 3 chars)…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onFocus={() => {
+            if (suggestions.length) setSuggestOpen(true);
+          }}
+          onKeyDown={async (e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setSuggestIndex((i) =>
+                Math.min(i + 1, suggestions.length - 1),
+              );
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setSuggestIndex((i) => Math.max(i - 1, 0));
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              if (suggestIndex >= 0 && suggestions[suggestIndex]) {
+                applyLocation(suggestions[suggestIndex]);
+                setSuggestOpen(false);
+                return;
+              }
+              if (search.trim().length >= 3) {
+                const hit = await resolveByLabel(search.trim());
+                if (hit) {
+                  applyLocation(hit);
+                }
+                setSuggestOpen(false);
+              }
+            } else if (e.key === "Escape") {
+              setSuggestOpen(false);
+            }
+          }}
+          style={{
+            width: "100%",
+            padding: "8px 10px",
+            borderRadius: 8,
+            border: "1px solid rgba(0,0,0,0.2)",
+          }}
+        />
+        {suggestOpen && suggestions.length > 0 ? (
+          <div
+            style={{
+              position: "absolute",
+              top: "100%",
+              left: 0,
+              right: 0,
+              background: "white",
+              border: "1px solid rgba(0,0,0,0.15)",
+              borderRadius: 8,
+              marginTop: 4,
+              zIndex: 1000,
+              maxHeight: 220,
+              overflowY: "auto",
+              boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
+            }}
+          >
+            {suggestions.map((s, i) => (
+              <div
+                key={`${s.geonameid}:${s.label}`}
+                onMouseDown={(evt) => {
+                  evt.preventDefault();
+                  applyLocation(s);
+                  setSuggestOpen(false);
+                }}
+                onMouseEnter={() => setSuggestIndex(i)}
+                style={{
+                  padding: "8px 10px",
+                  cursor: "pointer",
+                  background:
+                    i === suggestIndex ? "rgba(37, 99, 235, 0.1)" : "white",
+                }}
+              >
+                {s.label}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {suggestLoading ? (
+          <div style={{ fontSize: 12, opacity: 0.6, marginTop: 4 }}>
+            Searching…
+          </div>
+        ) : null}
+        {suggestError ? (
+          <div style={{ fontSize: 12, color: "#b91c1c", marginTop: 4 }}>
+            {suggestError}
+          </div>
+        ) : null}
+      </div>
       <div
         style={{
           display: "flex",
@@ -157,9 +338,12 @@ export default function ApiDemoPage() {
             onPick={(la, lo) => {
               setLat(la);
               setLon(lo);
+              setForceZoom(false);
               load(la, lo);
             }}
             picked={{ lat, lon }}
+            center={[lat, lon]}
+            zoom={forceZoom ? mapZoom : undefined}
             cell={
               cell
                 ? {
