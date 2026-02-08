@@ -410,6 +410,8 @@ def build_panel_tiles_registry(
                 error=graph_error,
                 x_axis_label=graph.get("x_axis_label"),
                 y_axis_label=graph.get("y_axis_label"),
+                time_range=graph.get("time_range"),
+                animation=graph.get("animation"),
             )
         )
 

@@ -40,6 +40,8 @@
         "source": { "type": "string" },
         "x_axis_label": { "type": "string" },
         "y_axis_label": { "type": "string" },
+        "time_range": { "$ref": "#/$defs/time_range" },
+        "animation": { "$ref": "#/$defs/graph_animation" },
         "series": {
           "type": "array",
           "items": { "$ref": "#/$defs/series" },
@@ -47,6 +49,65 @@
         }
       },
       "required": ["id", "title", "series"],
+      "additionalProperties": false
+    },
+    "time_range": {
+      "type": "object",
+      "properties": {
+        "start": { "$ref": "#/$defs/time_value" },
+        "end": { "$ref": "#/$defs/time_value" },
+        "last": { "$ref": "#/$defs/time_duration" },
+        "offset": { "$ref": "#/$defs/time_duration" }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        { "required": ["start"] },
+        { "required": ["end"] },
+        { "required": ["start", "end"] },
+        { "required": ["last"] }
+      ]
+    },
+    "time_value": {
+      "type": ["number", "string"]
+    },
+    "time_duration": {
+      "type": "object",
+      "properties": {
+        "value": { "type": "integer", "minimum": 0 },
+        "unit": { "type": "string", "enum": ["points", "days", "months", "years"] }
+      },
+      "required": ["value", "unit"],
+      "additionalProperties": false
+    },
+    "graph_animation": {
+      "type": "object",
+      "properties": {
+        "autoplay": { "type": "boolean", "default": true },
+        "loop": { "type": "boolean", "default": true },
+        "step_duration_ms": { "type": "integer", "minimum": 200, "default": 2600 },
+        "transition_ms": { "type": "integer", "minimum": 100, "default": 900 },
+        "steps": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/graph_animation_step" }
+        }
+      },
+      "required": ["steps"],
+      "additionalProperties": false
+    },
+    "graph_animation_step": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "title": { "type": "string" },
+        "time_range": { "$ref": "#/$defs/time_range" },
+        "series_keys": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+        }
+      },
+      "required": ["id"],
       "additionalProperties": false
     },
     "series": {

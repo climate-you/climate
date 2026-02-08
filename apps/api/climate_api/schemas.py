@@ -24,6 +24,8 @@ class GraphPayload(BaseModel):
     error: Optional[str] = None
     x_axis_label: Optional[str] = None
     y_axis_label: Optional[str] = None
+    time_range: Optional[Dict[str, Any]] = None
+    animation: Optional[Dict[str, Any]] = None
 
 
 class PanelPayload(BaseModel):

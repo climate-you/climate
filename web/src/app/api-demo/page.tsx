@@ -17,7 +17,35 @@ const MapPicker = dynamic(() => import("@/components/MapPicker"), {
   ssr: false,
 });
 
-type SeriesPayload = { x: unknown[]; y: (number | null)[]; unit?: string | null };
+type TimeDuration = {
+  value: number;
+  unit: "points" | "days" | "months" | "years";
+};
+type TimeRange = {
+  start?: number | string;
+  end?: number | string;
+  last?: TimeDuration;
+  offset?: TimeDuration;
+};
+type GraphAnimationStep = {
+  id: string;
+  title?: string;
+  time_range?: TimeRange;
+  series_keys?: string[];
+};
+type GraphAnimation = {
+  autoplay?: boolean;
+  loop?: boolean;
+  step_duration_ms?: number;
+  transition_ms?: number;
+  steps: GraphAnimationStep[];
+};
+type SeriesPayload = {
+  x: Array<number | string>;
+  y: (number | null)[];
+  unit?: string | null;
+  style?: { type?: "line" | "bar" } | null;
+};
 type GraphAnnotation = { series_key: string; text: string };
 type GraphPayload = {
   id: string;
@@ -28,6 +56,8 @@ type GraphPayload = {
   error?: string | null;
   x_axis_label?: string | null;
   y_axis_label?: string | null;
+  time_range?: TimeRange;
+  animation?: GraphAnimation;
 };
 type DataCell = {
   grid: string;
@@ -102,9 +132,14 @@ type NearestLocationResponse = {
   };
 };
 
+type ChartRow = {
+  x: number | string;
+  [key: string]: number | string | null | undefined;
+};
+
 function mergeSeries(series: Record<string, SeriesPayload>, keys: string[]) {
   // Merge into rows keyed by x (ISO date or year). We assume x values are unique per series.
-  const rows = new Map<string, { x: unknown } & Record<string, number | null>>();
+  const rows = new Map<string, ChartRow>();
 
   for (const k of keys) {
     const s = series[k];
@@ -122,6 +157,108 @@ function mergeSeries(series: Record<string, SeriesPayload>, keys: string[]) {
   return Array.from(rows.values()).sort((a, b) =>
     String(a.x).localeCompare(String(b.x)),
   );
+}
+
+function parseAxisValue(v: unknown): { numeric?: number; timestamp?: number } {
+  if (typeof v === "number" && Number.isFinite(v)) return { numeric: v };
+  const n = Number(v);
+  if (Number.isFinite(n) && String(v).trim() !== "") return { numeric: n };
+  const t = new Date(String(v)).getTime();
+  if (Number.isFinite(t)) return { timestamp: t };
+  return {};
+}
+
+function durationToMs(d: TimeDuration): number {
+  if (d.unit === "days") return d.value * 24 * 60 * 60 * 1000;
+  if (d.unit === "months") return d.value * 30 * 24 * 60 * 60 * 1000;
+  if (d.unit === "years") return d.value * 365.25 * 24 * 60 * 60 * 1000;
+  return 0;
+}
+
+function sliceRowsByTimeRange(rows: ChartRow[], range?: TimeRange): ChartRow[] {
+  if (!range || rows.length === 0) return rows;
+
+  if (
+    range.last &&
+    (range.last.unit === "points" || range.offset?.unit === "points")
+  ) {
+    const lastN = Math.max(1, range.last.value);
+    const offsetN = Math.max(0, range.offset?.value ?? 0);
+    const endIdx = rows.length - 1 - offsetN;
+    if (endIdx < 0) return [];
+    const startIdx = Math.max(0, endIdx - lastN + 1);
+    return rows.slice(startIdx, endIdx + 1);
+  }
+
+  const parsed = rows.map((r) => ({ row: r, parsed: parseAxisValue(r.x) }));
+  const numericCount = parsed.filter(
+    (p) => p.parsed.numeric !== undefined,
+  ).length;
+  const useNumeric = numericCount === parsed.length;
+
+  if (range.last) {
+    if (
+      useNumeric &&
+      (range.last.unit === "years" || range.last.unit === "points")
+    ) {
+      const vals = parsed.map((p) => p.parsed.numeric as number);
+      const max = Math.max(...vals);
+      const offset = range.offset?.value ?? 0;
+      const end = max - offset;
+      const start = end - range.last.value + 1;
+      return parsed
+        .filter((p) => {
+          const v = p.parsed.numeric as number;
+          return v >= start && v <= end;
+        })
+        .map((p) => p.row);
+    }
+
+    const stamps = parsed
+      .map((p) => p.parsed.timestamp)
+      .filter((v): v is number => v !== undefined);
+    if (stamps.length === 0) return rows;
+    const max = Math.max(...stamps);
+    const offsetMs = range.offset ? durationToMs(range.offset) : 0;
+    const endTs = max - offsetMs;
+    const startTs = endTs - durationToMs(range.last);
+    return parsed
+      .filter((p) => {
+        if (p.parsed.timestamp === undefined) return false;
+        return p.parsed.timestamp >= startTs && p.parsed.timestamp <= endTs;
+      })
+      .map((p) => p.row);
+  }
+
+  let startN: number | null = null;
+  let endN: number | null = null;
+  let startTs: number | null = null;
+  let endTs: number | null = null;
+  if (range.start !== undefined) {
+    const p = parseAxisValue(range.start);
+    startN = p.numeric ?? null;
+    startTs = p.timestamp ?? null;
+  }
+  if (range.end !== undefined) {
+    const p = parseAxisValue(range.end);
+    endN = p.numeric ?? null;
+    endTs = p.timestamp ?? null;
+  }
+
+  return parsed
+    .filter((p) => {
+      if (useNumeric) {
+        const v = p.parsed.numeric as number;
+        if (startN !== null && v < startN) return false;
+        if (endN !== null && v > endN) return false;
+        return true;
+      }
+      if (p.parsed.timestamp === undefined) return false;
+      if (startTs !== null && p.parsed.timestamp < startTs) return false;
+      if (endTs !== null && p.parsed.timestamp > endTs) return false;
+      return true;
+    })
+    .map((p) => p.row);
 }
 
 const LINE_COLORS = [
@@ -173,6 +310,180 @@ function inBbox(
   return latOk && lonOk;
 }
 
+function GraphCard({
+  graph,
+  data,
+  series,
+  unit,
+  showTitle = true,
+}: {
+  graph: GraphPayload;
+  data: ChartRow[];
+  series: Record<string, SeriesPayload>;
+  unit: "C" | "F";
+  showTitle?: boolean;
+}) {
+  const steps = graph.animation?.steps ?? [];
+  const hasAnimation = steps.length >= 2;
+  const [stepIndex, setStepIndex] = useState(0);
+
+  useEffect(() => {
+    if (!hasAnimation || graph.animation?.autoplay === false) return;
+    const stepDuration = graph.animation?.step_duration_ms ?? 2600;
+    const timer = window.setTimeout(() => {
+      setStepIndex((prev) => {
+        if (prev + 1 < steps.length) return prev + 1;
+        return graph.animation?.loop === false ? prev : 0;
+      });
+    }, stepDuration);
+    return () => window.clearTimeout(timer);
+  }, [graph.animation, hasAnimation, stepIndex, steps.length]);
+
+  const activeStep = hasAnimation
+    ? steps[Math.min(stepIndex, steps.length - 1)]
+    : null;
+  const visibleKeys = activeStep?.series_keys?.length
+    ? activeStep.series_keys
+    : graph.series_keys;
+  const activeRange = activeStep?.time_range ?? graph.time_range;
+  const filteredData = useMemo(
+    () => sliceRowsByTimeRange(data, activeRange),
+    [data, activeRange],
+  );
+  const transitionMs = graph.animation?.transition_ms ?? 900;
+  const activeSet = useMemo(() => new Set(visibleKeys), [visibleKeys]);
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      {showTitle ? (
+        <h3 style={{ fontSize: 15, fontWeight: 600 }}>{graph.title}</h3>
+      ) : null}
+      {hasAnimation ? (
+        <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {steps.map((step, idx) => {
+            const active = idx === stepIndex;
+            return (
+              <button
+                key={`${graph.id}:${step.id}`}
+                onClick={() => setStepIndex(idx)}
+                style={{
+                  fontSize: 12,
+                  borderRadius: 999,
+                  border: "1px solid rgba(0,0,0,0.2)",
+                  padding: "4px 10px",
+                  background: active ? "rgba(37, 99, 235, 0.12)" : "white",
+                  cursor: "pointer",
+                }}
+              >
+                {step.title ?? step.id}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div style={{ width: "100%", height: 420 }}>
+        <ResponsiveContainer>
+          <ComposedChart
+            data={filteredData}
+            margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
+          >
+            <XAxis
+              dataKey="x"
+              minTickGap={24}
+              label={
+                graph.x_axis_label
+                  ? {
+                      value: graph.x_axis_label,
+                      position: "insideBottom",
+                      offset: -5,
+                    }
+                  : undefined
+              }
+            />
+            <YAxis
+              domain={[
+                (dataMin: number) => Math.floor((dataMin - 0.5) * 10) / 10,
+                (dataMax: number) => Math.ceil((dataMax + 0.5) * 10) / 10,
+              ]}
+              label={
+                graph.y_axis_label
+                  ? {
+                      value: axisLabel(graph.y_axis_label, unit),
+                      angle: -90,
+                      position: "insideLeft",
+                    }
+                  : undefined
+              }
+            />
+            <Tooltip />
+            <Legend />
+
+            {graph.series_keys.map((key) => {
+              const style = series[key]?.style?.type ?? "line";
+              const visible = activeSet.has(key);
+              if (style === "bar") {
+                return (
+                  <Bar
+                    key={key}
+                    dataKey={key}
+                    fill={colorForKey(key)}
+                    opacity={visible ? 0.65 : 0}
+                    isAnimationActive
+                    animationDuration={transitionMs}
+                    animationEasing="ease-in-out"
+                  />
+                );
+              }
+              return (
+                <Line
+                  key={key}
+                  type="monotone"
+                  dataKey={key}
+                  dot={false}
+                  stroke={colorForKey(key)}
+                  strokeOpacity={visible ? 1 : 0}
+                  connectNulls
+                  isAnimationActive
+                  animationDuration={transitionMs}
+                  animationEasing="ease-in-out"
+                />
+              );
+            })}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
+      {graph.error ? (
+        <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>{graph.error}</div>
+      ) : null}
+      {graph.annotations?.length ? (
+        <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>
+          {graph.annotations.map((a) => (
+            <div key={`${graph.id}:${a.series_key}:${a.text}`}>
+              <code>{a.series_key}</code>: {a.text}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {graph.caption ? (
+        <div
+          style={{
+            marginTop: 8,
+            padding: 10,
+            border: "1px solid rgba(0,0,0,0.1)",
+            borderRadius: 8,
+            fontSize: 13,
+            opacity: 0.85,
+          }}
+        >
+          {graph.caption}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function ApiDemoPage() {
   const FIXED_ZOOM = 5;
   const [lat, setLat] = useState<number>(-20.32556);
@@ -196,7 +507,17 @@ export default function ApiDemoPage() {
       panel: item.panel,
       graphs: item.panel.graphs.map((graph) => ({
         graph,
-        data: mergeSeries(resp.series, graph.series_keys),
+        data: mergeSeries(
+          resp.series,
+          Array.from(
+            new Set([
+              ...graph.series_keys,
+              ...(graph.animation?.steps ?? []).flatMap(
+                (s) => s.series_keys ?? [],
+              ),
+            ]),
+          ),
+        ),
       })),
     }));
   }, [resp]);
@@ -494,104 +815,13 @@ export default function ApiDemoPage() {
             {panel.title} (score {score})
           </h2>
           {graphs.map(({ graph, data }) => (
-            <div key={`${panel.id}:${graph.id}`} style={{ marginTop: 12 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 600 }}>{graph.title}</h3>
-
-              <div style={{ width: "100%", height: 420 }}>
-                <ResponsiveContainer>
-                  <ComposedChart
-                    data={data}
-                    margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
-                  >
-                    <XAxis
-                      dataKey="x"
-                      minTickGap={24}
-                      label={
-                        graph.x_axis_label
-                          ? {
-                              value: graph.x_axis_label,
-                              position: "insideBottom",
-                              offset: -5,
-                            }
-                          : undefined
-                      }
-                    />
-                    <YAxis
-                      domain={[
-                        (dataMin: number) =>
-                          Math.floor((dataMin - 0.5) * 10) / 10,
-                        (dataMax: number) =>
-                          Math.ceil((dataMax + 0.5) * 10) / 10,
-                      ]}
-                      label={
-                        graph.y_axis_label
-                          ? {
-                              value: axisLabel(graph.y_axis_label, unit),
-                              angle: -90,
-                              position: "insideLeft",
-                            }
-                          : undefined
-                      }
-                    />
-                    <Tooltip />
-                    <Legend />
-
-                    {graph.series_keys.map((key) => {
-                      const style = resp?.series?.[key]?.style?.type ?? "line";
-                      if (style === "bar") {
-                        return (
-                          <Bar
-                            key={key}
-                            dataKey={key}
-                            fill={colorForKey(key)}
-                            opacity={0.65}
-                          />
-                        );
-                      }
-                      return (
-                        <Line
-                          key={key}
-                          type="monotone"
-                          dataKey={key}
-                          dot={false}
-                          stroke={colorForKey(key)}
-                          connectNulls
-                        />
-                      );
-                    })}
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-
-              {graph.error ? (
-                <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>
-                  {graph.error}
-                </div>
-              ) : null}
-              {graph.annotations?.length ? (
-                <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>
-                  {graph.annotations.map((a) => (
-                    <div key={`${graph.id}:${a.series_key}:${a.text}`}>
-                      <code>{a.series_key}</code>: {a.text}
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              {graph.caption ? (
-                <div
-                  style={{
-                    marginTop: 8,
-                    padding: 10,
-                    border: "1px solid rgba(0,0,0,0.1)",
-                    borderRadius: 8,
-                    fontSize: 13,
-                    opacity: 0.85,
-                  }}
-                >
-                  {graph.caption}
-                </div>
-              ) : null}
-            </div>
+            <GraphCard
+              key={`${panel.id}:${graph.id}:${data.length}`}
+              graph={graph}
+              data={data}
+              series={resp?.series ?? {}}
+              unit={unit}
+            />
           ))}
           {panel?.text_md ? (
             <div

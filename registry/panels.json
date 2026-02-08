@@ -12,6 +12,36 @@
           "y_axis_label": "Temperature (°C)",
           "caption": { "type": "fn", "fn": "fifty_year_caption", "params": {} },
           "source": "CDS ERA5 2m temperature monthly means (1979-2025)",
+          "animation": {
+            "autoplay": true,
+            "loop": true,
+            "step_duration_ms": 2800,
+            "transition_ms": 900,
+            "steps": [
+              {
+                "id": "last_year",
+                "title": "Last year",
+                "time_range": { "last": { "value": 1, "unit": "years" } },
+                "series_keys": ["t2m_yearly_mean"]
+              },
+              {
+                "id": "last_5_years",
+                "title": "Last 5 years",
+                "time_range": { "last": { "value": 5, "unit": "years" } },
+                "series_keys": ["t2m_yearly_mean", "t2m_yearly_mean_5y"]
+              },
+              {
+                "id": "last_50_years",
+                "title": "Last ~50 years",
+                "time_range": { "last": { "value": 50, "unit": "years" } },
+                "series_keys": [
+                  "t2m_yearly_mean_5y",
+                  "t2m_yearly_mean",
+                  "t2m_yearly_trend"
+                ]
+              }
+            ]
+          },
           "series": [
             {
               "key": "t2m_yearly_mean",
