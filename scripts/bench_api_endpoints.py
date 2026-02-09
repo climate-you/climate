@@ -104,11 +104,6 @@ def main() -> None:
         help='Release (default: "dev").',
     )
     ap.add_argument(
-        "--panel-id",
-        default="overview",
-        help='Panel id for panel benchmark (default: "overview").',
-    )
-    ap.add_argument(
         "--locations-csv",
         type=Path,
         default=Path("data/locations/locations.csv"),
@@ -181,9 +176,7 @@ def main() -> None:
 
     panel_urls = []
     for lat, lon in points:
-        query = urllib.parse.urlencode(
-            {"lat": f"{lat:.5f}", "lon": f"{lon:.5f}", "panel_id": args.panel_id}
-        )
+        query = urllib.parse.urlencode({"lat": f"{lat:.5f}", "lon": f"{lon:.5f}"})
         panel_urls.append(f"{args.base_url}/api/v/{args.release}/panel?{query}")
 
     auto_urls = []
@@ -262,7 +255,7 @@ def main() -> None:
         status, body = _request(panel_urls[0], args.timeout_s)
         _require(status == 200, f"panel status {status}")
         data = json.loads(body.decode("utf-8"))
-        for key in ("release", "unit", "location", "panel", "series"):
+        for key in ("release", "unit", "location", "panels", "series"):
             _require(key in data, f"panel missing key: {key}")
         _require("place" in data["location"], "panel.location missing place")
         _require("geonameid" in data["location"]["place"], "place missing geonameid")

@@ -77,8 +77,8 @@ def package_maps(
                 written += 1
             continue
 
-        if map_type == "interestingness":
-            if _write_interestingness_map(
+        if map_type == "score":
+            if _write_score_map(
                 map_id=map_id,
                 out_dir=out_dir,
                 values=values,
@@ -294,7 +294,7 @@ def _write_texture_map(
     return True
 
 
-def _write_interestingness_map(
+def _write_score_map(
     *,
     map_id: str,
     out_dir: Path,
@@ -308,36 +308,38 @@ def _write_interestingness_map(
 ) -> bool:
     output = spec.get("output", {}) or {}
     png_name = str(output.get("png_filename") or f"{map_id}.png")
-    binary_name = str(output.get("binary_filename") or f"{map_id}.bitset.bin")
-    pack_bits = bool(output.get("pack_bits", True))
-
+    binary_name = str(output.get("binary_filename") or f"{map_id}.i16.bin")
     png_path = out_dir / png_name
     bin_path = out_dir / binary_name
     meta_path = out_dir / "binary_manifest.json"
     manifest_path = out_dir / "manifest.json"
     if resume and png_path.exists() and bin_path.exists() and meta_path.exists() and manifest_path.exists():
         if debug:
-            print(f"[maps] Skip existing interestingness map: {out_dir}")
+            print(f"[maps] Skip existing score map: {out_dir}")
         return False
 
-    predicate = spec.get("predicate", {})
-    mask = _apply_predicate(values, predicate)
+    default_score = int(spec.get("default_score", 0))
+    score_rules = spec.get("score_rules", []) or []
+    score = np.full(values.shape, default_score, dtype=np.int16)
+    finite = np.isfinite(values)
+    for rule in score_rules:
+        predicate = rule.get("predicate", {})
+        score_value = int(rule.get("score"))
+        mask = _apply_predicate(values, predicate)
+        score[mask] = np.maximum(score[mask], np.int16(score_value))
+    score[~finite] = 0
 
-    bw = np.where(mask, 255, 0).astype(np.uint8)
-    rgb = np.repeat(bw[..., None], 3, axis=2)
+    rgb = _score_to_rgb(score)
     _save_png(png_path, rgb)
 
-    flat = mask.reshape(-1).astype(np.uint8)
-    if pack_bits:
-        payload = np.packbits(flat, bitorder="little").tobytes()
-    else:
-        payload = flat.tobytes(order="C")
+    flat = score.reshape(-1).astype("<i2", copy=False)
+    payload = flat.tobytes(order="C")
     bin_path.write_bytes(payload)
 
     bin_manifest = {
         "id": map_id,
-        "format": "bitset" if pack_bits else "bytes",
-        "bitorder": "little" if pack_bits else None,
+        "format": "int16",
+        "endianness": "little",
         "grid_id": grid.grid_id,
         "nlat": int(grid.nlat),
         "nlon": int(grid.nlon),
@@ -350,19 +352,41 @@ def _write_interestingness_map(
 
     manifest = {
         "id": map_id,
-        "type": "interestingness",
+        "type": "score",
         "source_metric": source_metric,
         "source_axis_years": axis,
         "output_png": str(png_path),
         "output_binary": str(bin_path),
         "output_binary_manifest": str(meta_path),
-        "true_count": int(np.count_nonzero(mask)),
-        "false_count": int(mask.size - np.count_nonzero(mask)),
-        "predicate": predicate,
+        "default_score": default_score,
+        "score_rules": score_rules,
+        "score_counts": {
+            "0": int(np.count_nonzero(score == 0)),
+            "1": int(np.count_nonzero(score == 1)),
+            "2": int(np.count_nonzero(score == 2)),
+            "3": int(np.count_nonzero(score == 3)),
+            "4": int(np.count_nonzero(score == 4)),
+        },
     }
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    print(f"[maps] Wrote interestingness map: {png_path} + {bin_path}")
+    print(f"[maps] Wrote score map: {png_path} + {bin_path}")
     return True
+
+
+def _score_to_rgb(score: np.ndarray) -> np.ndarray:
+    score = np.asarray(score, dtype=np.int16)
+    palette = np.asarray(
+        [
+            [0, 0, 0],        # 0 invalid
+            [255, 230, 0],    # 1
+            [255, 170, 0],    # 2
+            [255, 90, 0],     # 3
+            [215, 25, 28],    # 4
+        ],
+        dtype=np.uint8,
+    )
+    idx = np.clip(score, 0, 4).astype(np.int32)
+    return palette[idx]
 
 
 def _apply_predicate(values: np.ndarray, predicate: dict[str, Any]) -> np.ndarray:

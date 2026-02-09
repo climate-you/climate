@@ -1,8 +1,9 @@
 {
   "version": "0.1",
   "panels": {
-    "overview": {
-      "title": "Overview",
+    "air_temperature": {
+      "title": "Air Temperature",
+      "score_map_id": "t2m_trend_score",
       "graphs": [
         {
           "id": "t2m_annual",
@@ -42,6 +43,49 @@
           ]
         },
         {
+          "id": "t2m_hot_days",
+          "title": "Hot days per year (air temperature)",
+          "x_axis_label": "Year",
+          "y_axis_label": "Days/year",
+          "caption": {
+            "type": "static",
+            "text": "Hot days are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979. Units: Hot days / year."
+          },
+          "source": "CDS ERA5 2m temperature daily means (1979-2025)",
+          "series": [
+            {
+              "key": "t2m_hotdays",
+              "metric": "t2m_hotdays_per_year",
+              "label": "Hot days",
+              "unit": "days",
+              "style": { "type": "bar" }
+            },
+            {
+              "key": "t2m_hotdays_5y",
+              "metric": "t2m_hotdays_per_year",
+              "label": "5-year mean",
+              "unit": "days",
+              "transform": {
+                "fn": "rolling_mean",
+                "params": { "window": 5, "centered": true }
+              }
+            },
+            {
+              "key": "t2m_hotdays_trend",
+              "metric": "t2m_hotdays_per_year",
+              "label": "Trend",
+              "unit": "days",
+              "transform": { "fn": "linear_trend_line" }
+            }
+          ]
+        }
+      ]
+    },
+    "sea_temperature": {
+      "title": "Sea Surface Temperature",
+      "score_map_id": "sst_trend_score",
+      "graphs": [
+        {
           "id": "sst_annual",
           "title": "Annual Sea Surface temperature",
           "x_axis_label": "Year",
@@ -77,43 +121,6 @@
               "metric": "sst_yearly_mean_c",
               "label": "Trend",
               "unit": "C",
-              "transform": { "fn": "linear_trend_line" }
-            }
-          ]
-        },
-        {
-          "id": "t2m_hot_days",
-          "title": "Hot days per year (air temperature)",
-          "x_axis_label": "Year",
-          "y_axis_label": "Days/year",
-          "caption": {
-            "type": "static",
-            "text": "Hot days are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979. Units: Hot days / year."
-          },
-          "source": "CDS ERA5 2m temperature daily means (1979-2025)",
-          "series": [
-            {
-              "key": "t2m_hotdays",
-              "metric": "t2m_hotdays_per_year",
-              "label": "Hot days",
-              "unit": "days",
-              "style": { "type": "bar" }
-            },
-            {
-              "key": "t2m_hotdays_5y",
-              "metric": "t2m_hotdays_per_year",
-              "label": "5-year mean",
-              "unit": "days",
-              "transform": {
-                "fn": "rolling_mean",
-                "params": { "window": 5, "centered": true }
-              }
-            },
-            {
-              "key": "t2m_hotdays_trend",
-              "metric": "t2m_hotdays_per_year",
-              "label": "Trend",
-              "unit": "days",
               "transform": { "fn": "linear_trend_line" }
             }
           ]
@@ -159,6 +166,7 @@
     },
     "dummy": {
       "title": "Dummy Mixed-Grid Panel",
+      "score_map_id": "score_1_map",
       "graphs": [
         {
           "id": "dummy_025",

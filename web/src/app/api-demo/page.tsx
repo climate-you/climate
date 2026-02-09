@@ -17,7 +17,7 @@ const MapPicker = dynamic(() => import("@/components/MapPicker"), {
   ssr: false,
 });
 
-type SeriesPayload = { x: any[]; y: (number | null)[]; unit?: string | null };
+type SeriesPayload = { x: unknown[]; y: (number | null)[]; unit?: string | null };
 type GraphAnnotation = { series_key: string; text: string };
 type GraphPayload = {
   id: string;
@@ -66,12 +66,15 @@ type PanelResponse = {
       lon_max: number;
     } | null;
   };
-  panel: {
-    id: string;
-    title: string;
-    graphs: GraphPayload[];
-    text_md?: string | null;
-  };
+  panels: Array<{
+    score: number;
+    panel: {
+      id: string;
+      title: string;
+      graphs: GraphPayload[];
+      text_md?: string | null;
+    };
+  }>;
   series: Record<string, SeriesPayload>;
 };
 
@@ -88,20 +91,9 @@ type AutocompleteResponse = {
   results: AutocompleteItem[];
 };
 
-type NearestLocationResponse = {
-  query: { lat: number; lon: number };
-  result: {
-    geonameid: number;
-    label?: string | null;
-    lat: number;
-    lon: number;
-    distance_km: number;
-  };
-};
-
 function mergeSeries(series: Record<string, SeriesPayload>, keys: string[]) {
   // Merge into rows keyed by x (ISO date or year). We assume x values are unique per series.
-  const rows = new Map<string, any>();
+  const rows = new Map<string, { x: unknown } & Record<string, number | null>>();
 
   for (const k of keys) {
     const s = series[k];
@@ -151,32 +143,12 @@ function axisLabel(label: string | null | undefined, unit: "C" | "F") {
   return label;
 }
 
-function inBbox(
-  lat: number,
-  lon: number,
-  bbox:
-    | {
-        lat_min: number;
-        lat_max: number;
-        lon_min: number;
-        lon_max: number;
-      }
-    | null
-    | undefined,
-) {
-  if (!bbox) return false;
-  const latOk = lat >= bbox.lat_min && lat <= bbox.lat_max;
-  const lonOk = lon >= bbox.lon_min && lon <= bbox.lon_max;
-  return latOk && lonOk;
-}
-
 export default function ApiDemoPage() {
   const FIXED_ZOOM = 5;
   const [lat, setLat] = useState<number>(-20.32556);
   const [lon, setLon] = useState<number>(57.37056);
   const [mapZoom, setMapZoom] = useState<number>(FIXED_ZOOM);
   const [unit, setUnit] = useState<"C" | "F">("C");
-  const [panelId, setPanelId] = useState<string>("overview");
   const [resp, setResp] = useState<PanelResponse | null>(null);
   const [search, setSearch] = useState<string>("");
   const [suggestions, setSuggestions] = useState<AutocompleteItem[]>([]);
@@ -187,19 +159,22 @@ export default function ApiDemoPage() {
   const debounceRef = useRef<number | null>(null);
   const cell = resp?.location?.data_cells?.[0] ?? null;
 
-  const graphData = useMemo(() => {
+  const panelData = useMemo(() => {
     if (!resp) return [];
-    return resp.panel.graphs.map((graph) => ({
-      graph,
-      data: mergeSeries(resp.series, graph.series_keys),
+    return resp.panels.map((item) => ({
+      score: item.score,
+      panel: item.panel,
+      graphs: item.panel.graphs.map((graph) => ({
+        graph,
+        data: mergeSeries(resp.series, graph.series_keys),
+      })),
     }));
   }, [resp]);
 
-  // update load() to use numbers
   async function load(nextLat = lat, nextLon = lon) {
     const url = `http://localhost:8001/api/v/dev/panel?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
       nextLon,
-    )}&panel_id=${encodeURIComponent(panelId)}&unit=${unit}`;
+    )}&unit=${unit}`;
     const r = await fetch(url);
     if (!r.ok) throw new Error(await r.text());
     const data = (await r.json()) as PanelResponse;
@@ -225,16 +200,6 @@ export default function ApiDemoPage() {
     if (!r.ok) throw new Error(await r.text());
     const data = (await r.json()) as { result?: AutocompleteItem | null };
     return data.result ?? null;
-  }
-
-  async function fetchNearestLocation(nextLat: number, nextLon: number) {
-    const url = `http://localhost:8001/api/v/dev/location/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
-      nextLon,
-    )}`;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(await r.text());
-    const data = (await r.json()) as NearestLocationResponse;
-    return data.result;
   }
 
   function applyLocation(item: AutocompleteItem) {
@@ -265,8 +230,8 @@ export default function ApiDemoPage() {
         setSuggestions(results);
         setSuggestOpen(true);
         setSuggestIndex(results.length ? 0 : -1);
-      } catch (err: any) {
-        setSuggestError(err?.message ?? "Autocomplete failed");
+      } catch (err: unknown) {
+        setSuggestError(err instanceof Error ? err.message : "Autocomplete failed");
         setSuggestions([]);
         setSuggestOpen(false);
         setSuggestIndex(-1);
@@ -275,6 +240,12 @@ export default function ApiDemoPage() {
       }
     }, 250);
   }, [search]);
+
+  useEffect(() => {
+    if (!resp) return;
+    load(lat, lon);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unit]);
 
   return (
     <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
@@ -392,29 +363,6 @@ export default function ApiDemoPage() {
             onPick={async (la, lo) => {
               setLat(la);
               setLon(lo);
-              const bbox = resp?.location?.panel_valid_bbox;
-              if (inBbox(la, lo, bbox)) {
-                const place = await fetchNearestLocation(la, lo);
-                setResp((prev) => {
-                  if (!prev) return prev;
-                  return {
-                    ...prev,
-                    location: {
-                      ...prev.location,
-                      query: { lat: la, lon: lo },
-                      place: {
-                        ...prev.location.place,
-                        geonameid: place.geonameid,
-                        label: place.label ?? null,
-                        lat: place.lat,
-                        lon: place.lon,
-                        distance_km: place.distance_km,
-                      },
-                    },
-                  };
-                });
-                return;
-              }
               await load(la, lo);
             }}
             onZoomChange={(z) => setMapZoom(z)}
@@ -460,18 +408,13 @@ export default function ApiDemoPage() {
 
         <label>
           Unit{" "}
-          <select value={unit} onChange={(e) => setUnit(e.target.value as any)}>
+          <select
+            value={unit}
+            onChange={(e) => setUnit((e.target.value as "C" | "F") ?? "C")}
+          >
             <option value="C">°C</option>
             <option value="F">°F</option>
           </select>
-        </label>
-        <label>
-          Panel{" "}
-          <input
-            value={panelId}
-            onChange={(e) => setPanelId(e.target.value)}
-            style={{ width: 140 }}
-          />
         </label>
         <button onClick={() => load()} style={{ padding: "6px 10px" }}>
           Load
@@ -480,119 +423,128 @@ export default function ApiDemoPage() {
 
       {resp && (
         <div style={{ marginTop: 16, opacity: 0.8 }}>
-          Place: {resp.location.place.label ?? "—"} • Panel: {resp.panel.title}
+          Place: {resp.location.place.label ?? "—"} • Panels: {resp.panels.length}
         </div>
       )}
-      {graphData.map(({ graph, data }) => (
-        <div key={graph.id} style={{ marginTop: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600 }}>{graph.title}</h2>
+      {panelData.map(({ score, panel, graphs }) => (
+        <div key={panel.id} style={{ marginTop: 18 }}>
+          <h2 style={{ fontSize: 17, fontWeight: 700 }}>
+            {panel.title} (score {score})
+          </h2>
+          {graphs.map(({ graph, data }) => (
+            <div key={`${panel.id}:${graph.id}`} style={{ marginTop: 12 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600 }}>{graph.title}</h3>
 
-          <div style={{ width: "100%", height: 420 }}>
-            <ResponsiveContainer>
-              <ComposedChart
-                data={data}
-                margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
-              >
-                <XAxis
-                  dataKey="x"
-                  minTickGap={24}
-                  label={
-                    graph.x_axis_label
-                      ? {
-                          value: graph.x_axis_label,
-                          position: "insideBottom",
-                          offset: -5,
-                        }
-                      : undefined
-                  }
-                />
-                <YAxis
-                  domain={[
-                    (dataMin: number) => Math.floor((dataMin - 0.5) * 10) / 10,
-                    (dataMax: number) => Math.ceil((dataMax + 0.5) * 10) / 10,
-                  ]}
-                  label={
-                    graph.y_axis_label
-                      ? {
-                          value: axisLabel(graph.y_axis_label, unit),
-                          angle: -90,
-                          position: "insideLeft",
-                        }
-                      : undefined
-                  }
-                />
-                <Tooltip />
-                <Legend />
-
-                {graph.series_keys.map((key) => {
-                  const style = resp?.series?.[key]?.style?.type ?? "line";
-                  if (style === "bar") {
-                    return (
-                      <Bar
-                        key={key}
-                        dataKey={key}
-                        fill={colorForKey(key)}
-                        opacity={0.65}
-                      />
-                    );
-                  }
-                  return (
-                    <Line
-                      key={key}
-                      type="monotone"
-                      dataKey={key}
-                      dot={false}
-                      stroke={colorForKey(key)}
-                      connectNulls
+              <div style={{ width: "100%", height: 420 }}>
+                <ResponsiveContainer>
+                  <ComposedChart
+                    data={data}
+                    margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
+                  >
+                    <XAxis
+                      dataKey="x"
+                      minTickGap={24}
+                      label={
+                        graph.x_axis_label
+                          ? {
+                              value: graph.x_axis_label,
+                              position: "insideBottom",
+                              offset: -5,
+                            }
+                          : undefined
+                      }
                     />
-                  );
-                })}
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
+                    <YAxis
+                      domain={[
+                        (dataMin: number) =>
+                          Math.floor((dataMin - 0.5) * 10) / 10,
+                        (dataMax: number) =>
+                          Math.ceil((dataMax + 0.5) * 10) / 10,
+                      ]}
+                      label={
+                        graph.y_axis_label
+                          ? {
+                              value: axisLabel(graph.y_axis_label, unit),
+                              angle: -90,
+                              position: "insideLeft",
+                            }
+                          : undefined
+                      }
+                    />
+                    <Tooltip />
+                    <Legend />
 
-          {graph.error ? (
-            <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>
-              {graph.error}
-            </div>
-          ) : null}
-          {graph.annotations?.length ? (
-            <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>
-              {graph.annotations.map((a) => (
-                <div key={`${graph.id}:${a.series_key}:${a.text}`}>
-                  <code>{a.series_key}</code>: {a.text}
+                    {graph.series_keys.map((key) => {
+                      const style = resp?.series?.[key]?.style?.type ?? "line";
+                      if (style === "bar") {
+                        return (
+                          <Bar
+                            key={key}
+                            dataKey={key}
+                            fill={colorForKey(key)}
+                            opacity={0.65}
+                          />
+                        );
+                      }
+                      return (
+                        <Line
+                          key={key}
+                          type="monotone"
+                          dataKey={key}
+                          dot={false}
+                          stroke={colorForKey(key)}
+                          connectNulls
+                        />
+                      );
+                    })}
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+
+              {graph.error ? (
+                <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>
+                  {graph.error}
                 </div>
-              ))}
+              ) : null}
+              {graph.annotations?.length ? (
+                <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>
+                  {graph.annotations.map((a) => (
+                    <div key={`${graph.id}:${a.series_key}:${a.text}`}>
+                      <code>{a.series_key}</code>: {a.text}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {graph.caption ? (
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: 10,
+                    border: "1px solid rgba(0,0,0,0.1)",
+                    borderRadius: 8,
+                    fontSize: 13,
+                    opacity: 0.85,
+                  }}
+                >
+                  {graph.caption}
+                </div>
+              ) : null}
             </div>
-          ) : null}
-          {graph.caption ? (
+          ))}
+          {panel?.text_md ? (
             <div
               style={{
-                marginTop: 8,
-                padding: 10,
+                marginTop: 12,
+                padding: 12,
                 border: "1px solid rgba(0,0,0,0.1)",
                 borderRadius: 8,
-                fontSize: 13,
-                opacity: 0.85,
               }}
             >
-              {graph.caption}
+              {panel.text_md}
             </div>
           ) : null}
         </div>
       ))}
-      {resp?.panel?.text_md ? (
-        <div
-          style={{
-            marginTop: 12,
-            padding: 12,
-            border: "1px solid rgba(0,0,0,0.1)",
-            borderRadius: 8,
-          }}
-        >
-          {resp.panel.text_md}
-        </div>
-      ) : null}
     </div>
   );
 }

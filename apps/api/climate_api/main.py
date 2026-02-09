@@ -9,10 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.logging import AccessFormatter
 
 from .config import load_settings
-from .services.panels import build_panel_tiles_registry
+from .services.panels import build_panel_tiles_registry, build_scored_panels_tiles_registry
 from climate.registry.panels import load_panels
+from climate.registry.maps import load_maps
 from .schemas import (
-    PanelResponse,
+    PanelListResponse,
     GraphListResponse,
     LocationInfo,
     LocationAutocompleteResponse,
@@ -75,6 +76,7 @@ def create_app() -> FastAPI:
         start_year_fallback=1979,
     )
     panels_manifest = load_panels()
+    maps_manifest = load_maps()
 
     app = FastAPI(title="Climate API", version="0.1")
     access_logger = configure_access_logger()
@@ -84,6 +86,7 @@ def create_app() -> FastAPI:
     app.state.location_index = location_index
     app.state.tile_store = tile_store
     app.state.panels_manifest = panels_manifest
+    app.state.maps_manifest = maps_manifest
 
     @app.middleware("http")
     async def access_log_with_timing(request: Request, call_next):
@@ -116,12 +119,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    @app.get("/api/v/{release}/panel", response_model=PanelResponse)
+    @app.get("/api/v/{release}/panel", response_model=PanelListResponse)
     def get_panel(
         release: str,
         lat: float = Query(...),
         lon: float = Query(...),
-        panel_id: str = Query("overview"),
         unit: str = Query("C", pattern="^(C|F|c|f)$"),
     ):
         if release != settings.release and settings.release != "dev":
@@ -130,7 +132,8 @@ def create_app() -> FastAPI:
 
         try:
             panels_manifest = app.state.panels_manifest
-            return build_panel_tiles_registry(
+            maps_manifest = app.state.maps_manifest
+            return build_scored_panels_tiles_registry(
                 place_resolver=place_resolver,
                 tile_store=tile_store,
                 cache=cache,
@@ -139,8 +142,9 @@ def create_app() -> FastAPI:
                 lat=lat,
                 lon=lon,
                 unit=unit,
-                panel_id=panel_id,
                 panels_manifest=panels_manifest,
+                maps_manifest=maps_manifest,
+                maps_root=settings.maps_root,
             )
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e))
@@ -238,12 +242,23 @@ def create_app() -> FastAPI:
         release: str,
         lat: float = Query(...),
         lon: float = Query(...),
-        panel_id: str = Query("overview"),
+        panel_id: str = Query("air_temperature"),
         unit: str = Query("C", pattern="^(C|F|c|f)$"),
     ):
-        # Reuse panel assembly but return just graph ids (simple v0)
-        resp = get_panel(
-            release=release, lat=lat, lon=lon, panel_id=panel_id, unit=unit
+        if release != settings.release and settings.release != "dev":
+            raise HTTPException(status_code=404, detail=f"Unknown release: {release}")
+
+        resp = build_panel_tiles_registry(
+            place_resolver=place_resolver,
+            tile_store=tile_store,
+            cache=cache,
+            ttl_panel_s=settings.ttl_panel_s,
+            release=settings.release,
+            lat=lat,
+            lon=lon,
+            unit=unit,
+            panel_id=panel_id,
+            panels_manifest=app.state.panels_manifest,
         )
         return GraphListResponse(
             release=resp.release,

@@ -14,7 +14,7 @@
     "map_asset": {
       "oneOf": [
         { "$ref": "#/$defs/texture_map" },
-        { "$ref": "#/$defs/interestingness_map" }
+        { "$ref": "#/$defs/score_map" }
       ]
     },
 
@@ -36,20 +36,25 @@
       "additionalProperties": false
     },
 
-    "interestingness_map": {
+    "score_map": {
       "type": "object",
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "title": { "type": "string" },
         "description": { "type": "string" },
-        "type": { "const": "interestingness" },
+        "type": { "const": "score" },
         "source_metric": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "grid_id": { "type": "string", "pattern": "^[a-z0-9_.]+$" },
         "reducer": { "$ref": "#/$defs/reducer" },
-        "predicate": { "$ref": "#/$defs/predicate" },
-        "output": { "$ref": "#/$defs/interestingness_output" }
+        "default_score": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "score_rules": {
+          "type": "array",
+          "minItems": 0,
+          "items": { "$ref": "#/$defs/score_rule" }
+        },
+        "output": { "$ref": "#/$defs/score_output" }
       },
-      "required": ["type", "source_metric", "predicate"],
+      "required": ["type", "source_metric", "score_rules"],
       "additionalProperties": false
     },
 
@@ -153,13 +158,22 @@
       "additionalProperties": false
     },
 
-    "interestingness_output": {
+    "score_output": {
       "type": "object",
       "properties": {
         "png_filename": { "type": "string" },
         "binary_filename": { "type": "string" },
-        "pack_bits": { "type": "boolean" }
+        "dtype": { "const": "int16" }
       },
+      "additionalProperties": false
+    },
+    "score_rule": {
+      "type": "object",
+      "properties": {
+        "score": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "predicate": { "$ref": "#/$defs/predicate" }
+      },
+      "required": ["score", "predicate"],
       "additionalProperties": false
     },
 

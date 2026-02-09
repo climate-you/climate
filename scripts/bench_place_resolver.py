@@ -85,9 +85,7 @@ def main() -> None:
     failures = 0
 
     for lat, lon in points:
-        query = urllib.parse.urlencode(
-            {"lat": f"{lat:.5f}", "lon": f"{lon:.5f}", "panel_id": "overview"}
-        )
+        query = urllib.parse.urlencode({"lat": f"{lat:.5f}", "lon": f"{lon:.5f}"})
         url = f"{args.base_url}/api/v/{args.release}/panel?{query}"
 
         t0 = time.perf_counter()

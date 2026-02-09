@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from climate.registry.panels import PanelsSchemaError, validate_panels_against_metrics
+from climate.registry.panels import (
+    PanelsSchemaError,
+    validate_panels_against_maps,
+    validate_panels_against_metrics,
+)
 
 
 def _raw_metric(metric_id: str) -> dict:
@@ -35,6 +39,7 @@ def _panels(metric_id: str) -> dict:
         "panels": {
             "overview": {
                 "title": "Overview",
+                "score_map_id": "score_map",
                 "graphs": [
                     {
                         "id": "g1",
@@ -70,3 +75,19 @@ def test_panels_against_metrics_no_materialized_ancestor_fails() -> None:
     }
     with pytest.raises(PanelsSchemaError, match="no materialized ancestor"):
         validate_panels_against_metrics(_panels("a"), metrics)
+
+
+def test_panels_against_maps_ok() -> None:
+    panels = _panels("base")
+    maps = {
+        "version": "0.1",
+        "score_map": {"id": "score_map", "type": "score", "source_metric": "base"},
+    }
+    validate_panels_against_maps(panels, maps)
+
+
+def test_panels_against_maps_unknown_score_map_fails() -> None:
+    panels = _panels("base")
+    maps = {"version": "0.1"}
+    with pytest.raises(PanelsSchemaError, match="unknown score_map_id"):
+        validate_panels_against_maps(panels, maps)

@@ -120,6 +120,42 @@ def validate_panels_against_metrics(
         )
 
 
+def validate_panels_against_maps(
+    panels_manifest: dict[str, Any], maps_manifest: dict[str, Any]
+) -> None:
+    panels_root = panels_manifest.get("panels", {})
+    if not isinstance(panels_root, dict):
+        return
+    maps_root = {
+        key: spec
+        for key, spec in maps_manifest.items()
+        if key != "version" and isinstance(spec, dict)
+    }
+
+    errors: list[str] = []
+    for panel_id, panel in panels_root.items():
+        if not isinstance(panel, dict):
+            continue
+        score_map_id = panel.get("score_map_id")
+        if not isinstance(score_map_id, str) or not score_map_id:
+            errors.append(f"panels/{panel_id}: missing score_map_id")
+            continue
+        map_spec = maps_root.get(score_map_id)
+        if map_spec is None:
+            errors.append(f"panels/{panel_id}: unknown score_map_id '{score_map_id}'")
+            continue
+        if map_spec.get("type") != "score":
+            errors.append(
+                f"panels/{panel_id}: score_map_id '{score_map_id}' has type "
+                f"'{map_spec.get('type')}', expected 'score'"
+            )
+
+    if errors:
+        raise PanelsSchemaError(
+            "panels.json failed score-map linkage validation:\n- " + "\n- ".join(errors)
+        )
+
+
 def _error_sort_key(error) -> tuple[int, str]:
     return (len(error.path), "/".join(str(p) for p in error.path))
 

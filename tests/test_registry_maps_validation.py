@@ -32,9 +32,9 @@ def test_validate_maps_against_metrics_ok() -> None:
         },
         "trend_interest": {
             "id": "trend_interest",
-            "type": "interestingness",
+            "type": "score",
             "source_metric": "t2m_yearly_mean_c",
-            "predicate": {"op": "gt", "threshold": 0.0},
+            "score_rules": [],
         },
     }
     metrics_manifest = {

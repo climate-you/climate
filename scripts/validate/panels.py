@@ -9,8 +9,10 @@ from climate.registry.panels import (
     DEFAULT_PANELS_SCHEMA_PATH,
     PanelsSchemaError,
     load_panels,
+    validate_panels_against_maps,
     validate_panels_against_metrics,
 )
+from climate.registry.maps import DEFAULT_MAPS_PATH, DEFAULT_MAPS_SCHEMA_PATH, load_maps
 from climate.registry.metrics import (
     DEFAULT_METRICS_PATH,
     DEFAULT_SCHEMA_PATH,
@@ -29,6 +31,8 @@ def main() -> int:
     parser.add_argument("--metrics-schema", default=str(DEFAULT_SCHEMA_PATH))
     parser.add_argument("--datasets", default=str(DEFAULT_DATASETS_PATH))
     parser.add_argument("--datasets-schema", default=str(DEFAULT_DATASETS_SCHEMA_PATH))
+    parser.add_argument("--maps", default=str(DEFAULT_MAPS_PATH))
+    parser.add_argument("--maps-schema", default=str(DEFAULT_MAPS_SCHEMA_PATH))
     args = parser.parse_args()
 
     try:
@@ -41,6 +45,8 @@ def main() -> int:
             validate=True,
         )
         validate_panels_against_metrics(panels, metrics)
+        maps = load_maps(Path(args.maps), schema_path=Path(args.maps_schema), validate=True)
+        validate_panels_against_maps(panels, maps)
     except PanelsSchemaError as exc:
         print(str(exc))
         return 1

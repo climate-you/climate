@@ -49,6 +49,19 @@ class PanelResponse(BaseModel):
     series: Dict[str, SeriesPayload]
 
 
+class ScoredPanelPayload(BaseModel):
+    score: int
+    panel: PanelPayload
+
+
+class PanelListResponse(BaseModel):
+    release: str
+    unit: str
+    location: LocationInfo
+    panels: List[ScoredPanelPayload]
+    series: Dict[str, SeriesPayload]
+
+
 class GraphListResponse(BaseModel):
     release: str
     unit: str

@@ -21,13 +21,14 @@
       "properties": {
         "title": { "type": "string" },
         "description": { "type": "string" },
+        "score_map_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "graphs": {
           "type": "array",
           "items": { "$ref": "#/$defs/graph" },
           "minItems": 1
         }
       },
-      "required": ["title", "graphs"],
+      "required": ["title", "score_map_id", "graphs"],
       "additionalProperties": false
     },
     "graph": {

@@ -24,24 +24,27 @@
       "filename": "t2m_warming_2025_vs_1979_2000.png"
     }
   },
-  "t2m_trend_positive_interestingness": {
-    "id": "t2m_trend_positive_interestingness",
-    "title": "Cells with positive long-term trend",
-    "type": "interestingness",
+  "t2m_trend_score": {
+    "id": "t2m_trend_score",
+    "title": "Air temperature trend score",
+    "type": "score",
     "source_metric": "t2m_yearly_mean_c",
     "reducer": {
       "op": "trend_slope",
       "start_year": 1979,
       "end_year": 2025
     },
-    "predicate": {
-      "op": "gt",
-      "threshold": 0.01
-    },
+    "default_score": 0,
+    "score_rules": [
+      { "score": 4, "predicate": { "op": "gt", "threshold": 0.04 } },
+      { "score": 3, "predicate": { "op": "gt", "threshold": 0.03 } },
+      { "score": 2, "predicate": { "op": "gt", "threshold": 0.02 } },
+      { "score": 1, "predicate": { "op": "gt", "threshold": 0.01 } }
+    ],
     "output": {
-      "png_filename": "t2m_trend_positive.png",
-      "binary_filename": "t2m_trend_positive.bitset.bin",
-      "pack_bits": true
+      "png_filename": "t2m_trend_score.png",
+      "binary_filename": "t2m_trend_score.i16.bin",
+      "dtype": "int16"
     }
   },
   "sst_warming_2025_vs_1982_2000_texture": {
@@ -68,24 +71,43 @@
       "filename": "sst_warming_2025_vs_1982_2000.png"
     }
   },
-  "sst_trend_positive_interestingness": {
-    "id": "sst_trend_positive_interestingness",
-    "title": "SST cells with positive long-term trend",
-    "type": "interestingness",
+  "sst_trend_score": {
+    "id": "sst_trend_score",
+    "title": "Sea temperature trend score",
+    "type": "score",
     "source_metric": "sst_yearly_mean_c",
     "reducer": {
       "op": "trend_slope",
       "start_year": 1982,
       "end_year": 2025
     },
-    "predicate": {
-      "op": "gt",
-      "threshold": 0.01
-    },
+    "default_score": 0,
+    "score_rules": [
+      { "score": 4, "predicate": { "op": "gt", "threshold": 0.04 } },
+      { "score": 3, "predicate": { "op": "gt", "threshold": 0.03 } },
+      { "score": 2, "predicate": { "op": "gt", "threshold": 0.02 } },
+      { "score": 1, "predicate": { "op": "gt", "threshold": 0.01 } }
+    ],
     "output": {
-      "png_filename": "sst_trend_positive.png",
-      "binary_filename": "sst_trend_positive.bitset.bin",
-      "pack_bits": true
+      "png_filename": "sst_trend_score.png",
+      "binary_filename": "sst_trend_score.i16.bin",
+      "dtype": "int16"
+    }
+  },
+  "score_1_map": {
+    "id": "score_1_map",
+    "title": "Score 1 everywhere",
+    "type": "score",
+    "source_metric": "t2m_yearly_mean_c",
+    "reducer": {
+      "op": "latest_year"
+    },
+    "default_score": 1,
+    "score_rules": [],
+    "output": {
+      "png_filename": "score_1_map.png",
+      "binary_filename": "score_1_map.i16.bin",
+      "dtype": "int16"
     }
   }
 }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Dict, Any, List, Callable
 import numpy as np
 import xarray as xr
@@ -8,7 +9,9 @@ from datetime import date
 
 from ..schemas import (
     PanelResponse,
+    PanelListResponse,
     PanelPayload,
+    ScoredPanelPayload,
     GraphPayload,
     GraphAnnotation,
     SeriesPayload,
@@ -28,7 +31,7 @@ from climate.datasets.derive.series import rolling_mean_centered, linear_trend_l
 from climate.registry.panels import DEFAULT_PANELS_PATH, load_panels
 from climate.models import StoryContext, StoryFacts
 from climate.panels.zoomout import fifty_year_caption
-from climate.tiles.layout import locate_tile, cell_center_latlon
+from climate.tiles.layout import GridSpec, locate_tile, cell_center_latlon
 
 
 def _caption_fn_registry() -> dict[str, Callable[..., str]]:
@@ -428,6 +431,159 @@ def build_panel_tiles_registry(
         cache.set_json(cache_key, resp.model_dump(mode="json"), ttl_s=ttl_panel_s)
 
     return resp
+
+
+def build_scored_panels_tiles_registry(
+    *,
+    place_resolver: PlaceResolver,
+    tile_store: TileDataStore,
+    cache: Cache | None,
+    ttl_panel_s: int,
+    release: str,
+    lat: float,
+    lon: float,
+    unit: str,
+    panels_manifest: dict[str, Any],
+    maps_manifest: dict[str, Any],
+    maps_root: Path,
+) -> PanelListResponse:
+    panels = panels_manifest.get("panels", {})
+    if not isinstance(panels, dict):
+        raise KeyError("Invalid panels manifest: missing 'panels' root object.")
+
+    maps_specs = {
+        key: spec
+        for key, spec in maps_manifest.items()
+        if key != "version" and isinstance(spec, dict)
+    }
+    score_cache: dict[str, np.ndarray] = {}
+
+    scored_panel_ids: list[tuple[int, str]] = []
+    for panel_id, panel_spec in panels.items():
+        score_map_id = panel_spec.get("score_map_id")
+        if not isinstance(score_map_id, str) or not score_map_id:
+            raise KeyError(f"Panel '{panel_id}' is missing score_map_id.")
+        map_spec = maps_specs.get(score_map_id)
+        if map_spec is None:
+            raise KeyError(f"Panel '{panel_id}' references unknown score map: {score_map_id}")
+        if map_spec.get("type") != "score":
+            raise KeyError(
+                f"Panel '{panel_id}' references map '{score_map_id}' with unsupported type "
+                f"'{map_spec.get('type')}'. Expected 'score'."
+            )
+        score = _read_score_value(
+            lat=lat,
+            lon=lon,
+            map_id=score_map_id,
+            map_spec=map_spec,
+            tile_store=tile_store,
+            maps_root=maps_root,
+            score_cache=score_cache,
+        )
+        if score > 0:
+            scored_panel_ids.append((score, panel_id))
+
+    scored_panel_ids.sort(key=lambda item: item[0], reverse=True)
+
+    merged_series: dict[str, SeriesPayload] = {}
+    scored_panels: list[ScoredPanelPayload] = []
+    location: LocationInfo | None = None
+    for score, panel_id in scored_panel_ids:
+        panel_resp = build_panel_tiles_registry(
+            place_resolver=place_resolver,
+            tile_store=tile_store,
+            cache=cache,
+            ttl_panel_s=ttl_panel_s,
+            release=release,
+            lat=lat,
+            lon=lon,
+            unit=unit,
+            panel_id=panel_id,
+            panels_manifest=panels_manifest,
+        )
+        if location is None:
+            location = panel_resp.location
+        for key, payload in panel_resp.series.items():
+            if key not in merged_series:
+                merged_series[key] = payload
+        scored_panels.append(ScoredPanelPayload(score=score, panel=panel_resp.panel))
+
+    if location is None:
+        place = place_resolver.resolve_place(lat, lon)
+        location = LocationInfo(
+            query=QueryPoint(lat=float(lat), lon=float(lon)),
+            place=PlaceInfo(
+                geonameid=int(place.geonameid),
+                label=place.label,
+                lat=float(place.lat),
+                lon=float(place.lon),
+                distance_km=float(place.distance_km),
+            ),
+            data_cells=[],
+            panel_valid_bbox=None,
+            panel_cell_indices=None,
+        )
+
+    return PanelListResponse(
+        release=release,
+        unit=unit.upper(),
+        location=location,
+        panels=scored_panels,
+        series=merged_series,
+    )
+
+
+def _grid_from_id(grid_id: str) -> GridSpec:
+    if grid_id == "global_0p25":
+        return GridSpec.global_0p25(tile_size=64)
+    if grid_id == "global_0p05":
+        return GridSpec.global_0p05(tile_size=64)
+    raise KeyError(f"Unsupported map grid_id: {grid_id}")
+
+
+def _read_score_value(
+    *,
+    lat: float,
+    lon: float,
+    map_id: str,
+    map_spec: dict[str, Any],
+    tile_store: TileDataStore,
+    maps_root: Path,
+    score_cache: dict[str, np.ndarray],
+) -> int:
+    score_values = score_cache.get(map_id)
+    grid_id = str(map_spec.get("grid_id") or "")
+    if not grid_id:
+        source_metric = map_spec.get("source_metric")
+        if not isinstance(source_metric, str) or not source_metric:
+            raise KeyError(
+                f"Score map '{map_id}' must define grid_id or a valid source_metric."
+            )
+        grid_id = tile_store._metric_grid(source_metric).grid_id
+    grid = _grid_from_id(grid_id)
+    if score_values is None:
+        output = map_spec.get("output", {}) or {}
+        binary_name = str(output.get("binary_filename") or f"{map_id}.i16.bin")
+        bin_path = maps_root / grid.grid_id / map_id / binary_name
+        if not bin_path.exists():
+            raise FileNotFoundError(f"Missing score map binary: {bin_path}")
+        raw = np.fromfile(bin_path, dtype="<i2")
+        expected = grid.nlat * grid.nlon
+        if raw.size != expected:
+            raise ValueError(
+                f"Score map '{map_id}' has invalid size: {raw.size}, expected {expected}"
+            )
+        score_values = raw
+        score_cache[map_id] = score_values
+
+    cell, _tile = locate_tile(lat, lon, grid)
+    idx = cell.i_lat * grid.nlon + cell.i_lon
+    score = int(score_values[idx])
+    if score < 0:
+        return 0
+    if score > 4:
+        return 4
+    return score
 
 
 def _caption_context_from_series(
