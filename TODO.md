@@ -1,16 +1,18 @@
 Next:
 
+- when toggling the temperature unit, we need to re-send panel query
+- fix zoom when clicking on the map
 - for resolve/autocomplete:
   - Return geonameid only and drop slugs from responses entirely
   - Add a “best match” endpoint for a free‑text query (single request)
-    -Add prefix‑length + fuzziness tuning knobs to autocomplete
-- for ocean locations, maybe the ocean polygons with natural earth make the most sense. But how would we be able to return "Coast off <city>" with this? Would we do:
+  - Add prefix‑length + fuzziness tuning knobs to autocomplete
+- for ocean locations, a binary mask of oceans would be the fastest/easiest. The process could become:
   - check if water cell, then find nearest city, if less than X km, return "<ocean name> off <city>", otherwise return "<ocean name>"
-  - if not water cell, find nearest city and returns it
+  - if not water cell, returns nearest city
     So in both cases, we need to check water cell + nearest city.
 - add animated graphs:
-  - add steps, each step a different graph
-  - how to handle the animation: we need to keep series from one step to another, so a true zoomout animation can be performed, is that supported?
+  - zoomout animation
+  - no `series` field when animated is on otherwise we have duplicate/conflicting entries
 
 ---
 
