@@ -47,10 +47,24 @@ type DataCell = {
 };
 
 type PanelResponse = {
+  release: string;
   unit: string;
   location: {
-    place: { label?: string | null };
+    query?: { lat: number; lon: number };
+    place: {
+      geonameid: number;
+      label?: string | null;
+      lat: number;
+      lon: number;
+      distance_km: number;
+    };
     data_cells?: DataCell[];
+    panel_valid_bbox?: {
+      lat_min: number;
+      lat_max: number;
+      lon_min: number;
+      lon_max: number;
+    } | null;
   };
   panel: {
     id: string;
@@ -72,6 +86,17 @@ type AutocompleteItem = {
 type AutocompleteResponse = {
   query: string;
   results: AutocompleteItem[];
+};
+
+type NearestLocationResponse = {
+  query: { lat: number; lon: number };
+  result: {
+    geonameid: number;
+    label?: string | null;
+    lat: number;
+    lon: number;
+    distance_km: number;
+  };
 };
 
 function mergeSeries(series: Record<string, SeriesPayload>, keys: string[]) {
@@ -126,6 +151,25 @@ function axisLabel(label: string | null | undefined, unit: "C" | "F") {
   return label;
 }
 
+function inBbox(
+  lat: number,
+  lon: number,
+  bbox:
+    | {
+        lat_min: number;
+        lat_max: number;
+        lon_min: number;
+        lon_max: number;
+      }
+    | null
+    | undefined,
+) {
+  if (!bbox) return false;
+  const latOk = lat >= bbox.lat_min && lat <= bbox.lat_max;
+  const lonOk = lon >= bbox.lon_min && lon <= bbox.lon_max;
+  return latOk && lonOk;
+}
+
 export default function ApiDemoPage() {
   const FIXED_ZOOM = 5;
   const [lat, setLat] = useState<number>(-20.32556);
@@ -158,7 +202,9 @@ export default function ApiDemoPage() {
     )}&panel_id=${encodeURIComponent(panelId)}&unit=${unit}`;
     const r = await fetch(url);
     if (!r.ok) throw new Error(await r.text());
-    setResp(await r.json());
+    const data = (await r.json()) as PanelResponse;
+    setResp(data);
+    return data;
   }
 
   async function fetchAutocomplete(q: string) {
@@ -179,6 +225,16 @@ export default function ApiDemoPage() {
     if (!r.ok) throw new Error(await r.text());
     const data = (await r.json()) as { result?: AutocompleteItem | null };
     return data.result ?? null;
+  }
+
+  async function fetchNearestLocation(nextLat: number, nextLon: number) {
+    const url = `http://localhost:8001/api/v/dev/location/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
+      nextLon,
+    )}`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(await r.text());
+    const data = (await r.json()) as NearestLocationResponse;
+    return data.result;
   }
 
   function applyLocation(item: AutocompleteItem) {
@@ -333,10 +389,33 @@ export default function ApiDemoPage() {
         {/* Map + overlay */}
         <div style={{ width: 520, maxWidth: "100%" }}>
           <MapPicker
-            onPick={(la, lo) => {
+            onPick={async (la, lo) => {
               setLat(la);
               setLon(lo);
-              load(la, lo);
+              const bbox = resp?.location?.panel_valid_bbox;
+              if (inBbox(la, lo, bbox)) {
+                const place = await fetchNearestLocation(la, lo);
+                setResp((prev) => {
+                  if (!prev) return prev;
+                  return {
+                    ...prev,
+                    location: {
+                      ...prev.location,
+                      query: { lat: la, lon: lo },
+                      place: {
+                        ...prev.location.place,
+                        geonameid: place.geonameid,
+                        label: place.label ?? null,
+                        lat: place.lat,
+                        lon: place.lon,
+                        distance_km: place.distance_km,
+                      },
+                    },
+                  };
+                });
+                return;
+              }
+              await load(la, lo);
             }}
             onZoomChange={(z) => setMapZoom(z)}
             picked={{ lat, lon }}

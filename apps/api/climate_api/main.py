@@ -18,6 +18,9 @@ from .schemas import (
     LocationAutocompleteResponse,
     LocationAutocompleteItem,
     LocationResolveResponse,
+    LocationNearestResponse,
+    QueryPoint,
+    PlaceInfo,
 )
 from .cache import Cache, make_redis_client
 from .logging import configure_access_logger, format_access_line
@@ -205,6 +208,30 @@ def create_app() -> FastAPI:
             )
 
         return LocationResolveResponse(query=str(geonameid or label or ""), result=result)
+
+    @app.get(
+        "/api/v/{release}/location/nearest",
+        response_model=LocationNearestResponse,
+    )
+    def nearest_location(
+        release: str,
+        lat: float = Query(...),
+        lon: float = Query(...),
+    ):
+        if release != settings.release and settings.release != "dev":
+            raise HTTPException(status_code=404, detail=f"Unknown release: {release}")
+
+        place = app.state.place_resolver.resolve_place(lat, lon)
+        return LocationNearestResponse(
+            query=QueryPoint(lat=float(lat), lon=float(lon)),
+            result=PlaceInfo(
+                geonameid=int(place.geonameid),
+                label=place.label,
+                lat=float(place.lat),
+                lon=float(place.lon),
+                distance_km=float(place.distance_km),
+            ),
+        )
 
     @app.get("/api/v/{release}/location/graphs", response_model=GraphListResponse)
     def list_graphs(

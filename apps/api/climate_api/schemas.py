@@ -122,3 +122,8 @@ class LocationAutocompleteResponse(BaseModel):
 class LocationResolveResponse(BaseModel):
     query: str
     result: Optional[LocationAutocompleteItem] = None
+
+
+class LocationNearestResponse(BaseModel):
+    query: QueryPoint
+    result: PlaceInfo
