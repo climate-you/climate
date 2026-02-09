@@ -91,6 +91,17 @@ type AutocompleteResponse = {
   results: AutocompleteItem[];
 };
 
+type NearestLocationResponse = {
+  query: { lat: number; lon: number };
+  result: {
+    geonameid: number;
+    label?: string | null;
+    lat: number;
+    lon: number;
+    distance_km: number;
+  };
+};
+
 function mergeSeries(series: Record<string, SeriesPayload>, keys: string[]) {
   // Merge into rows keyed by x (ISO date or year). We assume x values are unique per series.
   const rows = new Map<string, { x: unknown } & Record<string, number | null>>();
@@ -141,6 +152,25 @@ function axisLabel(label: string | null | undefined, unit: "C" | "F") {
     return label.replace("°C", "°F");
   }
   return label;
+}
+
+function inBbox(
+  lat: number,
+  lon: number,
+  bbox:
+    | {
+        lat_min: number;
+        lat_max: number;
+        lon_min: number;
+        lon_max: number;
+      }
+    | null
+    | undefined,
+) {
+  if (!bbox) return false;
+  const latOk = lat >= bbox.lat_min && lat <= bbox.lat_max;
+  const lonOk = lon >= bbox.lon_min && lon <= bbox.lon_max;
+  return latOk && lonOk;
 }
 
 export default function ApiDemoPage() {
@@ -200,6 +230,16 @@ export default function ApiDemoPage() {
     if (!r.ok) throw new Error(await r.text());
     const data = (await r.json()) as { result?: AutocompleteItem | null };
     return data.result ?? null;
+  }
+
+  async function fetchNearestLocation(nextLat: number, nextLon: number) {
+    const url = `http://localhost:8001/api/v/dev/location/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
+      nextLon,
+    )}`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(await r.text());
+    const data = (await r.json()) as NearestLocationResponse;
+    return data.result;
   }
 
   function applyLocation(item: AutocompleteItem) {
@@ -363,6 +403,29 @@ export default function ApiDemoPage() {
             onPick={async (la, lo) => {
               setLat(la);
               setLon(lo);
+              const bbox = resp?.location?.panel_valid_bbox;
+              if (inBbox(la, lo, bbox)) {
+                const place = await fetchNearestLocation(la, lo);
+                setResp((prev) => {
+                  if (!prev) return prev;
+                  return {
+                    ...prev,
+                    location: {
+                      ...prev.location,
+                      query: { lat: la, lon: lo },
+                      place: {
+                        ...prev.location.place,
+                        geonameid: place.geonameid,
+                        label: place.label ?? null,
+                        lat: place.lat,
+                        lon: place.lon,
+                        distance_km: place.distance_km,
+                      },
+                    },
+                  };
+                });
+                return;
+              }
               await load(la, lo);
             }}
             onZoomChange={(z) => setMapZoom(z)}
