@@ -43,7 +43,7 @@ $ python scripts/make_montecarlo_experiment.py --grid-deg 1.0 --experiment-id 1 
 5. Run web page:
 
 # Next web - http://localhost:3000/
-$ cd web; npm run dev 
+$ cd web; npm run dev:fast
 
 # Streamlit - http://localhost:8501/
 $ streamlit run app/story_demo.py
@@ -61,7 +61,10 @@ $ streamlit run app/story_demo.py
 
 # Run FastAPI thin client:
 $ export REDIS_URL='redis://localhost:6379/0'
-$ uvicorn apps.api.climate_api.main:app --reload --port 8001
+# Works without watchfiles installed:
+$ uvicorn apps.api.climate_api.main:app --reload --reload-dir apps/api --port 8001
+# Optional (after `pip install watchfiles`) to reduce reload scanning further:
+# $ uvicorn apps.api.climate_api.main:app --reload --reload-dir apps/api --reload-exclude 'data/*' --reload-exclude 'web/*' --port 8001
 
 # Inspect Redis
 $ redis-cli DBSIZE
