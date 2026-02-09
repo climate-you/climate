@@ -201,10 +201,10 @@ export default function ApiDemoPage() {
     }));
   }, [resp]);
 
-  async function load(nextLat = lat, nextLon = lon) {
+  async function load(nextLat = lat, nextLon = lon, nextUnit = unit) {
     const url = `http://localhost:8001/api/v/dev/panel?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
       nextLon,
-    )}&unit=${unit}`;
+    )}&unit=${nextUnit}`;
     const r = await fetch(url);
     if (!r.ok) throw new Error(await r.text());
     const data = (await r.json()) as PanelResponse;
@@ -280,12 +280,6 @@ export default function ApiDemoPage() {
       }
     }, 250);
   }, [search]);
-
-  useEffect(() => {
-    if (!resp) return;
-    load(lat, lon);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unit]);
 
   return (
     <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
@@ -473,7 +467,12 @@ export default function ApiDemoPage() {
           Unit{" "}
           <select
             value={unit}
-            onChange={(e) => setUnit((e.target.value as "C" | "F") ?? "C")}
+            onChange={(e) => {
+              const nextUnit = (e.target.value as "C" | "F") ?? "C";
+              if (nextUnit === unit) return;
+              setUnit(nextUnit);
+              void load(lat, lon, nextUnit);
+            }}
           >
             <option value="C">°C</option>
             <option value="F">°F</option>
