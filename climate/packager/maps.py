@@ -43,6 +43,11 @@ def package_maps(
     written = 0
     for map_id, map_spec in maps_specs.items():
         map_type = map_spec.get("type")
+        if map_type == "score" and map_spec.get("constant_score") is not None:
+            if debug:
+                print(f"[maps] Skip virtual constant score map (no files): {map_id}")
+            continue
+
         source_metric = str(map_spec["source_metric"])
         metric_spec = metrics_manifest.get(source_metric)
         if not isinstance(metric_spec, dict):

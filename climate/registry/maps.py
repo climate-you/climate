@@ -66,6 +66,8 @@ def validate_maps_against_metrics(
     errors: list[str] = []
     for map_id, spec in maps_root.items():
         source_metric = spec.get("source_metric")
+        if source_metric is None:
+            continue
         if source_metric not in metrics:
             errors.append(f"{map_id}: unknown source_metric '{source_metric}'")
             continue

@@ -98,16 +98,6 @@
     "id": "score_1_map",
     "title": "Score 1 everywhere",
     "type": "score",
-    "source_metric": "t2m_yearly_mean_c",
-    "reducer": {
-      "op": "latest_year"
-    },
-    "default_score": 1,
-    "score_rules": [],
-    "output": {
-      "png_filename": "score_1_map.png",
-      "binary_filename": "score_1_map.i16.bin",
-      "dtype": "int16"
-    }
+    "constant_score": 1
   }
 }

@@ -72,3 +72,16 @@ def test_validate_maps_against_metrics_requires_materialized_source() -> None:
     metrics_manifest = {"version": "0.1", "derived_runtime_only": metric}
     with pytest.raises(MapsSchemaError, match="not materialized as tiled data"):
         validate_maps_against_metrics(maps_manifest, metrics_manifest)
+
+
+def test_validate_maps_against_metrics_allows_constant_score_map_without_metric() -> None:
+    maps_manifest = {
+        "version": "0.1",
+        "score_1_map": {
+            "id": "score_1_map",
+            "type": "score",
+            "constant_score": 1,
+        },
+    }
+    metrics_manifest = {"version": "0.1"}
+    validate_maps_against_metrics(maps_manifest, metrics_manifest)

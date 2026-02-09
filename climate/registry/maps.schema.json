@@ -46,6 +46,7 @@
         "source_metric": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "grid_id": { "type": "string", "pattern": "^[a-z0-9_.]+$" },
         "reducer": { "$ref": "#/$defs/reducer" },
+        "constant_score": { "type": "integer", "minimum": 0, "maximum": 4 },
         "default_score": { "type": "integer", "minimum": 0, "maximum": 4 },
         "score_rules": {
           "type": "array",
@@ -54,7 +55,15 @@
         },
         "output": { "$ref": "#/$defs/score_output" }
       },
-      "required": ["type", "source_metric", "score_rules"],
+      "required": ["type"],
+      "oneOf": [
+        {
+          "required": ["source_metric", "score_rules"]
+        },
+        {
+          "required": ["constant_score"]
+        }
+      ],
       "additionalProperties": false
     },
 

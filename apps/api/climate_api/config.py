@@ -16,6 +16,15 @@ class Settings:
     redis_url: Optional[str]
     ttl_resolve_s: int
     ttl_panel_s: int
+    score_map_preload: bool
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    return value in {"1", "true", "yes", "y", "on"}
 
 
 def load_settings() -> Settings:
@@ -63,6 +72,7 @@ def load_settings() -> Settings:
     redis_url = os.environ.get("REDIS_URL")  # e.g. redis://localhost:6379/0
     ttl_resolve_s = int(os.environ.get("TTL_RESOLVE_S", "86400"))  # 1 day
     ttl_panel_s = int(os.environ.get("TTL_PANEL_S", "86400"))  # 1 day
+    score_map_preload = _env_bool("SCORE_MAP_PRELOAD", False)
 
     return Settings(
         release=release,
@@ -74,4 +84,5 @@ def load_settings() -> Settings:
         redis_url=redis_url,
         ttl_resolve_s=ttl_resolve_s,
         ttl_panel_s=ttl_panel_s,
+        score_map_preload=score_map_preload,
     )

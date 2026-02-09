@@ -9,7 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.logging import AccessFormatter
 
 from .config import load_settings
-from .services.panels import build_panel_tiles_registry, build_scored_panels_tiles_registry
+from .services.panels import (
+    build_panel_tiles_registry,
+    build_scored_panels_tiles_registry,
+    preload_score_maps_cache,
+)
 from climate.registry.panels import load_panels
 from climate.registry.maps import load_maps
 from .schemas import (
@@ -77,6 +81,17 @@ def create_app() -> FastAPI:
     )
     panels_manifest = load_panels()
     maps_manifest = load_maps()
+    if settings.score_map_preload:
+        loaded_count, skipped_constant_count = preload_score_maps_cache(
+            maps_manifest=maps_manifest,
+            tile_store=tile_store,
+            maps_root=settings.maps_root,
+        )
+        uvicorn_logger.info(
+            "Preloaded score maps into memory: loaded=%d skipped_constant=%d",
+            loaded_count,
+            skipped_constant_count,
+        )
 
     app = FastAPI(title="Climate API", version="0.1")
     access_logger = configure_access_logger()

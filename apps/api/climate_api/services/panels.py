@@ -5,6 +5,7 @@ from typing import Dict, Any, List, Callable
 import numpy as np
 import xarray as xr
 import math
+from threading import Lock
 from datetime import date
 
 from ..schemas import (
@@ -32,6 +33,44 @@ from climate.registry.panels import DEFAULT_PANELS_PATH, load_panels
 from climate.models import StoryContext, StoryFacts
 from climate.panels.zoomout import fifty_year_caption
 from climate.tiles.layout import GridSpec, locate_tile, cell_center_latlon
+
+_SCORE_MAP_VALUES_CACHE: dict[str, np.ndarray] = {}
+_SCORE_MAP_VALUES_CACHE_LOCK = Lock()
+
+
+def preload_score_maps_cache(
+    *,
+    maps_manifest: dict[str, Any],
+    tile_store: TileDataStore,
+    maps_root: Path,
+) -> tuple[int, int]:
+    maps_specs = {
+        key: spec
+        for key, spec in maps_manifest.items()
+        if key != "version" and isinstance(spec, dict) and spec.get("type") == "score"
+    }
+    loaded = 0
+    skipped_constant = 0
+    for map_id, map_spec in maps_specs.items():
+        if map_spec.get("constant_score") is not None:
+            skipped_constant += 1
+            continue
+        grid_id = str(map_spec.get("grid_id") or "")
+        if not grid_id:
+            source_metric = map_spec.get("source_metric")
+            if not isinstance(source_metric, str) or not source_metric:
+                raise KeyError(
+                    f"Score map '{map_id}' must define grid_id or a valid source_metric."
+                )
+            grid_id = tile_store._metric_grid(source_metric).grid_id
+        grid = _grid_from_id(grid_id)
+        output = map_spec.get("output", {}) or {}
+        binary_name = str(output.get("binary_filename") or f"{map_id}.i16.bin")
+        bin_path = maps_root / grid.grid_id / map_id / binary_name
+        expected = grid.nlat * grid.nlon
+        _load_score_map_values_cached(bin_path=bin_path, expected=expected)
+        loaded += 1
+    return loaded, skipped_constant
 
 
 def _caption_fn_registry() -> dict[str, Callable[..., str]]:
@@ -456,8 +495,6 @@ def build_scored_panels_tiles_registry(
         for key, spec in maps_manifest.items()
         if key != "version" and isinstance(spec, dict)
     }
-    score_cache: dict[str, np.ndarray] = {}
-
     scored_panel_ids: list[tuple[int, str]] = []
     for panel_id, panel_spec in panels.items():
         score_map_id = panel_spec.get("score_map_id")
@@ -478,7 +515,6 @@ def build_scored_panels_tiles_registry(
             map_spec=map_spec,
             tile_store=tile_store,
             maps_root=maps_root,
-            score_cache=score_cache,
         )
         if score > 0:
             scored_panel_ids.append((score, panel_id))
@@ -549,9 +585,17 @@ def _read_score_value(
     map_spec: dict[str, Any],
     tile_store: TileDataStore,
     maps_root: Path,
-    score_cache: dict[str, np.ndarray],
 ) -> int:
-    score_values = score_cache.get(map_id)
+    constant_score = map_spec.get("constant_score")
+    if constant_score is not None:
+        score = int(constant_score)
+        if score < 0:
+            return 0
+        if score > 4:
+            return 4
+        return score
+
+    score_values = None
     grid_id = str(map_spec.get("grid_id") or "")
     if not grid_id:
         source_metric = map_spec.get("source_metric")
@@ -565,16 +609,8 @@ def _read_score_value(
         output = map_spec.get("output", {}) or {}
         binary_name = str(output.get("binary_filename") or f"{map_id}.i16.bin")
         bin_path = maps_root / grid.grid_id / map_id / binary_name
-        if not bin_path.exists():
-            raise FileNotFoundError(f"Missing score map binary: {bin_path}")
-        raw = np.fromfile(bin_path, dtype="<i2")
         expected = grid.nlat * grid.nlon
-        if raw.size != expected:
-            raise ValueError(
-                f"Score map '{map_id}' has invalid size: {raw.size}, expected {expected}"
-            )
-        score_values = raw
-        score_cache[map_id] = score_values
+        score_values = _load_score_map_values_cached(bin_path=bin_path, expected=expected)
 
     cell, _tile = locate_tile(lat, lon, grid)
     idx = cell.i_lat * grid.nlon + cell.i_lon
@@ -584,6 +620,26 @@ def _read_score_value(
     if score > 4:
         return 4
     return score
+
+
+def _load_score_map_values_cached(*, bin_path: Path, expected: int) -> np.ndarray:
+    cache_key = str(bin_path.resolve())
+    with _SCORE_MAP_VALUES_CACHE_LOCK:
+        cached = _SCORE_MAP_VALUES_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+
+    if not bin_path.exists():
+        raise FileNotFoundError(f"Missing score map binary: {bin_path}")
+    raw = np.fromfile(bin_path, dtype="<i2")
+    if raw.size != expected:
+        raise ValueError(
+            f"Score map '{bin_path.name}' has invalid size: {raw.size}, expected {expected}"
+        )
+
+    with _SCORE_MAP_VALUES_CACHE_LOCK:
+        _SCORE_MAP_VALUES_CACHE[cache_key] = raw
+    return raw
 
 
 def _caption_context_from_series(

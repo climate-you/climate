@@ -12,8 +12,8 @@ Next:
 - add animated graphs:
   - zoomout animation
   - no `series` field when animated is on otherwise we have duplicate/conflicting entries
-- keep score maps in memory?
-- score_1_map shouldn't use a metric
+- keep score maps in memory? [done via SCORE_MAP_PRELOAD]
+- score_1_map shouldn't use a metric [done via constant_score]
 
 ---
 
