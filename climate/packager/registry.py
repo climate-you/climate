@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import os
+import re
 import signal
 import threading
 from pathlib import Path
@@ -889,6 +890,28 @@ def _download_batch_daily_stats(
             except Exception:
                 pass
 
+    if not overwrite_download:
+        covering = _find_covering_daily_cache(
+            cache_dir=cache_dir,
+            variable=variable,
+            grid_id=grid.grid_id,
+            tile_range=tile_range,
+            start_year=start_year,
+            end_year=end_year,
+            month_tag=month_tag,
+        )
+        if covering is not None:
+            if debug:
+                print(f"[cache] Reusing larger daily cache: {covering}")
+            _slice_daily_cache_to_tile_batch(
+                src_path=covering,
+                dst_path=dl_path,
+                grid=grid,
+                tile_range=tile_range,
+            )
+            print(f"[cache] Wrote sliced cache: {dl_path}")
+            return dl_path
+
     area_req = tuple(round(coord, 2) for coord in area)
     months_label = "all" if not months else ",".join(months)
     if debug:
@@ -923,6 +946,81 @@ def _download_batch_daily_stats(
         raise
     print(f"Downloaded: {dl_path}")
     return dl_path
+
+
+_DAILY_BATCH_RE = re.compile(
+    r"^era5_daily_(?P<var>.+?)_(?P<grid>[^_]+_[^_]+)_r(?P<r0>\d{3})-(?P<r1>\d{3})_c(?P<c0>\d{3})-(?P<c1>\d{3})$"
+)
+
+
+def _find_covering_daily_cache(
+    *,
+    cache_dir: Path,
+    variable: str,
+    grid_id: str,
+    tile_range: TileRange,
+    start_year: int,
+    end_year: int,
+    month_tag: str,
+) -> Path | None:
+    pattern = (
+        f"era5_daily_{variable}_{grid_id}_r*-*_c*-*"
+        f"/era5_daily_{variable}_{grid_id}_r*-*_c*-*_{start_year}-{end_year}{month_tag}.nc"
+    )
+    best: tuple[int, Path] | None = None
+    for candidate in cache_dir.glob(pattern):
+        parent = candidate.parent.name
+        m = _DAILY_BATCH_RE.match(parent)
+        if m is None:
+            continue
+        r0 = int(m.group("r0"))
+        r1 = int(m.group("r1"))
+        c0 = int(m.group("c0"))
+        c1 = int(m.group("c1"))
+        if (
+            r0 <= tile_range.tile_r0 <= tile_range.tile_r1 <= r1
+            and c0 <= tile_range.tile_c0 <= tile_range.tile_c1 <= c1
+        ):
+            area = (r1 - r0 + 1) * (c1 - c0 + 1)
+            if best is None or area < best[0]:
+                best = (area, candidate)
+    return None if best is None else best[1]
+
+
+def _slice_daily_cache_to_tile_batch(
+    *,
+    src_path: Path,
+    dst_path: Path,
+    grid: GridSpec,
+    tile_range: TileRange,
+) -> None:
+    area, _total_h, _total_w = _compute_batch_bbox(
+        grid,
+        tile_range.tile_r0,
+        tile_range.tile_c0,
+        tile_range.tile_r1,
+        tile_range.tile_c1,
+    )
+    north, west, south, east = area
+    with xr.open_dataset(src_path) as ds:
+        lat_name, lon_name = _find_lat_lon_names(ds)
+        lat = ds[lat_name]
+        lon = ds[lon_name]
+        lat_slice = (
+            slice(north, south)
+            if float(lat.values[0]) >= float(lat.values[-1])
+            else slice(south, north)
+        )
+        lon_slice = (
+            slice(west, east)
+            if float(lon.values[0]) <= float(lon.values[-1])
+            else slice(east, west)
+        )
+        ds_sub = ds.sel({lat_name: lat_slice, lon_name: lon_slice})
+        dst_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dst_path.with_suffix(dst_path.suffix + ".tmp")
+        ds_sub.to_netcdf(tmp)
+        tmp.replace(dst_path)
 
 
 def _download_batch_erddap_daily(
@@ -1214,8 +1312,10 @@ def package_registry(
                 f"download={download_start_year}..{download_end_year}"
             )
 
-        batch_tiles_eff = int(
-            source.get("batch_tiles", batch_tiles if batch_tiles is not None else 1)
+        batch_tiles_eff = (
+            int(batch_tiles)
+            if batch_tiles is not None
+            else int(source.get("batch_tiles", 1))
         )
         n_batches_processed = 0
         download_count = 0
