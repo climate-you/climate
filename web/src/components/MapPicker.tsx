@@ -21,12 +21,19 @@ type DataCell = {
 
 function ClickHandler({
   onPick,
+  onZoomChange,
 }: {
   onPick: (lat: number, lon: number) => void;
+  onZoomChange?: (zoom: number) => void;
 }) {
   useMapEvents({
     click(e) {
       onPick(e.latlng.lat, e.latlng.lng);
+    },
+    zoomend(e) {
+      if (onZoomChange) {
+        onZoomChange(e.target.getZoom());
+      }
     },
   });
   return null;
@@ -88,6 +95,7 @@ function cellBoundsParts(
 
 export default function MapPicker({
   onPick,
+  onZoomChange,
   center = [20, 0],
   zoom = 2,
   picked,
@@ -95,6 +103,7 @@ export default function MapPicker({
   cellCenter,
 }: {
   onPick: (lat: number, lon: number) => void;
+  onZoomChange?: (zoom: number) => void;
   center?: [number, number];
   zoom?: number;
   picked?: PickPoint | null;
@@ -156,7 +165,7 @@ export default function MapPicker({
           />
         ) : null}
 
-        <ClickHandler onPick={onPick} />
+        <ClickHandler onPick={onPick} onZoomChange={onZoomChange} />
       </MapContainer>
     </div>
   );

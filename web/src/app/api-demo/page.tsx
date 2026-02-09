@@ -131,7 +131,6 @@ export default function ApiDemoPage() {
   const [lat, setLat] = useState<number>(-20.32556);
   const [lon, setLon] = useState<number>(57.37056);
   const [mapZoom, setMapZoom] = useState<number>(FIXED_ZOOM);
-  const [forceZoom, setForceZoom] = useState<boolean>(true);
   const [unit, setUnit] = useState<"C" | "F">("C");
   const [panelId, setPanelId] = useState<string>("overview");
   const [resp, setResp] = useState<PanelResponse | null>(null);
@@ -186,7 +185,6 @@ export default function ApiDemoPage() {
     setLat(item.lat);
     setLon(item.lon);
     setMapZoom(FIXED_ZOOM);
-    setForceZoom(true);
     load(item.lat, item.lon);
   }
 
@@ -338,12 +336,12 @@ export default function ApiDemoPage() {
             onPick={(la, lo) => {
               setLat(la);
               setLon(lo);
-              setForceZoom(false);
               load(la, lo);
             }}
+            onZoomChange={(z) => setMapZoom(z)}
             picked={{ lat, lon }}
             center={[lat, lon]}
-            zoom={forceZoom ? mapZoom : undefined}
+            zoom={mapZoom}
             cell={
               cell
                 ? {

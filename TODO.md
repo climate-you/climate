@@ -1,7 +1,6 @@
 Next:
 
 - when toggling the temperature unit, we need to re-send panel query
-- fix zoom when clicking on the map
 - for resolve/autocomplete:
   - Return geonameid only and drop slugs from responses entirely
   - Add a “best match” endpoint for a free‑text query (single request)
