@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MapLibre Globe Demo</title>
+  </head>
+  <body>
+    <main class="app">
+      <div id="map" aria-label="Interactive globe"></div>
+      <aside id="location-panel" class="location-panel" aria-live="polite">
+        <button id="close-panel" class="panel-close" type="button" aria-label="Close panel">x</button>
+        <h2 class="panel-title">Selected Location</h2>
+        <p id="panel-coordinates" class="panel-coordinates">Click the globe to zoom in.</p>
+      </aside>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
