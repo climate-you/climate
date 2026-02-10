@@ -581,6 +581,9 @@ function buildTemperatureOption({
     const isTrend = key.includes("trend");
     const isMean = key.includes("5y") || key.includes("7d");
     const isMonthly = key.includes("monthly");
+    const isDaily = key.includes("daily");
+    const baseColor =
+      isTrend ? "#cccccc" : isMean ? "#1736ff" : isDaily ? "rgba(180,180,180,0.7)" : "#ff2e55";
     const points = data
       .filter((row) => row[key] !== null && row[key] !== undefined)
       .map((row) => [toChartTimestamp(row.x), Number(row[key])]);
@@ -588,18 +591,18 @@ function buildTemperatureOption({
       id: key,
       name: isTrend ? trendLegendLabel(graph, data, key, unit) : keyLabel(key),
       type: "line",
-      color: isTrend ? "#cccccc" : isMean ? "#1736ff" : "#ff2e55",
+      color: baseColor,
       data: points,
       smooth: isTrend ? false : 0.35,
       showSymbol: false,
       connectNulls: true,
       universalTransition: true,
       itemStyle: {
-        color: isTrend ? "#cccccc" : isMean ? "#1736ff" : "#ff2e55",
+        color: baseColor,
       },
       lineStyle: {
-        width: isTrend ? 3 : isMean ? 4 : 3,
-        color: isTrend ? "#cccccc" : isMean ? "#1736ff" : "#ff2e55",
+        width: isTrend ? 3 : isMean ? 4 : isDaily ? 1.5 : 3,
+        color: baseColor,
       },
       areaStyle: isTrend ? { color: "rgba(255, 0, 0, 0.24)" } : undefined,
       animationDuration: isMonthly ? 1200 : 700,

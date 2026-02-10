@@ -8,7 +8,6 @@ Next:
   - era5 is downloaded as whole globe but then sliced, maybe this should be in the datasets/metrics as currently we need to force `--batch-tiles 4` for the packager to read the slices
 - graphs:
   - curve thickness: as thin as before
-  - daily mean in zoomout graph to be grey
   - remove markers/points on curve legend
   - trend line should be behind other curves or transparent, and not grey but pink
   - histograms hover values are wrong
