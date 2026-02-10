@@ -414,6 +414,97 @@ function trendLegendLabel(
   return `Trend: ${sign}${perDecade.toFixed(1)}${suffix}`;
 }
 
+function rollingMeanCentered(
+  values: Array<number | null>,
+  windowSize: number,
+  minPeriods: number,
+): Array<number | null> {
+  if (windowSize <= 1) return [...values];
+  const half = Math.floor(windowSize / 2);
+  const out: Array<number | null> = new Array(values.length).fill(null);
+  for (let i = 0; i < values.length; i++) {
+    let sum = 0;
+    let count = 0;
+    for (let j = Math.max(0, i - half); j <= Math.min(values.length - 1, i + half); j++) {
+      const v = values[j];
+      if (typeof v === "number" && Number.isFinite(v)) {
+        sum += v;
+        count += 1;
+      }
+    }
+    out[i] = count >= minPeriods ? sum / count : null;
+  }
+  return out;
+}
+
+function parseRollingToken(key: string): { token: string; windowSize: number; unit: string } | null {
+  const matches = [...key.matchAll(/(?:^|_)(\d+)([a-z])(?=_|$)/gi)];
+  if (!matches.length) return null;
+  const last = matches[matches.length - 1];
+  const windowSize = Number.parseInt(last[1], 10);
+  const unit = String(last[2] ?? "").toLowerCase();
+  if (!Number.isFinite(windowSize) || windowSize <= 1 || !unit) return null;
+  return { token: `${windowSize}${unit}`, windowSize, unit };
+}
+
+function rollingMinPeriods(windowSize: number, unit: string): number {
+  if (unit === "d") return windowSize;
+  if (unit === "y") return 2;
+  return Math.max(2, Math.ceil(windowSize / 2));
+}
+
+function resolveBaseKeyFromRollingKey(data: ChartRow[], meanKey: string): string | null {
+  const parsed = parseRollingToken(meanKey);
+  if (!parsed) return null;
+  const { token, unit } = parsed;
+  const unitWord: Record<string, string> = {
+    d: "daily",
+    w: "weekly",
+    m: "monthly",
+    y: "yearly",
+  };
+  const mapped = unitWord[unit];
+  const candidates = [
+    meanKey.replace(new RegExp(`_${token}$`, "i"), ""),
+    meanKey.replace(new RegExp(`_${token}_`, "i"), "_"),
+    mapped ? meanKey.replace(new RegExp(`_${token}$`, "i"), `_${mapped}`) : meanKey,
+    mapped ? meanKey.replace(new RegExp(`_${token}_`, "i"), `_${mapped}_`) : meanKey,
+  ];
+  for (const candidate of candidates) {
+    if (
+      candidate !== meanKey &&
+      data.some(
+        (row) =>
+          typeof row[candidate] === "number" &&
+          Number.isFinite(row[candidate] as number),
+      )
+    ) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function deriveMeanFromBase(
+  data: ChartRow[],
+  meanKey: string,
+  rawMeanValues: Array<number | null>,
+): Array<number | null> {
+  const parsed = parseRollingToken(meanKey);
+  if (!parsed) return rawMeanValues;
+  const baseKey = resolveBaseKeyFromRollingKey(data, meanKey);
+  if (!baseKey) return rawMeanValues;
+  const { windowSize, unit } = parsed;
+  const minPeriods = rollingMinPeriods(windowSize, unit);
+
+  const baseValues = data.map((row) => (row[baseKey] as number | null) ?? null);
+  if (!baseValues.some((v) => typeof v === "number" && Number.isFinite(v))) {
+    return rawMeanValues;
+  }
+  const rolled = rollingMeanCentered(baseValues, windowSize, minPeriods);
+  return rawMeanValues.map((v, i) => v ?? rolled[i]);
+}
+
 function buildHotDaysOption({
   graph,
   series,
@@ -437,6 +528,9 @@ function buildHotDaysOption({
 
   const barValues = barKey ? data.map((row) => (row[barKey] as number | null) ?? null) : [];
   const meanValues = meanKey ? data.map((row) => (row[meanKey] as number | null) ?? null) : [];
+  const meanDisplayValues = meanKey
+    ? deriveMeanFromBase(data, meanKey, meanValues)
+    : meanValues;
   const belowMean = barValues.map((v, i) => {
     if (v === null) return null;
     const m = meanValues[i];
@@ -476,7 +570,7 @@ function buildHotDaysOption({
       name: keyLabel(meanKey),
       type: "line",
       color: "#1736ff",
-      data: meanValues,
+      data: meanDisplayValues,
       smooth: 0.35,
       showSymbol: false,
       itemStyle: { color: "#1736ff" },
@@ -591,9 +685,12 @@ function buildTemperatureOption({
         : isDaily
           ? "rgba(180,180,180,0.7)"
           : "#ff2e55";
-    const points = data
-      .filter((row) => row[key] !== null && row[key] !== undefined)
-      .map((row) => [toChartTimestamp(row.x), Number(row[key])]);
+    const rawValues = data.map((row) => (row[key] as number | null) ?? null);
+    const displayValues = isMean ? deriveMeanFromBase(data, key, rawValues) : rawValues;
+    const points = displayValues
+      .map((value, idx) => ({ x: data[idx]?.x, value }))
+      .filter((p): p is { x: string | number; value: number } => typeof p.value === "number")
+      .map((p) => [toChartTimestamp(p.x), p.value]);
     return {
       id: key,
       name: isTrend ? trendLegendLabel(graph, data, key, unit) : keyLabel(key),

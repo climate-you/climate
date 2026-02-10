@@ -10,7 +10,6 @@ Next:
   - histograms hover values are wrong
   - when hovering on hist bar, it only selects one series
   - legend of histogram only show below bar colour
-  - means should cover the whole x axis range
   - minimum y range is different on ºC and ºF
 - mobile version
 
