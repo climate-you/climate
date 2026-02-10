@@ -88,6 +88,17 @@ PYTHONPATH=. pytest -q
 
 ---
 
+Script dependencies (non-stdlib)
+
+- scripts/make_locations.py: requests, scipy (only if --write-kdtree)
+- scripts/build_ocean_mask.py: numpy, fiona, rasterio
+- scripts/packager.py: cdsapi, jsonschema, pillow, xarray, zstandard (dask only if --dask)
+- scripts/redis_monitor.py: redis
+- scripts/tile_coverage.py: numpy, jsonschema, zstandard
+- scripts/validate_all.py: jsonschema
+
+---
+
 Guardian articles:
 URL: https://www.theguardian.com/environment/ng-interactive/2025/dec/18/how-climate-breakdown-is-putting-the-worlds-food-in-peril-in-maps-and-charts
 URL: Wildfires mapped January 2026
