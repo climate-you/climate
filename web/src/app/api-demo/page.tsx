@@ -297,9 +297,23 @@ function keyLabel(key: string): string {
 
 function toChartTimestamp(x: number | string): number {
   if (typeof x === "number" && Number.isFinite(x)) {
-    return new Date(`${Math.trunc(x)}-01-01`).getTime();
+    const n = Math.trunc(x);
+    if (n >= 1000 && n <= 3000) {
+      const t = new Date(`${n}-01-01`).getTime();
+      return Number.isFinite(t) ? t : Date.now();
+    }
+    // Already an epoch timestamp in milliseconds (or close enough for chart use).
+    if (Math.abs(n) >= 1e11) return n;
+    // Epoch seconds fallback.
+    if (Math.abs(n) >= 1e9) return n * 1000;
+    const t = new Date(String(x)).getTime();
+    return Number.isFinite(t) ? t : Date.now();
   }
   const s = String(x);
+  if (/^\d{4}$/.test(s)) {
+    const t = new Date(`${s}-01-01`).getTime();
+    return Number.isFinite(t) ? t : Date.now();
+  }
   if (/^\d{4}-\d{2}$/.test(s)) {
     const t = new Date(`${s}-01`).getTime();
     return Number.isFinite(t) ? t : Date.now();
@@ -730,9 +744,9 @@ function buildTemperatureOption({
   if (allValues.length > 0) {
     const min = Math.min(...allValues);
     const max = Math.max(...allValues);
-const minSpan = unit === "F" ? 3.6 : 2.0;
+    const minSpan = unit === "F" ? 3.6 : 2.0;
     const span = Math.max(max - min, minSpan);
-const pad = span * 0.1;
+    const pad = span * 0.1;
     const center = (min + max) / 2;
     const rawMin = center - span / 2 - pad;
     const rawMax = center + span / 2 + pad;
