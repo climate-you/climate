@@ -7,9 +7,6 @@ Next:
 - for packager:
   - era5 is downloaded as whole globe but then sliced, maybe this should be in the datasets/metrics as currently we need to force `--batch-tiles 4` for the packager to read the slices
 - graphs:
-  - histograms hover values are wrong
-  - when hovering on hist bar, it only selects one series
-  - legend of histogram only show below bar colour
 - mobile version
 
 ---

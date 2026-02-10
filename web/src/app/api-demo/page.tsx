@@ -547,13 +547,13 @@ function buildHotDaysOption({
     : meanValues;
   const belowMean = barValues.map((v, i) => {
     if (v === null) return null;
-    const m = meanValues[i];
+    const m = meanDisplayValues[i];
     if (m === null || m === undefined) return v;
     return Math.min(v, m);
   });
   const aboveMean = barValues.map((v, i) => {
     if (v === null) return null;
-    const m = meanValues[i];
+    const m = meanDisplayValues[i];
     if (m === null || m === undefined) return 0;
     return Math.max(0, v - m);
   });
@@ -566,7 +566,8 @@ function buildHotDaysOption({
       stack: "hot-days",
       data: belowMean,
       itemStyle: { color: "#ccccff" },
-      emphasis: { focus: "series" },
+      emphasis: { focus: "none" },
+      z: 2,
       animationDurationUpdate: transitionMs,
     });
     chartSeries.push({
@@ -575,7 +576,8 @@ function buildHotDaysOption({
       stack: "hot-days",
       data: aboveMean,
       itemStyle: { color: "#ff1744" },
-      emphasis: { focus: "series" },
+      emphasis: { focus: "none" },
+      z: 2,
       animationDurationUpdate: transitionMs,
     });
   }
@@ -589,7 +591,7 @@ function buildHotDaysOption({
       showSymbol: false,
       itemStyle: { color: "#1736ff" },
       lineStyle: { width: 3, color: "#1736ff" },
-      z: 2,
+      z: 3,
       animationDurationUpdate: transitionMs,
     });
   }
@@ -604,7 +606,7 @@ function buildHotDaysOption({
       itemStyle: { color: "rgba(255, 0, 0, 0.24)" },
       lineStyle: { width: 0, color: "rgba(255, 0, 0, 0)" },
       areaStyle: { color: "rgba(255, 0, 0, 0.24)" },
-      z: 1,
+      z: 4,
       animationDurationUpdate: transitionMs,
     });
   }
@@ -619,27 +621,44 @@ function buildHotDaysOption({
       top: 0,
       itemWidth: 30,
       itemHeight: 10,
-      textStyle: { color: "#2d3139", fontSize: 12 },
+      icon: "none",
+      formatter: (name: string) =>
+        name === "Hot days" ? "{cold|■}{hot|■} Hot days" : name,
+      textStyle: {
+        color: "#2d3139",
+        fontSize: 12,
+        rich: {
+          cold: { color: "#ccccff", fontSize: 12, padding: [0, 0, 0, 0] },
+          hot: { color: "#ff1744", fontSize: 12, padding: [0, 4, 0, 1] },
+        },
+      },
     },
     tooltip: {
       trigger: "axis",
+      axisPointer: { type: "shadow" },
       formatter: (params: unknown) => {
         const rows = Array.isArray(params) ? params : [params];
-        const first = (rows[0] ?? {}) as { axisValue?: unknown };
+        const first = (rows[0] ?? {}) as { axisValue?: unknown; dataIndex?: unknown };
         const title = formatAxisTitle(graph, first.axisValue);
-        const grouped = new Map<string, number>();
+        const lines: string[] = [];
+        const idx = Number(first.dataIndex);
+        if (Number.isInteger(idx) && idx >= 0 && idx < barValues.length) {
+          const v = barValues[idx];
+          if (typeof v === "number" && Number.isFinite(v)) {
+            lines.push(`Hot days: ${Math.round(v)}`);
+          }
+        }
+        const extra = new Map<string, number>();
         rows
-          .map((item) => item as { value?: unknown; marker?: string; seriesName?: string })
-          .filter((r) => typeof r.value === "number" && Number.isFinite(r.value))
+          .map((item) => item as { value?: unknown; seriesName?: string })
           .forEach((r) => {
             const label = String(r.seriesName ?? "").trim();
-            if (label.startsWith("Trend")) return;
-            const value = Number(r.value);
-            grouped.set(label, (grouped.get(label) ?? 0) + value);
+            if (!label || label.startsWith("Trend") || label === "Hot days") return;
+            if (typeof r.value === "number" && Number.isFinite(r.value)) {
+              extra.set(label, Number(r.value));
+            }
           });
-        const lines = Array.from(grouped.entries()).map(
-          ([label, value]) => `${label}: ${Math.round(value)}`,
-        );
+        lines.push(...Array.from(extra.entries()).map(([label, value]) => `${label}: ${Math.round(value)}`));
         return [title, ...lines].join("<br/>");
       },
     },
