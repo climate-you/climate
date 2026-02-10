@@ -4,13 +4,8 @@ Next:
   - Return geonameid only and drop slugs from responses entirely
   - Add a “best match” endpoint for a free‑text query (single request)
   - Add prefix‑length + fuzziness tuning knobs to autocomplete
-- for ocean locations, a binary mask of oceans would be the fastest/easiest. The process could become:
-  - check if water cell, then find nearest city, if less than X km, return "<ocean name> off <city>", otherwise return "<ocean name>"
-  - if not water cell, returns nearest city
-    So in both cases, we need to check water cell + nearest city.
-- add animated graphs:
-  - zoomout animation
-  - no `series` field when animated is on otherwise we have duplicate/conflicting entries
+- for packager:
+  - era5 is downloaded as whole globe but then sliced, maybe this should be in the datasets/metrics as currently we need to force `--batch-tiles 4` for the packager to read the slices
 
 ---
 
