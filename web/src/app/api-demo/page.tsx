@@ -344,11 +344,18 @@ function EChartCanvas({
 }
 
 function formatDateLabel(ts: number): string {
+  if (!Number.isFinite(ts) || Math.abs(ts) > 8.64e15) {
+    return "";
+  }
+  const date = new Date(ts);
+  if (!Number.isFinite(date.getTime())) {
+    return "";
+  }
   return new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
     month: "short",
     year: "numeric",
-  }).format(new Date(ts));
+  }).format(date);
 }
 
 function formatAxisTitle(graph: GraphPayload, value: unknown): string {
@@ -359,10 +366,11 @@ function formatAxisTitle(graph: GraphPayload, value: unknown): string {
       Number.isFinite(directYear) && directYear >= 1000 && directYear <= 3000
         ? directYear
         : new Date(toChartTimestamp(value as number | string)).getUTCFullYear();
-    const yearText = Number.isFinite(year) ? String(year) : "";
+    const yearText = Number.isFinite(year) ? String(year) : asString;
     return `Year ${yearText}`;
   }
-  return formatDateLabel(toChartTimestamp(value as number | string));
+  const label = formatDateLabel(toChartTimestamp(value as number | string));
+  return label || asString;
 }
 
 function xAxisTitle(graph: GraphPayload): string {
