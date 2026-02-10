@@ -38,6 +38,11 @@ from .store.tile_data_store import TileDataStore
 logging.getLogger("uvicorn.access").disabled = True
 
 
+def _normalize_lon(lon: float) -> float:
+    # Normalize wrapped-world longitudes (e.g. 359, 529) into [-180, 180).
+    return ((float(lon) + 180.0) % 360.0) - 180.0
+
+
 def _configure_uvicorn_like_access_logger() -> None:
     access_logger = logging.getLogger("uvicorn.access")
     access_logger.setLevel(logging.INFO)
@@ -164,6 +169,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Unknown release: {release}")
 
         try:
+            lon = _normalize_lon(lon)
             panels_manifest = app.state.panels_manifest
             maps_manifest = app.state.maps_manifest
             return build_scored_panels_tiles_registry(
@@ -258,6 +264,7 @@ def create_app() -> FastAPI:
         if release != settings.release and settings.release != "dev":
             raise HTTPException(status_code=404, detail=f"Unknown release: {release}")
 
+        lon = _normalize_lon(lon)
         place = app.state.place_resolver.resolve_place(lat, lon)
         return LocationNearestResponse(
             query=QueryPoint(lat=float(lat), lon=float(lon)),
@@ -281,6 +288,7 @@ def create_app() -> FastAPI:
         if release != settings.release and settings.release != "dev":
             raise HTTPException(status_code=404, detail=f"Unknown release: {release}")
 
+        lon = _normalize_lon(lon)
         resp = build_panel_tiles_registry(
             place_resolver=place_resolver,
             tile_store=tile_store,

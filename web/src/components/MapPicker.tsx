@@ -26,9 +26,11 @@ function ClickHandler({
   onPick: (lat: number, lon: number) => void;
   onZoomChange?: (zoom: number) => void;
 }) {
+  const map = useMap();
   useMapEvents({
     click(e) {
-      onPick(e.latlng.lat, e.latlng.lng);
+      const wrapped = map.wrapLatLng(e.latlng);
+      onPick(wrapped.lat, wrapped.lng);
     },
     zoomend(e) {
       if (onZoomChange) {
