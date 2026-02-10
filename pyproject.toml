@@ -69,5 +69,5 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["climate*", "apps*"]
+include = ["climate*"]
 namespaces = true
