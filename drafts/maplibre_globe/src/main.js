@@ -10,7 +10,7 @@ let selectedLocationMarker;
 
 const initialView = {
   center: [0, 0],
-  zoom: 1.8,
+  zoom: 2.5,
   pitch: 0,
   bearing: 0
 };
@@ -203,7 +203,7 @@ map.on('click', (event) => {
 
   map.flyTo({
     center: [lng, lat],
-    zoom: 4.2,
+    zoom: 5.5,
     pitch: 0,
     bearing: 0,
     padding: getPanelPadding(),
