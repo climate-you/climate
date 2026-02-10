@@ -622,14 +622,18 @@ function buildHotDaysOption({
       itemWidth: 30,
       itemHeight: 10,
       icon: "none",
-      formatter: (name: string) =>
-        name === "Hot days" ? "{cold|■}{hot|■} Hot days" : name,
+      formatter: (name: string) => {
+        if (name === "Hot days") return "{cold|■}{hot|■} Hot days";
+        if (name === "Trend") return "{trend|■} Trend";
+        return name;
+      },
       textStyle: {
         color: "#2d3139",
         fontSize: 12,
         rich: {
-          cold: { color: "#ccccff", fontSize: 12, padding: [0, 0, 0, 0] },
-          hot: { color: "#ff1744", fontSize: 12, padding: [0, 4, 0, 1] },
+          cold: { color: "#ccccff", fontSize: 24, padding: [0, 1, 0, 0] },
+          hot: { color: "#ff1744", fontSize: 24, padding: [0, 8, 0, 1] },
+          trend: { color: "rgba(255, 0, 0, 0.24)", fontSize: 24, padding: [0, 8, 0, 0] },
         },
       },
     },
