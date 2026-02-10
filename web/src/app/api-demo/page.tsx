@@ -480,7 +480,8 @@ function buildHotDaysOption({
       smooth: 0.35,
       showSymbol: false,
       itemStyle: { color: "#1736ff" },
-      lineStyle: { width: 4, color: "#1736ff" },
+      lineStyle: { width: 3, color: "#1736ff" },
+      z: 2,
       animationDurationUpdate: transitionMs,
     });
   }
@@ -495,6 +496,7 @@ function buildHotDaysOption({
       itemStyle: { color: "#cccccc" },
       lineStyle: { width: 3, color: "#cccccc" },
       areaStyle: { color: "rgba(255, 0, 0, 0.24)" },
+      z: 3,
       animationDurationUpdate: transitionMs,
     });
   }
@@ -601,9 +603,10 @@ function buildTemperatureOption({
         color: baseColor,
       },
       lineStyle: {
-        width: isTrend ? 3 : isMean ? 4 : isDaily ? 1.5 : 3,
+        width: isTrend ? 3 : isMean ? 3 : 1.5,
         color: baseColor,
       },
+      z: isTrend ? 3 : isMean ? 2 : 1,
       areaStyle: isTrend ? { color: "rgba(255, 0, 0, 0.24)" } : undefined,
       animationDuration: isMonthly ? 1200 : 700,
       animationDelay: isMonthly ? ((idx: number) => idx * 6) : 0,
