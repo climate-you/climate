@@ -228,7 +228,7 @@ def main() -> None:
     ap.add_argument(
         "--cache-dir",
         type=Path,
-        default=Path("cache/geodata"),
+        default=Path("data/cache/geodata"),
         help='Download cache directory (default: "data/cache/geodata").',
     )
     ap.add_argument(
