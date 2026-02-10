@@ -377,6 +377,35 @@ function yAxisTitle(graph: GraphPayload, unit: "C" | "F"): string {
   return `Temperature (${unit === "F" ? "°F" : "°C"})`;
 }
 
+function trendLegendLabel(
+  graph: GraphPayload,
+  data: ChartRow[],
+  trendKey: string,
+  unit: "C" | "F",
+): string {
+  if (graph.id === "t2m_hot_days" || graph.id === "sst_hot_days") {
+    return "Trend";
+  }
+  const samples = data
+    .map((row) => ({ t: toChartTimestamp(row.x), y: row[trendKey] }))
+    .filter(
+      (p): p is { t: number; y: number } =>
+        Number.isFinite(p.t) && typeof p.y === "number" && Number.isFinite(p.y),
+    )
+    .sort((a, b) => a.t - b.t);
+  if (samples.length < 2) return "Trend";
+
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+  const years = (last.t - first.t) / (1000 * 60 * 60 * 24 * 365.2425);
+  if (!Number.isFinite(years) || years <= 0) return "Trend";
+
+  const perDecade = ((last.y - first.y) / years) * 10;
+  const sign = perDecade >= 0 ? "+" : "";
+  const suffix = `${unit === "F" ? "ºF" : "ºC"}/decade`;
+  return `Trend: ${sign}${perDecade.toFixed(1)}${suffix}`;
+}
+
 function buildHotDaysOption({
   graph,
   series,
@@ -449,7 +478,7 @@ function buildHotDaysOption({
   }
   if (trendKey && isVisible(trendKey)) {
     chartSeries.push({
-      name: keyLabel(trendKey),
+      name: trendLegendLabel(graph, data, trendKey, unit),
       type: "line",
       color: "#cccccc",
       data: data.map((row) => (row[trendKey] as number | null) ?? null),
@@ -486,6 +515,7 @@ function buildHotDaysOption({
           .filter((r) => typeof r.value === "number" && Number.isFinite(r.value))
           .forEach((r) => {
             const label = String(r.seriesName ?? "").trim();
+            if (label.startsWith("Trend")) return;
             const value = Number(r.value);
             grouped.set(label, (grouped.get(label) ?? 0) + value);
           });
@@ -548,7 +578,7 @@ function buildTemperatureOption({
       .map((row) => [toChartTimestamp(row.x), Number(row[key])]);
     return {
       id: key,
-      name: keyLabel(key),
+      name: isTrend ? trendLegendLabel(graph, data, key, unit) : keyLabel(key),
       type: "line",
       color: isTrend ? "#cccccc" : isMean ? "#1736ff" : "#ff2e55",
       data: points,
@@ -621,6 +651,7 @@ function buildTemperatureOption({
           : String(rows[0]?.axisValue ?? "");
         const lines = rows
           .map((item) => item as { value?: unknown; marker?: string; seriesName?: string })
+          .filter((r) => !String(r.seriesName ?? "").startsWith("Trend"))
           .filter((r) => Array.isArray(r.value) && Number.isFinite(Number(r.value[1])))
           .map(
             (r) =>

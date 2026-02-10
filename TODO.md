@@ -10,8 +10,6 @@ Next:
   - curve thickness: as thin as before
   - daily mean in zoomout graph to be grey
   - remove markers/points on curve legend
-  - add trend ratio calculated per decade in legend
-  - remove trend from hover templates
   - trend line should be behind other curves or transparent, and not grey but pink
   - histograms hover values are wrong
   - when hovering on hist bar, it only selects one series
