@@ -501,7 +501,7 @@ function buildHotDaysOption({
       nameTextStyle: { color: "#666b78", fontSize: 13, align: "center", verticalAlign: "top" },
       axisLabel: { color: "#666b78" },
       axisLine: { lineStyle: { color: "#cfd4dd" } },
-      splitLine: { show: true, lineStyle: { color: "#d9dde4" } },
+      splitLine: { show: true, lineStyle: { color: "rgba(200,200,200,0.3)" } },
     },
     yAxis: {
       type: "value",
@@ -512,7 +512,7 @@ function buildHotDaysOption({
       nameTextStyle: { color: "#666b78", fontSize: 13, align: "center", verticalAlign: "middle" },
       axisLabel: { color: "#666b78", formatter: (value: number) => `${Math.round(value)}` },
       minInterval: 1,
-      splitLine: { lineStyle: { color: "#d9dde4" } },
+      splitLine: { lineStyle: { color: "rgba(200,200,200,0.3)" } },
     },
     series: chartSeries,
   };
@@ -632,7 +632,7 @@ function buildTemperatureOption({
       max: xMax,
       axisLabel: { color: "#666b78" },
       axisLine: { lineStyle: { color: "#cfd4dd" } },
-      splitLine: { show: true, lineStyle: { color: "#d9dde4" } },
+      splitLine: { show: true, lineStyle: { color: "rgba(200,200,200,0.3)" } },
     },
     yAxis: {
       type: "value",
@@ -646,7 +646,7 @@ function buildTemperatureOption({
       scale: true,
       min: yMin,
       max: yMax,
-      splitLine: { lineStyle: { color: "#d9dde4" } },
+      splitLine: { lineStyle: { color: "rgba(200,200,200,0.3)" } },
     },
     series: chartSeries,
   };
