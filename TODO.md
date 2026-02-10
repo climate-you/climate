@@ -1,14 +1,22 @@
-Next:
-
-- for resolve/autocomplete:
-  - Add a “best match” endpoint for a free‑text query (single request)
-  - Add prefix‑length + fuzziness tuning knobs to autocomplete
-  - names of Oceans are upper case
-- for packager:
-  - era5 is downloaded as whole globe but then sliced, maybe this should be in the datasets/metrics as currently we need to force `--batch-tiles 4` for the packager to read the slices
-- graphs:
+- Place Resolver:
+  - (needed?) Add a “best match” endpoint for a free‑text query (single request)
+  - (needed?) Add prefix‑length + fuzziness tuning knobs to autocomplete
+  - some names of Oceans are upper case
+  - search for Nordeste flies to "North Atlantic Ocean off Nordeste, Portugal" => ocean map should be finer
+- UI:
+  - Mobile version
+  - Map: don't reset zoom when clicking on map (don't zoom out)
+  - remove "Selected Location: "
+  - fix search bar overlapping home button when window is resized
+  - change scrolling style to snap
+- Graphs:
   - zoomout graph needs work
-- mobile version
+  - support trend with negative temperatures (overlay is above trend)
+- Data Pipeline:
+  - no graph displayed for "Lloydminster, Canada"
+  - no graph displayed for some areas of South Pacific Ocean
+- Packager script:
+  - era5 is downloaded as whole globe but then sliced, maybe this should be in the datasets/metrics as currently we need to force `--batch-tiles 4` for the packager to read the slices
 
 ---
 
