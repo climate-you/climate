@@ -24,6 +24,16 @@
       "paint": { "background-color": "rgba(255, 255, 255, 1)" }
     },
     {
+      "id": "cities",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "landuse",
+      "paint": {
+        "fill-color": "rgba(204, 204, 204, 1)"
+      },
+      "minzoom": 7
+    },
+    {
       "id": "waterway-river",
       "type": "line",
       "source": "openmaptiles",
@@ -642,5 +652,5 @@
       }
     }
   ],
-  "id": "swnlhn1gi"
+  "id": "custom_map"
 }
