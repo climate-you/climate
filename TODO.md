@@ -1,7 +1,6 @@
 Next:
 
 - for resolve/autocomplete:
-  - search bar doesn't clear when selecting a suggested autocomplete
   - Add a “best match” endpoint for a free‑text query (single request)
   - Add prefix‑length + fuzziness tuning knobs to autocomplete
   - Return geonameid only and drop slugs from responses entirely

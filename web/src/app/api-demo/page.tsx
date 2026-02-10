@@ -890,6 +890,7 @@ export default function ApiDemoPage() {
   }
 
   function applyLocation(item: AutocompleteItem) {
+    setSearch("");
     setLat(item.lat);
     setLon(item.lon);
     setMapZoom(FIXED_ZOOM);
