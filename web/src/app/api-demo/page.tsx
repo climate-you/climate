@@ -730,17 +730,14 @@ function buildTemperatureOption({
   if (allValues.length > 0) {
     const min = Math.min(...allValues);
     const max = Math.max(...allValues);
-    const span = Math.max(max - min, 5);
+const minSpan = unit === "F" ? 3.6 : 2.0;
+    const span = Math.max(max - min, minSpan);
+const pad = span * 0.1;
     const center = (min + max) / 2;
-    let lower = Math.floor(center - span / 2);
-    let upper = Math.ceil(center + span / 2);
-    if (upper - lower < 5) {
-      const extra = 5 - (upper - lower);
-      lower -= Math.floor(extra / 2);
-      upper += Math.ceil(extra / 2);
-    }
-    yMin = lower;
-    yMax = upper;
+    const rawMin = center - span / 2 - pad;
+    const rawMax = center + span / 2 + pad;
+    yMin = Math.floor(rawMin);
+    yMax = Math.ceil(rawMax);
   }
 
   return {
