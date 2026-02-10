@@ -31,7 +31,7 @@ const LOCATION_LABEL_KEYWORDS = [
 
 const map = new maplibregl.Map({
   container: 'map',
-  style: 'https://tiles.openfreemap.org/styles/positron',
+  style: '/custom_map.json',
   projection: { type: 'globe' },
   center: initialView.center,
   zoom: initialView.zoom,
