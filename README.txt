@@ -59,6 +59,12 @@ $ streamlit run app/story_demo.py
 6. Run v2 server  
 # Install & Run Redis
 
+# API data prep (locations + ocean labels):
+$ python scripts/make_locations.py --source cities500 --write-index --write-kdtree
+$ python scripts/build_ocean_mask.py
+# Optional tuning:
+# $ export OCEAN_OFF_CITY_MAX_KM=80
+
 # Run FastAPI thin client:
 $ export REDIS_URL='redis://localhost:6379/0'
 # Optional: preload all non-constant score maps into RAM at startup

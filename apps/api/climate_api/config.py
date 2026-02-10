@@ -11,6 +11,9 @@ class Settings:
     locations_csv: Path
     kdtree_path: Optional[Path]
     locations_index_csv: Path
+    ocean_mask_npz: Optional[Path]
+    ocean_names_json: Optional[Path]
+    ocean_off_city_max_km: float
     tiles_series_root: Path
     maps_root: Path
     redis_url: Optional[str]
@@ -57,6 +60,35 @@ def load_settings() -> Settings:
             repo_root / "data" / "locations" / "locations.index.csv",
         )
     )
+    ocean_mask_env = os.environ.get("OCEAN_MASK_NPZ")
+    if ocean_mask_env is not None and ocean_mask_env.strip().lower() in {
+        "",
+        "none",
+        "null",
+        "0",
+        "false",
+    }:
+        ocean_mask_npz = None
+    elif ocean_mask_env:
+        ocean_mask_npz = Path(ocean_mask_env)
+    else:
+        ocean_mask_npz = repo_root / "data" / "locations" / "ocean_mask.npz"
+
+    ocean_names_env = os.environ.get("OCEAN_NAMES_JSON")
+    if ocean_names_env is not None and ocean_names_env.strip().lower() in {
+        "",
+        "none",
+        "null",
+        "0",
+        "false",
+    }:
+        ocean_names_json = None
+    elif ocean_names_env:
+        ocean_names_json = Path(ocean_names_env)
+    else:
+        ocean_names_json = repo_root / "data" / "locations" / "ocean_names.json"
+
+    ocean_off_city_max_km = float(os.environ.get("OCEAN_OFF_CITY_MAX_KM", "80.0"))
     tiles_series_root = Path(
         os.environ.get(
             "TILES_SERIES_ROOT",
@@ -79,6 +111,9 @@ def load_settings() -> Settings:
         locations_csv=locations_csv,
         kdtree_path=kdtree_path,
         locations_index_csv=locations_index_csv,
+        ocean_mask_npz=ocean_mask_npz,
+        ocean_names_json=ocean_names_json,
+        ocean_off_city_max_km=ocean_off_city_max_km,
         tiles_series_root=tiles_series_root,
         maps_root=maps_root,
         redis_url=redis_url,

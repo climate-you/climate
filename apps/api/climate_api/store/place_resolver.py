@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from ..cache import Cache
+from .ocean_classifier import OceanClassifier
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,23 @@ def _haversine_km_vec(
     return 6371.0 * c
 
 
+def _haversine_km_pair(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    rlat1 = math.radians(float(lat1))
+    rlon1 = math.radians(float(lon1))
+    rlat2 = math.radians(float(lat2))
+    rlon2 = math.radians(float(lon2))
+
+    dlat = rlat2 - rlat1
+    dlon = rlon2 - rlon1
+
+    a = (
+        math.sin(dlat / 2.0) ** 2
+        + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlon / 2.0) ** 2
+    )
+    c = 2.0 * math.asin(math.sqrt(a))
+    return 6371.0 * c
+
+
 class PlaceResolver:
     """
     (lat,lon) -> nearest row in locations.csv (for human-friendly labels)
@@ -53,6 +71,8 @@ class PlaceResolver:
         locations_csv: Path,
         *,
         kdtree_path: Path | None = None,
+        ocean_classifier: OceanClassifier | None = None,
+        ocean_off_city_max_km: float = 80.0,
         cache: Cache | None = None,
         ttl_resolve_s: int = 86400,
         round_decimals: int = 2,
@@ -61,6 +81,8 @@ class PlaceResolver:
         self.cache = cache
         self.ttl_resolve_s = int(ttl_resolve_s)
         self.round_decimals = int(round_decimals)
+        self.ocean_classifier = ocean_classifier
+        self.ocean_off_city_max_km = float(ocean_off_city_max_km)
         self._logger = logging.getLogger("uvicorn.error")
 
         df = pd.read_csv(self.locations_csv)
@@ -134,6 +156,11 @@ class PlaceResolver:
             self.locations_csv,
             len(df),
         )
+        if self.ocean_classifier is not None:
+            self._logger.info(
+                "PlaceResolver: ocean labeling enabled (off-city <= %.1f km)",
+                self.ocean_off_city_max_km,
+            )
 
     def resolve_place(self, lat: float, lon: float) -> Place:
         qlat = round(float(lat), self.round_decimals)
@@ -154,7 +181,7 @@ class PlaceResolver:
         if self._kdtree_ready and self._kdtree is not None:
             _, i = self._kdtree.query([lat, lon], k=1)
             i = int(i)
-            dist = 0.0
+            dist = None
         else:
             d = _haversine_km_vec(lat, lon, self._lats, self._lons)
             i = int(np.argmin(d))
@@ -162,16 +189,34 @@ class PlaceResolver:
 
         geonameid = int(self._ids[i])
 
-        label = str(self._labels[i]).strip() if i < len(self._labels) else ""
-        if not label:
-            label = str(geonameid)
+        city_label = str(self._labels[i]).strip() if i < len(self._labels) else ""
+        if not city_label:
+            city_label = str(geonameid)
+
+        label = city_label
+        if self.ocean_classifier is not None:
+            ocean = self.ocean_classifier.classify(lat, lon)
+            if ocean.in_water:
+                if dist is None:
+                    dist = _haversine_km_pair(lat, lon, self._lats[i], self._lons[i])
+                ocean_name = ocean.ocean_name or "Open Ocean"
+                if dist <= self.ocean_off_city_max_km:
+                    label = f"{ocean_name} off {city_label}"
+                else:
+                    label = ocean_name
+            elif dist is None:
+                # Land point with KD-tree: skip distance computation for speed.
+                dist = 0.0
+        elif dist is None:
+            # No ocean classifier configured: keep accurate distance for API payload.
+            dist = _haversine_km_pair(lat, lon, self._lats[i], self._lons[i])
 
         place = Place(
             geonameid=geonameid,
             label=label,
             lat=float(self._lats[i]),
             lon=float(self._lons[i]),
-            distance_km=dist,
+            distance_km=float(dist),
         )
 
         if self.cache is not None:

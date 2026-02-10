@@ -32,6 +32,7 @@ from .logging import configure_access_logger, format_access_line
 
 from .store.place_resolver import PlaceResolver
 from .store.location_index import LocationIndex
+from .store.ocean_classifier import OceanClassifier
 from .store.tile_data_store import TileDataStore
 
 logging.getLogger("uvicorn.access").disabled = True
@@ -66,9 +67,26 @@ def create_app() -> FastAPI:
             "Redis cache disabled (REDIS_URL not set); using in-process cache only."
         )
 
+    ocean_classifier = None
+    if settings.ocean_mask_npz is not None:
+        try:
+            ocean_classifier = OceanClassifier(
+                settings.ocean_mask_npz,
+                settings.ocean_names_json,
+            )
+            uvicorn_logger.info(
+                "Ocean classifier enabled: mask=%s names=%s",
+                settings.ocean_mask_npz,
+                settings.ocean_names_json,
+            )
+        except Exception as e:
+            uvicorn_logger.warning("Ocean classifier disabled: %s", e)
+
     place_resolver = PlaceResolver(
         locations_csv=settings.locations_csv,
         kdtree_path=settings.kdtree_path,
+        ocean_classifier=ocean_classifier,
+        ocean_off_city_max_km=settings.ocean_off_city_max_km,
         cache=cache,
         ttl_resolve_s=settings.ttl_resolve_s,
         round_decimals=2,
