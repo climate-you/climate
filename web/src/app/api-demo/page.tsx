@@ -1,16 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ResponsiveContainer,
-  ComposedChart,
-  Line,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
-} from "recharts";
+import * as echarts from "echarts";
+import type { EChartsOption } from "echarts";
 import dynamic from "next/dynamic";
 
 const MapPicker = dynamic(() => import("@/components/MapPicker"), {
@@ -160,9 +152,21 @@ function mergeSeries(series: Record<string, SeriesPayload>, keys: string[]) {
 }
 
 function parseAxisValue(v: unknown): { numeric?: number; timestamp?: number } {
-  if (typeof v === "number" && Number.isFinite(v)) return { numeric: v };
+  if (typeof v === "number" && Number.isFinite(v)) {
+    if (v >= 1000 && v <= 3000) {
+      const ts = new Date(`${Math.trunc(v)}-01-01`).getTime();
+      return { numeric: v, timestamp: Number.isFinite(ts) ? ts : undefined };
+    }
+    return { numeric: v };
+  }
   const n = Number(v);
-  if (Number.isFinite(n) && String(v).trim() !== "") return { numeric: n };
+  if (Number.isFinite(n) && String(v).trim() !== "") {
+    if (n >= 1000 && n <= 3000) {
+      const ts = new Date(`${Math.trunc(n)}-01-01`).getTime();
+      return { numeric: n, timestamp: Number.isFinite(ts) ? ts : undefined };
+    }
+    return { numeric: n };
+  }
   const t = new Date(String(v)).getTime();
   if (Number.isFinite(t)) return { timestamp: t };
   return {};
@@ -261,36 +265,6 @@ function sliceRowsByTimeRange(rows: ChartRow[], range?: TimeRange): ChartRow[] {
     .map((p) => p.row);
 }
 
-const LINE_COLORS = [
-  "#2563eb",
-  "#dc2626",
-  "#16a34a",
-  "#7c3aed",
-  "#f59e0b",
-  "#0ea5e9",
-  "#db2777",
-  "#65a30d",
-  "#9333ea",
-  "#334155",
-];
-
-function colorForKey(key: string) {
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) {
-    hash = (hash * 31 + key.charCodeAt(i)) | 0;
-  }
-  const idx = Math.abs(hash) % LINE_COLORS.length;
-  return LINE_COLORS[idx];
-}
-
-function axisLabel(label: string | null | undefined, unit: "C" | "F") {
-  if (!label) return undefined;
-  if (unit === "F") {
-    return label.replace("°C", "°F");
-  }
-  return label;
-}
-
 function inBbox(
   lat: number,
   lon: number,
@@ -308,6 +282,374 @@ function inBbox(
   const latOk = lat >= bbox.lat_min && lat <= bbox.lat_max;
   const lonOk = lon >= bbox.lon_min && lon <= bbox.lon_max;
   return latOk && lonOk;
+}
+
+function keyLabel(key: string): string {
+  if (key.includes("hotdays")) return "Hot days";
+  if (key.includes("trend")) return "Trend";
+  if (key.includes("5y")) return "5-year mean";
+  if (key.includes("7d")) return "7-day mean";
+  if (key.includes("daily")) return "Daily mean";
+  if (key.includes("monthly")) return "Monthly mean";
+  if (key.includes("yearly")) return "Yearly mean";
+  return key.replaceAll("_", " ");
+}
+
+function toChartTimestamp(x: number | string): number {
+  if (typeof x === "number" && Number.isFinite(x)) {
+    return new Date(`${Math.trunc(x)}-01-01`).getTime();
+  }
+  const s = String(x);
+  if (/^\d{4}-\d{2}$/.test(s)) {
+    const t = new Date(`${s}-01`).getTime();
+    return Number.isFinite(t) ? t : Date.now();
+  }
+  const t = new Date(s).getTime();
+  return Number.isFinite(t) ? t : Date.now();
+}
+
+function EChartCanvas({
+  option,
+  height = 420,
+}: {
+  option: EChartsOption;
+  height?: number;
+}) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<echarts.ECharts | null>(null);
+
+  useEffect(() => {
+    if (!rootRef.current) return;
+    const chart = echarts.init(rootRef.current);
+    chartRef.current = chart;
+    const observer = new ResizeObserver(() => chart.resize());
+    observer.observe(rootRef.current);
+    return () => {
+      observer.disconnect();
+      chart.dispose();
+      chartRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    chartRef.current.setOption(option, {
+      notMerge: false,
+      replaceMerge: ["series"],
+      lazyUpdate: true,
+    });
+  }, [option]);
+
+  return <div ref={rootRef} style={{ width: "100%", height }} />;
+}
+
+function formatDateLabel(ts: number): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(ts));
+}
+
+function formatAxisTitle(graph: GraphPayload, value: unknown): string {
+  const asString = String(value ?? "");
+  if (graph.id !== "t2m_zoomout") {
+    const directYear = Number.parseInt(asString, 10);
+    const year =
+      Number.isFinite(directYear) && directYear >= 1000 && directYear <= 3000
+        ? directYear
+        : new Date(toChartTimestamp(value as number | string)).getUTCFullYear();
+    const yearText = Number.isFinite(year) ? String(year) : "";
+    return `Year ${yearText}`;
+  }
+  return formatDateLabel(toChartTimestamp(value as number | string));
+}
+
+function xAxisTitle(graph: GraphPayload): string {
+  if (graph.id === "t2m_zoomout") return "Date";
+  return "Year";
+}
+
+function yAxisTitle(graph: GraphPayload, unit: "C" | "F"): string {
+  if (graph.id === "t2m_hot_days" || graph.id === "sst_hot_days") {
+    return "Number of days";
+  }
+  return `Temperature (${unit === "F" ? "°F" : "°C"})`;
+}
+
+function buildHotDaysOption({
+  graph,
+  series,
+  data,
+  visibleKeys,
+  transitionMs,
+  unit,
+}: {
+  graph: GraphPayload;
+  series: Record<string, SeriesPayload>;
+  data: ChartRow[];
+  visibleKeys: string[];
+  transitionMs: number;
+  unit: "C" | "F";
+}): EChartsOption {
+  const xValues = data.map((row) => row.x);
+  const barKey = graph.series_keys.find((k) => series[k]?.style?.type === "bar");
+  const meanKey = graph.series_keys.find((k) => k.includes("5y"));
+  const trendKey = graph.series_keys.find((k) => k.includes("trend"));
+  const isVisible = (key: string | undefined) => Boolean(key && visibleKeys.includes(key));
+
+  const barValues = barKey ? data.map((row) => (row[barKey] as number | null) ?? null) : [];
+  const meanValues = meanKey ? data.map((row) => (row[meanKey] as number | null) ?? null) : [];
+  const belowMean = barValues.map((v, i) => {
+    if (v === null) return null;
+    const m = meanValues[i];
+    if (m === null || m === undefined) return v;
+    return Math.min(v, m);
+  });
+  const aboveMean = barValues.map((v, i) => {
+    if (v === null) return null;
+    const m = meanValues[i];
+    if (m === null || m === undefined) return 0;
+    return Math.max(0, v - m);
+  });
+
+  const chartSeries: NonNullable<EChartsOption["series"]> = [];
+  if (barKey && isVisible(barKey)) {
+    chartSeries.push({
+      name: keyLabel(barKey),
+      type: "bar",
+      stack: "hot-days",
+      data: belowMean,
+      itemStyle: { color: "#ccccff" },
+      emphasis: { focus: "series" },
+      animationDurationUpdate: transitionMs,
+    });
+    chartSeries.push({
+      name: keyLabel(barKey),
+      type: "bar",
+      stack: "hot-days",
+      data: aboveMean,
+      itemStyle: { color: "#ff1744" },
+      emphasis: { focus: "series" },
+      animationDurationUpdate: transitionMs,
+    });
+  }
+  if (meanKey && isVisible(meanKey)) {
+    chartSeries.push({
+      name: keyLabel(meanKey),
+      type: "line",
+      data: meanValues,
+      smooth: 0.35,
+      showSymbol: false,
+      lineStyle: { width: 4, color: "#1736ff" },
+      animationDurationUpdate: transitionMs,
+    });
+  }
+  if (trendKey && isVisible(trendKey)) {
+    chartSeries.push({
+      name: keyLabel(trendKey),
+      type: "line",
+      data: data.map((row) => (row[trendKey] as number | null) ?? null),
+      smooth: false,
+      showSymbol: false,
+      lineStyle: { width: 3, color: "#cccccc" },
+      areaStyle: { color: "rgba(255, 0, 0, 0.24)" },
+      animationDurationUpdate: transitionMs,
+    });
+  }
+
+  return {
+    animationDuration: 700,
+    animationDurationUpdate: transitionMs,
+    animationEasing: "cubicOut",
+    grid: { left: 74, right: 24, top: 36, bottom: 68, containLabel: true },
+    legend: {
+      right: 0,
+      top: 0,
+      itemWidth: 30,
+      itemHeight: 10,
+      textStyle: { color: "#2d3139", fontSize: 12 },
+    },
+    tooltip: {
+      trigger: "axis",
+      formatter: (params: unknown) => {
+        const rows = Array.isArray(params) ? params : [params];
+        const first = (rows[0] ?? {}) as { axisValue?: unknown };
+        const title = formatAxisTitle(graph, first.axisValue);
+        const grouped = new Map<string, number>();
+        rows
+          .map((item) => item as { value?: unknown; marker?: string; seriesName?: string })
+          .filter((r) => typeof r.value === "number" && Number.isFinite(r.value))
+          .forEach((r) => {
+            const label = String(r.seriesName ?? "").trim();
+            const value = Number(r.value);
+            grouped.set(label, (grouped.get(label) ?? 0) + value);
+          });
+        const lines = Array.from(grouped.entries()).map(
+          ([label, value]) => `${label}: ${Math.round(value)}`,
+        );
+        return [title, ...lines].join("<br/>");
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: xValues,
+      name: xAxisTitle(graph),
+      nameLocation: "middle",
+      nameRotate: 0,
+      nameGap: 44,
+      nameTextStyle: { color: "#666b78", fontSize: 13, align: "center", verticalAlign: "top" },
+      axisLabel: { color: "#666b78" },
+      axisLine: { lineStyle: { color: "#cfd4dd" } },
+      splitLine: { show: true, lineStyle: { color: "#d9dde4" } },
+    },
+    yAxis: {
+      type: "value",
+      name: yAxisTitle(graph, unit),
+      nameLocation: "middle",
+      nameRotate: 90,
+      nameGap: 56,
+      nameTextStyle: { color: "#666b78", fontSize: 13, align: "center", verticalAlign: "middle" },
+      axisLabel: { color: "#666b78", formatter: (value: number) => `${Math.round(value)}` },
+      minInterval: 1,
+      splitLine: { lineStyle: { color: "#d9dde4" } },
+    },
+    series: chartSeries,
+  };
+}
+
+function buildTemperatureOption({
+  graph,
+  data,
+  visibleKeys,
+  transitionMs,
+  unit,
+  xMin,
+  xMax,
+}: {
+  graph: GraphPayload;
+  data: ChartRow[];
+  visibleKeys: string[];
+  transitionMs: number;
+  unit: "C" | "F";
+  xMin?: number;
+  xMax?: number;
+}): EChartsOption {
+  const chartSeries: NonNullable<EChartsOption["series"]> = visibleKeys.map((key) => {
+    const isTrend = key.includes("trend");
+    const isMean = key.includes("5y") || key.includes("7d");
+    const isMonthly = key.includes("monthly");
+    const points = data
+      .filter((row) => row[key] !== null && row[key] !== undefined)
+      .map((row) => [toChartTimestamp(row.x), Number(row[key])]);
+    return {
+      id: key,
+      name: keyLabel(key),
+      type: "line",
+      data: points,
+      smooth: isTrend ? false : 0.35,
+      showSymbol: false,
+      connectNulls: true,
+      universalTransition: true,
+      lineStyle: {
+        width: isTrend ? 3 : isMean ? 4 : 3,
+        color: isTrend ? "#cccccc" : isMean ? "#1736ff" : "#ff2e55",
+      },
+      areaStyle: isTrend ? { color: "rgba(255, 0, 0, 0.24)" } : undefined,
+      animationDuration: isMonthly ? 1200 : 700,
+      animationDelay: isMonthly ? ((idx: number) => idx * 6) : 0,
+      animationDurationUpdate: transitionMs,
+      emphasis: { focus: "series" },
+    };
+  });
+
+  const keysForRange = visibleKeys.some((k) => !k.includes("trend"))
+    ? visibleKeys.filter((k) => !k.includes("trend"))
+    : visibleKeys;
+  const allValues = keysForRange.flatMap((key) =>
+    data
+      .map((row) => row[key])
+      .filter((v): v is number => typeof v === "number" && Number.isFinite(v)),
+  );
+  let yMin: number | undefined;
+  let yMax: number | undefined;
+  if (allValues.length > 0) {
+    const min = Math.min(...allValues);
+    const max = Math.max(...allValues);
+    const span = Math.max(max - min, 5);
+    const center = (min + max) / 2;
+    let lower = Math.floor(center - span / 2);
+    let upper = Math.ceil(center + span / 2);
+    if (upper - lower < 5) {
+      const extra = 5 - (upper - lower);
+      lower -= Math.floor(extra / 2);
+      upper += Math.ceil(extra / 2);
+    }
+    yMin = lower;
+    yMax = upper;
+  }
+
+  return {
+    animationDuration: 700,
+    animationDurationUpdate: transitionMs,
+    animationEasing: "cubicOut",
+    grid: { left: 74, right: 24, top: 36, bottom: 68, containLabel: true },
+    legend: {
+      right: 0,
+      top: 0,
+      itemWidth: 30,
+      itemHeight: 10,
+      textStyle: { color: "#2d3139", fontSize: 12 },
+    },
+    tooltip: {
+      trigger: "axis",
+      formatter: (params: unknown) => {
+        const rows = Array.isArray(params) ? params : [params];
+        const first = (rows[0] ?? {}) as { value?: unknown; axisValue?: unknown };
+        const firstValue = Array.isArray(first.value) ? first.value[0] : undefined;
+        const ts = Number(firstValue ?? first.axisValue ?? 0);
+        const title = Number.isFinite(ts)
+          ? formatAxisTitle(graph, ts)
+          : String(rows[0]?.axisValue ?? "");
+        const lines = rows
+          .map((item) => item as { value?: unknown; marker?: string; seriesName?: string })
+          .filter((r) => Array.isArray(r.value) && Number.isFinite(Number(r.value[1])))
+          .map(
+            (r) =>
+              `${r.marker ?? ""} ${r.seriesName ?? ""}: ${Number((r.value as unknown[])[1]).toFixed(1)}${unit === "F" ? "°F" : "°C"}`,
+          );
+        return [title, ...lines].join("<br/>");
+      },
+    },
+    xAxis: {
+      type: "time",
+      name: xAxisTitle(graph),
+      nameLocation: "middle",
+      nameRotate: 0,
+      nameGap: 44,
+      nameTextStyle: { color: "#666b78", fontSize: 13, align: "center", verticalAlign: "top" },
+      min: xMin,
+      max: xMax,
+      axisLabel: { color: "#666b78" },
+      axisLine: { lineStyle: { color: "#cfd4dd" } },
+      splitLine: { show: true, lineStyle: { color: "#d9dde4" } },
+    },
+    yAxis: {
+      type: "value",
+      name: yAxisTitle(graph, unit),
+      nameLocation: "middle",
+      nameRotate: 90,
+      nameGap: 56,
+      nameTextStyle: { color: "#666b78", fontSize: 13, align: "center", verticalAlign: "middle" },
+      axisLabel: { color: "#666b78", formatter: (value: number) => `${Math.round(value)}` },
+      minInterval: 1,
+      scale: true,
+      min: yMin,
+      max: yMax,
+      splitLine: { lineStyle: { color: "#d9dde4" } },
+    },
+    series: chartSeries,
+  };
 }
 
 function GraphCard({
@@ -346,12 +688,66 @@ function GraphCard({
     ? activeStep.series_keys
     : graph.series_keys;
   const activeRange = activeStep?.time_range ?? graph.time_range;
-  const filteredData = useMemo(
+  const rangedData = useMemo(
     () => sliceRowsByTimeRange(data, activeRange),
     [data, activeRange],
   );
+  const filteredData = useMemo(
+    () =>
+      rangedData.filter((row) =>
+        visibleKeys.some((key) => row[key] !== null && row[key] !== undefined),
+      ),
+    [rangedData, visibleKeys],
+  );
   const transitionMs = graph.animation?.transition_ms ?? 900;
-  const activeSet = useMemo(() => new Set(visibleKeys), [visibleKeys]);
+  const isHotDaysChart = graph.id === "t2m_hot_days" || graph.id === "sst_hot_days";
+  const isZoomOutGraph = graph.id === "t2m_zoomout";
+  const allVisibleData = useMemo(
+    () =>
+      data.filter((row) =>
+        visibleKeys.some((key) => row[key] !== null && row[key] !== undefined),
+      ),
+    [data, visibleKeys],
+  );
+  const [xMin, xMax] = useMemo((): [number | undefined, number | undefined] => {
+    const ref = filteredData.length ? filteredData : allVisibleData;
+    if (!ref.length) return [undefined, undefined];
+    const stamps = ref.map((row) => toChartTimestamp(row.x));
+    return [Math.min(...stamps), Math.max(...stamps)];
+  }, [allVisibleData, filteredData]);
+  const option = useMemo(() => {
+    if (isHotDaysChart) {
+      return buildHotDaysOption({
+        graph,
+        series,
+        data: filteredData,
+        visibleKeys,
+        transitionMs,
+        unit,
+      });
+    }
+    return buildTemperatureOption({
+      graph,
+      data: isZoomOutGraph ? allVisibleData : filteredData,
+      visibleKeys,
+      transitionMs,
+      unit,
+      xMin,
+      xMax,
+    });
+  }, [
+    allVisibleData,
+    filteredData,
+    graph,
+    isHotDaysChart,
+    isZoomOutGraph,
+    series,
+    transitionMs,
+    unit,
+    visibleKeys,
+    xMax,
+    xMin,
+  ]);
 
   return (
     <div style={{ marginTop: 12 }}>
@@ -382,77 +778,7 @@ function GraphCard({
         </div>
       ) : null}
 
-      <div style={{ width: "100%", height: 420 }}>
-        <ResponsiveContainer>
-          <ComposedChart
-            data={filteredData}
-            margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
-          >
-            <XAxis
-              dataKey="x"
-              minTickGap={24}
-              label={
-                graph.x_axis_label
-                  ? {
-                      value: graph.x_axis_label,
-                      position: "insideBottom",
-                      offset: -5,
-                    }
-                  : undefined
-              }
-            />
-            <YAxis
-              domain={[
-                (dataMin: number) => Math.floor((dataMin - 0.5) * 10) / 10,
-                (dataMax: number) => Math.ceil((dataMax + 0.5) * 10) / 10,
-              ]}
-              label={
-                graph.y_axis_label
-                  ? {
-                      value: axisLabel(graph.y_axis_label, unit),
-                      angle: -90,
-                      position: "insideLeft",
-                    }
-                  : undefined
-              }
-            />
-            <Tooltip />
-            <Legend />
-
-            {graph.series_keys.map((key) => {
-              const style = series[key]?.style?.type ?? "line";
-              const visible = activeSet.has(key);
-              if (style === "bar") {
-                return (
-                  <Bar
-                    key={key}
-                    dataKey={key}
-                    fill={colorForKey(key)}
-                    opacity={visible ? 0.65 : 0}
-                    isAnimationActive
-                    animationDuration={transitionMs}
-                    animationEasing="ease-in-out"
-                  />
-                );
-              }
-              return (
-                <Line
-                  key={key}
-                  type="monotone"
-                  dataKey={key}
-                  dot={false}
-                  stroke={colorForKey(key)}
-                  strokeOpacity={visible ? 1 : 0}
-                  connectNulls
-                  isAnimationActive
-                  animationDuration={transitionMs}
-                  animationEasing="ease-in-out"
-                />
-              );
-            })}
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
+      <EChartCanvas option={option} height={420} />
 
       {graph.error ? (
         <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>{graph.error}</div>
@@ -799,9 +1125,6 @@ export default function ApiDemoPage() {
             <option value="F">°F</option>
           </select>
         </label>
-        <button onClick={() => load()} style={{ padding: "6px 10px" }}>
-          Load
-        </button>
       </div>
 
       {resp && (
