@@ -1,7 +1,6 @@
 - Place Resolver:
   - (needed?) Add a “best match” endpoint for a free‑text query (single request)
   - (needed?) Add prefix‑length + fuzziness tuning knobs to autocomplete
-  - some names of Oceans are upper case
   - search for Nordeste flies to "North Atlantic Ocean off Nordeste, Portugal" => ocean map should be finer
 - UI:
   - Mobile version

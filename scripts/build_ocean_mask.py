@@ -33,6 +33,13 @@ NATURAL_EARTH_MARINE_POLYS_FALLBACK_URLS = [
 ]
 
 
+def _normalize_ocean_name(name: str) -> str:
+    # Some upstream datasets provide names in all caps; normalize them to title case.
+    if name and name == name.upper():
+        return name.title()
+    return name
+
+
 def _load_ocean_shapes(
     input_path: Path | str,
     *,
@@ -58,7 +65,7 @@ def _load_ocean_shapes(
                 continue
 
             props = feat.get("properties") or {}
-            name = str(props.get(name_field) or "").strip()
+            name = _normalize_ocean_name(str(props.get(name_field) or "").strip())
             if not name:
                 continue
 
