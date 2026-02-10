@@ -94,6 +94,12 @@
       "dtype": "int16"
     }
   },
+  "score_0_map": {
+    "id": "score_0_map",
+    "title": "Score 0 everywhere",
+    "type": "score",
+    "constant_score": 0
+  },
   "score_1_map": {
     "id": "score_1_map",
     "title": "Score 1 everywhere",

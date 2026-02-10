@@ -166,7 +166,7 @@
     },
     "dummy": {
       "title": "Dummy Mixed-Grid Panel",
-      "score_map_id": "score_1_map",
+      "score_map_id": "score_0_map",
       "graphs": [
         {
           "id": "dummy_025",
