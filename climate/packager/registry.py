@@ -45,6 +45,7 @@ from climate.datasets.derive.time_agg import (
     find_time_dim,
     annual_mean_from_monthly,
     annual_mean_from_daily,
+    monthly_mean_from_daily,
 )
 
 
@@ -115,12 +116,12 @@ def _compute_tiles_from_cds_downloads(
     dask_chunk_lat: int,
     dask_chunk_lon: int,
     output_years: list[int],
+    time_axis: str,
 ) -> int:
     agg_fn = _agg_map().get(agg)
     if agg_fn is None:
         raise ValueError(f"Unsupported aggregator: {agg}")
     da_parts: list[xr.DataArray] = []
-    years_parts: list[int] = []
 
     if dataset == ERA5_DAILY_STATS_DATASET and agg == "hot_days_per_year":
         daily_parts_all: list[xr.DataArray] = []
@@ -141,21 +142,13 @@ def _compute_tiles_from_cds_downloads(
                     daily_parts_all.append(da)
                 finally:
                     ds.close()
-            years_parts.extend(years_part)
-
         if debug:
-            print(
-                f"[cds] Concatenating daily parts for years {years_parts[0]}..{years_parts[-1]}"
-            )
+            print("[cds] Concatenating daily parts")
         da_daily = xr.concat(daily_parts_all, dim=find_time_dim(daily_parts_all[0]))
         da_daily = da_daily.sortby(find_time_dim(da_daily))
         if debug:
-            print(
-                f"[cds] Aggregating yearly (daily source, agg={agg}) "
-                f"for years {years_parts[0]}..{years_parts[-1]}"
-            )
-        da_ann = agg_fn(da_daily, params)
-        da_parts.append(da_ann)
+            print(f"[cds] Aggregating {time_axis} (daily source, agg={agg})")
+        da_parts.append(agg_fn(da_daily, params))
     else:
         for years_part, paths in downloads:
             if dataset == ERA5_MONTHLY_MEANS_DATASET:
@@ -174,17 +167,13 @@ def _compute_tiles_from_cds_downloads(
                     da = _apply_postprocess(da, postprocess)
                     if debug:
                         print(
-                            f"[cds] Aggregating yearly (monthly source, agg={agg}) "
+                            f"[cds] Aggregating {time_axis} (monthly source, agg={agg}) "
                             f"for years {years_part[0]}..{years_part[-1]}"
                         )
-                    _append_yearly_part(
-                        da=da,
-                        agg_fn=agg_fn,
-                        params=params,
-                        years_part=years_part,
-                        da_parts=da_parts,
-                        years_parts=years_parts,
-                    )
+                    da_out = agg_fn(da, params)
+                    if "year" in da_out.dims:
+                        da_out = da_out.sel(year=years_part)
+                    da_parts.append(da_out)
                 finally:
                     ds.close()
             else:
@@ -214,22 +203,18 @@ def _compute_tiles_from_cds_downloads(
                 da_daily = da_daily.sortby(find_time_dim(da_daily))
                 if debug:
                     print(
-                        f"[cds] Aggregating yearly (daily source, agg={agg}) "
+                        f"[cds] Aggregating {time_axis} (daily source, agg={agg}) "
                         f"for years {years_part[0]}..{years_part[-1]}"
                     )
-                _append_yearly_part(
-                    da=da_daily,
-                    agg_fn=agg_fn,
-                    params=params,
-                    years_part=years_part,
-                    da_parts=da_parts,
-                    years_parts=years_parts,
-                )
+                da_out = agg_fn(da_daily, params)
+                if "year" in da_out.dims:
+                    da_out = da_out.sel(year=years_part)
+                da_parts.append(da_out)
 
-    written = _concat_and_write_yearly_tiles(
+    written = _concat_and_write_time_tiles(
         da_parts=da_parts,
-        years_parts=years_parts,
         output_years=output_years,
+        time_axis=time_axis,
         out_root=out_root,
         grid=grid,
         metric_id=metric_id,
@@ -241,7 +226,8 @@ def _compute_tiles_from_cds_downloads(
         resume=resume,
     )
     print(
-        f"[cds] Finished writing tiles for batch r{tile_range.tile_r0}-{tile_range.tile_r1} "
+        f"[cds] Finished writing tiles for metric={metric_id} "
+        f"batch r{tile_range.tile_r0}-{tile_range.tile_r1} "
         f"c{tile_range.tile_c0}-{tile_range.tile_c1}"
     )
     return written
@@ -266,12 +252,12 @@ def _compute_tiles_from_erddap_downloads(
     dask_chunk_lat: int,
     dask_chunk_lon: int,
     output_years: list[int],
+    time_axis: str,
 ) -> int:
     agg_fn = _agg_map().get(agg)
     if agg_fn is None:
         raise ValueError(f"Unsupported aggregator: {agg}")
     da_parts: list[xr.DataArray] = []
-    years_parts: list[int] = []
 
     if agg == "hot_days_per_year":
         daily_parts_all: list[xr.DataArray] = []
@@ -294,21 +280,13 @@ def _compute_tiles_from_erddap_downloads(
                     daily_parts_all.append(da)
                 finally:
                     ds.close()
-            years_parts.extend(years_part)
-
         if debug:
-            print(
-                f"[erddap] Concatenating daily parts for years {years_parts[0]}..{years_parts[-1]}"
-            )
+            print("[erddap] Concatenating daily parts")
         da_daily = xr.concat(daily_parts_all, dim=find_time_dim(daily_parts_all[0]))
         da_daily = da_daily.sortby(find_time_dim(da_daily))
         if debug:
-            print(
-                f"[erddap] Aggregating yearly (agg={agg}) "
-                f"for years {years_parts[0]}..{years_parts[-1]}"
-            )
-        da_ann = agg_fn(da_daily, params)
-        da_parts.append(da_ann)
+            print(f"[erddap] Aggregating {time_axis} (agg={agg})")
+        da_parts.append(agg_fn(da_daily, params))
     else:
         for years_part, paths in downloads:
             dl_path = paths[0]
@@ -328,24 +306,20 @@ def _compute_tiles_from_erddap_downloads(
                 da = _apply_postprocess(da, postprocess)
                 if debug:
                     print(
-                        f"[erddap] Aggregating yearly (agg={agg}) "
+                        f"[erddap] Aggregating {time_axis} (agg={agg}) "
                         f"for years {years_part[0]}..{years_part[-1]}"
                     )
-                _append_yearly_part(
-                    da=da,
-                    agg_fn=agg_fn,
-                    params=params,
-                    years_part=years_part,
-                    da_parts=da_parts,
-                    years_parts=years_parts,
-                )
+                da_out = agg_fn(da, params)
+                if "year" in da_out.dims:
+                    da_out = da_out.sel(year=years_part)
+                da_parts.append(da_out)
             finally:
                 ds.close()
 
-    written = _concat_and_write_yearly_tiles(
+    written = _concat_and_write_time_tiles(
         da_parts=da_parts,
-        years_parts=years_parts,
         output_years=output_years,
+        time_axis=time_axis,
         out_root=out_root,
         grid=grid,
         metric_id=metric_id,
@@ -357,7 +331,8 @@ def _compute_tiles_from_erddap_downloads(
         resume=resume,
     )
     print(
-        f"[erddap] Finished writing tiles for batch r{tile_range.tile_r0}-{tile_range.tile_r1} "
+        f"[erddap] Finished writing tiles for metric={metric_id} "
+        f"batch r{tile_range.tile_r0}-{tile_range.tile_r1} "
         f"c{tile_range.tile_c0}-{tile_range.tile_c1}"
     )
     return written
@@ -486,11 +461,11 @@ def _append_yearly_part(
     years_parts.extend(years_part)
 
 
-def _concat_and_write_yearly_tiles(
+def _concat_and_write_time_tiles(
     *,
     da_parts: list[xr.DataArray],
-    years_parts: list[int],
     output_years: list[int],
+    time_axis: str,
     out_root: Path,
     grid: GridSpec,
     metric_id: str,
@@ -503,18 +478,63 @@ def _concat_and_write_yearly_tiles(
 ) -> int:
     if not da_parts:
         raise RuntimeError(f"No data blocks for metric={metric_id}")
-    da_ann = xr.concat(da_parts, dim="year")
-    da_ann = da_ann.sortby("year")
-    try:
-        da_ann = da_ann.sel(year=output_years)
-    except Exception as exc:
+
+    if time_axis == "yearly":
+        da = xr.concat(da_parts, dim="year").sortby("year")
+        try:
+            da = da.sel(year=output_years)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to select requested analysis years for {metric_id}: "
+                f"{output_years[0]}..{output_years[-1]}"
+            ) from exc
+        axis_values: list[object] = [int(v) for v in da["year"].values.tolist()]
+        return _tiles_from_time_da(
+            da=da,
+            axis_values=axis_values,
+            time_dim="year",
+            axis_name="yearly",
+            out_root=out_root,
+            grid=grid,
+            metric_id=metric_id,
+            tile_range=tile_range,
+            dtype=dtype,
+            missing=missing,
+            compression=compression,
+            debug=debug,
+            resume=resume,
+        )
+
+    time_dim = find_time_dim(da_parts[0])
+    da = xr.concat(da_parts, dim=time_dim).sortby(time_dim)
+    years_set = set(int(y) for y in output_years)
+    da = da.where(da[time_dim].dt.year.isin(sorted(years_set)), drop=True)
+    if da.sizes.get(time_dim, 0) == 0:
         raise RuntimeError(
-            f"Failed to select requested analysis years for {metric_id}: "
+            f"No data points remain for {metric_id} after applying analysis years "
             f"{output_years[0]}..{output_years[-1]}"
-        ) from exc
-    return _tiles_from_yearly_da(
-        da_ann=da_ann,
-        years_int=output_years,
+        )
+
+    if time_axis == "monthly":
+        axis_values = [
+            np.datetime_as_string(np.datetime64(v), unit="D")[:7]
+            for v in da[time_dim].values
+        ]
+        axis_name = "monthly"
+    elif time_axis == "daily":
+        axis_values = [
+            np.datetime_as_string(np.datetime64(v), unit="D")
+            for v in da[time_dim].values
+        ]
+        axis_name = "daily"
+    else:
+        raise ValueError(f"Unsupported time_axis for writing tiles: {time_axis}")
+
+    return _tiles_from_time_da(
+        da=da,
+        axis_values=axis_values,
+        time_dim=time_dim,
+        axis_name=axis_name,
         out_root=out_root,
         grid=grid,
         metric_id=metric_id,
@@ -529,7 +549,9 @@ def _concat_and_write_yearly_tiles(
 
 def _agg_map() -> dict[str, callable]:
     return {
+        "identity": lambda da, _params: da,
         "annual_mean_from_monthly": lambda da, _params: annual_mean_from_monthly(da),
+        "monthly_mean_from_daily": lambda da, _params: monthly_mean_from_daily(da),
         "annual_mean_from_daily": lambda da, _params: annual_mean_from_daily(da),
         "hot_days_per_year": lambda da, params: hot_days_per_year_xr(
             da,
@@ -648,10 +670,12 @@ def _resolve_year_ranges(
     return (analysis_start, analysis_end, download_start, download_end)
 
 
-def _tiles_from_yearly_da(
+def _tiles_from_time_da(
     *,
-    da_ann: xr.DataArray,
-    years_int: list[int],
+    da: xr.DataArray,
+    axis_values: list[object],
+    time_dim: str,
+    axis_name: str,
     out_root: Path,
     grid: GridSpec,
     metric_id: str,
@@ -662,8 +686,8 @@ def _tiles_from_yearly_da(
     debug: bool,
     resume: bool,
 ) -> int:
-    years_str = [str(y) for y in years_int]
-    axis_len = len(years_str)
+    axis_len = len(axis_values)
+    write_axis_json(out_root, grid, metric_id, axis_name, axis_values)
     fill_value = normalize_missing_value(missing, dtype)
 
     codec = "zstd"
@@ -679,7 +703,7 @@ def _tiles_from_yearly_da(
     else:
         raise ValueError(f"Unsupported compression codec: {codec}")
 
-    lat_name, lon_name = _find_lat_lon_names(da_ann.to_dataset(name="v"))
+    lat_name, lon_name = _find_lat_lon_names(da.to_dataset(name="v"))
     written = 0
     debug_tiles_printed = 0
 
@@ -690,7 +714,7 @@ def _tiles_from_yearly_da(
             )
 
             tol = grid.deg * 0.51
-            da_tile = da_ann.reindex(
+            da_tile = da.reindex(
                 {lat_name: lats_expected, lon_name: lons_expected},
                 method="nearest",
                 tolerance=tol,
@@ -713,7 +737,7 @@ def _tiles_from_yearly_da(
                     f"lat={max_lat_err:.6f}, lon={max_lon_err:.6f}"
                 )
 
-            arr = da_tile.transpose(lat_name, lon_name, "year").values
+            arr = da_tile.transpose(lat_name, lon_name, time_dim).values
 
             tile = np.full(
                 (grid.tile_size, grid.tile_size, axis_len),
@@ -767,7 +791,7 @@ def _tiles_from_yearly_da(
                 )
 
     if not debug:
-        print(f"Wrote {written} tile(s)")
+        print(f"Wrote {written} tile(s) for metric={metric_id}")
 
     return written
 
@@ -1267,15 +1291,28 @@ def package_registry(
 
         source_type = source.get("type")
 
+        if source_type == "derived":
+            print(
+                f"[metric] skip metric={metric_id} source=derived "
+                "reason=derived packaging is not supported by packager"
+            )
+            continue
+
         agg = source.get("agg")
+        if not agg:
+            raise ValueError(
+                f"Missing aggregator for metric={metric_id} source={source_type}. "
+                "Expected source.agg."
+            )
         agg_fn = _agg_map().get(agg)
         if agg_fn is None:
-            raise ValueError(f"Unsupported aggregator: {agg}")
-
-        if spec.get("time_axis") != "yearly":
             raise ValueError(
-                f"Unsupported time_axis for packager: {spec.get('time_axis')}"
+                f"Unsupported aggregator for metric={metric_id}: {agg}"
             )
+
+        time_axis = str(spec.get("time_axis", "yearly"))
+        if time_axis not in {"yearly", "monthly", "daily"}:
+            raise ValueError(f"Unsupported time_axis for packager: {time_axis}")
 
         tile_size = int(storage.get("tile_size", 64))
         grid = _grid_from_id(spec["grid_id"], tile_size=tile_size)
@@ -1296,17 +1333,13 @@ def package_registry(
             cli_end_year=end_year,
         )
         years_int = list(range(analysis_start_year, analysis_end_year + 1))
-        axis_path = write_axis_json(
-            out_root,
-            grid,
-            metric_id,
-            "yearly",
-            years_int,
+        print(
+            f"[metric] start metric={metric_id} source={source_type} "
+            f"time_axis={time_axis} agg={agg} "
+            f"analysis={analysis_start_year}..{analysis_end_year} "
+            f"download={download_start_year}..{download_end_year}"
         )
         if debug:
-            print(
-                f"Axis: {axis_path} ({years_int[0]}..{years_int[-1]}, n={len(years_int)})"
-            )
             print(
                 f"[range] metric={metric_id} analysis={analysis_start_year}..{analysis_end_year} "
                 f"download={download_start_year}..{download_end_year}"
@@ -1620,6 +1653,7 @@ def package_registry(
                                     dask_chunk_lat=dask_chunk_lat,
                                     dask_chunk_lon=dask_chunk_lon,
                                     output_years=years_int,
+                                    time_axis=time_axis,
                                 )
                             )
                             futures[-1].add_done_callback(_on_future_done)
@@ -1727,6 +1761,7 @@ def package_registry(
                                     dask_chunk_lat=dask_chunk_lat,
                                     dask_chunk_lon=dask_chunk_lon,
                                     output_years=years_int,
+                                    time_axis=time_axis,
                                 )
                             )
                             futures[-1].add_done_callback(_on_future_done)
@@ -1912,6 +1947,7 @@ def package_registry(
                         dask_chunk_lat=dask_chunk_lat,
                         dask_chunk_lon=dask_chunk_lon,
                         output_years=years_int,
+                        time_axis=time_axis,
                     )
 
                     n_batches_processed += 1
@@ -1995,6 +2031,7 @@ def package_registry(
                         dask_chunk_lat=dask_chunk_lat,
                         dask_chunk_lon=dask_chunk_lon,
                         output_years=years_int,
+                        time_axis=time_axis,
                     )
 
                     n_batches_processed += 1
