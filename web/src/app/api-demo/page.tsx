@@ -489,14 +489,14 @@ function buildHotDaysOption({
     chartSeries.push({
       name: trendLegendLabel(graph, data, trendKey, unit),
       type: "line",
-      color: "#cccccc",
+      color: "rgba(255, 0, 0, 0.24)",
       data: data.map((row) => (row[trendKey] as number | null) ?? null),
       smooth: false,
       showSymbol: false,
-      itemStyle: { color: "#cccccc" },
-      lineStyle: { width: 3, color: "#cccccc" },
+      itemStyle: { color: "rgba(255, 0, 0, 0.24)" },
+      lineStyle: { width: 0, color: "rgba(255, 0, 0, 0)" },
       areaStyle: { color: "rgba(255, 0, 0, 0.24)" },
-      z: 3,
+      z: 1,
       animationDurationUpdate: transitionMs,
     });
   }
@@ -584,8 +584,13 @@ function buildTemperatureOption({
     const isMean = key.includes("5y") || key.includes("7d");
     const isMonthly = key.includes("monthly");
     const isDaily = key.includes("daily");
-    const baseColor =
-      isTrend ? "#cccccc" : isMean ? "#1736ff" : isDaily ? "rgba(180,180,180,0.7)" : "#ff2e55";
+    const baseColor = isTrend
+      ? "rgba(255, 0, 0, 0.24)"
+      : isMean
+        ? "#1736ff"
+        : isDaily
+          ? "rgba(180,180,180,0.7)"
+          : "#ff2e55";
     const points = data
       .filter((row) => row[key] !== null && row[key] !== undefined)
       .map((row) => [toChartTimestamp(row.x), Number(row[key])]);
@@ -603,10 +608,10 @@ function buildTemperatureOption({
         color: baseColor,
       },
       lineStyle: {
-        width: isTrend ? 3 : isMean ? 3 : 1.5,
-        color: baseColor,
+        width: isTrend ? 0 : isMean ? 3 : 1.5,
+        color: isTrend ? "rgba(255, 0, 0, 0)" : baseColor,
       },
-      z: isTrend ? 3 : isMean ? 2 : 1,
+      z: isTrend ? 1 : isMean ? 3 : 2,
       areaStyle: isTrend ? { color: "rgba(255, 0, 0, 0.24)" } : undefined,
       animationDuration: isMonthly ? 1200 : 700,
       animationDelay: isMonthly ? ((idx: number) => idx * 6) : 0,

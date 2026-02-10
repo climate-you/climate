@@ -7,9 +7,6 @@ Next:
 - for packager:
   - era5 is downloaded as whole globe but then sliced, maybe this should be in the datasets/metrics as currently we need to force `--batch-tiles 4` for the packager to read the slices
 - graphs:
-  - curve thickness: as thin as before
-  - remove markers/points on curve legend
-  - trend line should be behind other curves or transparent, and not grey but pink
   - histograms hover values are wrong
   - when hovering on hist bar, it only selects one series
   - legend of histogram only show below bar colour
