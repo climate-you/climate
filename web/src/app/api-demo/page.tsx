@@ -3,11 +3,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
-import dynamic from "next/dynamic";
-
-const MapPicker = dynamic(() => import("@/components/MapPicker"), {
-  ssr: false,
-});
+import MapLibreGlobe from "@/components/MapLibreGlobe";
+import styles from "./page.module.css";
 
 type TimeDuration = {
   value: number;
@@ -38,39 +35,17 @@ type SeriesPayload = {
   unit?: string | null;
   style?: { type?: "line" | "bar" } | null;
 };
-type GraphAnnotation = { series_key: string; text: string };
 type GraphPayload = {
   id: string;
   title: string;
   series_keys: string[];
-  annotations?: GraphAnnotation[];
   caption?: string | null;
   error?: string | null;
-  x_axis_label?: string | null;
-  y_axis_label?: string | null;
   time_range?: TimeRange;
   animation?: GraphAnimation;
 };
-type DataCell = {
-  grid: string;
-  deg: number;
-  i_lat: number;
-  i_lon: number;
-  lat_center: number;
-  lon_center: number;
-  lat_min: number;
-  lat_max: number;
-  lon_min: number;
-  lon_max: number;
-  tile_r?: number | null;
-  tile_c?: number | null;
-  o_lat?: number | null;
-  o_lon?: number | null;
-};
 
 type PanelResponse = {
-  release: string;
-  unit: string;
   location: {
     query?: { lat: number; lon: number };
     place: {
@@ -80,7 +55,6 @@ type PanelResponse = {
       lon: number;
       distance_km: number;
     };
-    data_cells?: DataCell[];
     panel_valid_bbox?: {
       lat_min: number;
       lat_max: number;
@@ -105,16 +79,13 @@ type AutocompleteItem = {
   label: string;
   lat: number;
   lon: number;
-  country_code: string;
 };
 
 type AutocompleteResponse = {
-  query: string;
   results: AutocompleteItem[];
 };
 
 type NearestLocationResponse = {
-  query: { lat: number; lon: number };
   result: {
     geonameid: number;
     label?: string | null;
@@ -387,9 +358,8 @@ function formatAxisTitle(graph: GraphPayload, value: unknown): string {
   return label || asString;
 }
 
-function xAxisTitle(graph: GraphPayload): string {
-  if (graph.id === "t2m_zoomout") return "Date";
-  return "Year";
+function xAxisTitle(): string {
+  return "";
 }
 
 function yAxisTitle(graph: GraphPayload, unit: "C" | "F"): string {
@@ -439,7 +409,11 @@ function rollingMeanCentered(
   for (let i = 0; i < values.length; i++) {
     let sum = 0;
     let count = 0;
-    for (let j = Math.max(0, i - half); j <= Math.min(values.length - 1, i + half); j++) {
+    for (
+      let j = Math.max(0, i - half);
+      j <= Math.min(values.length - 1, i + half);
+      j++
+    ) {
       const v = values[j];
       if (typeof v === "number" && Number.isFinite(v)) {
         sum += v;
@@ -451,7 +425,9 @@ function rollingMeanCentered(
   return out;
 }
 
-function parseRollingToken(key: string): { token: string; windowSize: number; unit: string } | null {
+function parseRollingToken(
+  key: string,
+): { token: string; windowSize: number; unit: string } | null {
   const matches = [...key.matchAll(/(?:^|_)(\d+)([a-z])(?=_|$)/gi)];
   if (!matches.length) return null;
   const last = matches[matches.length - 1];
@@ -467,7 +443,10 @@ function rollingMinPeriods(windowSize: number, unit: string): number {
   return Math.max(2, Math.ceil(windowSize / 2));
 }
 
-function resolveBaseKeyFromRollingKey(data: ChartRow[], meanKey: string): string | null {
+function resolveBaseKeyFromRollingKey(
+  data: ChartRow[],
+  meanKey: string,
+): string | null {
   const parsed = parseRollingToken(meanKey);
   if (!parsed) return null;
   const { token, unit } = parsed;
@@ -481,8 +460,12 @@ function resolveBaseKeyFromRollingKey(data: ChartRow[], meanKey: string): string
   const candidates = [
     meanKey.replace(new RegExp(`_${token}$`, "i"), ""),
     meanKey.replace(new RegExp(`_${token}_`, "i"), "_"),
-    mapped ? meanKey.replace(new RegExp(`_${token}$`, "i"), `_${mapped}`) : meanKey,
-    mapped ? meanKey.replace(new RegExp(`_${token}_`, "i"), `_${mapped}_`) : meanKey,
+    mapped
+      ? meanKey.replace(new RegExp(`_${token}$`, "i"), `_${mapped}`)
+      : meanKey,
+    mapped
+      ? meanKey.replace(new RegExp(`_${token}_`, "i"), `_${mapped}_`)
+      : meanKey,
   ];
   for (const candidate of candidates) {
     if (
@@ -535,13 +518,20 @@ function buildHotDaysOption({
   unit: "C" | "F";
 }): EChartsOption {
   const xValues = data.map((row) => row.x);
-  const barKey = graph.series_keys.find((k) => series[k]?.style?.type === "bar");
+  const barKey = graph.series_keys.find(
+    (k) => series[k]?.style?.type === "bar",
+  );
   const meanKey = graph.series_keys.find((k) => k.includes("5y"));
   const trendKey = graph.series_keys.find((k) => k.includes("trend"));
-  const isVisible = (key: string | undefined) => Boolean(key && visibleKeys.includes(key));
+  const isVisible = (key: string | undefined) =>
+    Boolean(key && visibleKeys.includes(key));
 
-  const barValues = barKey ? data.map((row) => (row[barKey] as number | null) ?? null) : [];
-  const meanValues = meanKey ? data.map((row) => (row[meanKey] as number | null) ?? null) : [];
+  const barValues = barKey
+    ? data.map((row) => (row[barKey] as number | null) ?? null)
+    : [];
+  const meanValues = meanKey
+    ? data.map((row) => (row[meanKey] as number | null) ?? null)
+    : [];
   const meanDisplayValues = meanKey
     ? deriveMeanFromBase(data, meanKey, meanValues)
     : meanValues;
@@ -633,7 +623,11 @@ function buildHotDaysOption({
         rich: {
           cold: { color: "#ccccff", fontSize: 24, padding: [0, 1, 0, 0] },
           hot: { color: "#ff1744", fontSize: 24, padding: [0, 8, 0, 1] },
-          trend: { color: "rgba(255, 0, 0, 0.24)", fontSize: 24, padding: [0, 8, 0, 0] },
+          trend: {
+            color: "rgba(255, 0, 0, 0.24)",
+            fontSize: 24,
+            padding: [0, 8, 0, 0],
+          },
         },
       },
     },
@@ -642,7 +636,10 @@ function buildHotDaysOption({
       axisPointer: { type: "shadow" },
       formatter: (params: unknown) => {
         const rows = Array.isArray(params) ? params : [params];
-        const first = (rows[0] ?? {}) as { axisValue?: unknown; dataIndex?: unknown };
+        const first = (rows[0] ?? {}) as {
+          axisValue?: unknown;
+          dataIndex?: unknown;
+        };
         const title = formatAxisTitle(graph, first.axisValue);
         const lines: string[] = [];
         const idx = Number(first.dataIndex);
@@ -657,23 +654,33 @@ function buildHotDaysOption({
           .map((item) => item as { value?: unknown; seriesName?: string })
           .forEach((r) => {
             const label = String(r.seriesName ?? "").trim();
-            if (!label || label.startsWith("Trend") || label === "Hot days") return;
+            if (!label || label.startsWith("Trend") || label === "Hot days")
+              return;
             if (typeof r.value === "number" && Number.isFinite(r.value)) {
               extra.set(label, Number(r.value));
             }
           });
-        lines.push(...Array.from(extra.entries()).map(([label, value]) => `${label}: ${Math.round(value)}`));
+        lines.push(
+          ...Array.from(extra.entries()).map(
+            ([label, value]) => `${label}: ${Math.round(value)}`,
+          ),
+        );
         return [title, ...lines].join("<br/>");
       },
     },
     xAxis: {
       type: "category",
       data: xValues,
-      name: xAxisTitle(graph),
+      name: xAxisTitle(),
       nameLocation: "middle",
       nameRotate: 0,
       nameGap: 44,
-      nameTextStyle: { color: "#666b78", fontSize: 13, align: "center", verticalAlign: "top" },
+      nameTextStyle: {
+        color: "#666b78",
+        fontSize: 13,
+        align: "center",
+        verticalAlign: "top",
+      },
       axisLabel: { color: "#666b78" },
       axisLine: { lineStyle: { color: "#cfd4dd" } },
       splitLine: { show: true, lineStyle: { color: "rgba(200,200,200,0.3)" } },
@@ -684,8 +691,16 @@ function buildHotDaysOption({
       nameLocation: "middle",
       nameRotate: 90,
       nameGap: 56,
-      nameTextStyle: { color: "#666b78", fontSize: 13, align: "center", verticalAlign: "middle" },
-      axisLabel: { color: "#666b78", formatter: (value: number) => `${Math.round(value)}` },
+      nameTextStyle: {
+        color: "#666b78",
+        fontSize: 13,
+        align: "center",
+        verticalAlign: "middle",
+      },
+      axisLabel: {
+        color: "#666b78",
+        formatter: (value: number) => `${Math.round(value)}`,
+      },
       minInterval: 1,
       splitLine: { lineStyle: { color: "rgba(200,200,200,0.3)" } },
     },
@@ -710,49 +725,58 @@ function buildTemperatureOption({
   xMin?: number;
   xMax?: number;
 }): EChartsOption {
-  const chartSeries: NonNullable<EChartsOption["series"]> = visibleKeys.map((key) => {
-    const isTrend = key.includes("trend");
-    const isMean = key.includes("5y") || key.includes("7d");
-    const isMonthly = key.includes("monthly");
-    const isDaily = key.includes("daily");
-    const baseColor = isTrend
-      ? "rgba(255, 0, 0, 0.24)"
-      : isMean
-        ? "#1736ff"
-        : isDaily
-          ? "rgba(180,180,180,0.7)"
-          : "#ff2e55";
-    const rawValues = data.map((row) => (row[key] as number | null) ?? null);
-    const displayValues = isMean ? deriveMeanFromBase(data, key, rawValues) : rawValues;
-    const points = displayValues
-      .map((value, idx) => ({ x: data[idx]?.x, value }))
-      .filter((p): p is { x: string | number; value: number } => typeof p.value === "number")
-      .map((p) => [toChartTimestamp(p.x), p.value]);
-    return {
-      id: key,
-      name: isTrend ? trendLegendLabel(graph, data, key, unit) : keyLabel(key),
-      type: "line",
-      color: baseColor,
-      data: points,
-      smooth: isTrend ? false : 0.35,
-      showSymbol: false,
-      connectNulls: true,
-      universalTransition: true,
-      itemStyle: {
+  const chartSeries: NonNullable<EChartsOption["series"]> = visibleKeys.map(
+    (key) => {
+      const isTrend = key.includes("trend");
+      const isMean = key.includes("5y") || key.includes("7d");
+      const isMonthly = key.includes("monthly");
+      const isDaily = key.includes("daily");
+      const baseColor = isTrend
+        ? "rgba(255, 0, 0, 0.24)"
+        : isMean
+          ? "#1736ff"
+          : isDaily
+            ? "rgba(180,180,180,0.7)"
+            : "#ff2e55";
+      const rawValues = data.map((row) => (row[key] as number | null) ?? null);
+      const displayValues = isMean
+        ? deriveMeanFromBase(data, key, rawValues)
+        : rawValues;
+      const points = displayValues
+        .map((value, idx) => ({ x: data[idx]?.x, value }))
+        .filter(
+          (p): p is { x: string | number; value: number } =>
+            typeof p.value === "number",
+        )
+        .map((p) => [toChartTimestamp(p.x), p.value]);
+      return {
+        id: key,
+        name: isTrend
+          ? trendLegendLabel(graph, data, key, unit)
+          : keyLabel(key),
+        type: "line",
         color: baseColor,
-      },
-      lineStyle: {
-        width: isTrend ? 0 : isMean ? 3 : 1.5,
-        color: isTrend ? "rgba(255, 0, 0, 0)" : baseColor,
-      },
-      z: isTrend ? 1 : isMean ? 3 : 2,
-      areaStyle: isTrend ? { color: "rgba(255, 0, 0, 0.24)" } : undefined,
-      animationDuration: isMonthly ? 1200 : 700,
-      animationDelay: isMonthly ? ((idx: number) => idx * 6) : 0,
-      animationDurationUpdate: transitionMs,
-      emphasis: { focus: "series" },
-    };
-  });
+        data: points,
+        smooth: isTrend ? false : 0.35,
+        showSymbol: false,
+        connectNulls: true,
+        universalTransition: true,
+        itemStyle: {
+          color: baseColor,
+        },
+        lineStyle: {
+          width: isTrend ? 0 : isMean ? 3 : 1.5,
+          color: isTrend ? "rgba(255, 0, 0, 0)" : baseColor,
+        },
+        z: isTrend ? 1 : isMean ? 3 : 2,
+        areaStyle: isTrend ? { color: "rgba(255, 0, 0, 0.24)" } : undefined,
+        animationDuration: isMonthly ? 1200 : 700,
+        animationDelay: isMonthly ? (idx: number) => idx * 6 : 0,
+        animationDurationUpdate: transitionMs,
+        emphasis: { focus: "series" },
+      };
+    },
+  );
 
   const keysForRange = visibleKeys.some((k) => !k.includes("trend"))
     ? visibleKeys.filter((k) => !k.includes("trend"))
@@ -767,14 +791,14 @@ function buildTemperatureOption({
   if (allValues.length > 0) {
     const min = Math.min(...allValues);
     const max = Math.max(...allValues);
-    const minSpan = unit === "F" ? 3.6 : 2.0;
-    const span = Math.max(max - min, minSpan);
-    const pad = span * 0.1;
-    const center = (min + max) / 2;
-    const rawMin = center - span / 2 - pad;
-    const rawMax = center + span / 2 + pad;
-    yMin = Math.floor(rawMin);
-    yMax = Math.ceil(rawMax);
+    // const minSpan = unit === "F" ? 3.6 : 2.0;
+    // const span = Math.max(max - min, minSpan);
+    // const pad = span * 0.1;
+    // const center = (min + max) / 2;
+    // const rawMin = center - span / 2 - pad;
+    // const rawMax = center + span / 2 + pad;
+    yMin = min - 0.2; //Math.floor(min);
+    yMax = max + 0.2; //Math.ceil(max);
   }
 
   return {
@@ -793,16 +817,27 @@ function buildTemperatureOption({
       trigger: "axis",
       formatter: (params: unknown) => {
         const rows = Array.isArray(params) ? params : [params];
-        const first = (rows[0] ?? {}) as { value?: unknown; axisValue?: unknown };
-        const firstValue = Array.isArray(first.value) ? first.value[0] : undefined;
+        const first = (rows[0] ?? {}) as {
+          value?: unknown;
+          axisValue?: unknown;
+        };
+        const firstValue = Array.isArray(first.value)
+          ? first.value[0]
+          : undefined;
         const ts = Number(firstValue ?? first.axisValue ?? 0);
         const title = Number.isFinite(ts)
           ? formatAxisTitle(graph, ts)
           : String(rows[0]?.axisValue ?? "");
         const lines = rows
-          .map((item) => item as { value?: unknown; marker?: string; seriesName?: string })
+          .map(
+            (item) =>
+              item as { value?: unknown; marker?: string; seriesName?: string },
+          )
           .filter((r) => !String(r.seriesName ?? "").startsWith("Trend"))
-          .filter((r) => Array.isArray(r.value) && Number.isFinite(Number(r.value[1])))
+          .filter(
+            (r) =>
+              Array.isArray(r.value) && Number.isFinite(Number(r.value[1])),
+          )
           .map(
             (r) =>
               `${r.seriesName ?? ""}: ${Number((r.value as unknown[])[1]).toFixed(1)}${unit === "F" ? "°F" : "°C"}`,
@@ -812,11 +847,16 @@ function buildTemperatureOption({
     },
     xAxis: {
       type: "time",
-      name: xAxisTitle(graph),
+      name: xAxisTitle(),
       nameLocation: "middle",
       nameRotate: 0,
       nameGap: 44,
-      nameTextStyle: { color: "#666b78", fontSize: 13, align: "center", verticalAlign: "top" },
+      nameTextStyle: {
+        color: "#666b78",
+        fontSize: 13,
+        align: "center",
+        verticalAlign: "top",
+      },
       min: xMin,
       max: xMax,
       axisLabel: { color: "#666b78" },
@@ -829,8 +869,16 @@ function buildTemperatureOption({
       nameLocation: "middle",
       nameRotate: 90,
       nameGap: 56,
-      nameTextStyle: { color: "#666b78", fontSize: 13, align: "center", verticalAlign: "middle" },
-      axisLabel: { color: "#666b78", formatter: (value: number) => `${Math.round(value)}` },
+      nameTextStyle: {
+        color: "#666b78",
+        fontSize: 13,
+        align: "center",
+        verticalAlign: "middle",
+      },
+      axisLabel: {
+        color: "#666b78",
+        formatter: (value: number) => `${Math.round(value)}`,
+      },
       minInterval: 1,
       scale: true,
       min: yMin,
@@ -889,7 +937,8 @@ function GraphCard({
     [rangedData, visibleKeys],
   );
   const transitionMs = graph.animation?.transition_ms ?? 900;
-  const isHotDaysChart = graph.id === "t2m_hot_days" || graph.id === "sst_hot_days";
+  const isHotDaysChart =
+    graph.id === "t2m_hot_days" || graph.id === "sst_hot_days";
   const isZoomOutGraph = graph.id === "t2m_zoomout";
   const allVisibleData = useMemo(
     () =>
@@ -939,26 +988,25 @@ function GraphCard({
   ]);
 
   return (
-    <div style={{ marginTop: 12 }}>
+    <div className={styles.graphCard}>
       {showTitle ? (
-        <h3 style={{ fontSize: 15, fontWeight: 600 }}>{graph.title}</h3>
+        <h3 className={styles.graphTitle}>
+          {graph.title === "Annual temperature"
+            ? "Annual air temperature"
+            : graph.title}
+        </h3>
       ) : null}
       {hasAnimation ? (
-        <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className={styles.stepButtons}>
           {steps.map((step, idx) => {
             const active = idx === stepIndex;
             return (
               <button
                 key={`${graph.id}:${step.id}`}
                 onClick={() => setStepIndex(idx)}
-                style={{
-                  fontSize: 12,
-                  borderRadius: 999,
-                  border: "1px solid rgba(0,0,0,0.2)",
-                  padding: "4px 10px",
-                  background: active ? "rgba(37, 99, 235, 0.12)" : "white",
-                  cursor: "pointer",
-                }}
+                className={`${styles.stepButton} ${
+                  active ? styles.stepButtonActive : ""
+                }`}
               >
                 {step.title ?? step.id}
               </button>
@@ -967,43 +1015,21 @@ function GraphCard({
         </div>
       ) : null}
 
-      <EChartCanvas option={option} height={420} />
+      <EChartCanvas option={option} height={320} />
 
       {graph.error ? (
-        <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>{graph.error}</div>
-      ) : null}
-      {graph.annotations?.length ? (
-        <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>
-          {graph.annotations.map((a) => (
-            <div key={`${graph.id}:${a.series_key}:${a.text}`}>
-              <code>{a.series_key}</code>: {a.text}
-            </div>
-          ))}
-        </div>
+        <div className={styles.graphError}>{graph.error}</div>
       ) : null}
       {graph.caption ? (
-        <div
-          style={{
-            marginTop: 8,
-            padding: 10,
-            border: "1px solid rgba(0,0,0,0.1)",
-            borderRadius: 8,
-            fontSize: 13,
-            opacity: 0.85,
-          }}
-        >
-          {graph.caption}
-        </div>
+        <div className={styles.graphCaption}>{graph.caption}</div>
       ) : null}
     </div>
   );
 }
 
 export default function ApiDemoPage() {
-  const FIXED_ZOOM = 5;
   const [lat, setLat] = useState<number>(-20.32556);
   const [lon, setLon] = useState<number>(57.37056);
-  const [mapZoom, setMapZoom] = useState<number>(FIXED_ZOOM);
   const [unit, setUnit] = useState<"C" | "F">("C");
   const [resp, setResp] = useState<PanelResponse | null>(null);
   const [search, setSearch] = useState<string>("");
@@ -1012,28 +1038,41 @@ export default function ApiDemoPage() {
   const [suggestIndex, setSuggestIndex] = useState<number>(-1);
   const [suggestLoading, setSuggestLoading] = useState<boolean>(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState<boolean>(false);
+  const [picked, setPicked] = useState<{ lat: number; lon: number } | null>(
+    null,
+  );
   const debounceRef = useRef<number | null>(null);
-  const cell = resp?.location?.data_cells?.[0] ?? null;
 
   const panelData = useMemo(() => {
     if (!resp) return [];
     return resp.panels.map((item) => ({
       score: item.score,
       panel: item.panel,
-      graphs: item.panel.graphs.map((graph) => ({
-        graph,
-        data: mergeSeries(
-          resp.series,
-          Array.from(
-            new Set([
-              ...graph.series_keys,
-              ...(graph.animation?.steps ?? []).flatMap(
-                (s) => s.series_keys ?? [],
-              ),
-            ]),
+      graphs: [...item.panel.graphs]
+        .sort((a, b) => {
+          const isAHotDays = a.title === "Hot days per year (air temperature)";
+          const isBHotDays = b.title === "Hot days per year (air temperature)";
+          const isAZoomOut = a.title === "Temperature zoom-out";
+          const isBZoomOut = b.title === "Temperature zoom-out";
+          if (isAHotDays && isBZoomOut) return -1;
+          if (isAZoomOut && isBHotDays) return 1;
+          return 0;
+        })
+        .map((graph) => ({
+          graph,
+          data: mergeSeries(
+            resp.series,
+            Array.from(
+              new Set([
+                ...graph.series_keys,
+                ...(graph.animation?.steps ?? []).flatMap(
+                  (s) => s.series_keys ?? [],
+                ),
+              ]),
+            ),
           ),
-        ),
-      })),
+        })),
     }));
   }, [resp]);
 
@@ -1082,8 +1121,47 @@ export default function ApiDemoPage() {
     setSearch("");
     setLat(item.lat);
     setLon(item.lon);
-    setMapZoom(FIXED_ZOOM);
-    load(item.lat, item.lon);
+    setPicked({ lat: item.lat, lon: item.lon });
+    setPanelOpen(true);
+    void load(item.lat, item.lon);
+  }
+
+  async function handlePick(la: number, lo: number) {
+    setLat(la);
+    setLon(lo);
+    setPicked({ lat: la, lon: lo });
+    setPanelOpen(true);
+
+    try {
+      const bbox = resp?.location?.panel_valid_bbox;
+      if (inBbox(la, lo, bbox)) {
+        const place = await fetchNearestLocation(la, lo);
+        setResp((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            location: {
+              ...prev.location,
+              query: { lat: la, lon: lo },
+              place: {
+                ...prev.location.place,
+                geonameid: place.geonameid,
+                label: place.label ?? null,
+                lat: place.lat,
+                lon: place.lon,
+                distance_km: place.distance_km,
+              },
+            },
+          };
+        });
+        return;
+      }
+      await load(la, lo);
+    } catch (err) {
+      setSuggestError(
+        err instanceof Error ? err.message : "Failed to load location data",
+      );
+    }
   }
 
   useEffect(() => {
@@ -1108,7 +1186,9 @@ export default function ApiDemoPage() {
         setSuggestOpen(true);
         setSuggestIndex(results.length ? 0 : -1);
       } catch (err: unknown) {
-        setSuggestError(err instanceof Error ? err.message : "Autocomplete failed");
+        setSuggestError(
+          err instanceof Error ? err.message : "Autocomplete failed",
+        );
         setSuggestions([]);
         setSuggestOpen(false);
         setSuggestIndex(-1);
@@ -1119,237 +1199,136 @@ export default function ApiDemoPage() {
   }, [search]);
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 20, fontWeight: 700 }}>API Demo</h1>
-      <div
-        style={{
-          marginTop: 12,
-          position: "relative",
-          maxWidth: 520,
-          zIndex: 50,
-        }}
-      >
-        <input
-          placeholder="Search a city (min 3 chars)…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onFocus={() => {
-            if (suggestions.length) setSuggestOpen(true);
+    <main className={styles.app}>
+      <div className={styles.map}>
+        <MapLibreGlobe
+          panelOpen={panelOpen}
+          focusLocation={picked}
+          onPick={(la, lo) => {
+            void handlePick(la, lo);
           }}
-          onKeyDown={async (e) => {
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              setSuggestIndex((i) =>
-                Math.min(i + 1, suggestions.length - 1),
-              );
-            } else if (e.key === "ArrowUp") {
-              e.preventDefault();
-              setSuggestIndex((i) => Math.max(i - 1, 0));
-            } else if (e.key === "Enter") {
-              e.preventDefault();
-              if (suggestIndex >= 0 && suggestions[suggestIndex]) {
-                applyLocation(suggestions[suggestIndex]);
-                setSuggestOpen(false);
-                return;
-              }
-              if (search.trim().length >= 3) {
-                const hit = await resolveByLabel(search.trim());
-                if (hit) {
-                  applyLocation(hit);
-                }
-                setSuggestOpen(false);
-              }
-            } else if (e.key === "Escape") {
-              setSuggestOpen(false);
-            }
-          }}
-          style={{
-            width: "100%",
-            padding: "8px 10px",
-            borderRadius: 8,
-            border: "1px solid rgba(0,0,0,0.2)",
-          }}
+          onHome={() => setPanelOpen(false)}
         />
-        {suggestOpen && suggestions.length > 0 ? (
-          <div
-            style={{
-              position: "absolute",
-              top: "100%",
-              left: 0,
-              right: 0,
-              background: "white",
-              border: "1px solid rgba(0,0,0,0.15)",
-              borderRadius: 8,
-              marginTop: 4,
-              zIndex: 1000,
-              maxHeight: 220,
-              overflowY: "auto",
-              boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
+      </div>
+
+      <div className={styles.searchOverlay}>
+        <div className={styles.searchWrap}>
+          <input
+            className={styles.searchInput}
+            placeholder="Search a city (min 3 chars)..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onFocus={() => {
+              if (suggestions.length) setSuggestOpen(true);
             }}
-          >
-            {suggestions.map((s, i) => (
-              <div
-                key={`${s.geonameid}:${s.label}`}
-                onMouseDown={(evt) => {
-                  evt.preventDefault();
-                  applyLocation(s);
+            onKeyDown={async (e) => {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setSuggestIndex((i) => Math.min(i + 1, suggestions.length - 1));
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setSuggestIndex((i) => Math.max(i - 1, 0));
+              } else if (e.key === "Enter") {
+                e.preventDefault();
+                if (suggestIndex >= 0 && suggestions[suggestIndex]) {
+                  applyLocation(suggestions[suggestIndex]);
                   setSuggestOpen(false);
-                }}
-                onMouseEnter={() => setSuggestIndex(i)}
-                style={{
-                  padding: "8px 10px",
-                  cursor: "pointer",
-                  background:
-                    i === suggestIndex ? "rgba(37, 99, 235, 0.1)" : "white",
-                }}
-              >
-                {s.label}
-              </div>
-            ))}
-          </div>
-        ) : null}
-        {suggestLoading ? (
-          <div style={{ fontSize: 12, opacity: 0.6, marginTop: 4 }}>
-            Searching…
-          </div>
-        ) : null}
-        {suggestError ? (
-          <div style={{ fontSize: 12, color: "#b91c1c", marginTop: 4 }}>
-            {suggestError}
-          </div>
-        ) : null}
-      </div>
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          alignItems: "center",
-          marginTop: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        {/* Map + overlay */}
-        <div style={{ width: 520, maxWidth: "100%" }}>
-          <MapPicker
-            onPick={async (la, lo) => {
-              setLat(la);
-              setLon(lo);
-              const bbox = resp?.location?.panel_valid_bbox;
-              if (inBbox(la, lo, bbox)) {
-                const place = await fetchNearestLocation(la, lo);
-                setResp((prev) => {
-                  if (!prev) return prev;
-                  return {
-                    ...prev,
-                    location: {
-                      ...prev.location,
-                      query: { lat: la, lon: lo },
-                      place: {
-                        ...prev.location.place,
-                        geonameid: place.geonameid,
-                        label: place.label ?? null,
-                        lat: place.lat,
-                        lon: place.lon,
-                        distance_km: place.distance_km,
-                      },
-                    },
-                  };
-                });
-                return;
-              }
-              await load(la, lo);
-            }}
-            onZoomChange={(z) => setMapZoom(z)}
-            picked={{ lat, lon }}
-            center={[lat, lon]}
-            zoom={mapZoom}
-            cell={
-              cell
-                ? {
-                    lat_min: cell.lat_min,
-                    lat_max: cell.lat_max,
-                    lon_min: cell.lon_min,
-                    lon_max: cell.lon_max,
+                  return;
+                }
+                if (search.trim().length >= 3) {
+                  const hit = await resolveByLabel(search.trim());
+                  if (hit) {
+                    applyLocation(hit);
                   }
-                : null
-            }
-            cellCenter={
-              cell ? { lat: cell.lat_center, lon: cell.lon_center } : null
-            }
+                  setSuggestOpen(false);
+                }
+              } else if (e.key === "Escape") {
+                setSuggestOpen(false);
+              }
+            }}
           />
-        </div>
-
-        <div style={{ marginTop: 8, opacity: 0.75 }}>
-          Picked: {lat.toFixed(4)}, {lon.toFixed(4)}
-          {cell ? (
-            <div
-              style={{
-                marginTop: 4,
-                fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                fontSize: 12,
-                opacity: 0.75,
-              }}
-            >
-              cell {cell.grid} deg={cell.deg} i_lat={cell.i_lat} i_lon=
-              {cell.i_lon} tile=r{cell.tile_r ?? "?"} c{cell.tile_c ?? "?"} off=
-              {cell.o_lat ?? "?"},{cell.o_lon ?? "?"} center=(
-              {cell.lat_center.toFixed(4)},{cell.lon_center.toFixed(4)}){" "}
-              bounds=[{cell.lat_min.toFixed(4)}..{cell.lat_max.toFixed(4)},{" "}
-              {cell.lon_min.toFixed(4)}..{cell.lon_max.toFixed(4)}]
+          {suggestOpen && suggestions.length > 0 ? (
+            <div className={styles.suggestionList}>
+              {suggestions.map((s, i) => (
+                <div
+                  key={`${s.geonameid}:${s.label}`}
+                  onMouseDown={(evt) => {
+                    evt.preventDefault();
+                    applyLocation(s);
+                    setSuggestOpen(false);
+                  }}
+                  onMouseEnter={() => setSuggestIndex(i)}
+                  className={`${styles.suggestionItem} ${
+                    i === suggestIndex ? styles.suggestionItemActive : ""
+                  }`}
+                >
+                  {s.label}
+                </div>
+              ))}
             </div>
           ) : null}
+          {suggestLoading ? (
+            <div className={styles.searchStatus}>Searching...</div>
+          ) : null}
+          {suggestError ? (
+            <div className={styles.searchError}>{suggestError}</div>
+          ) : null}
         </div>
-
-        <label>
-          Unit{" "}
-          <select
-            value={unit}
-            onChange={(e) => {
-              const nextUnit = (e.target.value as "C" | "F") ?? "C";
-              if (nextUnit === unit) return;
-              setUnit(nextUnit);
-              void load(lat, lon, nextUnit);
-            }}
-          >
-            <option value="C">°C</option>
-            <option value="F">°F</option>
-          </select>
-        </label>
       </div>
 
-      {resp && (
-        <div style={{ marginTop: 16, opacity: 0.8 }}>
-          Place: {resp.location.place.label ?? "—"} • Panels: {resp.panels.length}
-        </div>
-      )}
-      {panelData.map(({ score, panel, graphs }) => (
-        <div key={panel.id} style={{ marginTop: 18 }}>
-          <h2 style={{ fontSize: 17, fontWeight: 700 }}>
-            {panel.title} (score {score})
-          </h2>
-          {graphs.map(({ graph, data }) => (
-            <GraphCard
-              key={`${panel.id}:${graph.id}:${data.length}`}
-              graph={graph}
-              data={data}
-              series={resp?.series ?? {}}
-              unit={unit}
-            />
-          ))}
-          {panel?.text_md ? (
-            <div
-              style={{
-                marginTop: 12,
-                padding: 12,
-                border: "1px solid rgba(0,0,0,0.1)",
-                borderRadius: 8,
+      <aside
+        className={`${styles.locationPanel} ${panelOpen ? styles.locationPanelOpen : ""}`}
+        aria-live="polite"
+      >
+        <button
+          className={styles.panelClose}
+          type="button"
+          aria-label="Close panel"
+          onClick={() => setPanelOpen(false)}
+        >
+          x
+        </button>
+        <h2 className={styles.panelTitle}>
+          Selected Location
+          {resp?.location.place.label ? `: ${resp.location.place.label}` : ""}
+        </h2>
+
+        <div className={styles.unitControl}>
+          <label className={styles.unitLabel}>
+            Unit{" "}
+            <select
+              className={styles.unitSelect}
+              value={unit}
+              onChange={(e) => {
+                const nextUnit = (e.target.value as "C" | "F") ?? "C";
+                if (nextUnit === unit) return;
+                setUnit(nextUnit);
+                void load(lat, lon, nextUnit);
               }}
             >
-              {panel.text_md}
-            </div>
-          ) : null}
+              <option value="C">°C</option>
+              <option value="F">°F</option>
+            </select>
+          </label>
         </div>
-      ))}
-    </div>
+
+        {panelData.map(({ score, panel, graphs }) => (
+          <section key={panel.id} className={styles.panelSection}>
+            {graphs.map(({ graph, data }) => (
+              <GraphCard
+                key={`${panel.id}:${graph.id}:${data.length}`}
+                graph={graph}
+                data={data}
+                series={resp?.series ?? {}}
+                unit={unit}
+              />
+            ))}
+            {panel?.text_md ? (
+              <div className={styles.panelText}>{panel.text_md}</div>
+            ) : null}
+          </section>
+        ))}
+      </aside>
+    </main>
   );
 }
