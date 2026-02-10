@@ -33,6 +33,45 @@
     },
     "materialize": "on_api"
   },
+  "t2m_monthly_mean_c": {
+    "id": "t2m_monthly_mean_c",
+    "title": "2m temperature monthly mean",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "time_axis": "monthly",
+    "source": {
+      "type": "cds",
+      "dataset_ref": "era5_monthly_t2m",
+      "agg": "identity",
+      "time_range": { "start_year": 1979, "end_year": 2025 }
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
+  "t2m_daily_mean_c": {
+    "id": "t2m_daily_mean_c",
+    "title": "2m temperature daily mean",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "time_axis": "daily",
+    "source": {
+      "type": "cds",
+      "dataset_ref": "era5_daily_t2m",
+      "agg": "identity",
+      "params": {
+        "daily_statistic": "daily_mean"
+      },
+      "time_range": { "start_year": 2021, "end_year": 2025 }
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
   "t2m_hotdays_per_year": {
     "id": "t2m_hotdays_per_year",
     "title": "T2m hot days per year",

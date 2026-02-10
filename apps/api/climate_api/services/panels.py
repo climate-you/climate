@@ -235,10 +235,28 @@ def _series_to_list(y: np.ndarray) -> list[float | None]:
     return out
 
 
-def _series_year_axis(tile_store: TileDataStore, metric: str, length: int) -> list[int]:
+def _axis_to_numeric(v: Any) -> float:
+    if isinstance(v, (int, float)):
+        return float(v)
+    try:
+        return float(v)
+    except Exception:
+        pass
+    try:
+        dt = np.datetime64(str(v))
+        return float(dt.astype("datetime64[s]").astype(np.int64))
+    except Exception:
+        return float("nan")
+
+
+def _series_axis(tile_store: TileDataStore, metric: str, length: int) -> list[Any]:
     axis = tile_store.axis(metric)
     if axis:
-        return [int(v) for v in axis]
+        if len(axis) != length:
+            raise RuntimeError(
+                f"Axis length {len(axis)} != series length {length} for {metric}"
+            )
+        return list(axis)
     return list(
         range(tile_store.start_year_fallback, tile_store.start_year_fallback + length)
     )
@@ -332,18 +350,14 @@ def build_panel_tiles_registry(
                 continue
 
             vec = np.asarray(vec, dtype=np.float32).reshape(-1)
-            axis_years = _series_year_axis(tile_store, metric, vec.size)
-            x = np.asarray(axis_years, dtype=np.int32)
-            if x.size != vec.size:
-                raise RuntimeError(
-                    f"Axis length {x.size} != series length {vec.size} for {metric}"
-                )
+            axis_vals = _series_axis(tile_store, metric, vec.size)
+            x = np.asarray([_axis_to_numeric(v) for v in axis_vals], dtype=np.float64)
 
             y = _apply_transform(x=x, y=vec, transform=series_spec.get("transform"))
             y = _convert_unit(y, series_spec.get("unit"), unit)
 
             series_payload[key] = SeriesPayload(
-                x=[int(v) for v in x.tolist()],
+                x=list(axis_vals),
                 y=_series_to_list(y),
                 unit=unit,
                 style=series_spec.get("style"),
@@ -351,7 +365,8 @@ def build_panel_tiles_registry(
             graph_series_keys.append(key)
 
             if base_series_for_caption is None:
-                base_series_for_caption = (axis_years, y)
+                if all(isinstance(v, (int, np.integer)) for v in axis_vals):
+                    base_series_for_caption = ([int(v) for v in axis_vals], y)
 
             graph_annotations.extend(
                 _build_series_annotations(

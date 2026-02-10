@@ -12,36 +12,6 @@
           "y_axis_label": "Temperature (°C)",
           "caption": { "type": "fn", "fn": "fifty_year_caption", "params": {} },
           "source": "CDS ERA5 2m temperature monthly means (1979-2025)",
-          "animation": {
-            "autoplay": true,
-            "loop": true,
-            "step_duration_ms": 2800,
-            "transition_ms": 900,
-            "steps": [
-              {
-                "id": "last_year",
-                "title": "Last year",
-                "time_range": { "last": { "value": 1, "unit": "years" } },
-                "series_keys": ["t2m_yearly_mean"]
-              },
-              {
-                "id": "last_5_years",
-                "title": "Last 5 years",
-                "time_range": { "last": { "value": 5, "unit": "years" } },
-                "series_keys": ["t2m_yearly_mean", "t2m_yearly_mean_5y"]
-              },
-              {
-                "id": "last_50_years",
-                "title": "Last ~50 years",
-                "time_range": { "last": { "value": 50, "unit": "years" } },
-                "series_keys": [
-                  "t2m_yearly_mean_5y",
-                  "t2m_yearly_mean",
-                  "t2m_yearly_trend"
-                ]
-              }
-            ]
-          },
           "series": [
             {
               "key": "t2m_yearly_mean",
@@ -62,6 +32,80 @@
                 { "type": "min", "label": "Minimum" },
                 { "type": "max", "label": "Maximum" }
               ]
+            },
+            {
+              "key": "t2m_yearly_trend",
+              "metric": "t2m_yearly_mean_c",
+              "label": "Trend",
+              "unit": "C",
+              "transform": { "fn": "linear_trend_line" }
+            }
+          ]
+        },
+        {
+          "id": "t2m_zoomout",
+          "title": "Temperature zoom-out",
+          "x_axis_label": "Date",
+          "y_axis_label": "Temperature (°C)",
+          "source": "CDS ERA5 daily and monthly 2m temperature means",
+          "animation": {
+            "autoplay": false,
+            "loop": false,
+            "step_duration_ms": 2800,
+            "transition_ms": 3000,
+            "steps": [
+              {
+                "id": "last_year",
+                "title": "Last year",
+                "time_range": { "last": { "value": 1, "unit": "years" } },
+                "series_keys": ["t2m_daily_mean", "t2m_daily_mean_7d"]
+              },
+              {
+                "id": "last_5_years",
+                "title": "Last 5 years",
+                "time_range": { "last": { "value": 5, "unit": "years" } },
+                "series_keys": ["t2m_daily_mean_7d", "t2m_monthly_mean"]
+              },
+              {
+                "id": "last_50_years",
+                "title": "Last 50 years",
+                "time_range": { "last": { "value": 50, "unit": "years" } },
+                "series_keys": [
+                  "t2m_monthly_mean",
+                  "t2m_yearly_mean",
+                  "t2m_yearly_trend"
+                ]
+              }
+            ]
+          },
+          "series": [
+            {
+              "key": "t2m_daily_mean",
+              "metric": "t2m_daily_mean_c",
+              "label": "Daily mean",
+              "unit": "C"
+            },
+            {
+              "key": "t2m_daily_mean_7d",
+              "metric": "t2m_daily_mean_c",
+              "label": "7-day mean",
+              "unit": "C",
+              "transform": {
+                "fn": "rolling_mean",
+                "params": { "window": 7, "centered": true }
+              }
+            },
+            {
+              "key": "t2m_monthly_mean",
+              "metric": "t2m_monthly_mean_c",
+              "label": "Monthly mean",
+              "unit": "C"
+            },
+            {
+              "key": "t2m_yearly_mean",
+              "metric": "t2m_yearly_mean_c",
+              "label": "Yearly mean",
+              "unit": "C"
             },
             {
               "key": "t2m_yearly_trend",
