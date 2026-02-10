@@ -438,9 +438,11 @@ function buildHotDaysOption({
     chartSeries.push({
       name: keyLabel(meanKey),
       type: "line",
+      color: "#1736ff",
       data: meanValues,
       smooth: 0.35,
       showSymbol: false,
+      itemStyle: { color: "#1736ff" },
       lineStyle: { width: 4, color: "#1736ff" },
       animationDurationUpdate: transitionMs,
     });
@@ -449,9 +451,11 @@ function buildHotDaysOption({
     chartSeries.push({
       name: keyLabel(trendKey),
       type: "line",
+      color: "#cccccc",
       data: data.map((row) => (row[trendKey] as number | null) ?? null),
       smooth: false,
       showSymbol: false,
+      itemStyle: { color: "#cccccc" },
       lineStyle: { width: 3, color: "#cccccc" },
       areaStyle: { color: "rgba(255, 0, 0, 0.24)" },
       animationDurationUpdate: transitionMs,
@@ -546,11 +550,15 @@ function buildTemperatureOption({
       id: key,
       name: keyLabel(key),
       type: "line",
+      color: isTrend ? "#cccccc" : isMean ? "#1736ff" : "#ff2e55",
       data: points,
       smooth: isTrend ? false : 0.35,
       showSymbol: false,
       connectNulls: true,
       universalTransition: true,
+      itemStyle: {
+        color: isTrend ? "#cccccc" : isMean ? "#1736ff" : "#ff2e55",
+      },
       lineStyle: {
         width: isTrend ? 3 : isMean ? 4 : 3,
         color: isTrend ? "#cccccc" : isMean ? "#1736ff" : "#ff2e55",
@@ -616,7 +624,7 @@ function buildTemperatureOption({
           .filter((r) => Array.isArray(r.value) && Number.isFinite(Number(r.value[1])))
           .map(
             (r) =>
-              `${r.marker ?? ""} ${r.seriesName ?? ""}: ${Number((r.value as unknown[])[1]).toFixed(1)}${unit === "F" ? "°F" : "°C"}`,
+              `${r.seriesName ?? ""}: ${Number((r.value as unknown[])[1]).toFixed(1)}${unit === "F" ? "°F" : "°C"}`,
           );
         return [title, ...lines].join("<br/>");
       },

@@ -9,7 +9,6 @@ Next:
 - graphs:
   - curve thickness: as thin as before
   - daily mean in zoomout graph to be grey
-  - curve+points have different colour
   - remove markers/points on curve legend
   - add trend ratio calculated per decade in legend
   - remove trend from hover templates
