@@ -46,9 +46,6 @@
 }
 
 .panelClose {
-  position: absolute;
-  top: 12px;
-  right: 12px;
   width: 28px;
   height: 28px;
   border: 1px solid #cccccc;
@@ -59,36 +56,60 @@
 }
 
 .panelTitle {
-  margin: 0;
+  margin: 0 0 6px;
   font-size: 1.25rem;
 }
 
-.unitControl {
-  position: absolute;
-  top: 22px;
-  right: 52px;
-}
-
-.unitLabel {
-  display: inline-flex;
+.panelActions {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: flex;
+  justify-content: flex-end;
   align-items: center;
-  gap: 6px;
-  font-size: 14px;
+  gap: 10px;
+  padding: 0 0 8px;
+  background: transparent;
 }
 
-.unitSelect {
+.unitControl {
+  position: static;
+}
+
+.unitToggle {
+  display: inline-flex;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 999px;
+  overflow: hidden;
   background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.2);
-  border-radius: 6px;
-  padding: 4px 8px;
+}
+
+.unitOption {
+  border: 0;
+  background: #ffffff;
+  color: #111111;
+  padding: 4px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.unitOption + .unitOption {
+  border-left: 1px solid rgba(0, 0, 0, 0.18);
+}
+
+.unitOptionActive {
+  background: #111111;
+  color: #ffffff;
 }
 
 .searchOverlay {
   position: absolute;
   top: 10px;
-  left: 110px;
-  width: min(420px, calc(100% - 130px));
+  left: 50px;
+  width: 300px;
   z-index: 4;
+  border-radius: 12px;
+  border: 4px solid #0d0c0c;
 }
 
 .searchWrap {
@@ -221,7 +242,6 @@
   }
 
   .unitControl {
-    top: 18px;
-    right: 52px;
+    position: static;
   }
 }

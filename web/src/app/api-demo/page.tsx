@@ -1280,37 +1280,52 @@ export default function ApiDemoPage() {
         className={`${styles.locationPanel} ${panelOpen ? styles.locationPanelOpen : ""}`}
         aria-live="polite"
       >
-        <button
-          className={styles.panelClose}
-          type="button"
-          aria-label="Close panel"
-          onClick={() => setPanelOpen(false)}
-        >
-          x
-        </button>
+        <div className={styles.panelActions}>
+          <div className={styles.unitControl}>
+            <div className={styles.unitToggle} role="group" aria-label="Unit">
+              <button
+                type="button"
+                className={`${styles.unitOption} ${
+                  unit === "C" ? styles.unitOptionActive : ""
+                }`}
+                aria-pressed={unit === "C"}
+                onClick={() => {
+                  if (unit === "C") return;
+                  setUnit("C");
+                  void load(lat, lon, "C");
+                }}
+              >
+                °C
+              </button>
+              <button
+                type="button"
+                className={`${styles.unitOption} ${
+                  unit === "F" ? styles.unitOptionActive : ""
+                }`}
+                aria-pressed={unit === "F"}
+                onClick={() => {
+                  if (unit === "F") return;
+                  setUnit("F");
+                  void load(lat, lon, "F");
+                }}
+              >
+                °F
+              </button>
+            </div>
+          </div>
+          <button
+            className={styles.panelClose}
+            type="button"
+            aria-label="Close panel"
+            onClick={() => setPanelOpen(false)}
+          >
+            x
+          </button>
+        </div>
         <h2 className={styles.panelTitle}>
           Selected Location
           {resp?.location.place.label ? `: ${resp.location.place.label}` : ""}
         </h2>
-
-        <div className={styles.unitControl}>
-          <label className={styles.unitLabel}>
-            Unit{" "}
-            <select
-              className={styles.unitSelect}
-              value={unit}
-              onChange={(e) => {
-                const nextUnit = (e.target.value as "C" | "F") ?? "C";
-                if (nextUnit === unit) return;
-                setUnit(nextUnit);
-                void load(lat, lon, nextUnit);
-              }}
-            >
-              <option value="C">°C</option>
-              <option value="F">°F</option>
-            </select>
-          </label>
-        </div>
 
         {panelData.map(({ score, panel, graphs }) => (
           <section key={panel.id} className={styles.panelSection}>
