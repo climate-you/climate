@@ -73,6 +73,7 @@ class PlaceResolver:
         kdtree_path: Path | None = None,
         ocean_classifier: OceanClassifier | None = None,
         ocean_off_city_max_km: float = 80.0,
+        ocean_city_override_max_km: float = 2.0,
         cache: Cache | None = None,
         ttl_resolve_s: int = 86400,
         round_decimals: int = 2,
@@ -83,6 +84,7 @@ class PlaceResolver:
         self.round_decimals = int(round_decimals)
         self.ocean_classifier = ocean_classifier
         self.ocean_off_city_max_km = float(ocean_off_city_max_km)
+        self.ocean_city_override_max_km = float(ocean_city_override_max_km)
         self._logger = logging.getLogger("uvicorn.error")
 
         df = pd.read_csv(self.locations_csv)
@@ -158,7 +160,8 @@ class PlaceResolver:
         )
         if self.ocean_classifier is not None:
             self._logger.info(
-                "PlaceResolver: ocean labeling enabled (off-city <= %.1f km)",
+                "PlaceResolver: ocean labeling enabled (city override <= %.1f km, off-city <= %.1f km)",
+                self.ocean_city_override_max_km,
                 self.ocean_off_city_max_km,
             )
 
@@ -199,11 +202,16 @@ class PlaceResolver:
             if ocean.in_water:
                 if dist is None:
                     dist = _haversine_km_pair(lat, lon, self._lats[i], self._lons[i])
-                ocean_name = ocean.ocean_name or "Open Ocean"
-                if dist <= self.ocean_off_city_max_km:
-                    label = f"{ocean_name} off {city_label}"
-                else:
-                    label = ocean_name
+                use_city_override = (
+                    self.ocean_city_override_max_km > 0.0
+                    and dist <= self.ocean_city_override_max_km
+                )
+                if not use_city_override:
+                    ocean_name = ocean.ocean_name or "Open Ocean"
+                    if dist <= self.ocean_off_city_max_km:
+                        label = f"{ocean_name} off {city_label}"
+                    else:
+                        label = ocean_name
             elif dist is None:
                 # Land point with KD-tree: skip distance computation for speed.
                 dist = 0.0

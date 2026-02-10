@@ -92,6 +92,7 @@ def create_app() -> FastAPI:
         kdtree_path=settings.kdtree_path,
         ocean_classifier=ocean_classifier,
         ocean_off_city_max_km=settings.ocean_off_city_max_km,
+        ocean_city_override_max_km=settings.ocean_city_override_max_km,
         cache=cache,
         ttl_resolve_s=settings.ttl_resolve_s,
         round_decimals=2,

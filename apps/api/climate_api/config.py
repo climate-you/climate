@@ -14,6 +14,7 @@ class Settings:
     ocean_mask_npz: Optional[Path]
     ocean_names_json: Optional[Path]
     ocean_off_city_max_km: float
+    ocean_city_override_max_km: float
     tiles_series_root: Path
     maps_root: Path
     redis_url: Optional[str]
@@ -89,6 +90,9 @@ def load_settings() -> Settings:
         ocean_names_json = repo_root / "data" / "locations" / "ocean_names.json"
 
     ocean_off_city_max_km = float(os.environ.get("OCEAN_OFF_CITY_MAX_KM", "80.0"))
+    ocean_city_override_max_km = float(
+        os.environ.get("OCEAN_CITY_OVERRIDE_MAX_KM", "2.0")
+    )
     tiles_series_root = Path(
         os.environ.get(
             "TILES_SERIES_ROOT",
@@ -114,6 +118,7 @@ def load_settings() -> Settings:
         ocean_mask_npz=ocean_mask_npz,
         ocean_names_json=ocean_names_json,
         ocean_off_city_max_km=ocean_off_city_max_km,
+        ocean_city_override_max_km=ocean_city_override_max_km,
         tiles_series_root=tiles_series_root,
         maps_root=maps_root,
         redis_url=redis_url,

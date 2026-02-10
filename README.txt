@@ -63,6 +63,8 @@ $ streamlit run app/story_demo.py
 $ python scripts/make_locations.py --source cities500 --write-index --write-kdtree
 $ python scripts/build_ocean_mask.py
 # Optional tuning:
+# Keep city labels when click is very close to a city, even if ocean mask says water:
+# $ export OCEAN_CITY_OVERRIDE_MAX_KM=2
 # $ export OCEAN_OFF_CITY_MAX_KM=80
 
 # Run FastAPI thin client:
