@@ -79,7 +79,17 @@
       "source-layer": "water",
       "filter": ["==", ["get", "intermittent"], 1],
       "layout": { "visibility": "visible" },
-      "paint": { "fill-color": "hsl(210,67%,85%)", "fill-opacity": 0.7 }
+      "paint": { "fill-color": "rgba(221, 221, 221, 1)", "fill-opacity": 1.0 }
+    },
+    {
+      "id": "coast",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "water",
+      "layout": { "visibility": "visible" },
+      "paint": {
+        "line-color": "rgba(66, 66, 66, 1)"
+      }
     },
     {
       "id": "boundary_3",
@@ -134,7 +144,15 @@
       "paint": {
         "line-color": "rgba(66, 66, 66, 1)",
         "line-dasharray": [1, 2],
-        "line-opacity": ["interpolate", ["linear"], ["zoom"], 3.5, 0, 4.3, 0.85],
+        "line-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          3.5,
+          0,
+          4.3,
+          0.85
+        ],
         "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1, 5, 1.2, 12, 3]
       }
     },
@@ -468,7 +486,7 @@
       "type": "symbol",
       "source": "openmaptiles",
       "source-layer": "place",
-      "minzoom": 3,
+      "minzoom": 3.8,
       "filter": [
         "all",
         ["==", ["get", "class"], "city"],
@@ -504,6 +522,7 @@
       },
       "paint": {
         "text-color": "#000",
+        "text-opacity": ["interpolate", ["linear"], ["zoom"], 3.8, 0, 4.4, 1],
         "text-halo-blur": 1,
         "text-halo-color": "#fff",
         "text-halo-width": 1
@@ -514,7 +533,7 @@
       "type": "symbol",
       "source": "openmaptiles",
       "source-layer": "place",
-      "minzoom": 3,
+      "minzoom": 3.8,
       "filter": [
         "all",
         ["==", ["get", "class"], "city"],
@@ -549,6 +568,7 @@
       },
       "paint": {
         "text-color": "#000",
+        "text-opacity": ["interpolate", ["linear"], ["zoom"], 3.8, 0, 4.4, 1],
         "text-halo-blur": 1,
         "text-halo-color": "#fff",
         "text-halo-width": 1
@@ -646,17 +666,6 @@
         "text-halo-blur": 1,
         "text-halo-color": "#fff",
         "text-halo-width": 1
-      }
-    },
-    {
-      "id": "coast",
-      "type": "line",
-      "source": "openmaptiles",
-      "source-layer": "water",
-      "layout": { "visibility": "visible" },
-      "paint": {
-        "line-color": "rgba(66, 66, 66, 1)",
-        "line-opacity": ["interpolate", ["linear"], ["zoom"], 2.7, 0, 3.4, 1]
       }
     }
   ],
