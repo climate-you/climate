@@ -46,6 +46,7 @@ from climate.datasets.derive.time_agg import (
     annual_mean_from_monthly,
     annual_mean_from_daily,
     monthly_mean_from_daily,
+    climatology_mean_from_monthly,
 )
 
 
@@ -151,7 +152,7 @@ def _compute_tiles_from_cds_downloads(
         da_parts.append(agg_fn(da_daily, params))
     else:
         for years_part, paths in downloads:
-            if dataset == ERA5_MONTHLY_MEANS_DATASET:
+            if _is_cds_monthly_dataset(dataset, params):
                 dl_path = paths[0]
                 if dask_enabled:
                     ds = _open_dataset_dask(
@@ -553,13 +554,30 @@ def _agg_map() -> dict[str, callable]:
         "annual_mean_from_monthly": lambda da, _params: annual_mean_from_monthly(da),
         "monthly_mean_from_daily": lambda da, _params: monthly_mean_from_daily(da),
         "annual_mean_from_daily": lambda da, _params: annual_mean_from_daily(da),
+        "climatology_mean_from_monthly": lambda da, params: climatology_mean_from_monthly(
+            da,
+            start_year=int((params or {}).get("start_year")),
+            end_year=int((params or {}).get("end_year")),
+            label_year=(
+                int((params or {}).get("label_year"))
+                if (params or {}).get("label_year") is not None
+                else None
+            ),
+        ),
         "hot_days_per_year": lambda da, params: hot_days_per_year_xr(
             da,
             baseline_years=int((params or {}).get("baseline_years", 10)),
             percentile=float((params or {}).get("percentile", 90)),
             debug=bool((params or {}).get("_debug", False)),
         ),
-    }
+}
+
+
+def _is_cds_monthly_dataset(dataset: str, params: dict[str, Any] | None) -> bool:
+    if dataset == ERA5_MONTHLY_MEANS_DATASET:
+        return True
+    p = params or {}
+    return str(p.get("cds_cadence", "")).lower() == "monthly"
 
 
 def _year_blocks(
@@ -798,6 +816,7 @@ def _tiles_from_time_da(
 
 def _download_batch_monthly_means(
     *,
+    dataset: str,
     grid: GridSpec,
     cache_dir: Path,
     start_year: int,
@@ -806,6 +825,7 @@ def _download_batch_monthly_means(
     overwrite_download: bool,
     debug: bool,
     variable: str,
+    params: dict[str, Any] | None,
 ) -> Path:
     years_int = list(range(int(start_year), int(end_year) + 1))
     years_str = [str(y) for y in years_int]
@@ -843,23 +863,51 @@ def _download_batch_monthly_means(
 
     if debug:
         print(
-            f"Downloading ERA5 monthly means batch: years={years_str[0]}..{years_str[-1]} "
+            f"Downloading CDS monthly batch ({dataset}): years={years_str[0]}..{years_str[-1]} "
             f"tiles r{tile_range.tile_r0}-{tile_range.tile_r1} c{tile_range.tile_c0}-{tile_range.tile_c1} "
             f"area={area_req} expected_points=({total_h} lat x {total_w} lon) grid={grid.deg}"
         )
     else:
         print(
-            f"Downloading ERA5 monthly means: years={years_str[0]}..{years_str[-1]} "
+            f"Downloading CDS monthly ({dataset}): years={years_str[0]}..{years_str[-1]} "
             f"area={area} grid={grid.deg}"
         )
 
-    req = build_monthly_means_request(
-        years=years_str,
-        grid_deg=float(grid.deg),
-        area=area,
-        variable=variable,
-    )
-    retrieve(ERA5_MONTHLY_MEANS_DATASET, req, dl_path, overwrite=overwrite_download)
+    p = params or {}
+    if dataset == ERA5_MONTHLY_MEANS_DATASET:
+        req = build_monthly_means_request(
+            years=years_str,
+            grid_deg=float(grid.deg),
+            area=area,
+            variable=variable,
+        )
+    else:
+        req = dict(p.get("request_template", {}) or {})
+        variable_field = str(p.get("variable_field", "variable"))
+        year_field = str(p.get("year_field", "year"))
+        month_field = str(p.get("month_field", "month"))
+        months = p.get("months")
+        if not isinstance(months, list) or not months:
+            months = [f"{m:02d}" for m in range(1, 13)]
+
+        req[variable_field] = [variable]
+        req[year_field] = years_str
+        req[month_field] = months
+
+        format_field = p.get("format_field")
+        format_value = p.get("format_value")
+        if isinstance(format_field, str) and format_field:
+            req[format_field] = format_value if format_value is not None else "netcdf"
+
+        if bool(p.get("include_grid", False)):
+            grid_field = str(p.get("grid_field", "grid"))
+            req[grid_field] = [float(grid.deg), float(grid.deg)]
+
+        if bool(p.get("include_area", False)) and area is not None:
+            area_field = str(p.get("area_field", "area"))
+            req[area_field] = [area[0], area[1], area[2], area[3]]
+
+    retrieve(dataset, req, dl_path, overwrite=overwrite_download)
     print(f"Downloaded: {dl_path}")
     return dl_path
 
@@ -1231,6 +1279,17 @@ def package_registry(
         datasets_path=datasets_path,
         validate=True,
     )
+    if metric_ids:
+        known_metric_ids = {
+            key for key in manifest.keys() if key != "version" and isinstance(manifest[key], dict)
+        }
+        unknown_metric_ids = sorted(set(metric_ids) - known_metric_ids)
+        if unknown_metric_ids:
+            raise ValueError(
+                "Unknown metric id(s): "
+                + ", ".join(unknown_metric_ids)
+                + ". Use ids from registry/metrics.json (not registry/datasets.json)."
+            )
     maps_manifest: dict[str, Any] | None = None
     maps_path_eff = Path(maps_path) if maps_path is not None else DEFAULT_MAPS_PATH
     maps_schema_path_eff = (
@@ -1409,7 +1468,8 @@ def package_registry(
                 def _downloads_per_batch() -> int:
                     if source_type == "cds":
                         dataset = source.get("dataset")
-                        if dataset == ERA5_MONTHLY_MEANS_DATASET:
+                        params = source.get("params", {}) or {}
+                        if _is_cds_monthly_dataset(str(dataset), params):
                             block_years = int(
                                 source.get(
                                     "block_years",
@@ -1506,10 +1566,9 @@ def package_registry(
                         if source_type == "cds":
                             cache_dir_eff = cache_dir / "cds"
                             dataset = source.get("dataset")
-                            if dataset not in (
-                                ERA5_MONTHLY_MEANS_DATASET,
-                                ERA5_DAILY_STATS_DATASET,
-                            ):
+                            params = source.get("params", {}) or {}
+                            is_monthly_cds = _is_cds_monthly_dataset(str(dataset), params)
+                            if not is_monthly_cds and dataset != ERA5_DAILY_STATS_DATASET:
                                 raise ValueError(f"Unsupported CDS dataset: {dataset}")
 
                             variable = source.get("variable")
@@ -1546,10 +1605,9 @@ def package_registry(
                                     f"No valid CDS blocks for {download_start_year}-{download_end_year}"
                                 )
 
-                            params = source.get("params", {}) or {}
                             downloads: list[tuple[list[int], list[Path]]] = []
                             for _start_date, _end_date, years_part in blocks:
-                                if dataset == ERA5_MONTHLY_MEANS_DATASET:
+                                if is_monthly_cds:
                                     if (
                                         max_requests is not None
                                         and download_count >= int(max_requests)
@@ -1560,6 +1618,7 @@ def package_registry(
                                         stop_downloads = True
                                         break
                                     dl_path = _download_batch_monthly_means(
+                                        dataset=str(dataset),
                                         grid=grid,
                                         cache_dir=cache_dir_eff,
                                         start_year=years_part[0],
@@ -1568,6 +1627,7 @@ def package_registry(
                                         overwrite_download=overwrite_download,
                                         debug=debug,
                                         variable=variable,
+                                        params=params,
                                     )
                                     download_count += 1
                                     with counters_lock:
@@ -1834,10 +1894,9 @@ def package_registry(
                 if source_type == "cds":
                     cache_dir_eff = cache_dir / "cds"
                     dataset = source.get("dataset")
-                    if dataset not in (
-                        ERA5_MONTHLY_MEANS_DATASET,
-                        ERA5_DAILY_STATS_DATASET,
-                    ):
+                    params = source.get("params", {}) or {}
+                    is_monthly_cds = _is_cds_monthly_dataset(str(dataset), params)
+                    if not is_monthly_cds and dataset != ERA5_DAILY_STATS_DATASET:
                         raise ValueError(f"Unsupported CDS dataset: {dataset}")
 
                     variable = source.get("variable")
@@ -1871,12 +1930,11 @@ def package_registry(
                             f"No valid CDS blocks for {download_start_year}-{download_end_year}"
                         )
 
-                    params = source.get("params", {}) or {}
                     downloads: list[tuple[list[int], list[Path]]] = []
                     for _start_date, _end_date, years_part in blocks:
                         if stop_after_current:
                             break
-                        if dataset == ERA5_MONTHLY_MEANS_DATASET:
+                        if is_monthly_cds:
                             if (
                                 max_requests is not None
                                 and download_count >= int(max_requests)
@@ -1886,6 +1944,7 @@ def package_registry(
                                 )
                                 return total_written
                             dl_path = _download_batch_monthly_means(
+                                dataset=str(dataset),
                                 grid=grid,
                                 cache_dir=cache_dir_eff,
                                 start_year=years_part[0],
@@ -1894,6 +1953,7 @@ def package_registry(
                                 overwrite_download=overwrite_download,
                                 debug=debug,
                                 variable=variable,
+                                params=params,
                             )
                             download_count += 1
                             downloads.append((years_part, [dl_path]))

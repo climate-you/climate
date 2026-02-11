@@ -81,6 +81,15 @@ type PanelResponse = {
     };
   }>;
   series: Record<string, SeriesPayload>;
+  headlines?: Array<{
+    key: string;
+    label: string;
+    value: number | null;
+    unit: string;
+    baseline?: string | null;
+    period?: string | null;
+    method?: string | null;
+  }>;
 };
 
 type AutocompleteItem = {
@@ -316,6 +325,11 @@ function toChartTimestamp(x: number | string): number {
   }
   const t = new Date(s).getTime();
   return Number.isFinite(t) ? t : Date.now();
+}
+
+function formatHeadlineDelta(value: number, unit: "C" | "F"): string {
+  const sign = value >= 0 ? "+" : "";
+  return `${sign}${value.toFixed(1)}º${unit}`;
 }
 
 function EChartCanvas({
@@ -1094,6 +1108,12 @@ export default function ApiDemoPage() {
   const [activeLayerId, setActiveLayerId] = useState<string>(
     mapLayers[0]?.id ?? "",
   );
+  const tempHeadline = useMemo(() => {
+    if (!resp?.headlines?.length) return null;
+    return (
+      resp.headlines.find((h) => h.key === "t2m_vs_preindustrial_local") ?? null
+    );
+  }, [resp]);
 
   const panelData = useMemo(() => {
     if (!resp) return [];
@@ -1586,6 +1606,17 @@ export default function ApiDemoPage() {
             </div>
           </div>
         </div>
+        {typeof tempHeadline?.value === "number" &&
+        Number.isFinite(tempHeadline.value) ? (
+          <div className={styles.headlineWrap}>
+            <div className={styles.headlineValue}>
+              {formatHeadlineDelta(tempHeadline.value, unit)}
+            </div>
+            <div className={styles.headlineLabel}>
+              Air temperature change vs pre-industrial
+            </div>
+          </div>
+        ) : null}
 
         <div className={styles.panelViewport}>
           {graphSlots.map((entry, slotIndex) =>

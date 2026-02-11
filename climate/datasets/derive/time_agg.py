@@ -55,3 +55,30 @@ def annual_mean_from_daily(da: xr.DataArray) -> xr.DataArray:
     monthly = monthly_mean_from_daily(da)
     tname = find_time_dim(monthly)
     return monthly.groupby(f"{tname}.year").mean(tname, keep_attrs=False)
+
+
+def climatology_mean_from_monthly(
+    da: xr.DataArray,
+    *,
+    start_year: int,
+    end_year: int,
+    label_year: int | None = None,
+) -> xr.DataArray:
+    """
+    Mean over a fixed monthly baseline period, returned as a single yearly point.
+    """
+    tname = find_time_dim(da)
+    if not np.issubdtype(da[tname].dtype, np.datetime64):
+        da = xr.decode_cf(da.to_dataset(name="v"))["v"]
+
+    years = da[tname].dt.year
+    mask = (years >= int(start_year)) & (years <= int(end_year))
+    da_sel = da.where(mask, drop=True)
+    if da_sel.sizes.get(tname, 0) == 0:
+        raise RuntimeError(
+            f"No monthly data in requested climatology window {start_year}-{end_year}"
+        )
+
+    mean_da = da_sel.mean(tname, keep_attrs=False)
+    out_year = int(label_year) if label_year is not None else int(end_year)
+    return mean_da.expand_dims(year=[out_year])

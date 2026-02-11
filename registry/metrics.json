@@ -33,6 +33,29 @@
     },
     "materialize": "on_api"
   },
+  "t2m_preindustrial_baseline_c": {
+    "id": "t2m_preindustrial_baseline_c",
+    "title": "2m temperature baseline mean (1850-1900)",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "time_axis": "yearly",
+    "source": {
+      "type": "cds",
+      "dataset_ref": "cmip6_historical_tas_monthly",
+      "agg": "climatology_mean_from_monthly",
+      "params": {
+        "start_year": 1850,
+        "end_year": 1900,
+        "label_year": 1900
+      },
+      "time_range": { "start_year": 1900, "end_year": 1900 }
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
   "t2m_monthly_mean_c": {
     "id": "t2m_monthly_mean_c",
     "title": "2m temperature monthly mean",

@@ -159,6 +159,15 @@ def _apply_dataset_refs(metrics: dict[str, Any], datasets: dict[str, Any]) -> di
                 continue
             if k2 in _SOURCE_DOWNLOAD_FIELDS:
                 continue
+            if (
+                k2 == "params"
+                and isinstance(merged_source.get("params"), dict)
+                and isinstance(v2, dict)
+            ):
+                merged_params = dict(merged_source.get("params", {}))
+                merged_params.update(v2)
+                merged_source["params"] = merged_params
+                continue
             merged_source[k2] = v2
         if isinstance(metric_time_range, dict):
             merged_source["_analysis_time_range"] = metric_time_range

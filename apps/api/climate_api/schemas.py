@@ -35,6 +35,16 @@ class PanelPayload(BaseModel):
     text_md: Optional[str] = None
 
 
+class HeadlinePayload(BaseModel):
+    key: str
+    label: str
+    value: float | None = None
+    unit: str
+    baseline: Optional[str] = None
+    period: Optional[str] = None
+    method: Optional[str] = None
+
+
 class LocationInfo(BaseModel):
     query: QueryPoint
     place: PlaceInfo
@@ -49,6 +59,7 @@ class PanelResponse(BaseModel):
     location: LocationInfo
     panel: PanelPayload
     series: Dict[str, SeriesPayload]
+    headlines: List[HeadlinePayload] = []
 
 
 class ScoredPanelPayload(BaseModel):
@@ -62,6 +73,7 @@ class PanelListResponse(BaseModel):
     location: LocationInfo
     panels: List[ScoredPanelPayload]
     series: Dict[str, SeriesPayload]
+    headlines: List[HeadlinePayload] = []
 
 
 class GraphListResponse(BaseModel):

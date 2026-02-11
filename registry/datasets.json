@@ -31,6 +31,33 @@
       "batch_tiles": 4
     }
   },
+  "cmip6_historical_tas_monthly": {
+    "id": "cmip6_historical_tas_monthly",
+    "title": "CMIP6 historical monthly near-surface air temperature",
+    "grid_id": "global_0p25",
+    "tile_size": 64,
+    "source": {
+      "type": "cds",
+      "dataset": "projections-cmip6",
+      "variable": "near_surface_air_temperature",
+      "postprocess": [{ "fn": "k_to_c" }],
+      "time_range": { "start_year": 1850, "end_year": 1900 },
+      "block_years": 51,
+      "batch_tiles": 4,
+      "params": {
+        "cds_cadence": "monthly",
+        "request_template": {
+          "temporal_resolution": "monthly",
+          "experiment": "historical",
+          "format": "netcdf",
+          "model": "access_cm2"
+        },
+        "variable_field": "variable",
+        "year_field": "year",
+        "month_field": "month"
+      }
+    }
+  },
   "oisst_sst_v21_daily": {
     "id": "oisst_sst_v21_daily",
     "title": "OISST v2.1 daily SST",
