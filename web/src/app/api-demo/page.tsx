@@ -1207,7 +1207,10 @@ export default function ApiDemoPage() {
           onPick={(la, lo) => {
             void handlePick(la, lo);
           }}
-          onHome={() => setPanelOpen(false)}
+          onHome={() => {
+            setPanelOpen(false);
+            setPicked(null);
+          }}
         />
       </div>
 
