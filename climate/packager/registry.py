@@ -1259,9 +1259,17 @@ def package_registry(
         missing_maps = [mid for mid in selected_map_ids if mid not in maps_specs]
         if missing_maps:
             raise ValueError(f"Unknown map id(s): {', '.join(sorted(missing_maps))}")
-        effective_metric_ids = {
-            str(maps_specs[mid]["source_metric"]) for mid in selected_map_ids
-        }
+        effective_metric_ids = set()
+        for mid in selected_map_ids:
+            spec = maps_specs[mid]
+            source_metric = spec.get("source_metric")
+            if isinstance(source_metric, str) and source_metric:
+                effective_metric_ids.add(str(source_metric))
+                continue
+            # Constant score maps are virtual maps with no source metric.
+            if spec.get("type") == "score" and spec.get("constant_score") is not None:
+                continue
+            raise ValueError(f"Map '{mid}' is missing source_metric.")
         if debug:
             print(
                 "[maps] Restricting metric packaging to selected maps' source metrics: "
