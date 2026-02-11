@@ -10,9 +10,6 @@
 - Graphs:
   - zoomout graph needs work
   - support trend with negative temperatures (overlay is above trend)
-- Data Pipeline:
-  - no graph displayed for "Lloydminster, Canada"
-  - no graph displayed for some areas of South Pacific Ocean
 - Packager script:
   - era5 is downloaded as whole globe but then sliced, maybe this should be in the datasets/metrics as currently we need to force `--batch-tiles 4` for the packager to read the slices
 
