@@ -14,45 +14,56 @@ type Props = {
 
 const initialView = {
   center: [0, 0] as [number, number],
-  zoom: 2.5,
   pitch: 0,
   bearing: 0,
 };
 
-const CLOUD_SOURCE_ID = "clouds-overlay-source";
-const CLOUD_LAYER_ID = "clouds-overlay-layer";
-const CLOUD_TEXTURE_URL = "/data/textures/clouds_4096_mercator_alpha.webp";
-const CLOUD_DRIFT_SPEED_RAD_PER_SEC = 0.01;
-const CLOUD_DRIFT_SPEED_DEG_PER_SEC =
-  CLOUD_DRIFT_SPEED_RAD_PER_SEC * (180 / Math.PI);
-const MERCATOR_MAX_LAT = 85.05112878;
+const PANEL_BREAKPOINT_PX = 900;
+const DESKTOP_PANEL_WIDTH_RATIO = 0.62;
+const MOBILE_PANEL_HEIGHT_RATIO = 0.6;
+const FOCUS_LOCATION_ZOOM = 5.5;
+const FOCUS_FLY_DURATION_MS = 1900;
+const FOCUS_RECENTER_DURATION_MS = 650;
+const PANEL_TRANSITION_MS = 300;
+const DEFAULT_BASE_ZOOM = 2.5;
 
-const LOCATION_LABELS_MIN_ZOOM = 3.8;
-const LOCATION_LABELS_MAX_ZOOM = 10;
-const CLOUD_FADE_START_ZOOM = LOCATION_LABELS_MIN_ZOOM;
-const CLOUD_FADE_END_ZOOM = LOCATION_LABELS_MIN_ZOOM + 1.2;
-const CLOUD_MAX_OPACITY = 0.65;
+function baseZoomForViewportWidth(width: number) {
+  if (width <= 480) return 1.5;
+  if (width <= PANEL_BREAKPOINT_PX) return 2.0;
+  return DEFAULT_BASE_ZOOM;
+}
 
-const LOCATION_LABEL_KEYWORDS = [
-  "place",
-  "settlement",
-  "city",
-  "town",
-  "village",
-  "state",
-  "province",
-  "continent",
-];
+function responsiveBaseZoom() {
+  return baseZoomForViewportWidth(window.innerWidth);
+}
 
-function isEarthLocationLabelLayer(layer: {
-  type?: string;
-  id?: string;
-  layout?: Record<string, unknown>;
-}) {
-  if (!layer || layer.type !== "symbol") return false;
-  if (!layer.layout?.["text-field"]) return false;
-  const id = (layer.id || "").toLowerCase();
-  return LOCATION_LABEL_KEYWORDS.some((keyword) => id.includes(keyword));
+function cubicOut(t: number) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function panelPaddingForViewport(map: maplibregl.Map, panelOpen: boolean) {
+  if (!panelOpen) return { top: 0, right: 0, bottom: 0, left: 0 };
+
+  const mapRect = map.getContainer().getBoundingClientRect();
+  const isMobile = window.matchMedia(
+    `(max-width: ${PANEL_BREAKPOINT_PX}px)`,
+  ).matches;
+
+  if (isMobile) {
+    return {
+      top: 0,
+      right: 0,
+      bottom: Math.round(mapRect.height * MOBILE_PANEL_HEIGHT_RATIO),
+      left: 0,
+    };
+  }
+
+  return {
+    top: 0,
+    right: Math.round(mapRect.width * DESKTOP_PANEL_WIDTH_RATIO),
+    bottom: 0,
+    left: 0,
+  };
 }
 
 export default function MapLibreGlobe({
@@ -67,8 +78,7 @@ export default function MapLibreGlobe({
   const onPickRef = useRef(onPick);
   const onHomeRef = useRef(onHome);
   const panelOpenRef = useRef(panelOpen);
-  const cloudRafRef = useRef<number | null>(null);
-  const cloudStartRef = useRef<number | null>(null);
+  const focusLocationRef = useRef(focusLocation);
 
   useEffect(() => {
     onPickRef.current = onPick;
@@ -83,15 +93,20 @@ export default function MapLibreGlobe({
   }, [panelOpen]);
 
   useEffect(() => {
+    focusLocationRef.current = focusLocation;
+  }, [focusLocation]);
+
+  useEffect(() => {
     if (!mapContainerRef.current) return;
 
+    const baseZoom = responsiveBaseZoom();
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
       style: "/custom_map.json",
       projection: { type: "globe" },
       center: initialView.center,
-      zoom: initialView.zoom,
-      minZoom: initialView.zoom,
+      zoom: baseZoom,
+      minZoom: baseZoom,
       maxZoom: 10,
       pitch: initialView.pitch,
       bearing: initialView.bearing,
@@ -109,99 +124,6 @@ export default function MapLibreGlobe({
           map.setPaintProperty(layer.id, "sky-opacity", 0);
         }
       }
-    }
-
-    function cloudCoordinates(lonOffsetDeg: number): [number, number][] {
-      const west = -180 + lonOffsetDeg;
-      const east = 180 + lonOffsetDeg;
-      return [
-        [west, MERCATOR_MAX_LAT],
-        [east, MERCATOR_MAX_LAT],
-        [east, -MERCATOR_MAX_LAT],
-        [west, -MERCATOR_MAX_LAT],
-      ];
-    }
-
-    function ensureCloudOverlay() {
-      if (!map.getSource(CLOUD_SOURCE_ID)) {
-        map.addSource(CLOUD_SOURCE_ID, {
-          type: "image",
-          url: CLOUD_TEXTURE_URL,
-          coordinates: cloudCoordinates(0),
-        });
-      }
-
-      if (!map.getLayer(CLOUD_LAYER_ID)) {
-        const firstSymbolLayerId = (map.getStyle()?.layers || []).find(
-          (layer) => layer.type === "symbol",
-        )?.id;
-
-        map.addLayer(
-          {
-            id: CLOUD_LAYER_ID,
-            type: "raster",
-            source: CLOUD_SOURCE_ID,
-            paint: {
-              "raster-opacity": CLOUD_MAX_OPACITY,
-              "raster-fade-duration": 0,
-            },
-          },
-          firstSymbolLayerId,
-        );
-      }
-    }
-
-    function updateCloudOpacity() {
-      if (!map.getLayer(CLOUD_LAYER_ID)) return;
-      const zoom = map.getZoom();
-      if (zoom <= CLOUD_FADE_START_ZOOM) {
-        map.setPaintProperty(
-          CLOUD_LAYER_ID,
-          "raster-opacity",
-          CLOUD_MAX_OPACITY,
-        );
-        return;
-      }
-      if (zoom >= CLOUD_FADE_END_ZOOM) {
-        map.setPaintProperty(CLOUD_LAYER_ID, "raster-opacity", 0);
-        return;
-      }
-      const t =
-        (zoom - CLOUD_FADE_START_ZOOM) /
-        (CLOUD_FADE_END_ZOOM - CLOUD_FADE_START_ZOOM);
-      map.setPaintProperty(
-        CLOUD_LAYER_ID,
-        "raster-opacity",
-        CLOUD_MAX_OPACITY * (1 - t),
-      );
-    }
-
-    function startCloudDrift() {
-      stopCloudDrift();
-
-      const source = map.getSource(CLOUD_SOURCE_ID) as
-        | maplibregl.ImageSource
-        | undefined;
-      if (!source) return;
-
-      cloudStartRef.current = performance.now();
-      const tick = (now: number) => {
-        const t0 = cloudStartRef.current ?? now;
-        const elapsedSec = (now - t0) / 1000;
-        source.setCoordinates(
-          cloudCoordinates(elapsedSec * CLOUD_DRIFT_SPEED_DEG_PER_SEC),
-        );
-        cloudRafRef.current = requestAnimationFrame(tick);
-      };
-      cloudRafRef.current = requestAnimationFrame(tick);
-    }
-
-    function stopCloudDrift() {
-      if (cloudRafRef.current !== null) {
-        cancelAnimationFrame(cloudRafRef.current);
-        cloudRafRef.current = null;
-      }
-      cloudStartRef.current = null;
     }
 
     function ensureHillshadeLayer() {
@@ -238,35 +160,8 @@ export default function MapLibreGlobe({
       );
     }
 
-    function syncZoomDependentLayers() {
-      updateCloudOpacity();
-      updateEarthLocationLabelVisibility();
-      map.triggerRepaint();
-    }
-
-    function updateEarthLocationLabelVisibility() {
-      const zoom = map.getZoom();
-      const visible =
-        zoom >= LOCATION_LABELS_MIN_ZOOM && zoom <= LOCATION_LABELS_MAX_ZOOM;
-      const visibility = visible ? "visible" : "none";
-      const layers = map.getStyle()?.layers || [];
-
-      for (const layer of layers) {
-        if (!isEarthLocationLabelLayer(layer)) continue;
-        map.setLayoutProperty(layer.id, "visibility", visibility);
-      }
-    }
-
     function getPanelPadding() {
-      if (
-        !panelOpenRef.current ||
-        window.matchMedia("(max-width: 900px)").matches
-      ) {
-        return { top: 0, right: 0, bottom: 0, left: 0 };
-      }
-      const mapRect = map.getContainer().getBoundingClientRect();
-      const rightPadding = Math.round(mapRect.width * 0.62);
-      return { top: 0, right: rightPadding, bottom: 0, left: 0 };
+      return panelPaddingForViewport(map, panelOpenRef.current);
     }
 
     class HomeControl {
@@ -300,10 +195,14 @@ export default function MapLibreGlobe({
       }
 
       onClick = () => {
+        markerRef.current?.remove();
+        markerRef.current = null;
         onHomeRef.current();
+        const nextBaseZoom = responsiveBaseZoom();
+        this.map?.setMinZoom(nextBaseZoom);
         this.map?.flyTo({
           center: initialView.center,
-          zoom: initialView.zoom,
+          zoom: nextBaseZoom,
           pitch: initialView.pitch,
           bearing: initialView.bearing,
           padding: { top: 0, right: 0, bottom: 0, left: 0 },
@@ -314,23 +213,28 @@ export default function MapLibreGlobe({
     }
 
     map.on("style.load", applyGlobeSettings);
-    map.on("style.load", ensureCloudOverlay);
-    map.on("style.load", startCloudDrift);
     map.on("style.load", ensureHillshadeLayer);
-    map.on("style.load", syncZoomDependentLayers);
-    map.on("styledata", () => {
-      if (!map.isStyleLoaded()) return;
-      syncZoomDependentLayers();
-    });
     map.on("load", applyGlobeSettings);
-    map.on("load", ensureCloudOverlay);
-    map.on("load", startCloudDrift);
-    map.on("load", syncZoomDependentLayers);
-    map.once("idle", syncZoomDependentLayers);
-    map.on("zoom", updateCloudOpacity);
-    map.on("zoom", updateEarthLocationLabelVisibility);
     map.addControl(new HomeControl(), "top-left");
     map.addControl(new maplibregl.NavigationControl(), "top-left");
+
+    const onResize = () => {
+      const previousMinZoom = map.getMinZoom();
+      const nextMinZoom = responsiveBaseZoom();
+      map.setMinZoom(nextMinZoom);
+
+      // Keep the base/home view responsive across viewport sizes.
+      const currentZoom = map.getZoom();
+      const isAtBaseZoom = Math.abs(currentZoom - previousMinZoom) < 0.05;
+      if (!focusLocationRef.current && isAtBaseZoom) {
+        map.easeTo({
+          zoom: nextMinZoom,
+          duration: 300,
+          essential: true,
+        });
+      }
+    };
+    window.addEventListener("resize", onResize);
 
     map.on("click", (event) => {
       const { lng, lat } = event.lngLat;
@@ -346,17 +250,18 @@ export default function MapLibreGlobe({
       onPickRef.current(lat, lng);
       map.flyTo({
         center: [lng, lat],
-        zoom: 5.5,
+        zoom: FOCUS_LOCATION_ZOOM,
         pitch: 0,
         bearing: 0,
         padding: getPanelPadding(),
-        duration: 1500,
+        duration: FOCUS_FLY_DURATION_MS,
+        easing: cubicOut,
         essential: true,
       });
     });
 
     return () => {
-      stopCloudDrift();
+      window.removeEventListener("resize", onResize);
       markerRef.current?.remove();
       markerRef.current = null;
       map.remove();
@@ -380,21 +285,12 @@ export default function MapLibreGlobe({
 
     map.flyTo({
       center: [lon, lat],
-      zoom: 5.5,
+      zoom: FOCUS_LOCATION_ZOOM,
       pitch: 0,
       bearing: 0,
-      padding:
-        panelOpen && !window.matchMedia("(max-width: 900px)").matches
-          ? {
-              top: 0,
-              right: Math.round(
-                map.getContainer().getBoundingClientRect().width * 0.62,
-              ),
-              bottom: 0,
-              left: 0,
-            }
-          : { top: 0, right: 0, bottom: 0, left: 0 },
-      duration: 1500,
+      padding: panelPaddingForViewport(map, panelOpen),
+      duration: FOCUS_FLY_DURATION_MS,
+      easing: cubicOut,
       essential: true,
     });
   }, [focusLocation, panelOpen]);
@@ -402,13 +298,50 @@ export default function MapLibreGlobe({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    if (!panelOpen) return;
+    if (!focusLocation) return;
+
+    const { lat, lon } = focusLocation;
+    let rafId: number | null = null;
+    let timerId: number | null = null;
+    const recenterToVisibleArea = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        map.easeTo({
+          center: [lon, lat],
+          zoom: FOCUS_LOCATION_ZOOM,
+          padding: panelPaddingForViewport(map, true),
+          duration: FOCUS_RECENTER_DURATION_MS,
+          easing: cubicOut,
+          essential: true,
+        });
+      });
+    };
+
+    const media = window.matchMedia(`(max-width: ${PANEL_BREAKPOINT_PX}px)`);
+    timerId = window.setTimeout(recenterToVisibleArea, PANEL_TRANSITION_MS);
+    window.addEventListener("resize", recenterToVisibleArea);
+    media.addEventListener?.("change", recenterToVisibleArea);
+
+    return () => {
+      if (timerId !== null) window.clearTimeout(timerId);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", recenterToVisibleArea);
+      media.removeEventListener?.("change", recenterToVisibleArea);
+    };
+  }, [panelOpen, focusLocation]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
     if (panelOpen) return;
+    if (!focusLocation) return;
     map.easeTo({
       padding: { top: 0, right: 0, bottom: 0, left: 0 },
       duration: 300,
       essential: true,
     });
-  }, [panelOpen]);
+  }, [panelOpen, focusLocation]);
 
   return (
     <div ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
