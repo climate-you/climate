@@ -223,9 +223,10 @@
   }
 
   .searchOverlay {
-    left: 10px;
     top: 10px;
-    width: calc(100% - 20px);
+    left: 60px;
+    width: calc(100% - 80px);
+    border-width: 3px;
   }
 
   .locationPanel {
