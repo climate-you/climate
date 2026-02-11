@@ -86,7 +86,6 @@
       "type": "line",
       "source": "openmaptiles",
       "source-layer": "boundary",
-      "minzoom": 8,
       "filter": [
         "all",
         [">=", ["get", "admin_level"], 3],
@@ -99,6 +98,7 @@
       "paint": {
         "line-color": "rgba(66, 66, 66, 1)",
         "line-dasharray": [1, 1],
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], 7.6, 0, 8.4, 1],
         "line-width": ["interpolate", ["linear", 1], ["zoom"], 7, 1, 11, 2]
       }
     },
@@ -117,7 +117,7 @@
       "layout": { "line-cap": "round", "line-join": "round" },
       "paint": {
         "line-color": "rgba(66, 66, 66, 1)",
-        "line-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.4, 4, 1],
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], 3.5, 0, 4.3, 1],
         "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1, 5, 1.2, 12, 3]
       }
     },
@@ -134,6 +134,7 @@
       "paint": {
         "line-color": "rgba(66, 66, 66, 1)",
         "line-dasharray": [1, 2],
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], 3.5, 0, 4.3, 0.85],
         "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1, 5, 1.2, 12, 3]
       }
     },
@@ -142,6 +143,7 @@
       "type": "symbol",
       "source": "openmaptiles",
       "source-layer": "water_name",
+      "minzoom": 3,
       "filter": [
         "match",
         ["geometry-type"],
@@ -164,6 +166,7 @@
       },
       "paint": {
         "text-color": "#495e91",
+        "text-opacity": ["interpolate", ["linear"], ["zoom"], 3, 0, 4, 1],
         "text-halo-color": "rgba(255,255,255,0.7)",
         "text-halo-width": 1.5
       }
@@ -197,6 +200,7 @@
       },
       "paint": {
         "text-color": "#495e91",
+        "text-opacity": ["interpolate", ["linear"], ["zoom"], 3, 0, 4, 1],
         "text-halo-color": "rgba(255,255,255,0.7)",
         "text-halo-width": 1.5
       }
@@ -576,6 +580,7 @@
       },
       "paint": {
         "text-color": "#000",
+        "text-opacity": ["interpolate", ["linear"], ["zoom"], 3.3, 0, 3.8, 1],
         "text-halo-blur": 1,
         "text-halo-color": "#fff",
         "text-halo-width": 1
@@ -606,6 +611,7 @@
       },
       "paint": {
         "text-color": "#000",
+        "text-opacity": ["interpolate", ["linear"], ["zoom"], 3.3, 0, 3.8, 1],
         "text-halo-blur": 1,
         "text-halo-color": "#fff",
         "text-halo-width": 1
@@ -636,6 +642,7 @@
       },
       "paint": {
         "text-color": "#000",
+        "text-opacity": ["interpolate", ["linear"], ["zoom"], 3.3, 0, 3.8, 1],
         "text-halo-blur": 1,
         "text-halo-color": "#fff",
         "text-halo-width": 1
@@ -648,7 +655,8 @@
       "source-layer": "water",
       "layout": { "visibility": "visible" },
       "paint": {
-        "line-color": "rgba(66, 66, 66, 1)"
+        "line-color": "rgba(66, 66, 66, 1)",
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], 2.7, 0, 3.4, 1]
       }
     }
   ],

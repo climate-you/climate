@@ -19,15 +19,26 @@ const initialView = {
   bearing: 0,
 };
 
+const CLOUD_SOURCE_ID = "clouds-overlay-source";
+const CLOUD_LAYER_ID = "clouds-overlay-layer";
+const CLOUD_TEXTURE_URL = "/data/textures/clouds_4096_mercator_alpha.webp";
+const CLOUD_DRIFT_SPEED_RAD_PER_SEC = 0.01;
+const CLOUD_DRIFT_SPEED_DEG_PER_SEC =
+  CLOUD_DRIFT_SPEED_RAD_PER_SEC * (180 / Math.PI);
+const MERCATOR_MAX_LAT = 85.05112878;
+
 const LOCATION_LABELS_MIN_ZOOM = 3.8;
 const LOCATION_LABELS_MAX_ZOOM = 10;
+const CLOUD_FADE_START_ZOOM = LOCATION_LABELS_MIN_ZOOM;
+const CLOUD_FADE_END_ZOOM = LOCATION_LABELS_MIN_ZOOM + 1.2;
+const CLOUD_MAX_OPACITY = 0.65;
+
 const LOCATION_LABEL_KEYWORDS = [
   "place",
   "settlement",
   "city",
   "town",
   "village",
-  "country",
   "state",
   "province",
   "continent",
@@ -56,6 +67,8 @@ export default function MapLibreGlobe({
   const onPickRef = useRef(onPick);
   const onHomeRef = useRef(onHome);
   const panelOpenRef = useRef(panelOpen);
+  const cloudRafRef = useRef<number | null>(null);
+  const cloudStartRef = useRef<number | null>(null);
 
   useEffect(() => {
     onPickRef.current = onPick;
@@ -98,6 +111,99 @@ export default function MapLibreGlobe({
       }
     }
 
+    function cloudCoordinates(lonOffsetDeg: number): [number, number][] {
+      const west = -180 + lonOffsetDeg;
+      const east = 180 + lonOffsetDeg;
+      return [
+        [west, MERCATOR_MAX_LAT],
+        [east, MERCATOR_MAX_LAT],
+        [east, -MERCATOR_MAX_LAT],
+        [west, -MERCATOR_MAX_LAT],
+      ];
+    }
+
+    function ensureCloudOverlay() {
+      if (!map.getSource(CLOUD_SOURCE_ID)) {
+        map.addSource(CLOUD_SOURCE_ID, {
+          type: "image",
+          url: CLOUD_TEXTURE_URL,
+          coordinates: cloudCoordinates(0),
+        });
+      }
+
+      if (!map.getLayer(CLOUD_LAYER_ID)) {
+        const firstSymbolLayerId = (map.getStyle()?.layers || []).find(
+          (layer) => layer.type === "symbol",
+        )?.id;
+
+        map.addLayer(
+          {
+            id: CLOUD_LAYER_ID,
+            type: "raster",
+            source: CLOUD_SOURCE_ID,
+            paint: {
+              "raster-opacity": CLOUD_MAX_OPACITY,
+              "raster-fade-duration": 0,
+            },
+          },
+          firstSymbolLayerId,
+        );
+      }
+    }
+
+    function updateCloudOpacity() {
+      if (!map.getLayer(CLOUD_LAYER_ID)) return;
+      const zoom = map.getZoom();
+      if (zoom <= CLOUD_FADE_START_ZOOM) {
+        map.setPaintProperty(
+          CLOUD_LAYER_ID,
+          "raster-opacity",
+          CLOUD_MAX_OPACITY,
+        );
+        return;
+      }
+      if (zoom >= CLOUD_FADE_END_ZOOM) {
+        map.setPaintProperty(CLOUD_LAYER_ID, "raster-opacity", 0);
+        return;
+      }
+      const t =
+        (zoom - CLOUD_FADE_START_ZOOM) /
+        (CLOUD_FADE_END_ZOOM - CLOUD_FADE_START_ZOOM);
+      map.setPaintProperty(
+        CLOUD_LAYER_ID,
+        "raster-opacity",
+        CLOUD_MAX_OPACITY * (1 - t),
+      );
+    }
+
+    function startCloudDrift() {
+      stopCloudDrift();
+
+      const source = map.getSource(CLOUD_SOURCE_ID) as
+        | maplibregl.ImageSource
+        | undefined;
+      if (!source) return;
+
+      cloudStartRef.current = performance.now();
+      const tick = (now: number) => {
+        const t0 = cloudStartRef.current ?? now;
+        const elapsedSec = (now - t0) / 1000;
+        source.setCoordinates(
+          cloudCoordinates(elapsedSec * CLOUD_DRIFT_SPEED_DEG_PER_SEC),
+        );
+        cloudRafRef.current = requestAnimationFrame(tick);
+      };
+      cloudRafRef.current = requestAnimationFrame(tick);
+    }
+
+    function stopCloudDrift() {
+      if (cloudRafRef.current !== null) {
+        cancelAnimationFrame(cloudRafRef.current);
+        cloudRafRef.current = null;
+      }
+      cloudStartRef.current = null;
+    }
+
     function ensureHillshadeLayer() {
       if (!map.getSource("hillshadeSource")) {
         map.addSource("hillshadeSource", {
@@ -132,6 +238,12 @@ export default function MapLibreGlobe({
       );
     }
 
+    function syncZoomDependentLayers() {
+      updateCloudOpacity();
+      updateEarthLocationLabelVisibility();
+      map.triggerRepaint();
+    }
+
     function updateEarthLocationLabelVisibility() {
       const zoom = map.getZoom();
       const visible =
@@ -146,7 +258,10 @@ export default function MapLibreGlobe({
     }
 
     function getPanelPadding() {
-      if (!panelOpenRef.current || window.matchMedia("(max-width: 900px)").matches) {
+      if (
+        !panelOpenRef.current ||
+        window.matchMedia("(max-width: 900px)").matches
+      ) {
         return { top: 0, right: 0, bottom: 0, left: 0 };
       }
       const mapRect = map.getContainer().getBoundingClientRect();
@@ -199,9 +314,20 @@ export default function MapLibreGlobe({
     }
 
     map.on("style.load", applyGlobeSettings);
+    map.on("style.load", ensureCloudOverlay);
+    map.on("style.load", startCloudDrift);
     map.on("style.load", ensureHillshadeLayer);
+    map.on("style.load", syncZoomDependentLayers);
+    map.on("styledata", () => {
+      if (!map.isStyleLoaded()) return;
+      syncZoomDependentLayers();
+    });
     map.on("load", applyGlobeSettings);
-    map.on("load", updateEarthLocationLabelVisibility);
+    map.on("load", ensureCloudOverlay);
+    map.on("load", startCloudDrift);
+    map.on("load", syncZoomDependentLayers);
+    map.once("idle", syncZoomDependentLayers);
+    map.on("zoom", updateCloudOpacity);
     map.on("zoom", updateEarthLocationLabelVisibility);
     map.addControl(new HomeControl(), "top-left");
     map.addControl(new maplibregl.NavigationControl(), "top-left");
@@ -230,6 +356,7 @@ export default function MapLibreGlobe({
     });
 
     return () => {
+      stopCloudDrift();
       markerRef.current?.remove();
       markerRef.current = null;
       map.remove();
@@ -260,7 +387,9 @@ export default function MapLibreGlobe({
         panelOpen && !window.matchMedia("(max-width: 900px)").matches
           ? {
               top: 0,
-              right: Math.round(map.getContainer().getBoundingClientRect().width * 0.62),
+              right: Math.round(
+                map.getContainer().getBoundingClientRect().width * 0.62,
+              ),
               bottom: 0,
               left: 0,
             }
@@ -281,5 +410,7 @@ export default function MapLibreGlobe({
     });
   }, [panelOpen]);
 
-  return <div ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />;
+  return (
+    <div ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
+  );
 }
