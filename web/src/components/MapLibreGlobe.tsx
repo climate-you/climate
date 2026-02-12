@@ -28,7 +28,7 @@ const PANEL_TRANSITION_MS = 300;
 const DEFAULT_BASE_ZOOM = 2.5;
 
 function baseZoomForViewportWidth(width: number) {
-  if (width <= 480) return 1.5;
+  if (width <= 480) return 1.0;
   if (width <= PANEL_BREAKPOINT_PX) return 2.0;
   return DEFAULT_BASE_ZOOM;
 }

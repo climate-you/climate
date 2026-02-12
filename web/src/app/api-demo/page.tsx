@@ -358,10 +358,6 @@ function formatAxisTitle(graph: GraphPayload, value: unknown): string {
   return label || asString;
 }
 
-function xAxisTitle(): string {
-  return "";
-}
-
 function yAxisTitle(graph: GraphPayload, unit: "C" | "F"): string {
   if (graph.id === "t2m_hot_days" || graph.id === "sst_hot_days") {
     return "Number of days";
@@ -605,9 +601,9 @@ function buildHotDaysOption({
     animationDuration: 700,
     animationDurationUpdate: transitionMs,
     animationEasing: "cubicOut",
-    grid: { left: 74, right: 24, top: 36, bottom: 68, containLabel: true },
+    grid: { left: 74, right: 24, top: 36, bottom: 20, containLabel: true },
     legend: {
-      right: 0,
+      right: 24,
       top: 0,
       itemWidth: 30,
       itemHeight: 10,
@@ -671,16 +667,6 @@ function buildHotDaysOption({
     xAxis: {
       type: "category",
       data: xValues,
-      name: xAxisTitle(),
-      nameLocation: "middle",
-      nameRotate: 0,
-      nameGap: 44,
-      nameTextStyle: {
-        color: "#666b78",
-        fontSize: 13,
-        align: "center",
-        verticalAlign: "top",
-      },
       axisLabel: { color: "#666b78" },
       axisLine: { lineStyle: { color: "#cfd4dd" } },
       splitLine: { show: true, lineStyle: { color: "rgba(200,200,200,0.3)" } },
@@ -805,9 +791,9 @@ function buildTemperatureOption({
     animationDuration: 700,
     animationDurationUpdate: transitionMs,
     animationEasing: "cubicOut",
-    grid: { left: 74, right: 24, top: 36, bottom: 68, containLabel: true },
+    grid: { left: 74, right: 24, top: 36, bottom: 20, containLabel: true },
     legend: {
-      right: 0,
+      right: 24,
       top: 0,
       itemWidth: 30,
       itemHeight: 10,
@@ -847,16 +833,6 @@ function buildTemperatureOption({
     },
     xAxis: {
       type: "time",
-      name: xAxisTitle(),
-      nameLocation: "middle",
-      nameRotate: 0,
-      nameGap: 44,
-      nameTextStyle: {
-        color: "#666b78",
-        fontSize: 13,
-        align: "center",
-        verticalAlign: "top",
-      },
       min: xMin,
       max: xMax,
       axisLabel: { color: "#666b78" },
@@ -1015,7 +991,7 @@ function GraphCard({
         </div>
       ) : null}
 
-      <EChartCanvas option={option} height={320} />
+      <EChartCanvas option={option} height={260} />
 
       {graph.error ? (
         <div className={styles.graphError}>{graph.error}</div>
@@ -1291,53 +1267,55 @@ export default function ApiDemoPage() {
         aria-live="polite"
       >
         <div className={styles.panelActions}>
-          <div className={styles.unitControl}>
-            <div className={styles.unitToggle} role="group" aria-label="Unit">
-              <button
-                type="button"
-                className={`${styles.unitOption} ${
-                  unit === "C" ? styles.unitOptionActive : ""
-                }`}
-                aria-pressed={unit === "C"}
-                onClick={() => {
-                  if (unit === "C") return;
-                  setUnit("C");
-                  void load(lat, lon, "C");
-                }}
-              >
-                °C
-              </button>
-              <button
-                type="button"
-                className={`${styles.unitOption} ${
-                  unit === "F" ? styles.unitOptionActive : ""
-                }`}
-                aria-pressed={unit === "F"}
-                onClick={() => {
-                  if (unit === "F") return;
-                  setUnit("F");
-                  void load(lat, lon, "F");
-                }}
-              >
-                °F
-              </button>
+          <div className={styles.panelTopRow}>
+            <div className={styles.unitControl}>
+              <div className={styles.unitToggle} role="group" aria-label="Unit">
+                <button
+                  type="button"
+                  className={`${styles.unitOption} ${
+                    unit === "C" ? styles.unitOptionActive : ""
+                  }`}
+                  aria-pressed={unit === "C"}
+                  onClick={() => {
+                    if (unit === "C") return;
+                    setUnit("C");
+                    void load(lat, lon, "C");
+                  }}
+                >
+                  °C
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.unitOption} ${
+                    unit === "F" ? styles.unitOptionActive : ""
+                  }`}
+                  aria-pressed={unit === "F"}
+                  onClick={() => {
+                    if (unit === "F") return;
+                    setUnit("F");
+                    void load(lat, lon, "F");
+                  }}
+                >
+                  °F
+                </button>
+              </div>
             </div>
+            <button
+              className={styles.panelClose}
+              type="button"
+              aria-label="Close panel"
+              onClick={() => setPanelOpen(false)}
+            >
+              x
+            </button>
           </div>
-          <button
-            className={styles.panelClose}
-            type="button"
-            aria-label="Close panel"
-            onClick={() => setPanelOpen(false)}
-          >
-            x
-          </button>
+          <h2 className={styles.panelTitle}>
+            Selected Location
+            {resp?.location.place.label ? `: ${resp.location.place.label}` : ""}
+          </h2>
         </div>
-        <h2 className={styles.panelTitle}>
-          Selected Location
-          {resp?.location.place.label ? `: ${resp.location.place.label}` : ""}
-        </h2>
 
-        {panelData.map(({ score, panel, graphs }) => (
+        {panelData.map(({ panel, graphs }) => (
           <section key={panel.id} className={styles.panelSection}>
             {graphs.map(({ graph, data }) => (
               <GraphCard
