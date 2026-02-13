@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 import logging
 
-from fastapi import Request
+from fastapi import Request, Response
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.logging import AccessFormatter
@@ -41,6 +41,17 @@ logging.getLogger("uvicorn.access").disabled = True
 def _normalize_lon(lon: float) -> float:
     # Normalize wrapped-world longitudes (e.g. 359, 529) into [-180, 180).
     return ((float(lon) + 180.0) % 360.0) - 180.0
+
+
+def _is_local_client_host(host: str | None) -> bool:
+    if not host:
+        return False
+    if host in {"127.0.0.1", "::1", "localhost"}:
+        return True
+    if host.startswith("::ffff:"):
+        mapped = host.removeprefix("::ffff:")
+        return mapped == "127.0.0.1"
+    return False
 
 
 def _configure_uvicorn_like_access_logger() -> None:
@@ -160,20 +171,34 @@ def create_app() -> FastAPI:
 
     @app.get("/api/v/{release}/panel", response_model=PanelListResponse)
     def get_panel(
+        request: Request,
+        response: Response,
         release: str,
         lat: float = Query(...),
         lon: float = Query(...),
         unit: str = Query("C", pattern="^(C|F|c|f)$"),
+        profile: bool = Query(False),
     ):
         if release != settings.release and settings.release != "dev":
             # v0: simple guard; later you can support multiple releases on disk
             raise HTTPException(status_code=404, detail=f"Unknown release: {release}")
+        if profile and not settings.enable_profile_headers:
+            raise HTTPException(
+                status_code=400,
+                detail="Request profiling is disabled. Set ENABLE_PROFILE_HEADERS=true to enable it.",
+            )
+        if profile and not _is_local_client_host(request.client.host if request.client else None):
+            raise HTTPException(
+                status_code=403,
+                detail="Request profiling is only allowed from local requests.",
+            )
 
         try:
             lon = _normalize_lon(lon)
             panels_manifest = app.state.panels_manifest
             maps_manifest = app.state.maps_manifest
-            return build_scored_panels_tiles_registry(
+            profile_data = {} if profile else None
+            panel_resp = build_scored_panels_tiles_registry(
                 place_resolver=place_resolver,
                 tile_store=tile_store,
                 cache=cache,
@@ -185,7 +210,21 @@ def create_app() -> FastAPI:
                 panels_manifest=panels_manifest,
                 maps_manifest=maps_manifest,
                 maps_root=settings.maps_root,
+                profile=profile_data,
             )
+            if profile_data:
+                sorted_items = sorted(
+                    profile_data.items(),
+                    key=lambda item: item[1],
+                    reverse=True,
+                )
+                response.headers["X-Profile-Breakdown-ms"] = ",".join(
+                    f"{k}={v:.2f}" for k, v in sorted_items
+                )
+                response.headers["Server-Timing"] = ", ".join(
+                    f"{k};dur={v:.1f}" for k, v in sorted_items
+                )
+            return panel_resp
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e))
         except KeyError as e:

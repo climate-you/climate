@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Any, List, Callable
+from typing import Dict, Any, List, Callable, MutableMapping
 import numpy as np
 import xarray as xr
 import math
+import time
 from threading import Lock
 from datetime import date
 
@@ -39,6 +40,16 @@ _SCORE_MAP_VALUES_CACHE: dict[str, np.ndarray] = {}
 _SCORE_MAP_VALUES_CACHE_LOCK = Lock()
 _HEADLINE_RECENT_YEARS = 5
 _CMIP_OFFSET_METRIC = "t2m_cmip_offset_1979_2000_vs_1850_1900_mean_5models_c"
+
+
+def _profile_add(
+    profile: MutableMapping[str, float] | None,
+    key: str,
+    dt_ms: float,
+) -> None:
+    if profile is None:
+        return
+    profile[key] = profile.get(key, 0.0) + float(dt_ms)
 
 
 def preload_score_maps_cache(
@@ -397,7 +408,13 @@ def build_panel_tiles_registry(
     unit: str,
     panel_id: str,
     panels_manifest: dict[str, Any] | None = None,
+    profile: MutableMapping[str, float] | None = None,
+    profile_prefix: str = "",
 ) -> PanelResponse:
+    total_t0 = time.perf_counter()
+    def _p(name: str) -> str:
+        return f"{profile_prefix}{name}" if profile_prefix else name
+
     unit = unit.upper()
 
     if panels_manifest is None:
@@ -434,11 +451,20 @@ def build_panel_tiles_registry(
     cache_key = ":".join(cache_key_parts)
 
     if cache is not None:
+        t0 = time.perf_counter()
         hit = cache.get_json(cache_key)
+        _profile_add(profile, _p("cache_lookup"), (time.perf_counter() - t0) * 1000.0)
         if hit is not None:
+            _profile_add(
+                profile,
+                _p("total"),
+                (time.perf_counter() - total_t0) * 1000.0,
+            )
             return PanelResponse.model_validate(hit)
 
+    t0 = time.perf_counter()
     place = place_resolver.resolve_place(lat, lon)
+    _profile_add(profile, _p("place_resolve"), (time.perf_counter() - t0) * 1000.0)
 
     series_payload: Dict[str, SeriesPayload] = {}
     graphs_out: List[GraphPayload] = []
@@ -449,6 +475,10 @@ def build_panel_tiles_registry(
     data_cells_map: dict[str, DataCell] = {}
     base_series_for_caption: tuple[list[int], np.ndarray] | None = None
 
+    graph_t0 = time.perf_counter()
+    series_fetch_ms = 0.0
+    series_prepare_ms = 0.0
+    data_cell_ms = 0.0
     for graph in panel_spec.get("graphs", []):
         graph_series_keys: list[str] = []
         graph_annotations: list[GraphAnnotation] = []
@@ -466,6 +496,7 @@ def build_panel_tiles_registry(
                 graph_series_keys.append(key)
                 continue
 
+            t0 = time.perf_counter()
             if metric in metric_vector_cache:
                 vec = metric_vector_cache[metric]
             else:
@@ -476,10 +507,12 @@ def build_panel_tiles_registry(
                     missing = True
                     continue
                 metric_vector_cache[metric] = vec
+            series_fetch_ms += (time.perf_counter() - t0) * 1000.0
             if vec is None:
                 missing = True
                 continue
 
+            t0 = time.perf_counter()
             vec = np.asarray(vec, dtype=np.float32).reshape(-1)
             if metric in metric_axis_cache:
                 axis_vals = metric_axis_cache[metric]
@@ -513,9 +546,11 @@ def build_panel_tiles_registry(
                     annotations=series_spec.get("annotations"),
                 )
             )
+            series_prepare_ms += (time.perf_counter() - t0) * 1000.0
 
             grid = tile_store._metric_grid(metric)
             if grid.grid_id not in data_cells_map:
+                t0 = time.perf_counter()
                 if grid.grid_id in grid_cells:
                     _grid, cell, t = grid_cells[grid.grid_id]
                 else:
@@ -538,6 +573,7 @@ def build_panel_tiles_registry(
                     o_lat=int(t.o_lat),
                     o_lon=int(t.o_lon),
                 )
+                data_cell_ms += (time.perf_counter() - t0) * 1000.0
 
         if missing:
             graph_error = "Missing data - graph can't be displayed."
@@ -566,6 +602,10 @@ def build_panel_tiles_registry(
                 animation=graph.get("animation"),
             )
         )
+    _profile_add(profile, _p("graph_build"), (time.perf_counter() - graph_t0) * 1000.0)
+    _profile_add(profile, _p("series_fetch"), series_fetch_ms)
+    _profile_add(profile, _p("series_prepare"), series_prepare_ms)
+    _profile_add(profile, _p("data_cell"), data_cell_ms)
 
     panel_out = PanelPayload(
         id=panel_id,
@@ -633,8 +673,11 @@ def build_panel_tiles_registry(
     )
 
     if cache is not None:
+        t0 = time.perf_counter()
         cache.set_json(cache_key, resp.model_dump(mode="json"), ttl_s=ttl_panel_s)
+        _profile_add(profile, _p("cache_store"), (time.perf_counter() - t0) * 1000.0)
 
+    _profile_add(profile, _p("total"), (time.perf_counter() - total_t0) * 1000.0)
     return resp
 
 
@@ -651,7 +694,9 @@ def build_scored_panels_tiles_registry(
     panels_manifest: dict[str, Any],
     maps_manifest: dict[str, Any],
     maps_root: Path,
+    profile: MutableMapping[str, float] | None = None,
 ) -> PanelListResponse:
+    total_t0 = time.perf_counter()
     panels = panels_manifest.get("panels", {})
     if not isinstance(panels, dict):
         raise KeyError("Invalid panels manifest: missing 'panels' root object.")
@@ -662,6 +707,7 @@ def build_scored_panels_tiles_registry(
         if key != "version" and isinstance(spec, dict)
     }
     scored_panel_ids: list[tuple[int, str]] = []
+    t0 = time.perf_counter()
     for panel_id, panel_spec in panels.items():
         score_map_id = panel_spec.get("score_map_id")
         if not isinstance(score_map_id, str) or not score_map_id:
@@ -684,12 +730,14 @@ def build_scored_panels_tiles_registry(
         )
         if score > 0:
             scored_panel_ids.append((score, panel_id))
+    _profile_add(profile, "score_maps", (time.perf_counter() - t0) * 1000.0)
 
     scored_panel_ids.sort(key=lambda item: item[0], reverse=True)
 
     merged_series: dict[str, SeriesPayload] = {}
     scored_panels: list[ScoredPanelPayload] = []
     location: LocationInfo | None = None
+    t0 = time.perf_counter()
     for score, panel_id in scored_panel_ids:
         panel_resp = build_panel_tiles_registry(
             place_resolver=place_resolver,
@@ -702,6 +750,8 @@ def build_scored_panels_tiles_registry(
             unit=unit,
             panel_id=panel_id,
             panels_manifest=panels_manifest,
+            profile=profile,
+            profile_prefix=f"panel_{panel_id}__",
         )
         if location is None:
             location = panel_resp.location
@@ -709,8 +759,10 @@ def build_scored_panels_tiles_registry(
             if key not in merged_series:
                 merged_series[key] = payload
         scored_panels.append(ScoredPanelPayload(score=score, panel=panel_resp.panel))
+    _profile_add(profile, "panel_build", (time.perf_counter() - t0) * 1000.0)
 
     if location is None:
+        t0 = time.perf_counter()
         place = place_resolver.resolve_place(lat, lon)
         location = LocationInfo(
             query=QueryPoint(lat=float(lat), lon=float(lon)),
@@ -727,6 +779,7 @@ def build_scored_panels_tiles_registry(
             panel_valid_bbox=None,
             panel_cell_indices=None,
         )
+        _profile_add(profile, "fallback_place_resolve", (time.perf_counter() - t0) * 1000.0)
 
     headlines = [
         _compute_t2m_preindustrial_headline(
@@ -737,7 +790,7 @@ def build_scored_panels_tiles_registry(
         )
     ]
 
-    return PanelListResponse(
+    resp = PanelListResponse(
         release=release,
         unit=unit.upper(),
         location=location,
@@ -745,6 +798,8 @@ def build_scored_panels_tiles_registry(
         series=merged_series,
         headlines=headlines,
     )
+    _profile_add(profile, "total", (time.perf_counter() - total_t0) * 1000.0)
+    return resp
 
 
 def _grid_from_id(grid_id: str) -> GridSpec:

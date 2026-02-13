@@ -16,12 +16,14 @@ from pathlib import Path
 from typing import List, Tuple
 
 
-def _request(url: str, timeout_s: float) -> tuple[int, bytes]:
+def _request(url: str, timeout_s: float) -> tuple[int, bytes, dict[str, str]]:
     try:
         with urllib.request.urlopen(url, timeout=timeout_s) as resp:
-            return int(resp.status), resp.read()
+            headers = {k.lower(): v for k, v in resp.headers.items()}
+            return int(resp.status), resp.read(), headers
     except urllib.error.HTTPError as e:
-        return int(e.code), e.read()
+        headers = {k.lower(): v for k, v in e.headers.items()} if e.headers else {}
+        return int(e.code), e.read(), headers
 
 
 def _reservoir_sample_points(csv_path: Path, n: int) -> List[Tuple[float, float]]:
@@ -89,6 +91,63 @@ def _bench_urls(urls: List[str], timeout_s: float) -> tuple[int, int, float, flo
             failures += 1
     avg, median, p95 = _stats(durations_ms)
     return len(durations_ms), failures, avg, median, p95
+
+
+def _bench_profiled_urls(
+    urls: List[str],
+    timeout_s: float,
+) -> tuple[int, int, float, float, float, dict[str, float], int]:
+    durations_ms: List[float] = []
+    failures = 0
+    breakdown_totals: dict[str, float] = {}
+    missing_header = 0
+
+    for url in urls:
+        t0 = time.perf_counter()
+        try:
+            status, _body, headers = _request(url, timeout_s)
+            if status != 200:
+                failures += 1
+                continue
+            durations_ms.append((time.perf_counter() - t0) * 1000.0)
+            raw = headers.get("x-profile-breakdown-ms")
+            if not raw:
+                missing_header += 1
+                continue
+            parsed = _parse_profile_header(raw)
+            for key, value in parsed.items():
+                breakdown_totals[key] = breakdown_totals.get(key, 0.0) + value
+        except Exception:
+            failures += 1
+
+    avg, median, p95 = _stats(durations_ms)
+    return (
+        len(durations_ms),
+        failures,
+        avg,
+        median,
+        p95,
+        breakdown_totals,
+        missing_header,
+    )
+
+
+def _parse_profile_header(value: str) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for token in value.split(","):
+        token = token.strip()
+        if not token or "=" not in token:
+            continue
+        key, raw = token.split("=", 1)
+        key = key.strip()
+        raw = raw.strip()
+        if not key:
+            continue
+        try:
+            out[key] = float(raw)
+        except ValueError:
+            continue
+    return out
 
 
 def main() -> None:
@@ -162,6 +221,17 @@ def main() -> None:
         action="store_true",
         help="Suppress human-readable output (useful with --json).",
     )
+    ap.add_argument(
+        "--profile-panel",
+        action="store_true",
+        help="Collect backend profile headers for a subset of panel requests.",
+    )
+    ap.add_argument(
+        "--profile-samples",
+        type=int,
+        default=20,
+        help="Number of panel requests to sample for cold/warm profiling.",
+    )
     args = ap.parse_args()
 
     points = _reservoir_sample_points(args.locations_csv, args.n)
@@ -200,6 +270,7 @@ def main() -> None:
         "panel": {},
         "autocomplete": {},
         "resolve": {},
+        "panel_profile": None,
         "smoke": None,
         "regression_failed": False,
     }
@@ -244,6 +315,104 @@ def main() -> None:
         "p95_ms": resolve_p95,
     }
 
+    if args.profile_panel:
+        samples = max(1, min(args.profile_samples, len(panel_urls)))
+        sample_urls = random.sample(panel_urls, samples)
+        cold_urls = [f"{url}&profile=true" for url in sample_urls]
+        warm_urls = [f"{url}&profile=true" for url in sample_urls]
+
+        (
+            cold_ok,
+            cold_fail,
+            cold_avg,
+            cold_median,
+            cold_p95,
+            cold_totals,
+            cold_missing_header,
+        ) = _bench_profiled_urls(cold_urls, args.timeout_s)
+        (
+            warm_ok,
+            warm_fail,
+            warm_avg,
+            warm_median,
+            warm_p95,
+            warm_totals,
+            warm_missing_header,
+        ) = _bench_profiled_urls(warm_urls, args.timeout_s)
+
+        cold_breakdown = {}
+        if cold_ok > 0:
+            cold_breakdown = {
+                key: value / cold_ok
+                for key, value in sorted(
+                    cold_totals.items(),
+                    key=lambda item: item[1],
+                    reverse=True,
+                )
+            }
+        warm_breakdown = {}
+        if warm_ok > 0:
+            warm_breakdown = {
+                key: value / warm_ok
+                for key, value in sorted(
+                    warm_totals.items(),
+                    key=lambda item: item[1],
+                    reverse=True,
+                )
+            }
+
+        results["panel_profile"] = {
+            "requested_samples": samples,
+            "cold": {
+                "ok": cold_ok,
+                "failed": cold_fail,
+                "avg_ms": cold_avg,
+                "median_ms": cold_median,
+                "p95_ms": cold_p95,
+                "missing_profile_header": cold_missing_header,
+                "avg_breakdown_ms": cold_breakdown,
+            },
+            "warm": {
+                "ok": warm_ok,
+                "failed": warm_fail,
+                "avg_ms": warm_avg,
+                "median_ms": warm_median,
+                "p95_ms": warm_p95,
+                "missing_profile_header": warm_missing_header,
+                "avg_breakdown_ms": warm_breakdown,
+            },
+        }
+
+        _print("Panel profile cold vs warm:")
+        _print(
+            f"  Cold: {cold_ok} ok, {cold_fail} failed  Avg: {cold_avg:.1f} ms  Median: {cold_median:.1f} ms  P95: {cold_p95:.1f} ms"
+        )
+        _print(
+            f"  Warm: {warm_ok} ok, {warm_fail} failed  Avg: {warm_avg:.1f} ms  Median: {warm_median:.1f} ms  P95: {warm_p95:.1f} ms"
+        )
+
+        _print("Panel profile breakdown (cold avg ms per request):")
+        if not cold_breakdown:
+            _print("  no cold profile data found (ensure API supports ?profile=true)")
+        else:
+            shown = 0
+            for key, value in cold_breakdown.items():
+                if shown >= 12:
+                    break
+                _print(f"  {key}: {value:.1f} ms")
+                shown += 1
+
+        _print("Panel profile breakdown (warm avg ms per request):")
+        if not warm_breakdown:
+            _print("  no warm profile data found (ensure API supports ?profile=true)")
+        else:
+            shown = 0
+            for key, value in warm_breakdown.items():
+                if shown >= 12:
+                    break
+                _print(f"  {key}: {value:.1f} ms")
+                shown += 1
+
     if args.smoke:
         _print("Smoke checks:")
 
@@ -252,7 +421,7 @@ def main() -> None:
                 raise SystemExit(f"Smoke check failed: {msg}")
 
         # Panel smoke: one request, 200, required keys
-        status, body = _request(panel_urls[0], args.timeout_s)
+        status, body, _headers = _request(panel_urls[0], args.timeout_s)
         _require(status == 200, f"panel status {status}")
         data = json.loads(body.decode("utf-8"))
         for key in ("release", "unit", "location", "panels", "series"):
@@ -261,7 +430,7 @@ def main() -> None:
         _require("geonameid" in data["location"]["place"], "place missing geonameid")
 
         # Autocomplete smoke
-        status, body = _request(auto_urls[0], args.timeout_s)
+        status, body, _headers = _request(auto_urls[0], args.timeout_s)
         _require(status == 200, f"autocomplete status {status}")
         data = json.loads(body.decode("utf-8"))
         _require("results" in data, "autocomplete missing results")
@@ -271,7 +440,7 @@ def main() -> None:
                 _require(key in item, f"autocomplete item missing {key}")
 
         # Resolve smoke
-        status, body = _request(resolve_urls[0], args.timeout_s)
+        status, body, _headers = _request(resolve_urls[0], args.timeout_s)
         _require(status == 200, f"resolve status {status}")
         data = json.loads(body.decode("utf-8"))
         _require("result" in data, "resolve missing result")

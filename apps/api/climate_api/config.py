@@ -21,6 +21,7 @@ class Settings:
     ttl_resolve_s: int
     ttl_panel_s: int
     score_map_preload: bool
+    enable_profile_headers: bool
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -109,6 +110,7 @@ def load_settings() -> Settings:
     ttl_resolve_s = int(os.environ.get("TTL_RESOLVE_S", "86400"))  # 1 day
     ttl_panel_s = int(os.environ.get("TTL_PANEL_S", "86400"))  # 1 day
     score_map_preload = _env_bool("SCORE_MAP_PRELOAD", False)
+    enable_profile_headers = _env_bool("ENABLE_PROFILE_HEADERS", False)
 
     return Settings(
         release=release,
@@ -125,4 +127,5 @@ def load_settings() -> Settings:
         ttl_resolve_s=ttl_resolve_s,
         ttl_panel_s=ttl_panel_s,
         score_map_preload=score_map_preload,
+        enable_profile_headers=enable_profile_headers,
     )

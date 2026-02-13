@@ -74,12 +74,24 @@ $ export REDIS_URL='redis://localhost:6379/0'
 # Optional: preload all non-constant score maps into RAM at startup
 # (avoids first-request disk I/O for score maps):
 $ export SCORE_MAP_PRELOAD=1
+# Optional: enable backend timing headers for /api/v/{release}/panel?profile=true
+# Safe gate:
+# - default is disabled
+# - only local requests are allowed
+# - disabled => HTTP 400, non-local => HTTP 403
+$ export ENABLE_PROFILE_HEADERS=true
 # FastAPI (LAN / phone testing):
 $ ./scripts/dev_api_lan.sh
 # Works without watchfiles installed:
 $ uvicorn apps.api.climate_api.main:app --reload --reload-dir apps/api --port 8001
 # Optional (after `pip install watchfiles`) to reduce reload scanning further:
 # $ uvicorn apps.api.climate_api.main:app --reload --reload-dir apps/api --reload-exclude 'data/*' --reload-exclude 'web/*' --port 8001
+
+# Example local profile request (returns X-Profile-Breakdown-ms + Server-Timing):
+$ curl -i "http://127.0.0.1:8001/api/v/dev/panel?lat=48.8566&lon=2.3522&profile=true"
+
+# Benchmark with profiling breakdown aggregation:
+$ python scripts/bench_api_endpoints.py --base-url http://127.0.0.1:8001 --release dev --n 200 --profile-panel --profile-samples 40
 
 # Inspect Redis
 $ redis-cli DBSIZE
