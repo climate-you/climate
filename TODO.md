@@ -13,6 +13,14 @@
 - Packager script:
   - specify projection in maps.json so it can be applied to MapLibre
   - era5 is downloaded as whole globe but then sliced, maybe this should be in the datasets/metrics as currently we need to force `--batch-tiles 4` for the packager to read the slices
+- Code:
+  - create branch before cleaning up so we can run streamlit
+  - clean code, remove old page and remove unused python modules
+  - regenerate fresh package.json
+  - rename api-demo to main page
+  - fix python tests (`pytest -q`)
+  - add more python tests
+  - add e2e tests
 
 ---
 
