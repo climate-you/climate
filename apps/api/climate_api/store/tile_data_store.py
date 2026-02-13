@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, MutableMapping
 
 import json
 import numpy as np
@@ -233,7 +233,12 @@ class TileDataStore:
         )
 
     def try_get_metric_vector(
-        self, metric: str, lat: float, lon: float
+        self,
+        metric: str,
+        lat: float,
+        lon: float,
+        profile: MutableMapping[str, float] | None = None,
+        profile_prefix: str = "",
     ) -> np.ndarray | None:
         """
         Return vector for the snapped cell:
@@ -247,7 +252,13 @@ class TileDataStore:
         if not p.exists():
             raise FileNotFoundError(f"Missing tile file: {p}")
 
-        hdr, vec = read_cell_series(p, o_lat=t.o_lat, o_lon=t.o_lon)
+        hdr, vec = read_cell_series(
+            p,
+            o_lat=t.o_lat,
+            o_lon=t.o_lon,
+            profile=profile,
+            profile_prefix=profile_prefix,
+        )
 
         # dev harness uses NaN for empty cells
         if np.issubdtype(vec.dtype, np.floating) and np.all(np.isnan(vec)):

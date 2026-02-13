@@ -480,6 +480,9 @@ def build_panel_tiles_registry(
     series_prepare_ms = 0.0
     data_cell_ms = 0.0
     for graph in panel_spec.get("graphs", []):
+        graph_id = str(graph.get("id", "unknown_graph"))
+        graph_fetch_ms = 0.0
+        graph_prepare_ms = 0.0
         graph_series_keys: list[str] = []
         graph_annotations: list[GraphAnnotation] = []
         graph_caption: str | None = None
@@ -499,45 +502,82 @@ def build_panel_tiles_registry(
             t0 = time.perf_counter()
             if metric in metric_vector_cache:
                 vec = metric_vector_cache[metric]
+                _profile_add(
+                    profile,
+                    _p(f"metric_{metric}__fetch_cache_hit"),
+                    (time.perf_counter() - t0) * 1000.0,
+                )
             else:
                 try:
-                    vec = tile_store.try_get_metric_vector(metric, lat, lon)
+                    vec = tile_store.try_get_metric_vector(
+                        metric,
+                        lat,
+                        lon,
+                        profile=profile,
+                        profile_prefix=_p(f"metric_{metric}__"),
+                    )
                 except FileNotFoundError:
                     metric_vector_cache[metric] = None
                     missing = True
                     continue
                 metric_vector_cache[metric] = vec
-            series_fetch_ms += (time.perf_counter() - t0) * 1000.0
+                _profile_add(
+                    profile,
+                    _p(f"metric_{metric}__fetch_cache_miss"),
+                    (time.perf_counter() - t0) * 1000.0,
+                )
+
+            fetch_ms = (time.perf_counter() - t0) * 1000.0
+            series_fetch_ms += fetch_ms
+            graph_fetch_ms += fetch_ms
+            _profile_add(profile, _p(f"series_{key}__fetch"), fetch_ms)
             if vec is None:
                 missing = True
                 continue
 
             t0 = time.perf_counter()
             vec = np.asarray(vec, dtype=np.float32).reshape(-1)
+            axis_t0 = time.perf_counter()
             if metric in metric_axis_cache:
                 axis_vals = metric_axis_cache[metric]
                 x = metric_x_cache[metric]
+                _profile_add(
+                    profile,
+                    _p(f"metric_{metric}__axis_cache_hit"),
+                    (time.perf_counter() - axis_t0) * 1000.0,
+                )
             else:
                 axis_vals = _series_axis(tile_store, metric, vec.size)
                 x = np.asarray([_axis_to_numeric(v) for v in axis_vals], dtype=np.float64)
                 metric_axis_cache[metric] = axis_vals
                 metric_x_cache[metric] = x
+                _profile_add(
+                    profile,
+                    _p(f"metric_{metric}__axis_cache_miss"),
+                    (time.perf_counter() - axis_t0) * 1000.0,
+                )
+            axis_ms = (time.perf_counter() - axis_t0) * 1000.0
 
+            transform_t0 = time.perf_counter()
             y = _apply_transform(x=x, y=vec, transform=series_spec.get("transform"))
             y = _convert_unit(y, series_spec.get("unit"), unit)
+            transform_ms = (time.perf_counter() - transform_t0) * 1000.0
 
+            payload_t0 = time.perf_counter()
             series_payload[key] = SeriesPayload(
                 x=list(axis_vals),
                 y=_series_to_list(y),
                 unit=unit,
                 style=series_spec.get("style"),
             )
+            payload_ms = (time.perf_counter() - payload_t0) * 1000.0
             graph_series_keys.append(key)
 
             if base_series_for_caption is None:
                 if all(isinstance(v, (int, np.integer)) for v in axis_vals):
                     base_series_for_caption = ([int(v) for v in axis_vals], y)
 
+            ann_t0 = time.perf_counter()
             graph_annotations.extend(
                 _build_series_annotations(
                     series_key=key,
@@ -546,7 +586,14 @@ def build_panel_tiles_registry(
                     annotations=series_spec.get("annotations"),
                 )
             )
-            series_prepare_ms += (time.perf_counter() - t0) * 1000.0
+            ann_ms = (time.perf_counter() - ann_t0) * 1000.0
+            prepare_ms = (time.perf_counter() - t0) * 1000.0
+            series_prepare_ms += prepare_ms
+            graph_prepare_ms += prepare_ms
+            _profile_add(profile, _p(f"series_{key}__axis"), axis_ms)
+            _profile_add(profile, _p(f"series_{key}__transform"), transform_ms)
+            _profile_add(profile, _p(f"series_{key}__payload"), payload_ms)
+            _profile_add(profile, _p(f"series_{key}__annotations"), ann_ms)
 
             grid = tile_store._metric_grid(metric)
             if grid.grid_id not in data_cells_map:
@@ -602,6 +649,8 @@ def build_panel_tiles_registry(
                 animation=graph.get("animation"),
             )
         )
+        _profile_add(profile, _p(f"graph_{graph_id}__series_fetch"), graph_fetch_ms)
+        _profile_add(profile, _p(f"graph_{graph_id}__series_prepare"), graph_prepare_ms)
     _profile_add(profile, _p("graph_build"), (time.perf_counter() - graph_t0) * 1000.0)
     _profile_add(profile, _p("series_fetch"), series_fetch_ms)
     _profile_add(profile, _p("series_prepare"), series_prepare_ms)

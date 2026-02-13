@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Tuple
+from typing import Literal, MutableMapping, Tuple
+import time
 
 import numpy as np
 import struct
@@ -107,6 +108,16 @@ class TileHeader:
 def cell_index(o_lat: int, o_lon: int, tile_w: int) -> int:
     """Row-major cell index inside a tile."""
     return int(o_lat) * int(tile_w) + int(o_lon)
+
+
+def _profile_add(
+    profile: MutableMapping[str, float] | None,
+    key: str,
+    dt_ms: float,
+) -> None:
+    if profile is None:
+        return
+    profile[key] = profile.get(key, 0.0) + float(dt_ms)
 
 
 def _require_zstd() -> None:
@@ -267,17 +278,32 @@ def read_tile_array(path: str | Path) -> tuple[TileHeader, np.ndarray]:
 
 
 def read_cell_series(
-    path: str | Path, *, o_lat: int, o_lon: int
+    path: str | Path,
+    *,
+    o_lat: int,
+    o_lon: int,
+    profile: MutableMapping[str, float] | None = None,
+    profile_prefix: str = "",
 ) -> tuple[TileHeader, np.ndarray]:
     """
     Read just one cell's vector (scalar => length 1 array, series => length nyears).
     Note: this still decompresses the whole tile (zstd is block-based; random seek is not worth it yet).
     """
-    path = Path(path)
-    data = path.read_bytes()
-    data = _decompress_if_needed(path, data)
+    def _p(name: str) -> str:
+        return f"{profile_prefix}{name}" if profile_prefix else name
 
+    path = Path(path)
+    t0 = time.perf_counter()
+    data = path.read_bytes()
+    _profile_add(profile, _p("tile_read_bytes"), (time.perf_counter() - t0) * 1000.0)
+
+    t0 = time.perf_counter()
+    data = _decompress_if_needed(path, data)
+    _profile_add(profile, _p("tile_decompress"), (time.perf_counter() - t0) * 1000.0)
+
+    t0 = time.perf_counter()
     hdr = TileHeader.unpack(data[:HEADER_SIZE])
+    _profile_add(profile, _p("tile_header_unpack"), (time.perf_counter() - t0) * 1000.0)
     if hdr.version != VERSION:
         raise ValueError(f"Unsupported tile version: {hdr.version}")
 
@@ -287,13 +313,16 @@ def read_cell_series(
             f"Cell index out of bounds: {o_lat=}, {o_lon=}, tile={hdr.tile_h}x{hdr.tile_w}"
         )
 
+    t0 = time.perf_counter()
     payload = np.frombuffer(data, dtype=hdr.dtype, offset=HEADER_SIZE)
 
     if hdr.nyears == 0:
         v = payload[idx : idx + 1].astype(hdr.dtype, copy=True)
+        _profile_add(profile, _p("tile_extract_cell"), (time.perf_counter() - t0) * 1000.0)
         return hdr, v
 
     start = idx * hdr.nyears
     end = start + hdr.nyears
     v = payload[start:end].astype(hdr.dtype, copy=True)
+    _profile_add(profile, _p("tile_extract_cell"), (time.perf_counter() - t0) * 1000.0)
     return hdr, v

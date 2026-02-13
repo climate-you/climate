@@ -279,42 +279,6 @@ def main() -> None:
         if not args.quiet and not args.json:
             print(msg)
 
-    _print("Panel endpoint:")
-    ok, fail, avg, median, panel_p95 = _bench_urls(panel_urls, args.timeout_s)
-    _print(f"  Requests: {ok} ok, {fail} failed")
-    _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {panel_p95:.1f} ms")
-    results["panel"] = {
-        "ok": ok,
-        "failed": fail,
-        "avg_ms": avg,
-        "median_ms": median,
-        "p95_ms": panel_p95,
-    }
-
-    _print("Autocomplete endpoint:")
-    ok, fail, avg, median, auto_p95 = _bench_urls(auto_urls, args.timeout_s)
-    _print(f"  Requests: {ok} ok, {fail} failed")
-    _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {auto_p95:.1f} ms")
-    results["autocomplete"] = {
-        "ok": ok,
-        "failed": fail,
-        "avg_ms": avg,
-        "median_ms": median,
-        "p95_ms": auto_p95,
-    }
-
-    _print("Resolve endpoint:")
-    ok, fail, avg, median, resolve_p95 = _bench_urls(resolve_urls, args.timeout_s)
-    _print(f"  Requests: {ok} ok, {fail} failed")
-    _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {resolve_p95:.1f} ms")
-    results["resolve"] = {
-        "ok": ok,
-        "failed": fail,
-        "avg_ms": avg,
-        "median_ms": median,
-        "p95_ms": resolve_p95,
-    }
-
     if args.profile_panel:
         samples = max(1, min(args.profile_samples, len(panel_urls)))
         sample_urls = random.sample(panel_urls, samples)
@@ -412,6 +376,42 @@ def main() -> None:
                     break
                 _print(f"  {key}: {value:.1f} ms")
                 shown += 1
+
+    _print("Panel endpoint:")
+    ok, fail, avg, median, panel_p95 = _bench_urls(panel_urls, args.timeout_s)
+    _print(f"  Requests: {ok} ok, {fail} failed")
+    _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {panel_p95:.1f} ms")
+    results["panel"] = {
+        "ok": ok,
+        "failed": fail,
+        "avg_ms": avg,
+        "median_ms": median,
+        "p95_ms": panel_p95,
+    }
+
+    _print("Autocomplete endpoint:")
+    ok, fail, avg, median, auto_p95 = _bench_urls(auto_urls, args.timeout_s)
+    _print(f"  Requests: {ok} ok, {fail} failed")
+    _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {auto_p95:.1f} ms")
+    results["autocomplete"] = {
+        "ok": ok,
+        "failed": fail,
+        "avg_ms": avg,
+        "median_ms": median,
+        "p95_ms": auto_p95,
+    }
+
+    _print("Resolve endpoint:")
+    ok, fail, avg, median, resolve_p95 = _bench_urls(resolve_urls, args.timeout_s)
+    _print(f"  Requests: {ok} ok, {fail} failed")
+    _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {resolve_p95:.1f} ms")
+    results["resolve"] = {
+        "ok": ok,
+        "failed": fail,
+        "avg_ms": avg,
+        "median_ms": median,
+        "p95_ms": resolve_p95,
+    }
 
     if args.smoke:
         _print("Smoke checks:")
