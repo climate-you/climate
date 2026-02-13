@@ -3,7 +3,6 @@
   - (needed?) Add prefix‑length + fuzziness tuning knobs to autocomplete
   - use zoom level to decide whether to snap to bigger cities (eg. Paris instead of Clichy)
 - UI:
-  - Mobile version fix backend doesn't access data
   - Mobile version fix minzoom of globe
   - Map: don't reset zoom when clicking on map (don't zoom out)
   - remove "Selected Location: "
