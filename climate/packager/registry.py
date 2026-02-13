@@ -6,6 +6,7 @@ import os
 import re
 import signal
 import threading
+import zipfile
 from pathlib import Path
 import time
 from typing import Any, Iterable
@@ -58,6 +59,10 @@ class TileRange:
     tile_c1: int
 
 
+_REGRID_DEBUG_SEEN: set[str] = set()
+_REGRID_DEBUG_SEEN_LOCK = threading.Lock()
+
+
 def _grid_from_id(grid_id: str, *, tile_size: int) -> GridSpec:
     if grid_id == "global_0p25":
         return GridSpec.global_0p25(tile_size=tile_size)
@@ -80,21 +85,77 @@ def _find_lat_lon_names(ds: xr.Dataset) -> tuple[str, str]:
     return lat_name, lon_name
 
 
-def _get_single_data_var(ds: xr.Dataset) -> str:
+def _data_var_aliases(name: str) -> list[str]:
+    aliases = {
+        "near_surface_air_temperature": ["tas"],
+        "2m_temperature": ["t2m"],
+    }
+    return aliases.get(name, [])
+
+
+def _pick_data_var(ds: xr.Dataset, *, preferred: str | None = None) -> str:
     vars_ = list(ds.data_vars)
-    if len(vars_) != 1:
-        raise RuntimeError(f"Expected 1 data var in file, got {vars_}")
-    return vars_[0]
+    if not vars_:
+        raise RuntimeError("Dataset has no data_vars")
+
+    preferred_name = preferred if isinstance(preferred, str) and preferred else None
+    if preferred_name:
+        if preferred_name in ds.data_vars:
+            return preferred_name
+        for alias in _data_var_aliases(preferred_name):
+            if alias in ds.data_vars:
+                return alias
+
+    non_bounds = [
+        v
+        for v in vars_
+        if not (v.endswith("_bnds") or v.endswith("_bounds") or v == "bounds")
+    ]
+    if len(non_bounds) == 1:
+        return non_bounds[0]
+    if len(vars_) == 1:
+        return vars_[0]
+    raise RuntimeError(
+        f"Could not choose a single data var (preferred={preferred_name!r}); got {vars_}"
+    )
 
 
 def _open_dataset_dask(
     path: Path, *, dask_chunk_lat: int, dask_chunk_lon: int
 ) -> xr.Dataset:
-    ds = xr.open_dataset(path, chunks="auto")
+    # Avoid chunks="auto": some CDS/CMIP files expose object/cftime arrays and
+    # xarray+dask can fail during auto size estimation/rechunking.
+    ds = xr.open_dataset(path, chunks={})
     lat_name, lon_name = _find_lat_lon_names(ds)
     if lat_name in ds.dims and lon_name in ds.dims:
         ds = ds.chunk({lat_name: int(dask_chunk_lat), lon_name: int(dask_chunk_lon)})
     return ds
+
+
+def _normalize_cds_payload_to_netcdf(path: Path) -> Path:
+    """
+    CDS can return ZIP payloads even when target filename ends with .nc.
+    If so, extract the first .nc member and replace `path` with it.
+    """
+    if not path.exists():
+        return path
+    with path.open("rb") as f:
+        sig = f.read(4)
+    if sig != b"PK\x03\x04":
+        return path
+
+    with zipfile.ZipFile(path, "r") as zf:
+        members = [m for m in zf.namelist() if m.lower().endswith(".nc")]
+        if not members:
+            members = zf.namelist()
+        if not members:
+            raise RuntimeError(f"ZIP payload has no members: {path}")
+        member = members[0]
+        tmp = path.with_suffix(path.suffix + ".unzipped.tmp")
+        with zf.open(member) as src, tmp.open("wb") as dst:
+            dst.write(src.read())
+    tmp.replace(path)
+    return path
 
 
 def _compute_tiles_from_cds_downloads(
@@ -118,6 +179,7 @@ def _compute_tiles_from_cds_downloads(
     dask_chunk_lon: int,
     output_years: list[int],
     time_axis: str,
+    data_var_hint: str | None = None,
 ) -> int:
     agg_fn = _agg_map().get(agg)
     if agg_fn is None:
@@ -137,9 +199,18 @@ def _compute_tiles_from_cds_downloads(
                 else:
                     ds = xr.open_dataset(dl_path)
                 try:
-                    var_name = _get_single_data_var(ds)
+                    var_name = _pick_data_var(ds, preferred=data_var_hint)
                     da = ds[var_name]
                     da = _apply_postprocess(da, postprocess)
+                    da = _maybe_regrid_to_metric_grid(
+                        da=da,
+                        grid=grid,
+                        tile_range=tile_range,
+                        params=params,
+                        debug=debug,
+                        label=f"cds:{metric_id}:{dl_path.name}",
+                        metric_id=metric_id,
+                    )
                     daily_parts_all.append(da)
                 finally:
                     ds.close()
@@ -163,17 +234,25 @@ def _compute_tiles_from_cds_downloads(
                 else:
                     ds = xr.open_dataset(dl_path)
                 try:
-                    var_name = _get_single_data_var(ds)
+                    var_name = _pick_data_var(ds, preferred=data_var_hint)
                     da = ds[var_name]
                     da = _apply_postprocess(da, postprocess)
+                    da = _maybe_regrid_to_metric_grid(
+                        da=da,
+                        grid=grid,
+                        tile_range=tile_range,
+                        params=params,
+                        debug=debug,
+                        label=f"cds:{metric_id}:{dl_path.name}",
+                        metric_id=metric_id,
+                    )
                     if debug:
                         print(
                             f"[cds] Aggregating {time_axis} (monthly source, agg={agg}) "
                             f"for years {years_part[0]}..{years_part[-1]}"
                         )
                     da_out = agg_fn(da, params)
-                    if "year" in da_out.dims:
-                        da_out = da_out.sel(year=years_part)
+                    da_out = _select_years_if_present(da_out, years_part)
                     da_parts.append(da_out)
                 finally:
                     ds.close()
@@ -189,9 +268,18 @@ def _compute_tiles_from_cds_downloads(
                     else:
                         ds = xr.open_dataset(dl_path)
                     try:
-                        var_name = _get_single_data_var(ds)
+                        var_name = _pick_data_var(ds, preferred=data_var_hint)
                         da = ds[var_name]
                         da = _apply_postprocess(da, postprocess)
+                        da = _maybe_regrid_to_metric_grid(
+                            da=da,
+                            grid=grid,
+                            tile_range=tile_range,
+                            params=params,
+                            debug=debug,
+                            label=f"cds:{metric_id}:{dl_path.name}",
+                            metric_id=metric_id,
+                        )
                         daily_parts.append(da)
                     finally:
                         ds.close()
@@ -208,8 +296,7 @@ def _compute_tiles_from_cds_downloads(
                         f"for years {years_part[0]}..{years_part[-1]}"
                     )
                 da_out = agg_fn(da_daily, params)
-                if "year" in da_out.dims:
-                    da_out = da_out.sel(year=years_part)
+                da_out = _select_years_if_present(da_out, years_part)
                 da_parts.append(da_out)
 
     written = _concat_and_write_time_tiles(
@@ -254,6 +341,7 @@ def _compute_tiles_from_erddap_downloads(
     dask_chunk_lon: int,
     output_years: list[int],
     time_axis: str,
+    data_var_hint: str | None = None,
 ) -> int:
     agg_fn = _agg_map().get(agg)
     if agg_fn is None:
@@ -273,11 +361,20 @@ def _compute_tiles_from_erddap_downloads(
                 else:
                     ds = xr.open_dataset(dl_path)
                 try:
-                    var_name = _get_single_data_var(ds)
+                    var_name = _pick_data_var(ds, preferred=data_var_hint)
                     da = ds[var_name]
                     if "zlev" in da.dims:
                         da = da.sel(zlev=0.0, drop=True)
                     da = _apply_postprocess(da, postprocess)
+                    da = _maybe_regrid_to_metric_grid(
+                        da=da,
+                        grid=grid,
+                        tile_range=tile_range,
+                        params=params,
+                        debug=debug,
+                        label=f"erddap:{metric_id}:{dl_path.name}",
+                        metric_id=metric_id,
+                    )
                     daily_parts_all.append(da)
                 finally:
                     ds.close()
@@ -300,19 +397,27 @@ def _compute_tiles_from_erddap_downloads(
             else:
                 ds = xr.open_dataset(dl_path)
             try:
-                var_name = _get_single_data_var(ds)
+                var_name = _pick_data_var(ds, preferred=data_var_hint)
                 da = ds[var_name]
                 if "zlev" in da.dims:
                     da = da.sel(zlev=0.0, drop=True)
                 da = _apply_postprocess(da, postprocess)
+                da = _maybe_regrid_to_metric_grid(
+                    da=da,
+                    grid=grid,
+                    tile_range=tile_range,
+                    params=params,
+                    debug=debug,
+                    label=f"erddap:{metric_id}:{dl_path.name}",
+                    metric_id=metric_id,
+                )
                 if debug:
                     print(
                         f"[erddap] Aggregating {time_axis} (agg={agg}) "
                         f"for years {years_part[0]}..{years_part[-1]}"
                     )
                 da_out = agg_fn(da, params)
-                if "year" in da_out.dims:
-                    da_out = da_out.sel(year=years_part)
+                da_out = _select_years_if_present(da_out, years_part)
                 da_parts.append(da_out)
             finally:
                 ds.close()
@@ -447,6 +552,92 @@ def _apply_postprocess(da: xr.DataArray, steps: list[object] | None) -> xr.DataA
     return da
 
 
+def _batch_target_lat_lon(grid: GridSpec, tile_range: TileRange) -> tuple[np.ndarray, np.ndarray]:
+    ts = grid.tile_size
+    i_lat0 = tile_range.tile_r0 * ts
+    i_lon0 = tile_range.tile_c0 * ts
+    i_lat1 = min((tile_range.tile_r1 + 1) * ts - 1, grid.nlat - 1)
+    i_lon1 = min((tile_range.tile_c1 + 1) * ts - 1, grid.nlon - 1)
+
+    lat_vals = np.asarray(
+        [cell_center_latlon(i, i_lon0, grid)[0] for i in range(i_lat0, i_lat1 + 1)],
+        dtype=np.float64,
+    )
+    lon_vals = np.asarray(
+        [cell_center_latlon(i_lat0, j, grid)[1] for j in range(i_lon0, i_lon1 + 1)],
+        dtype=np.float64,
+    )
+    return lat_vals, lon_vals
+
+
+def _normalize_lon_to_180(da: xr.DataArray, lon_name: str) -> xr.DataArray:
+    lon_raw = np.asarray(da[lon_name].values, dtype=np.float64)
+    lon_norm = ((lon_raw + 180.0) % 360.0) - 180.0
+    if np.any(np.abs(lon_raw - lon_norm) > 1e-10):
+        da = da.assign_coords({lon_name: lon_norm})
+    return da.sortby(lon_name)
+
+
+def _maybe_regrid_to_metric_grid(
+    *,
+    da: xr.DataArray,
+    grid: GridSpec,
+    tile_range: TileRange,
+    params: dict[str, Any] | None,
+    debug: bool,
+    label: str,
+    metric_id: str,
+) -> xr.DataArray:
+    p = params or {}
+    if not bool(p.get("regrid_to_metric_grid", False)):
+        return da
+
+    method_raw = str(p.get("regrid_method", "bilinear")).lower()
+    if method_raw == "bilinear":
+        interp_method = "linear"
+    elif method_raw == "nearest":
+        interp_method = "nearest"
+    else:
+        raise ValueError(f"Unsupported regrid_method: {method_raw}")
+
+    lat_name, lon_name = _find_lat_lon_names(da.to_dataset(name="v"))
+    if lat_name not in da.dims or lon_name not in da.dims:
+        raise RuntimeError(
+            f"Cannot regrid {label}: expected lat/lon dimensions in {da.dims}"
+        )
+
+    da_src = da.sortby(lat_name)
+    da_src = _normalize_lon_to_180(da_src, lon_name)
+    # Some CMIP files use object/cftime coordinates on time; xarray+dask interpolation can
+    # raise on object dtype rechunking. Regridding batch chunks in-memory is robust here.
+    if bool((params or {}).get("regrid_in_memory", True)):
+        da_src = da_src.load()
+
+    target_lat, target_lon = _batch_target_lat_lon(grid, tile_range)
+    if target_lat.size == 0 or target_lon.size == 0:
+        raise RuntimeError(
+            f"Cannot regrid {label}: empty target coordinates for batch "
+            f"r{tile_range.tile_r0}-{tile_range.tile_r1} c{tile_range.tile_c0}-{tile_range.tile_c1}"
+        )
+
+    if debug:
+        with _REGRID_DEBUG_SEEN_LOCK:
+            first_for_metric = metric_id not in _REGRID_DEBUG_SEEN
+            if first_for_metric:
+                _REGRID_DEBUG_SEEN.add(metric_id)
+        if first_for_metric:
+            print(
+                f"[regrid] metric={metric_id} method={method_raw} "
+                f"src_grid=({da_src.sizes.get(lat_name)} lat x {da_src.sizes.get(lon_name)} lon) "
+                f"-> dst_grid=({target_lat.size} lat x {target_lon.size} lon)"
+            )
+
+    return da_src.interp(
+        {lat_name: target_lat, lon_name: target_lon},
+        method=interp_method,
+    )
+
+
 def _append_yearly_part(
     *,
     da: xr.DataArray,
@@ -460,6 +651,24 @@ def _append_yearly_part(
     da_ann = da_ann.sel(year=years_part)
     da_parts.append(da_ann)
     years_parts.extend(years_part)
+
+
+def _select_years_if_present(da_out: xr.DataArray, years_part: list[int]) -> xr.DataArray:
+    if "year" not in da_out.dims:
+        return da_out
+    if not years_part:
+        return da_out
+    try:
+        years_avail = [int(v) for v in np.asarray(da_out["year"].values).tolist()]
+    except Exception:
+        return da_out
+
+    wanted = set(int(y) for y in years_part)
+    keep = [y for y in years_avail if y in wanted]
+    if not keep:
+        # Some aggregators intentionally collapse to one label year (e.g., climatology baseline).
+        return da_out
+    return da_out.sel(year=keep)
 
 
 def _concat_and_write_time_tiles(
@@ -827,6 +1036,7 @@ def _download_batch_monthly_means(
     variable: str,
     params: dict[str, Any] | None,
 ) -> Path:
+    p = params or {}
     years_int = list(range(int(start_year), int(end_year) + 1))
     years_str = [str(y) for y in years_int]
 
@@ -839,17 +1049,45 @@ def _download_batch_monthly_means(
     )
     area_req = tuple(round(coord, 2) for coord in area)
 
+    dataset_tag = re.sub(r"[^a-z0-9]+", "_", str(dataset).lower()).strip("_")
+    prefix = f"cds_monthly_{dataset_tag}_{variable}"
+    cache_tag = p.get("cache_tag")
+    if isinstance(cache_tag, str) and cache_tag.strip():
+        cache_tag_norm = re.sub(r"[^a-z0-9]+", "_", cache_tag.lower()).strip("_")
+        if cache_tag_norm:
+            prefix = f"{prefix}_{cache_tag_norm}"
     batch_dir = (
         cache_dir
-        / f"era5_monthly_{variable}_{grid.grid_id}_r{tile_range.tile_r0:03d}-{tile_range.tile_r1:03d}_c{tile_range.tile_c0:03d}-{tile_range.tile_c1:03d}"
+        / f"{prefix}_{grid.grid_id}_r{tile_range.tile_r0:03d}-{tile_range.tile_r1:03d}_c{tile_range.tile_c0:03d}-{tile_range.tile_c1:03d}"
     )
     batch_dir.mkdir(parents=True, exist_ok=True)
     dl_path = batch_dir / (
-        f"era5_monthly_{variable}_{grid.grid_id}_r{tile_range.tile_r0:03d}-{tile_range.tile_r1:03d}_c{tile_range.tile_c0:03d}-{tile_range.tile_c1:03d}_{start_year}-{end_year}.nc"
+        f"{prefix}_{grid.grid_id}_r{tile_range.tile_r0:03d}-{tile_range.tile_r1:03d}_c{tile_range.tile_c0:03d}-{tile_range.tile_c1:03d}_{start_year}-{end_year}.nc"
     )
+    legacy_prefix = f"era5_monthly_{variable}"
+    legacy_batch_dir = (
+        cache_dir
+        / f"{legacy_prefix}_{grid.grid_id}_r{tile_range.tile_r0:03d}-{tile_range.tile_r1:03d}_c{tile_range.tile_c0:03d}-{tile_range.tile_c1:03d}"
+    )
+    legacy_dl_path = legacy_batch_dir / (
+        f"{legacy_prefix}_{grid.grid_id}_r{tile_range.tile_r0:03d}-{tile_range.tile_r1:03d}_c{tile_range.tile_c0:03d}-{tile_range.tile_c1:03d}_{start_year}-{end_year}.nc"
+    )
+
+    if (not overwrite_download) and (not dl_path.exists()) and legacy_dl_path.exists():
+        if debug:
+            print(f"[cache] Reusing legacy monthly cache path: {legacy_dl_path}")
+        dl_path.parent.mkdir(parents=True, exist_ok=True)
+        _normalize_cds_payload_to_netcdf(legacy_dl_path)
+        legacy_dl_path.replace(dl_path)
+        try:
+            if legacy_batch_dir.exists() and not any(legacy_batch_dir.iterdir()):
+                legacy_batch_dir.rmdir()
+        except Exception:
+            pass
 
     if dl_path.exists() and not overwrite_download:
         try:
+            _normalize_cds_payload_to_netcdf(dl_path)
             _ = xr.open_dataset(dl_path)
             _.close()
             print(f"Using cached download: {dl_path}")
@@ -873,7 +1111,6 @@ def _download_batch_monthly_means(
             f"area={area} grid={grid.deg}"
         )
 
-    p = params or {}
     if dataset == ERA5_MONTHLY_MEANS_DATASET:
         req = build_monthly_means_request(
             years=years_str,
@@ -908,6 +1145,7 @@ def _download_batch_monthly_means(
             req[area_field] = [area[0], area[1], area[2], area[3]]
 
     retrieve(dataset, req, dl_path, overwrite=overwrite_download)
+    _normalize_cds_payload_to_netcdf(dl_path)
     print(f"Downloaded: {dl_path}")
     return dl_path
 
@@ -951,6 +1189,7 @@ def _download_batch_daily_stats(
 
     if dl_path.exists() and not overwrite_download:
         try:
+            _normalize_cds_payload_to_netcdf(dl_path)
             _ = xr.open_dataset(dl_path)
             _.close()
             print(f"Using cached download: {dl_path}")
@@ -1011,6 +1250,7 @@ def _download_batch_daily_stats(
     )
     try:
         retrieve(ERA5_DAILY_STATS_DATASET, req, dl_path, overwrite=overwrite_download)
+        _normalize_cds_payload_to_netcdf(dl_path)
     except Exception:
         req_path = Path(f"{dl_path}.request.json")
         req_path.write_text(json.dumps(req, indent=2, sort_keys=True))
@@ -1533,12 +1773,16 @@ def package_registry(
                 with ProcessPoolExecutor(max_workers=workers_eff) as executor:
                     futures = []
                     stop_downloads = False
+                    future_errors: list[str] = []
                     def _on_future_done(fut) -> None:
                         nonlocal batches_completed, total_written
                         try:
                             written = int(fut.result())
-                        except Exception:
+                        except Exception as exc:
                             written = 0
+                            with counters_lock:
+                                future_errors.append(repr(exc))
+                            print(f"[error] Worker failed for metric={metric_id}: {exc!r}")
                         with counters_lock:
                             total_written += written
                             batches_completed += 1
@@ -1722,6 +1966,7 @@ def package_registry(
                                     dask_chunk_lon=dask_chunk_lon,
                                     output_years=years_int,
                                     time_axis=time_axis,
+                                    data_var_hint=variable,
                                 )
                             )
                             futures[-1].add_done_callback(_on_future_done)
@@ -1830,6 +2075,7 @@ def package_registry(
                                     dask_chunk_lon=dask_chunk_lon,
                                     output_years=years_int,
                                     time_axis=time_axis,
+                                    data_var_hint=source.get("variable"),
                                 )
                             )
                             futures[-1].add_done_callback(_on_future_done)
@@ -1838,10 +2084,20 @@ def package_registry(
                         else:
                             raise ValueError(f"Unsupported source type: {source_type}")
 
-                    for _ in as_completed(futures):
-                        pass
+                    for fut in as_completed(futures):
+                        try:
+                            fut.result()
+                        except Exception:
+                            # Already tracked and logged by callback.
+                            pass
                     summary_stop.set()
                     summary_thread.join(timeout=1)
+                    if future_errors:
+                        preview = "; ".join(future_errors[:3])
+                        raise RuntimeError(
+                            f"{len(future_errors)} worker batch(es) failed for metric={metric_id}. "
+                            f"First errors: {preview}"
+                        )
                     if stop_after_current:
                         in_flight = n_batches_processed - batches_completed
                         print(
@@ -2016,6 +2272,7 @@ def package_registry(
                         dask_chunk_lon=dask_chunk_lon,
                         output_years=years_int,
                         time_axis=time_axis,
+                        data_var_hint=variable,
                     )
 
                     n_batches_processed += 1
@@ -2100,6 +2357,7 @@ def package_registry(
                         dask_chunk_lon=dask_chunk_lon,
                         output_years=years_int,
                         time_axis=time_axis,
+                        data_var_hint=source.get("variable"),
                     )
 
                     n_batches_processed += 1

@@ -38,6 +38,28 @@ from climate.tiles.layout import GridSpec, locate_tile, cell_center_latlon
 _SCORE_MAP_VALUES_CACHE: dict[str, np.ndarray] = {}
 _SCORE_MAP_VALUES_CACHE_LOCK = Lock()
 _HEADLINE_RECENT_YEARS = 5
+_CMIP_BASELINE_METRIC_PAIRS: tuple[tuple[str, str], ...] = (
+    (
+        "t2m_preindustrial_baseline_access_cm2_c",
+        "t2m_cmip_baseline_1979_2000_access_cm2_c",
+    ),
+    (
+        "t2m_preindustrial_baseline_canesm5_c",
+        "t2m_cmip_baseline_1979_2000_canesm5_c",
+    ),
+    (
+        "t2m_preindustrial_baseline_mpi_esm1_2_lr_c",
+        "t2m_cmip_baseline_1979_2000_mpi_esm1_2_lr_c",
+    ),
+    (
+        "t2m_preindustrial_baseline_ipsl_cm6a_lr_c",
+        "t2m_cmip_baseline_1979_2000_ipsl_cm6a_lr_c",
+    ),
+    (
+        "t2m_preindustrial_baseline_ukesm1_0_ll_c",
+        "t2m_cmip_baseline_1979_2000_ukesm1_0_ll_c",
+    ),
+)
 
 
 def preload_score_maps_cache(
@@ -279,28 +301,13 @@ def _compute_t2m_preindustrial_headline(
     unit: str,
 ) -> HeadlinePayload:
     current_metric = "t2m_yearly_mean_c"
-    baseline_metric = "t2m_preindustrial_baseline_c"
     baseline_label = "1850-1900"
-    method = "local recent 5-year mean minus local pre-industrial climatology metric"
+    method = "ERA5 recent 5y minus ERA5 1979-2000, plus mean CMIP offset"
     try:
         vec = tile_store.try_get_metric_vector(current_metric, lat, lon)
     except FileNotFoundError:
         vec = None
-    try:
-        baseline_vec = tile_store.try_get_metric_vector(baseline_metric, lat, lon)
-    except FileNotFoundError:
-        baseline_vec = None
     if vec is None:
-        return HeadlinePayload(
-            key="t2m_vs_preindustrial_local",
-            label="Air temperature change vs pre-industrial",
-            value=None,
-            unit=unit.upper(),
-            baseline=baseline_label,
-            period=f"latest {_HEADLINE_RECENT_YEARS}-year mean",
-            method=method,
-        )
-    if baseline_vec is None:
         return HeadlinePayload(
             key="t2m_vs_preindustrial_local",
             label="Air temperature change vs pre-industrial",
@@ -317,19 +324,6 @@ def _compute_t2m_preindustrial_headline(
     finite = np.isfinite(y) & np.isfinite(year_vals)
     years = year_vals.astype(np.int32, copy=False)
 
-    baseline_values = np.asarray(baseline_vec, dtype=np.float64).reshape(-1)
-    baseline_finite = baseline_values[np.isfinite(baseline_values)]
-    if baseline_finite.size == 0:
-        return HeadlinePayload(
-            key="t2m_vs_preindustrial_local",
-            label="Air temperature change vs pre-industrial",
-            value=None,
-            unit=unit.upper(),
-            baseline=baseline_label,
-            period=f"latest {_HEADLINE_RECENT_YEARS}-year mean",
-            method=method,
-        )
-
     finite_years = years[finite]
     if finite_years.size == 0:
         return HeadlinePayload(
@@ -344,6 +338,7 @@ def _compute_t2m_preindustrial_headline(
     latest_year = int(np.max(finite_years))
     recent_start = latest_year - (_HEADLINE_RECENT_YEARS - 1)
     recent_mask = finite & (years >= recent_start) & (years <= latest_year)
+    era5_ref_mask = finite & (years >= 1979) & (years <= 2000)
     if int(np.count_nonzero(recent_mask)) < max(2, _HEADLINE_RECENT_YEARS - 1):
         return HeadlinePayload(
             key="t2m_vs_preindustrial_local",
@@ -354,10 +349,50 @@ def _compute_t2m_preindustrial_headline(
             period=f"{recent_start}-{latest_year}",
             method=method,
         )
+    if int(np.count_nonzero(era5_ref_mask)) < 10:
+        return HeadlinePayload(
+            key="t2m_vs_preindustrial_local",
+            label="Air temperature change vs pre-industrial",
+            value=None,
+            unit=unit.upper(),
+            baseline=baseline_label,
+            period=f"{recent_start}-{latest_year}",
+            method=method,
+        )
 
-    baseline_local = float(baseline_finite[-1])
-    recent_local = float(np.mean(y[recent_mask]))
-    delta_c = recent_local - baseline_local
+    era5_recent_local = float(np.mean(y[recent_mask]))
+    era5_ref_local = float(np.mean(y[era5_ref_mask]))
+    cmip_offsets: list[float] = []
+    for cmip_preindustrial_metric, cmip_ref_metric in _CMIP_BASELINE_METRIC_PAIRS:
+        try:
+            cmip_preindustrial_vec = tile_store.try_get_metric_vector(
+                cmip_preindustrial_metric, lat, lon
+            )
+            cmip_ref_vec = tile_store.try_get_metric_vector(cmip_ref_metric, lat, lon)
+        except FileNotFoundError:
+            continue
+        if cmip_preindustrial_vec is None or cmip_ref_vec is None:
+            continue
+        cmip_pre_vals = np.asarray(cmip_preindustrial_vec, dtype=np.float64).reshape(-1)
+        cmip_ref_vals = np.asarray(cmip_ref_vec, dtype=np.float64).reshape(-1)
+        cmip_pre_finite = cmip_pre_vals[np.isfinite(cmip_pre_vals)]
+        cmip_ref_finite = cmip_ref_vals[np.isfinite(cmip_ref_vals)]
+        if cmip_pre_finite.size == 0 or cmip_ref_finite.size == 0:
+            continue
+        cmip_offsets.append(float(cmip_ref_finite[-1] - cmip_pre_finite[-1]))
+
+    if not cmip_offsets:
+        return HeadlinePayload(
+            key="t2m_vs_preindustrial_local",
+            label="Air temperature change vs pre-industrial",
+            value=None,
+            unit=unit.upper(),
+            baseline=baseline_label,
+            period=f"{recent_start}-{latest_year}",
+            method=method,
+        )
+
+    delta_c = (era5_recent_local - era5_ref_local) + float(np.mean(cmip_offsets))
     delta = _to_unit_delta(delta_c, unit)
 
     return HeadlinePayload(
@@ -367,7 +402,7 @@ def _compute_t2m_preindustrial_headline(
         unit=unit.upper(),
         baseline=baseline_label,
         period=f"{recent_start}-{latest_year}",
-        method=method,
+        method=f"{method} (n_models={len(cmip_offsets)})",
     )
 
 

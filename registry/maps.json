@@ -51,6 +51,53 @@
       "filename": "t2m_warming_2025_vs_1979_1988_mercator.webp"
     }
   },
+  "t2m_blended_preindustrial_anomaly_2021_2025_texture": {
+    "id": "t2m_blended_preindustrial_anomaly_2021_2025_texture",
+    "title": "Air temperature anomaly vs pre-industrial (blended method)",
+    "type": "texture_png",
+    "source_metric": "t2m_yearly_mean_c",
+    "reducer": {
+      "op": "blended_preindustrial_anomaly",
+      "recent_start_year": 2021,
+      "recent_end_year": 2025,
+      "era5_ref_start_year": 1979,
+      "era5_ref_end_year": 2000,
+      "cmip_metric_pairs": [
+        {
+          "cmip_preindustrial_metric": "t2m_preindustrial_baseline_access_cm2_c",
+          "cmip_ref_metric": "t2m_cmip_baseline_1979_2000_access_cm2_c"
+        },
+        {
+          "cmip_preindustrial_metric": "t2m_preindustrial_baseline_canesm5_c",
+          "cmip_ref_metric": "t2m_cmip_baseline_1979_2000_canesm5_c"
+        },
+        {
+          "cmip_preindustrial_metric": "t2m_preindustrial_baseline_mpi_esm1_2_lr_c",
+          "cmip_ref_metric": "t2m_cmip_baseline_1979_2000_mpi_esm1_2_lr_c"
+        },
+        {
+          "cmip_preindustrial_metric": "t2m_preindustrial_baseline_ipsl_cm6a_lr_c",
+          "cmip_ref_metric": "t2m_cmip_baseline_1979_2000_ipsl_cm6a_lr_c"
+        },
+        {
+          "cmip_preindustrial_metric": "t2m_preindustrial_baseline_ukesm1_0_ll_c",
+          "cmip_ref_metric": "t2m_cmip_baseline_1979_2000_ukesm1_0_ll_c"
+        }
+      ]
+    },
+    "palette": {
+      "colors": ["#313695", "#74add1", "#f7f7f7", "#f46d43", "#a50026"],
+      "nan_color": "#000000"
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": -3.0,
+      "vmax": 3.0
+    },
+    "output": {
+      "filename": "t2m_blended_preindustrial_anomaly_2021_2025.png"
+    }
+  },
   "t2m_trend_score": {
     "id": "t2m_trend_score",
     "title": "Air temperature trend score",
