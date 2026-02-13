@@ -44,6 +44,8 @@ $ python scripts/make_montecarlo_experiment.py --grid-deg 1.0 --experiment-id 1 
 
 # Next web - http://localhost:3000/
 $ cd web; npm run dev:fast
+# Next web (LAN / phone testing):
+$ cd web; npm run dev:fast:lan
 
 # Streamlit - http://localhost:8501/
 $ streamlit run app/story_demo.py
@@ -72,6 +74,8 @@ $ export REDIS_URL='redis://localhost:6379/0'
 # Optional: preload all non-constant score maps into RAM at startup
 # (avoids first-request disk I/O for score maps):
 $ export SCORE_MAP_PRELOAD=1
+# FastAPI (LAN / phone testing):
+$ ./scripts/dev_api_lan.sh
 # Works without watchfiles installed:
 $ uvicorn apps.api.climate_api.main:app --reload --reload-dir apps/api --port 8001
 # Optional (after `pip install watchfiles`) to reduce reload scanning further:

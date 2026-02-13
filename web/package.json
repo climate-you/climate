@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:lan": "next dev --hostname 0.0.0.0 --port 3000",
     "dev:fast": "next dev --turbo --disable-source-maps",
+    "dev:fast:lan": "next dev --turbo --disable-source-maps --hostname 0.0.0.0 --port 3000",
     "dev:webpack-fast": "next dev --webpack --disable-source-maps",
     "build": "next build",
     "start": "next start",

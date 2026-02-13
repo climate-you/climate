@@ -1043,6 +1043,13 @@ export default function ApiDemoPage() {
     null,
   );
   const debounceRef = useRef<number | null>(null);
+  const apiBase = useMemo(() => {
+    if (process.env.NEXT_PUBLIC_CLIMATE_API_BASE) {
+      return process.env.NEXT_PUBLIC_CLIMATE_API_BASE.replace(/\/+$/, "");
+    }
+    if (typeof window === "undefined") return "http://localhost:8001";
+    return `http://${window.location.hostname}:8001`;
+  }, []);
 
   const panelData = useMemo(() => {
     if (!resp) return [];
@@ -1077,7 +1084,7 @@ export default function ApiDemoPage() {
   }, [resp]);
 
   async function load(nextLat = lat, nextLon = lon, nextUnit = unit) {
-    const url = `http://localhost:8001/api/v/dev/panel?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
+    const url = `${apiBase}/api/v/dev/panel?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
       nextLon,
     )}&unit=${nextUnit}`;
     const r = await fetch(url);
@@ -1088,7 +1095,7 @@ export default function ApiDemoPage() {
   }
 
   async function fetchAutocomplete(q: string) {
-    const url = `http://localhost:8001/api/v/dev/locations/autocomplete?q=${encodeURIComponent(
+    const url = `${apiBase}/api/v/dev/locations/autocomplete?q=${encodeURIComponent(
       q,
     )}&limit=8`;
     const r = await fetch(url);
@@ -1098,7 +1105,7 @@ export default function ApiDemoPage() {
   }
 
   async function resolveByLabel(label: string) {
-    const url = `http://localhost:8001/api/v/dev/locations/resolve?label=${encodeURIComponent(
+    const url = `${apiBase}/api/v/dev/locations/resolve?label=${encodeURIComponent(
       label,
     )}`;
     const r = await fetch(url);
@@ -1108,7 +1115,7 @@ export default function ApiDemoPage() {
   }
 
   async function fetchNearestLocation(nextLat: number, nextLon: number) {
-    const url = `http://localhost:8001/api/v/dev/location/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
+    const url = `${apiBase}/api/v/dev/location/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
       nextLon,
     )}`;
     const r = await fetch(url);
