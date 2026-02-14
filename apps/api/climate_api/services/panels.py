@@ -319,6 +319,9 @@ def build_panel_tiles_registry(
 
     series_payload: Dict[str, SeriesPayload] = {}
     graphs_out: List[GraphPayload] = []
+    metric_vector_cache: dict[str, np.ndarray | None] = {}
+    metric_axis_cache: dict[str, list[Any]] = {}
+    metric_x_cache: dict[str, np.ndarray] = {}
 
     data_cells_map: dict[str, DataCell] = {}
     base_series_for_caption: tuple[list[int], np.ndarray] | None = None
@@ -340,18 +343,29 @@ def build_panel_tiles_registry(
                 graph_series_keys.append(key)
                 continue
 
-            try:
-                vec = tile_store.try_get_metric_vector(metric, lat, lon)
-            except FileNotFoundError:
-                missing = True
-                continue
+            if metric in metric_vector_cache:
+                vec = metric_vector_cache[metric]
+            else:
+                try:
+                    vec = tile_store.try_get_metric_vector(metric, lat, lon)
+                except FileNotFoundError:
+                    metric_vector_cache[metric] = None
+                    missing = True
+                    continue
+                metric_vector_cache[metric] = vec
             if vec is None:
                 missing = True
                 continue
 
             vec = np.asarray(vec, dtype=np.float32).reshape(-1)
-            axis_vals = _series_axis(tile_store, metric, vec.size)
-            x = np.asarray([_axis_to_numeric(v) for v in axis_vals], dtype=np.float64)
+            if metric in metric_axis_cache:
+                axis_vals = metric_axis_cache[metric]
+                x = metric_x_cache[metric]
+            else:
+                axis_vals = _series_axis(tile_store, metric, vec.size)
+                x = np.asarray([_axis_to_numeric(v) for v in axis_vals], dtype=np.float64)
+                metric_axis_cache[metric] = axis_vals
+                metric_x_cache[metric] = x
 
             y = _apply_transform(x=x, y=vec, transform=series_spec.get("transform"))
             y = _convert_unit(y, series_spec.get("unit"), unit)
