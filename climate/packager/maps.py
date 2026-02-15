@@ -9,6 +9,8 @@ import numpy as np
 from climate.tiles.layout import GridSpec, tile_counts, tile_path
 from climate.tiles.spec import read_tile_array
 
+MERCATOR_MAX_LAT = 85.05112878
+
 
 def package_maps(
     *,
@@ -263,8 +265,16 @@ def _write_texture_map(
     palette = spec.get("palette", {}) or {}
     colors = palette.get("colors", ["#313695", "#74add1", "#f7f7f7", "#f46d43", "#a50026"])
     nan_color = str(palette.get("nan_color", "#000000"))
+    projection = _resolve_projection(spec)
+    projected_values, bounds = _project_texture_values(values, projection=projection)
 
-    rgb = _apply_palette(values, vmin=vmin, vmax=vmax, colors=colors, nan_color=nan_color)
+    rgb = _apply_palette(
+        projected_values,
+        vmin=vmin,
+        vmax=vmax,
+        colors=colors,
+        nan_color=nan_color,
+    )
     rgb = _resize_if_needed(
         rgb,
         width=output.get("width"),
@@ -272,14 +282,16 @@ def _write_texture_map(
     )
     _save_png(png_path, rgb)
 
-    finite = values[np.isfinite(values)]
+    finite = projected_values[np.isfinite(projected_values)]
     manifest = {
         "id": map_id,
         "type": "texture_png",
+        "projection": projection,
+        "projection_bounds": bounds,
         "source_metric": source_metric,
         "source_axis_years": axis,
         "output_png": str(png_path),
-        "shape": [int(values.shape[0]), int(values.shape[1])],
+        "shape": [int(projected_values.shape[0]), int(projected_values.shape[1])],
         "scale": {
             "mode": "linear",
             "vmin": float(vmin),
@@ -453,6 +465,91 @@ def _resolve_scale(values: np.ndarray, scale: dict[str, Any]) -> tuple[float, fl
             vmin = vmin - 1.0
             vmax = vmax + 1.0
     return (vmin, vmax)
+
+
+def _resolve_projection(spec: dict[str, Any]) -> str:
+    projection = str(spec.get("projection", "equirectangular")).strip().lower()
+    if projection not in ("equirectangular", "mercator"):
+        raise ValueError(
+            f"Unsupported texture projection '{projection}'. "
+            "Expected one of: equirectangular, mercator."
+        )
+    return projection
+
+
+def _project_texture_values(
+    values: np.ndarray, *, projection: str
+) -> tuple[np.ndarray, dict[str, float]]:
+    arr = np.asarray(values, dtype=np.float64)
+    if projection == "equirectangular":
+        return (
+            arr,
+            {
+                "lat_min": -90.0,
+                "lat_max": 90.0,
+                "lon_min": -180.0,
+                "lon_max": 180.0,
+            },
+        )
+    if projection == "mercator":
+        merc = _warp_lat_to_mercator(arr)
+        return (
+            merc,
+            {
+                "lat_min": -float(MERCATOR_MAX_LAT),
+                "lat_max": float(MERCATOR_MAX_LAT),
+                "lon_min": -180.0,
+                "lon_max": 180.0,
+            },
+        )
+    raise ValueError(f"Unsupported texture projection: {projection}")
+
+
+def _warp_lat_to_mercator(values: np.ndarray) -> np.ndarray:
+    arr = np.asarray(values, dtype=np.float64)
+    if arr.ndim != 2:
+        raise ValueError(f"Expected 2D scalar grid for texture map, got shape: {arr.shape}")
+    nlat, nlon = arr.shape
+    if nlat < 2 or nlon < 1:
+        return arr.copy()
+
+    # Row 0 is north, row nlat-1 is south.
+    lat_src = np.linspace(90.0, -90.0, num=nlat, dtype=np.float64)
+    valid = (lat_src <= MERCATOR_MAX_LAT) & (lat_src >= -MERCATOR_MAX_LAT)
+    if np.count_nonzero(valid) < 2:
+        return arr.copy()
+
+    arr_clip = arr[valid, :]
+    lat_clip = lat_src[valid]
+    phi = np.deg2rad(lat_clip)
+    y_src = np.log(np.tan(np.pi / 4.0 + phi / 2.0))
+    y_north = np.log(np.tan(np.pi / 4.0 + np.deg2rad(MERCATOR_MAX_LAT) / 2.0))
+    y_tgt = np.linspace(y_north, -y_north, num=arr_clip.shape[0], dtype=np.float64)
+
+    out = np.full_like(arr_clip, np.nan, dtype=np.float64)
+    order = np.argsort(y_src)
+    y_src_sorted = y_src[order]
+    for j in range(arr_clip.shape[1]):
+        col = arr_clip[:, j]
+        col_sorted = col[order]
+        finite_idx = np.flatnonzero(np.isfinite(col_sorted))
+        if finite_idx.size < 2:
+            continue
+
+        # Preserve NaN gaps (e.g. land masks in SST) by interpolating only
+        # inside contiguous finite runs instead of bridging across missing spans.
+        split_points = np.where(np.diff(finite_idx) > 1)[0] + 1
+        runs = np.split(finite_idx, split_points)
+        for run in runs:
+            if run.size < 2:
+                continue
+            x = y_src_sorted[run]
+            y = col_sorted[run]
+            use = (y_tgt >= x[0]) & (y_tgt <= x[-1])
+            if not np.any(use):
+                continue
+            out[use, j] = np.interp(y_tgt[use], x, y)
+    return out
 
 
 def _apply_palette(

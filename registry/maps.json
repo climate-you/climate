@@ -24,6 +24,31 @@
       "filename": "t2m_warming_2025_vs_1979_1988.png"
     }
   },
+  "t2m_warming_2025_vs_1979_1988_mercator_texture": {
+    "id": "t2m_warming_2025_vs_1979_1988_mercator_texture",
+    "title": "Air temperature anomaly in 2025 vs 1979-1988 (Mercator)",
+    "type": "texture_png",
+    "projection": "mercator",
+    "source_metric": "t2m_yearly_mean_c",
+    "reducer": {
+      "op": "anomaly_vs_mean",
+      "target_year": 2025,
+      "baseline_start_year": 1979,
+      "baseline_end_year": 1988
+    },
+    "palette": {
+      "colors": ["#313695", "#74add1", "#f7f7f7", "#f46d43", "#a50026"],
+      "nan_color": "#000000"
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": -3.0,
+      "vmax": 3.0
+    },
+    "output": {
+      "filename": "t2m_warming_2025_vs_1979_1988_mercator.png"
+    }
+  },
   "t2m_trend_score": {
     "id": "t2m_trend_score",
     "title": "Air temperature trend score",
@@ -68,6 +93,31 @@
     },
     "output": {
       "filename": "sst_warming_2025_vs_1982_1991.png"
+    }
+  },
+  "sst_warming_2025_vs_1982_1991_mercator_texture": {
+    "id": "sst_warming_2025_vs_1982_1991_mercator_texture",
+    "title": "Sea surface temperature anomaly in 2025 vs 1982-1991 (Mercator)",
+    "type": "texture_png",
+    "projection": "mercator",
+    "source_metric": "sst_yearly_mean_c",
+    "reducer": {
+      "op": "anomaly_vs_mean",
+      "target_year": 2025,
+      "baseline_start_year": 1982,
+      "baseline_end_year": 1991
+    },
+    "palette": {
+      "colors": ["#313695", "#74add1", "#f7f7f7", "#f46d43", "#a50026"],
+      "nan_color": "#000000"
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": -3.0,
+      "vmax": 3.0
+    },
+    "output": {
+      "filename": "sst_warming_2025_vs_1982_1991_mercator.png"
     }
   },
   "sst_trend_score": {

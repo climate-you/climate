@@ -27,6 +27,10 @@
         "type": { "const": "texture_png" },
         "source_metric": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "grid_id": { "type": "string", "pattern": "^[a-z0-9_.]+$" },
+        "projection": {
+          "type": "string",
+          "enum": ["equirectangular", "mercator"]
+        },
         "reducer": { "$ref": "#/$defs/reducer" },
         "palette": { "$ref": "#/$defs/palette" },
         "scale": { "$ref": "#/$defs/scale" },

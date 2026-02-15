@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
 import MapLibreGlobe from "@/components/MapLibreGlobe";
+import type { MapLayerOption } from "@/components/MapLibreGlobe";
 import styles from "./page.module.css";
 
 type TimeDuration = {
@@ -1026,6 +1027,32 @@ export default function ApiDemoPage() {
     if (typeof window === "undefined") return "http://localhost:8001";
     return `http://${window.location.hostname}:8001`;
   }, []);
+  const mapLayerRoot = useMemo(() => {
+    if (process.env.NEXT_PUBLIC_MAP_LAYER_ROOT) {
+      return process.env.NEXT_PUBLIC_MAP_LAYER_ROOT.replace(/\/+$/, "");
+    }
+    return "/data/releases/dev/maps/global_0p25";
+  }, []);
+  const mapLayers = useMemo<MapLayerOption[]>(
+    () => [
+      {
+        id: "t2m_warming_2025_vs_1979_1988_mercator_texture",
+        label: "Air temperature anomaly (2025 vs 1979-1988)",
+        imageUrl: `${mapLayerRoot}/t2m_warming_2025_vs_1979_1988_mercator_texture/t2m_warming_2025_vs_1979_1988_mercator.png`,
+        opacity: 0.72,
+      },
+      {
+        id: "sst_warming_2025_vs_1982_1991_mercator_texture",
+        label: "Sea surface anomaly (2025 vs 1982-1991)",
+        imageUrl: `${mapLayerRoot}/sst_warming_2025_vs_1982_1991_mercator_texture/sst_warming_2025_vs_1982_1991_mercator.png`,
+        opacity: 0.72,
+      },
+    ],
+    [mapLayerRoot],
+  );
+  const [activeLayerId, setActiveLayerId] = useState<string>(
+    mapLayers[0]?.id ?? "",
+  );
 
   const panelData = useMemo(() => {
     if (!resp) return [];
@@ -1070,15 +1097,18 @@ export default function ApiDemoPage() {
     return data;
   }
 
-  async function fetchAutocomplete(q: string) {
-    const url = `${apiBase}/api/v/dev/locations/autocomplete?q=${encodeURIComponent(
-      q,
-    )}&limit=8`;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(await r.text());
-    const data = (await r.json()) as AutocompleteResponse;
-    return data.results ?? [];
-  }
+  const fetchAutocomplete = useCallback(
+    async (q: string) => {
+      const url = `${apiBase}/api/v/dev/locations/autocomplete?q=${encodeURIComponent(
+        q,
+      )}&limit=8`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(await r.text());
+      const data = (await r.json()) as AutocompleteResponse;
+      return data.results ?? [];
+    },
+    [apiBase],
+  );
 
   async function resolveByLabel(label: string) {
     const url = `${apiBase}/api/v/dev/locations/resolve?label=${encodeURIComponent(
@@ -1179,7 +1209,13 @@ export default function ApiDemoPage() {
         setSuggestLoading(false);
       }
     }, 250);
-  }, [search]);
+  }, [fetchAutocomplete, search]);
+
+  useEffect(() => {
+    if (!mapLayers.length) return;
+    if (mapLayers.some((layer) => layer.id === activeLayerId)) return;
+    setActiveLayerId(mapLayers[0].id);
+  }, [activeLayerId, mapLayers]);
 
   return (
     <main className={styles.app}>
@@ -1187,6 +1223,9 @@ export default function ApiDemoPage() {
         <MapLibreGlobe
           panelOpen={panelOpen}
           focusLocation={picked}
+          layerOptions={mapLayers}
+          activeLayerId={activeLayerId || null}
+          onLayerChange={(layerId) => setActiveLayerId(layerId)}
           onPick={(la, lo) => {
             void handlePick(la, lo);
           }}
