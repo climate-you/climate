@@ -15,7 +15,7 @@ if "cdsapi" not in sys.modules:
 
 from climate.packager.registry import (
     TileRange,
-    _concat_and_write_yearly_tiles,
+    _concat_and_write_time_tiles,
     _resolve_year_ranges,
 )
 from climate.registry.metrics import load_metrics
@@ -162,23 +162,25 @@ def test_concat_and_write_clips_to_metric_analysis_years(
 
     captured: dict[str, object] = {}
 
-    def _fake_tiles_from_yearly_da(**kwargs: object) -> int:
-        arr = kwargs["da_ann"]
-        captured["years_int"] = kwargs["years_int"]
+    def _fake_tiles_from_time_da(**kwargs: object) -> int:
+        arr = kwargs["da"]
+        captured["axis_values"] = kwargs["axis_values"]
+        captured["time_dim"] = kwargs["time_dim"]
+        captured["axis_name"] = kwargs["axis_name"]
         captured["years_coord"] = list(arr["year"].values.tolist())
         captured["values"] = arr.values.reshape(-1).tolist()
         return 1
 
     monkeypatch.setattr(
-        "climate.packager.registry._tiles_from_yearly_da",
-        _fake_tiles_from_yearly_da,
+        "climate.packager.registry._tiles_from_time_da",
+        _fake_tiles_from_time_da,
     )
 
     output_years = list(range(1984, 1990))
-    written = _concat_and_write_yearly_tiles(
+    written = _concat_and_write_time_tiles(
         da_parts=[da],
-        years_parts=list(years.tolist()),
         output_years=output_years,
+        time_axis="yearly",
         out_root=tmp_path,
         grid=GridSpec.global_0p25(tile_size=64),
         metric_id="sst_hotdays",
@@ -191,6 +193,8 @@ def test_concat_and_write_clips_to_metric_analysis_years(
     )
 
     assert written == 1
-    assert captured["years_int"] == output_years
+    assert captured["axis_values"] == output_years
+    assert captured["time_dim"] == "year"
+    assert captured["axis_name"] == "yearly"
     assert captured["years_coord"] == output_years
     assert captured["values"] == [2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
