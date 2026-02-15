@@ -276,13 +276,13 @@ function inBbox(
 }
 
 function keyLabel(key: string): string {
-  if (key.includes("hotdays")) return "Hot days";
   if (key.includes("trend")) return "Trend";
   if (key.includes("5y")) return "5-year mean";
   if (key.includes("7d")) return "7-day mean";
   if (key.includes("daily")) return "Daily mean";
   if (key.includes("monthly")) return "Monthly mean";
   if (key.includes("yearly")) return "Yearly mean";
+  if (key.includes("hotdays")) return "Hot days";
   return key.replaceAll("_", " ");
 }
 
@@ -384,10 +384,7 @@ function countryCodeToFlag(countryCode: string | null | undefined): string {
     .toUpperCase();
   if (!/^[A-Z]{2}$/.test(cc)) return "";
   const base = 127397;
-  return String.fromCodePoint(
-    cc.charCodeAt(0) + base,
-    cc.charCodeAt(1) + base,
-  );
+  return String.fromCodePoint(cc.charCodeAt(0) + base, cc.charCodeAt(1) + base);
 }
 
 function formatPopulation(value: number | null | undefined): string | null {
@@ -618,6 +615,7 @@ function buildHotDaysOption({
       lineStyle: { width: 3, color: "#1736ff" },
       z: 3,
       animationDurationUpdate: transitionMs,
+      emphasis: { focus: "series" },
     });
   }
   if (trendKey && isVisible(trendKey)) {
@@ -633,6 +631,7 @@ function buildHotDaysOption({
       areaStyle: { color: "rgba(255, 0, 0, 0.24)" },
       z: 4,
       animationDurationUpdate: transitionMs,
+      emphasis: { focus: "series" },
     });
   }
 
@@ -646,25 +645,7 @@ function buildHotDaysOption({
       top: 0,
       itemWidth: 30,
       itemHeight: 10,
-      icon: "none",
-      formatter: (name: string) => {
-        if (name === "Hot days") return "{cold|■}{hot|■} Hot days";
-        if (name === "Trend") return "{trend|■} Trend";
-        return name;
-      },
-      textStyle: {
-        color: "#2d3139",
-        fontSize: 12,
-        rich: {
-          cold: { color: "#ccccff", fontSize: 24, padding: [0, 1, 0, 0] },
-          hot: { color: "#ff1744", fontSize: 24, padding: [0, 8, 0, 1] },
-          trend: {
-            color: "rgba(255, 0, 0, 0.24)",
-            fontSize: 24,
-            padding: [0, 8, 0, 0],
-          },
-        },
-      },
+      textStyle: { color: "#2d3139", fontSize: 12 },
     },
     tooltip: {
       trigger: "axis",
@@ -1204,7 +1185,8 @@ export default function ApiDemoPage() {
           label: place.label ?? "",
           countryCode: place.country_code ?? "",
           population:
-            typeof place.population === "number" && Number.isFinite(place.population)
+            typeof place.population === "number" &&
+            Number.isFinite(place.population)
               ? place.population
               : null,
         });
@@ -1286,13 +1268,15 @@ export default function ApiDemoPage() {
       label: place.label ?? "",
       countryCode: place.country_code ?? "",
       population:
-        typeof place.population === "number" && Number.isFinite(place.population)
+        typeof place.population === "number" &&
+        Number.isFinite(place.population)
           ? place.population
           : null,
     });
   }, [resp?.location.place]);
 
-  const locationLabel = selectedLocation?.label ?? resp?.location.place.label ?? "";
+  const locationLabel =
+    selectedLocation?.label ?? resp?.location.place.label ?? "";
   const locationFlag = countryCodeToFlag(selectedLocation?.countryCode);
   const populationText = formatPopulation(selectedLocation?.population);
 
