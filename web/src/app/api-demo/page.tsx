@@ -1097,6 +1097,12 @@ export default function ApiDemoPage() {
         opacity: 0.72,
       },
       {
+        id: "t2m_blended_preindustrial_anomaly_2021_2025_mercator_texture",
+        label: "Warming vs pre-industrial (air)",
+        imageUrl: `${mapLayerRoot}/t2m_blended_preindustrial_anomaly_2021_2025_mercator.webp`,
+        opacity: 0.72,
+      },
+      {
         id: "sst_warming_2025_vs_1982_1991_mercator_texture",
         label: "Warming (sea surface)",
         imageUrl: `${mapLayerRoot}/sst_warming_2025_vs_1982_1991_mercator.webp`,

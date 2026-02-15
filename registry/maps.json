@@ -12,7 +12,16 @@
       "baseline_end_year": 1988
     },
     "palette": {
-      "colors": ["#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#b10026"],
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
       "nan_color": "#fff9d7"
     },
     "scale": {
@@ -39,7 +48,16 @@
       "baseline_end_year": 1988
     },
     "palette": {
-      "colors": ["#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#b10026"],
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
       "nan_color": "#fff9d7"
     },
     "scale": {
@@ -77,6 +95,44 @@
       "filename": "t2m_blended_preindustrial_anomaly_2021_2025.png"
     }
   },
+  "t2m_blended_preindustrial_anomaly_2021_2025_mercator_texture": {
+    "id": "t2m_blended_preindustrial_anomaly_2021_2025_mercator_texture",
+    "title": "Air temperature anomaly vs pre-industrial (blended method, Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "web_write": true,
+    "source_metric": "t2m_yearly_mean_c",
+    "reducer": {
+      "op": "blended_preindustrial_anomaly",
+      "recent_start_year": 2021,
+      "recent_end_year": 2025,
+      "era5_ref_start_year": 1979,
+      "era5_ref_end_year": 2000,
+      "cmip_offset_metric": "t2m_cmip_offset_1979_2000_vs_1850_1900_mean_5models_c"
+    },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#fff9d7"
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 4.0
+    },
+    "output": {
+      "filename": "t2m_blended_preindustrial_anomaly_2021_2025_mercator.webp"
+    }
+  },
   "t2m_trend_score": {
     "id": "t2m_trend_score",
     "title": "Air temperature trend score",
@@ -111,7 +167,16 @@
       "baseline_end_year": 1991
     },
     "palette": {
-      "colors": ["#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#b10026"],
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
       "nan_color": "#fff9d7"
     },
     "scale": {
@@ -138,7 +203,16 @@
       "baseline_end_year": 1991
     },
     "palette": {
-      "colors": ["#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#b10026"],
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
       "nan_color": "#fff9d7"
     },
     "scale": {
