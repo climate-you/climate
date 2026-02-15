@@ -54,7 +54,7 @@
   "t2m_blended_preindustrial_anomaly_2021_2025_texture": {
     "id": "t2m_blended_preindustrial_anomaly_2021_2025_texture",
     "title": "Air temperature anomaly vs pre-industrial (blended method)",
-    "type": "texture_png",
+    "type": "texture",
     "source_metric": "t2m_yearly_mean_c",
     "reducer": {
       "op": "blended_preindustrial_anomaly",
