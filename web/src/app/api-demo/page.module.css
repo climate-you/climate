@@ -79,6 +79,12 @@
   pointer-events: none;
 }
 
+.panelTitleLine {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
 .panelPopulation {
   margin: 4px 0 0;
   font-size: 0.88rem;
@@ -86,22 +92,11 @@
   color: rgba(17, 17, 17, 0.72);
 }
 
-.headlineWrap {
-  margin: 2px 0 14px;
-}
-
 .headlineValue {
-  font-size: 2.1rem;
+  font-size: 1.8rem;
   font-weight: 700;
-  line-height: 1.05;
+  line-height: 1.1;
   color: #d61f45;
-}
-
-.headlineLabel {
-  margin-top: 3px;
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  color: #4c535f;
 }
 
 .panelActions {

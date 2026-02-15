@@ -1597,7 +1597,15 @@ export default function ApiDemoPage() {
               </span>
             ) : null}
             <div>
-              <h2 className={styles.panelTitle}>{locationLabel}</h2>
+              <div className={styles.panelTitleLine}>
+                <h2 className={styles.panelTitle}>{locationLabel}</h2>
+                {typeof tempHeadline?.value === "number" &&
+                Number.isFinite(tempHeadline.value) ? (
+                  <span className={styles.headlineValue}>
+                    {formatHeadlineDelta(tempHeadline.value, unit)}
+                  </span>
+                ) : null}
+              </div>
               {populationText ? (
                 <p className={styles.panelPopulation}>
                   Population: {populationText}
@@ -1606,17 +1614,6 @@ export default function ApiDemoPage() {
             </div>
           </div>
         </div>
-        {typeof tempHeadline?.value === "number" &&
-        Number.isFinite(tempHeadline.value) ? (
-          <div className={styles.headlineWrap}>
-            <div className={styles.headlineValue}>
-              {formatHeadlineDelta(tempHeadline.value, unit)}
-            </div>
-            <div className={styles.headlineLabel}>
-              Air temperature change vs pre-industrial
-            </div>
-          </div>
-        ) : null}
 
         <div className={styles.panelViewport}>
           {graphSlots.map((entry, slotIndex) =>
