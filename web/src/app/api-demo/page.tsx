@@ -61,6 +61,8 @@ type PanelResponse = {
       lat: number;
       lon: number;
       distance_km: number;
+      country_code?: string | null;
+      population?: number | null;
     };
     panel_valid_bbox?: {
       lat_min: number;
@@ -86,6 +88,8 @@ type AutocompleteItem = {
   label: string;
   lat: number;
   lon: number;
+  country_code: string;
+  population: number;
 };
 
 type AutocompleteResponse = {
@@ -99,12 +103,21 @@ type NearestLocationResponse = {
     lat: number;
     lon: number;
     distance_km: number;
+    country_code?: string | null;
+    population?: number | null;
   };
 };
 
 type ChartRow = {
   x: number | string;
   [key: string]: number | string | null | undefined;
+};
+
+type SelectedLocationMeta = {
+  geonameid: number;
+  label: string;
+  countryCode: string;
+  population: number | null;
 };
 
 function mergeSeries(series: Record<string, SeriesPayload>, keys: string[]) {
@@ -363,6 +376,25 @@ function formatAxisTitle(graph: GraphPayload, value: unknown): string {
   }
   const label = formatDateLabel(toChartTimestamp(value as number | string));
   return label || asString;
+}
+
+function countryCodeToFlag(countryCode: string | null | undefined): string {
+  const cc = String(countryCode ?? "")
+    .trim()
+    .toUpperCase();
+  if (!/^[A-Z]{2}$/.test(cc)) return "";
+  const base = 127397;
+  return String.fromCodePoint(
+    cc.charCodeAt(0) + base,
+    cc.charCodeAt(1) + base,
+  );
+}
+
+function formatPopulation(value: number | null | undefined): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return new Intl.NumberFormat("en-US").format(Math.trunc(value));
 }
 
 function yAxisTitle(graph: GraphPayload, unit: "C" | "F"): string {
@@ -1025,6 +1057,8 @@ export default function ApiDemoPage() {
   const [picked, setPicked] = useState<{ lat: number; lon: number } | null>(
     null,
   );
+  const [selectedLocation, setSelectedLocation] =
+    useState<SelectedLocationMeta | null>(null);
   const debounceRef = useRef<number | null>(null);
   const apiBase = useMemo(() => {
     if (process.env.NEXT_PUBLIC_CLIMATE_API_BASE) {
@@ -1145,6 +1179,12 @@ export default function ApiDemoPage() {
     setLat(item.lat);
     setLon(item.lon);
     setPicked({ lat: item.lat, lon: item.lon });
+    setSelectedLocation({
+      geonameid: item.geonameid,
+      label: item.label,
+      countryCode: item.country_code,
+      population: item.population,
+    });
     setPanelOpen(true);
     void load(item.lat, item.lon);
   }
@@ -1159,6 +1199,15 @@ export default function ApiDemoPage() {
       const bbox = resp?.location?.panel_valid_bbox;
       if (inBbox(la, lo, bbox)) {
         const place = await fetchNearestLocation(la, lo);
+        setSelectedLocation({
+          geonameid: place.geonameid,
+          label: place.label ?? "",
+          countryCode: place.country_code ?? "",
+          population:
+            typeof place.population === "number" && Number.isFinite(place.population)
+              ? place.population
+              : null,
+        });
         setResp((prev) => {
           if (!prev) return prev;
           return {
@@ -1173,6 +1222,8 @@ export default function ApiDemoPage() {
                 lat: place.lat,
                 lon: place.lon,
                 distance_km: place.distance_km,
+                country_code: place.country_code ?? null,
+                population: place.population ?? null,
               },
             },
           };
@@ -1226,6 +1277,24 @@ export default function ApiDemoPage() {
     if (mapLayers.some((layer) => layer.id === activeLayerId)) return;
     setActiveLayerId(mapLayers[0].id);
   }, [activeLayerId, mapLayers]);
+
+  useEffect(() => {
+    const place = resp?.location.place;
+    if (!place?.geonameid) return;
+    setSelectedLocation({
+      geonameid: place.geonameid,
+      label: place.label ?? "",
+      countryCode: place.country_code ?? "",
+      population:
+        typeof place.population === "number" && Number.isFinite(place.population)
+          ? place.population
+          : null,
+    });
+  }, [resp?.location.place]);
+
+  const locationLabel = selectedLocation?.label ?? resp?.location.place.label ?? "";
+  const locationFlag = countryCodeToFlag(selectedLocation?.countryCode);
+  const populationText = formatPopulation(selectedLocation?.population);
 
   return (
     <main className={styles.app}>
@@ -1358,10 +1427,21 @@ export default function ApiDemoPage() {
               x
             </button>
           </div>
-          <h2 className={styles.panelTitle}>
-            Selected Location
-            {resp?.location.place.label ? `: ${resp.location.place.label}` : ""}
-          </h2>
+          <div className={styles.panelTitleWrap}>
+            {locationFlag ? (
+              <span className={styles.panelFlag} aria-hidden="true">
+                {locationFlag}
+              </span>
+            ) : null}
+            <div>
+              <h2 className={styles.panelTitle}>{locationLabel}</h2>
+              {populationText ? (
+                <p className={styles.panelPopulation}>
+                  Population: {populationText}
+                </p>
+              ) : null}
+            </div>
+          </div>
         </div>
 
         {panelData.map(({ panel, graphs }) => (

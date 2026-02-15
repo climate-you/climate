@@ -34,6 +34,7 @@
     opacity 200ms ease,
     visibility 0s linear 300ms;
   overflow-y: auto;
+  font-family: Calibri, "Segoe UI", Arial, Helvetica, sans-serif;
 }
 
 .locationPanelOpen {
@@ -55,12 +56,34 @@
   cursor: pointer;
 }
 
+.panelTitleWrap {
+  margin-top: -38px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.panelFlag {
+  font-size: 1.65rem;
+  line-height: 1;
+  margin-top: 2px;
+}
+
 .panelTitle {
-  margin: -38px 0 4px;
-  font-size: 1.25rem;
+  margin: 0;
+  font-size: 2rem;
+  line-height: 1.15;
+  font-weight: 700;
   position: relative;
   z-index: 1;
   pointer-events: none;
+}
+
+.panelPopulation {
+  margin: 4px 0 0;
+  font-size: 0.88rem;
+  line-height: 1.25;
+  color: rgba(17, 17, 17, 0.72);
 }
 
 .panelActions {

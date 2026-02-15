@@ -20,6 +20,8 @@ class Place:
     lat: float
     lon: float
     distance_km: float
+    country_code: str | None = None
+    population: int | None = None
 
 
 def _haversine_km_vec(
@@ -100,6 +102,19 @@ class PlaceResolver:
         self._lats = df["lat"].to_numpy(dtype=np.float64)
         self._lons = df["lon"].to_numpy(dtype=np.float64)
         self._ids = df["geonameid"].astype(int).to_numpy()
+        if "country_code" in df.columns:
+            self._country_codes = df["country_code"].fillna("").astype(str).to_numpy()
+        else:
+            self._country_codes = np.array([""] * len(df), dtype=object)
+        if "population" in df.columns:
+            self._populations = (
+                pd.to_numeric(df["population"], errors="coerce")
+                .fillna(0)
+                .astype(np.int64)
+                .to_numpy()
+            )
+        else:
+            self._populations = np.zeros(len(df), dtype=np.int64)
         self._kdtree = None
         self._kdtree_ready = False
 
@@ -179,6 +194,16 @@ class PlaceResolver:
                     lat=float(hit["lat"]),
                     lon=float(hit["lon"]),
                     distance_km=float(hit["distance_km"]),
+                    country_code=(
+                        str(hit.get("country_code")).strip().upper()
+                        if hit.get("country_code")
+                        else None
+                    ),
+                    population=(
+                        int(hit["population"])
+                        if hit.get("population") is not None
+                        else None
+                    ),
                 )
 
         if self._kdtree_ready and self._kdtree is not None:
@@ -225,6 +250,17 @@ class PlaceResolver:
             lat=float(self._lats[i]),
             lon=float(self._lons[i]),
             distance_km=float(dist),
+            country_code=(
+                str(self._country_codes[i]).strip().upper()
+                if i < len(self._country_codes)
+                and str(self._country_codes[i]).strip()
+                else None
+            ),
+            population=(
+                int(self._populations[i])
+                if i < len(self._populations) and int(self._populations[i]) > 0
+                else None
+            ),
         )
 
         if self.cache is not None:
@@ -236,6 +272,8 @@ class PlaceResolver:
                     "lat": place.lat,
                     "lon": place.lon,
                     "distance_km": place.distance_km,
+                    "country_code": place.country_code,
+                    "population": place.population,
                 },
                 ttl_s=self.ttl_resolve_s,
             )

@@ -213,6 +213,7 @@ def create_app() -> FastAPI:
                 lat=h.lat,
                 lon=h.lon,
                 country_code=h.country_code,
+                population=h.population,
             )
             for h in hits
         ]
@@ -249,6 +250,7 @@ def create_app() -> FastAPI:
                 lat=hit.lat,
                 lon=hit.lon,
                 country_code=hit.country_code,
+                population=hit.population,
             )
 
         return LocationResolveResponse(query=str(geonameid or label or ""), result=result)
@@ -275,6 +277,8 @@ def create_app() -> FastAPI:
                 lat=float(place.lat),
                 lon=float(place.lon),
                 distance_km=float(place.distance_km),
+                country_code=place.country_code,
+                population=place.population,
             ),
         )
 

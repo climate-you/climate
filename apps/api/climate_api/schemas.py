@@ -83,6 +83,8 @@ class PlaceInfo(BaseModel):
     lat: float
     lon: float
     distance_km: float
+    country_code: str | None = None
+    population: int | None = None
 
 
 class DataCell(BaseModel):
@@ -127,6 +129,7 @@ class LocationAutocompleteItem(BaseModel):
     lat: float
     lon: float
     country_code: str
+    population: int
 
 
 class LocationAutocompleteResponse(BaseModel):
