@@ -119,6 +119,11 @@ type SelectedLocationMeta = {
   countryCode: string;
   population: number | null;
 };
+type PagedGraphItem = {
+  panelId: string;
+  graph: GraphPayload;
+  data: ChartRow[];
+};
 
 function mergeSeries(series: Record<string, SeriesPayload>, keys: string[]) {
   // Merge into rows keyed by x (ISO date or year). We assume x values are unique per series.
@@ -1024,6 +1029,9 @@ function GraphCard({
 }
 
 export default function ApiDemoPage() {
+  const graphsPerPage = 2;
+  const wheelStepThreshold = 130;
+  const wheelGestureGapMs = 160;
   const [lat, setLat] = useState<number>(-20.32556);
   const [lon, setLon] = useState<number>(57.37056);
   const [unit, setUnit] = useState<"C" | "F">("C");
@@ -1041,6 +1049,12 @@ export default function ApiDemoPage() {
   const [selectedLocation, setSelectedLocation] =
     useState<SelectedLocationMeta | null>(null);
   const debounceRef = useRef<number | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
+  const wheelAccumRef = useRef(0);
+  const wheelLastEventTsRef = useRef(0);
+  const wheelGestureConsumedRef = useRef(false);
+  const wheelGestureResetTimerRef = useRef<number | null>(null);
+  const [graphPage, setGraphPage] = useState(0);
   const apiBase = useMemo(() => {
     if (process.env.NEXT_PUBLIC_CLIMATE_API_BASE) {
       return process.env.NEXT_PUBLIC_CLIMATE_API_BASE.replace(/\/+$/, "");
@@ -1110,6 +1124,34 @@ export default function ApiDemoPage() {
         })),
     }));
   }, [resp]);
+
+  const pagedGraphs = useMemo<PagedGraphItem[]>(
+    () =>
+      panelData.flatMap(({ panel, graphs }) =>
+        graphs.map(({ graph, data }) => ({ panelId: panel.id, graph, data })),
+      ),
+    [panelData],
+  );
+  const maxGraphPage = Math.max(
+    0,
+    Math.ceil(pagedGraphs.length / graphsPerPage) - 1,
+  );
+  const pageStart = graphPage * graphsPerPage;
+  const visibleGraphs = pagedGraphs.slice(pageStart, pageStart + graphsPerPage);
+  const graphSlots = [visibleGraphs[0] ?? null, visibleGraphs[1] ?? null] as const;
+
+  const goGraphPage = useCallback(
+    (direction: 1 | -1): boolean => {
+      const nextPage =
+        direction > 0
+          ? Math.min(maxGraphPage, graphPage + 1)
+          : Math.max(0, graphPage - 1);
+      if (nextPage === graphPage) return false;
+      setGraphPage(nextPage);
+      return true;
+    },
+    [graphPage, maxGraphPage],
+  );
 
   async function load(nextLat = lat, nextLon = lon, nextUnit = unit) {
     const url = `${apiBase}/api/v/dev/panel?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
@@ -1275,6 +1317,68 @@ export default function ApiDemoPage() {
     });
   }, [resp?.location.place]);
 
+  useEffect(() => {
+    setGraphPage(0);
+    wheelAccumRef.current = 0;
+    wheelLastEventTsRef.current = 0;
+    wheelGestureConsumedRef.current = false;
+  }, [lat, lon, unit, pagedGraphs.length]);
+
+  useEffect(() => {
+    if (!panelOpen) return;
+    panelRef.current?.focus();
+  }, [panelOpen]);
+
+  useEffect(
+    () => () => {
+      if (wheelGestureResetTimerRef.current) {
+        window.clearTimeout(wheelGestureResetTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const handlePanelWheel = useCallback(
+    (e: React.WheelEvent<HTMLElement>) => {
+      if (Math.abs(e.deltaY) < 5) return;
+      e.preventDefault();
+      const now = Date.now();
+      if (now - wheelLastEventTsRef.current > wheelGestureGapMs) {
+        wheelAccumRef.current = 0;
+      }
+      wheelLastEventTsRef.current = now;
+      if (wheelGestureResetTimerRef.current) {
+        window.clearTimeout(wheelGestureResetTimerRef.current);
+      }
+      wheelGestureResetTimerRef.current = window.setTimeout(() => {
+        wheelGestureConsumedRef.current = false;
+        wheelAccumRef.current = 0;
+      }, wheelGestureGapMs);
+      if (wheelGestureConsumedRef.current) return;
+      wheelAccumRef.current += e.deltaY;
+      if (Math.abs(wheelAccumRef.current) < wheelStepThreshold) return;
+      const changed = goGraphPage(wheelAccumRef.current > 0 ? 1 : -1);
+      wheelAccumRef.current = 0;
+      if (changed) {
+        wheelGestureConsumedRef.current = true;
+      }
+    },
+    [goGraphPage, wheelGestureGapMs, wheelStepThreshold],
+  );
+
+  const handlePanelKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLElement>) => {
+      if (e.key === "ArrowDown" || e.key === "PageDown") {
+        e.preventDefault();
+        goGraphPage(1);
+      } else if (e.key === "ArrowUp" || e.key === "PageUp") {
+        e.preventDefault();
+        goGraphPage(-1);
+      }
+    },
+    [goGraphPage],
+  );
+
   const locationLabel =
     selectedLocation?.label ?? resp?.location.place.label ?? "";
   const locationFlag = countryCodeToFlag(selectedLocation?.countryCode);
@@ -1365,8 +1469,12 @@ export default function ApiDemoPage() {
       </div>
 
       <aside
+        ref={panelRef}
         className={`${styles.locationPanel} ${panelOpen ? styles.locationPanelOpen : ""}`}
         aria-live="polite"
+        tabIndex={panelOpen ? 0 : -1}
+        onWheel={handlePanelWheel}
+        onKeyDown={handlePanelKeyDown}
       >
         <div className={styles.panelActions}>
           <div className={styles.panelTopRow}>
@@ -1428,22 +1536,19 @@ export default function ApiDemoPage() {
           </div>
         </div>
 
-        {panelData.map(({ panel, graphs }) => (
-          <section key={panel.id} className={styles.panelSection}>
-            {graphs.map(({ graph, data }) => (
+        <div className={styles.panelViewport}>
+          {graphSlots.map((entry, slotIndex) =>
+            entry ? (
               <GraphCard
-                key={`${panel.id}:${graph.id}:${data.length}`}
-                graph={graph}
-                data={data}
+                key={`slot-${slotIndex}`}
+                graph={entry.graph}
+                data={entry.data}
                 series={resp?.series ?? {}}
                 unit={unit}
               />
-            ))}
-            {panel?.text_md ? (
-              <div className={styles.panelText}>{panel.text_md}</div>
-            ) : null}
-          </section>
-        ))}
+            ) : null,
+          )}
+        </div>
       </aside>
     </main>
   );

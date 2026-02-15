@@ -33,7 +33,7 @@
     transform 300ms ease,
     opacity 200ms ease,
     visibility 0s linear 300ms;
-  overflow-y: auto;
+  overflow: hidden;
   font-family: Calibri, "Segoe UI", Arial, Helvetica, sans-serif;
 }
 
@@ -209,6 +209,11 @@
 .graphCard {
   margin-top: 12px;
   padding-right: 18px;
+}
+
+.panelViewport {
+  height: calc(100% - 112px);
+  overflow: hidden;
 }
 
 .graphTitle {
