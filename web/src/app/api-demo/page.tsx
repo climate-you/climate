@@ -1159,6 +1159,15 @@ export default function ApiDemoPage() {
     },
     [graphPage, maxGraphPage],
   );
+  const goToGraphPage = useCallback(
+    (nextPage: number): boolean => {
+      const clamped = Math.max(0, Math.min(maxGraphPage, nextPage));
+      if (clamped === graphPage) return false;
+      setGraphPage(clamped);
+      return true;
+    },
+    [graphPage, maxGraphPage],
+  );
 
   async function load(nextLat = lat, nextLon = lon, nextUnit = unit) {
     const url = `${apiBase}/api/v/dev/panel?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
@@ -1503,10 +1512,21 @@ export default function ApiDemoPage() {
         onWheel={handlePanelWheel}
         onKeyDown={handlePanelKeyDown}
       >
-        <div className={styles.panelSteps} aria-hidden="true">
+        <div className={styles.panelSteps} role="tablist" aria-label="Graph steps">
           {Array.from({ length: stepCount }, (_, idx) => (
-            <span
+            <button
               key={`step-dot-${idx}`}
+              type="button"
+              role="tab"
+              aria-label={`Go to step ${idx + 1} of ${stepCount}`}
+              aria-selected={idx === graphPage}
+              onClick={() => {
+                const changed = goToGraphPage(idx);
+                if (!changed) return;
+                wheelAccumRef.current = 0;
+                wheelGestureConsumedRef.current = false;
+                wheelGestureConsumedAtRef.current = 0;
+              }}
               className={`${styles.panelStepDot} ${
                 idx === graphPage ? styles.panelStepDotActive : ""
               }`}

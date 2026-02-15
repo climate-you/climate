@@ -111,9 +111,11 @@
 .panelStepDot {
   width: 10px;
   height: 10px;
+  padding: 0;
   border-radius: 999px;
   border: 1.5px solid rgba(0, 0, 0, 0.45);
   background: transparent;
+  cursor: pointer;
 }
 
 .panelStepDotActive {
