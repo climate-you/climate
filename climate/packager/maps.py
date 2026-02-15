@@ -67,7 +67,7 @@ def package_maps(
                 f"source metric grid_id={grid.grid_id}"
             )
 
-        out_dir = maps_root / grid.grid_id / map_id
+        out_dir = maps_root
         out_dir.mkdir(parents=True, exist_ok=True)
 
         if map_type == "texture_png":
@@ -254,7 +254,7 @@ def _write_texture_map(
     output = spec.get("output", {})
     filename = str(output.get("filename") or f"{map_id}.png")
     png_path = out_dir / filename
-    manifest_path = out_dir / "manifest.json"
+    manifest_path = out_dir / f"{map_id}.manifest.json"
     if resume and png_path.exists() and manifest_path.exists():
         if debug:
             print(f"[maps] Skip existing texture map: {png_path}")
@@ -328,8 +328,8 @@ def _write_score_map(
     binary_name = str(output.get("binary_filename") or f"{map_id}.i16.bin")
     png_path = out_dir / png_name
     bin_path = out_dir / binary_name
-    meta_path = out_dir / "binary_manifest.json"
-    manifest_path = out_dir / "manifest.json"
+    meta_path = out_dir / f"{map_id}.binary_manifest.json"
+    manifest_path = out_dir / f"{map_id}.manifest.json"
     if resume and png_path.exists() and bin_path.exists() and meta_path.exists() and manifest_path.exists():
         if debug:
             print(f"[maps] Skip existing score map: {out_dir}")

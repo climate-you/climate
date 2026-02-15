@@ -1031,20 +1031,24 @@ export default function ApiDemoPage() {
     if (process.env.NEXT_PUBLIC_MAP_LAYER_ROOT) {
       return process.env.NEXT_PUBLIC_MAP_LAYER_ROOT.replace(/\/+$/, "");
     }
-    return "/data/releases/dev/maps/global_0p25";
+    return "/data/maps/global_0p25";
   }, []);
   const mapLayers = useMemo<MapLayerOption[]>(
     () => [
       {
+        id: "none",
+        label: "None",
+      },
+      {
         id: "t2m_warming_2025_vs_1979_1988_mercator_texture",
-        label: "Air temperature anomaly (2025 vs 1979-1988)",
-        imageUrl: `${mapLayerRoot}/t2m_warming_2025_vs_1979_1988_mercator_texture/t2m_warming_2025_vs_1979_1988_mercator.png`,
+        label: "Warming (air)",
+        imageUrl: `${mapLayerRoot}/t2m_warming_2025_vs_1979_1988_mercator.png`,
         opacity: 0.72,
       },
       {
         id: "sst_warming_2025_vs_1982_1991_mercator_texture",
-        label: "Sea surface anomaly (2025 vs 1982-1991)",
-        imageUrl: `${mapLayerRoot}/sst_warming_2025_vs_1982_1991_mercator_texture/sst_warming_2025_vs_1982_1991_mercator.png`,
+        label: "Warming (sea surface)",
+        imageUrl: `${mapLayerRoot}/sst_warming_2025_vs_1982_1991_mercator.png`,
         opacity: 0.72,
       },
     ],

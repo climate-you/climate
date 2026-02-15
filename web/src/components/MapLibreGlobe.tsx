@@ -7,7 +7,7 @@ type LngLat = { lat: number; lon: number };
 export type MapLayerOption = {
   id: string;
   label: string;
-  imageUrl: string;
+  imageUrl?: string;
   opacity?: number;
 };
 
@@ -161,7 +161,7 @@ export default function MapLibreGlobe({
       const selected = layerOptionsRef.current.find(
         (layer) => layer.id === activeLayerIdRef.current,
       );
-      if (!selected) {
+      if (!selected || !selected.imageUrl) {
         if (map.getLayer(TEXTURE_LAYER_ID)) {
           map.removeLayer(TEXTURE_LAYER_ID);
         }
@@ -337,6 +337,7 @@ export default function MapLibreGlobe({
             : "transparent";
           item.style.color = "#111";
           item.style.fontSize = "12px";
+          item.style.whiteSpace = "nowrap";
           item.addEventListener("click", () => {
             onLayerChangeRef.current(option.id);
             isOpen = false;
@@ -468,7 +469,16 @@ export default function MapLibreGlobe({
 
     const apply = () => {
       const selected = layerOptions.find((layer) => layer.id === activeLayerId);
-      if (!selected) return;
+      if (!selected || !selected.imageUrl) {
+        if (map.getLayer(TEXTURE_LAYER_ID)) {
+          map.removeLayer(TEXTURE_LAYER_ID);
+        }
+        if (map.getSource(TEXTURE_SOURCE_ID)) {
+          map.removeSource(TEXTURE_SOURCE_ID);
+        }
+        layerControlRef.current?.refresh();
+        return;
+      }
       const source = map.getSource(TEXTURE_SOURCE_ID) as
         | (maplibregl.ImageSource & {
             updateImage?: (args: {
