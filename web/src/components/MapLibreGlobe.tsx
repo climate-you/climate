@@ -134,7 +134,7 @@ export default function MapLibreGlobe({
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
       style: "/custom_map.json",
-      projection: { type: "mercator" },
+      projection: { type: "globe" },
       center: initialView.center,
       zoom: baseZoom,
       minZoom: baseZoom,
@@ -145,9 +145,9 @@ export default function MapLibreGlobe({
     mapRef.current = map;
 
     function applyMapSettings() {
-      map.setProjection({ type: "mercator" });
-      map.getContainer().style.backgroundColor = "#ffffff";
-      map.getCanvas().style.backgroundColor = "#ffffff";
+      map.setProjection({ type: "globe" });
+      map.getContainer().style.backgroundColor = "#0000ff";
+      map.getCanvas().style.backgroundColor = "#0000ff";
 
       const layers = map.getStyle()?.layers || [];
       for (const layer of layers) {
