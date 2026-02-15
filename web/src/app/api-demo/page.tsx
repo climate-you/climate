@@ -1032,6 +1032,8 @@ export default function ApiDemoPage() {
   const graphsPerPage = 2;
   const wheelStepThreshold = 130;
   const wheelGestureGapMs = 160;
+  const wheelSustainRepeatMs = 520;
+  const wheelRepeatKickThreshold = 55;
   const [lat, setLat] = useState<number>(-20.32556);
   const [lon, setLon] = useState<number>(57.37056);
   const [unit, setUnit] = useState<"C" | "F">("C");
@@ -1053,6 +1055,7 @@ export default function ApiDemoPage() {
   const wheelAccumRef = useRef(0);
   const wheelLastEventTsRef = useRef(0);
   const wheelGestureConsumedRef = useRef(false);
+  const wheelGestureConsumedAtRef = useRef(0);
   const wheelGestureResetTimerRef = useRef<number | null>(null);
   const [graphPage, setGraphPage] = useState(0);
   const apiBase = useMemo(() => {
@@ -1136,9 +1139,13 @@ export default function ApiDemoPage() {
     0,
     Math.ceil(pagedGraphs.length / graphsPerPage) - 1,
   );
+  const stepCount = maxGraphPage + 1;
   const pageStart = graphPage * graphsPerPage;
   const visibleGraphs = pagedGraphs.slice(pageStart, pageStart + graphsPerPage);
-  const graphSlots = [visibleGraphs[0] ?? null, visibleGraphs[1] ?? null] as const;
+  const graphSlots = [
+    visibleGraphs[0] ?? null,
+    visibleGraphs[1] ?? null,
+  ] as const;
 
   const goGraphPage = useCallback(
     (direction: 1 | -1): boolean => {
@@ -1322,6 +1329,7 @@ export default function ApiDemoPage() {
     wheelAccumRef.current = 0;
     wheelLastEventTsRef.current = 0;
     wheelGestureConsumedRef.current = false;
+    wheelGestureConsumedAtRef.current = 0;
   }, [lat, lon, unit, pagedGraphs.length]);
 
   useEffect(() => {
@@ -1352,18 +1360,37 @@ export default function ApiDemoPage() {
       }
       wheelGestureResetTimerRef.current = window.setTimeout(() => {
         wheelGestureConsumedRef.current = false;
+        wheelGestureConsumedAtRef.current = 0;
         wheelAccumRef.current = 0;
       }, wheelGestureGapMs);
-      if (wheelGestureConsumedRef.current) return;
+      if (wheelGestureConsumedRef.current) {
+        if (now - wheelGestureConsumedAtRef.current < wheelSustainRepeatMs) {
+          return;
+        }
+        // Allow another step only on a fresh strong impulse.
+        // This blocks trackpad momentum from cascading through many pages.
+        if (Math.abs(e.deltaY) < wheelRepeatKickThreshold) {
+          return;
+        }
+        wheelGestureConsumedRef.current = false;
+        wheelAccumRef.current = 0;
+      }
       wheelAccumRef.current += e.deltaY;
       if (Math.abs(wheelAccumRef.current) < wheelStepThreshold) return;
       const changed = goGraphPage(wheelAccumRef.current > 0 ? 1 : -1);
       wheelAccumRef.current = 0;
       if (changed) {
         wheelGestureConsumedRef.current = true;
+        wheelGestureConsumedAtRef.current = now;
       }
     },
-    [goGraphPage, wheelGestureGapMs, wheelStepThreshold],
+    [
+      goGraphPage,
+      wheelGestureGapMs,
+      wheelRepeatKickThreshold,
+      wheelStepThreshold,
+      wheelSustainRepeatMs,
+    ],
   );
 
   const handlePanelKeyDown = useCallback(
@@ -1476,6 +1503,17 @@ export default function ApiDemoPage() {
         onWheel={handlePanelWheel}
         onKeyDown={handlePanelKeyDown}
       >
+        <div className={styles.panelSteps} aria-hidden="true">
+          {Array.from({ length: stepCount }, (_, idx) => (
+            <span
+              key={`step-dot-${idx}`}
+              className={`${styles.panelStepDot} ${
+                idx === graphPage ? styles.panelStepDotActive : ""
+              }`}
+            />
+          ))}
+        </div>
+
         <div className={styles.panelActions}>
           <div className={styles.panelTopRow}>
             <div className={styles.unitControl}>

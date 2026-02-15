@@ -97,6 +97,30 @@
   background: #ffffff;
 }
 
+.panelSteps {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panelStepDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(0, 0, 0, 0.45);
+  background: transparent;
+}
+
+.panelStepDotActive {
+  background: #111111;
+  border-color: #111111;
+}
+
 .panelTopRow {
   position: relative;
   z-index: 2;
