@@ -1051,7 +1051,6 @@ export default function ApiDemoPage() {
   const [selectedLocation, setSelectedLocation] =
     useState<SelectedLocationMeta | null>(null);
   const debounceRef = useRef<number | null>(null);
-  const panelRef = useRef<HTMLElement | null>(null);
   const wheelAccumRef = useRef(0);
   const wheelLastEventTsRef = useRef(0);
   const wheelGestureConsumedRef = useRef(false);
@@ -1341,11 +1340,6 @@ export default function ApiDemoPage() {
     wheelGestureConsumedAtRef.current = 0;
   }, [lat, lon, unit, pagedGraphs.length]);
 
-  useEffect(() => {
-    if (!panelOpen) return;
-    panelRef.current?.focus();
-  }, [panelOpen]);
-
   useEffect(
     () => () => {
       if (wheelGestureResetTimerRef.current) {
@@ -1505,10 +1499,9 @@ export default function ApiDemoPage() {
       </div>
 
       <aside
-        ref={panelRef}
         className={`${styles.locationPanel} ${panelOpen ? styles.locationPanelOpen : ""}`}
         aria-live="polite"
-        tabIndex={panelOpen ? 0 : -1}
+        tabIndex={0}
         onWheel={handlePanelWheel}
         onKeyDown={handlePanelKeyDown}
       >
