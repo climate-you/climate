@@ -72,10 +72,8 @@ def package_maps(
         out_dir = maps_root / grid.grid_id / map_id
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        if map_type == "texture_png":
-            output = map_spec.get("output", {}) or {}
-            filename = str(output.get("filename") or f"{map_id}.png")
-            png_path = out_dir / filename
+        if map_type == "texture":
+            texture_path = _texture_output_path(map_id=map_id, out_dir=out_dir, spec=map_spec)
             if _write_texture_map(
                 map_id=map_id,
                 out_dir=out_dir,
@@ -90,7 +88,7 @@ def package_maps(
             _copy_texture_to_web_public_if_needed(
                 map_id=map_id,
                 map_spec=map_spec,
-                texture_png_path=png_path,
+                texture_path=texture_path,
                 debug=debug,
             )
             continue
@@ -262,13 +260,13 @@ def _write_texture_map(
     resume: bool,
     debug: bool,
 ) -> bool:
-    output = spec.get("output", {})
-    filename = str(output.get("filename") or f"{map_id}.png")
-    png_path = out_dir / filename
+    output = spec.get("output", {}) or {}
+    file_format = _resolve_texture_file_format(spec)
+    texture_path = _texture_output_path(map_id=map_id, out_dir=out_dir, spec=spec)
     manifest_path = out_dir / "manifest.json"
-    if resume and png_path.exists() and manifest_path.exists():
+    if resume and texture_path.exists() and manifest_path.exists():
         if debug:
-            print(f"[maps] Skip existing texture map: {png_path}")
+            print(f"[maps] Skip existing texture map: {texture_path}")
         return False
 
     scale = spec.get("scale", {})
@@ -291,17 +289,18 @@ def _write_texture_map(
         width=output.get("width"),
         height=output.get("height"),
     )
-    _save_png(png_path, rgb)
+    _save_texture(texture_path, rgb, file_format=file_format)
 
     finite = projected_values[np.isfinite(projected_values)]
     manifest = {
         "id": map_id,
-        "type": "texture_png",
+        "type": "texture",
+        "file_format": file_format,
         "projection": projection,
         "projection_bounds": bounds,
         "source_metric": source_metric,
         "source_axis_years": axis,
-        "output_png": str(png_path),
+        "output_texture": str(texture_path),
         "shape": [int(projected_values.shape[0]), int(projected_values.shape[1])],
         "scale": {
             "mode": "linear",
@@ -317,8 +316,10 @@ def _write_texture_map(
             "nan_count": int(np.size(values) - finite.size),
         },
     }
+    if file_format == "png":
+        manifest["output_png"] = str(texture_path)
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    print(f"[maps] Wrote texture map: {png_path}")
+    print(f"[maps] Wrote texture map: {texture_path}")
     return True
 
 
@@ -405,21 +406,60 @@ def _copy_texture_to_web_public_if_needed(
     *,
     map_id: str,
     map_spec: dict[str, Any],
-    texture_png_path: Path,
+    texture_path: Path,
     debug: bool,
 ) -> None:
     if not bool(map_spec.get("web_write", False)):
         return
-    if not texture_png_path.exists():
+    if not texture_path.exists():
         if debug:
             print(
-                f"[maps] Skip web copy for {map_id}: texture file not found at {texture_png_path}"
+                f"[maps] Skip web copy for {map_id}: texture file not found at {texture_path}"
             )
         return
-    target_path = WEB_MAPS_ROOT / texture_png_path.name
+    target_path = WEB_MAPS_ROOT / texture_path.name
     target_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(texture_png_path, target_path)
+    shutil.copy2(texture_path, target_path)
     print(f"[maps] Copied web texture map: {target_path}")
+
+
+def _resolve_texture_file_format(spec: dict[str, Any]) -> str:
+    explicit = spec.get("file_format")
+    output = spec.get("output", {}) or {}
+    filename = output.get("filename")
+    suffix_format: str | None = None
+    if filename:
+        suffix = Path(str(filename)).suffix.lower()
+        if suffix in (".png", ".webp"):
+            suffix_format = suffix[1:]
+
+    if explicit is None:
+        return suffix_format or "png"
+
+    file_format = str(explicit).strip().lower()
+    if file_format not in ("png", "webp"):
+        raise ValueError(
+            f"Unsupported texture file_format '{explicit}'. Expected one of: png, webp."
+        )
+    if suffix_format and suffix_format != file_format:
+        raise ValueError(
+            f"Texture output filename extension '.{suffix_format}' does not match "
+            f"file_format '{file_format}'."
+        )
+    return file_format
+
+
+def _texture_output_path(*, map_id: str, out_dir: Path, spec: dict[str, Any]) -> Path:
+    output = spec.get("output", {}) or {}
+    filename = output.get("filename")
+    file_format = _resolve_texture_file_format(spec)
+    if filename:
+        filename_str = str(filename)
+        suffix = Path(filename_str).suffix
+        if suffix:
+            return out_dir / filename_str
+        return out_dir / f"{filename_str}.{file_format}"
+    return out_dir / f"{map_id}.{file_format}"
 
 
 def _score_to_rgb(score: np.ndarray) -> np.ndarray:
@@ -648,6 +688,26 @@ def _save_png(path: Path, rgb: np.ndarray) -> None:
         ) from exc
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(rgb, mode="RGB").save(path, format="PNG")
+
+
+def _save_texture(path: Path, rgb: np.ndarray, *, file_format: str) -> None:
+    fmt = file_format.lower()
+    if fmt == "png":
+        _save_png(path, rgb)
+        return
+
+    if fmt == "webp":
+        try:
+            from PIL import Image
+        except Exception as exc:  # pragma: no cover
+            raise RuntimeError(
+                "Pillow is required for map WebP output. Install with: pip install pillow"
+            ) from exc
+        path.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(rgb, mode="RGB").save(path, format="WEBP", quality=85, method=6)
+        return
+
+    raise ValueError(f"Unsupported texture file format: {file_format}")
 
 
 def _compression_ext(compression: dict | None) -> str:

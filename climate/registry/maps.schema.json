@@ -24,7 +24,8 @@
         "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "title": { "type": "string" },
         "description": { "type": "string" },
-        "type": { "const": "texture_png" },
+        "type": { "const": "texture" },
+        "file_format": { "type": "string", "enum": ["png", "webp"] },
         "source_metric": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "grid_id": { "type": "string", "pattern": "^[a-z0-9_.]+$" },
         "projection": {

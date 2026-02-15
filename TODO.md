@@ -7,7 +7,6 @@
   - Map: don't reset zoom when clicking on map (don't zoom out)
   - remove "Selected Location: "
   - change scrolling style to snap to two graphs if size allows it or one.
-  - layer selector
 - Graphs:
   - zoomout graph needs work
 - Packager script:

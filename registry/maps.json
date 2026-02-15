@@ -3,7 +3,7 @@
   "t2m_warming_2025_vs_1979_1988_texture": {
     "id": "t2m_warming_2025_vs_1979_1988_texture",
     "title": "Air temperature anomaly in 2025 vs 1979-1988",
-    "type": "texture_png",
+    "type": "texture",
     "source_metric": "t2m_yearly_mean_c",
     "reducer": {
       "op": "anomaly_vs_mean",
@@ -12,13 +12,13 @@
       "baseline_end_year": 1988
     },
     "palette": {
-      "colors": ["#313695", "#74add1", "#f7f7f7", "#f46d43", "#a50026"],
-      "nan_color": "#000000"
+      "colors": ["#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#b10026"],
+      "nan_color": "#fff9d7"
     },
     "scale": {
       "mode": "linear",
-      "vmin": -3.0,
-      "vmax": 3.0
+      "vmin": 0.0,
+      "vmax": 4.0
     },
     "output": {
       "filename": "t2m_warming_2025_vs_1979_1988.png"
@@ -27,7 +27,8 @@
   "t2m_warming_2025_vs_1979_1988_mercator_texture": {
     "id": "t2m_warming_2025_vs_1979_1988_mercator_texture",
     "title": "Air temperature anomaly in 2025 vs 1979-1988 (Mercator)",
-    "type": "texture_png",
+    "type": "texture",
+    "file_format": "webp",
     "projection": "mercator",
     "web_write": true,
     "source_metric": "t2m_yearly_mean_c",
@@ -38,16 +39,16 @@
       "baseline_end_year": 1988
     },
     "palette": {
-      "colors": ["#313695", "#74add1", "#f7f7f7", "#f46d43", "#a50026"],
-      "nan_color": "#000000"
+      "colors": ["#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#b10026"],
+      "nan_color": "#fff9d7"
     },
     "scale": {
       "mode": "linear",
-      "vmin": -3.0,
-      "vmax": 3.0
+      "vmin": 0.0,
+      "vmax": 4.0
     },
     "output": {
-      "filename": "t2m_warming_2025_vs_1979_1988_mercator.png"
+      "filename": "t2m_warming_2025_vs_1979_1988_mercator.webp"
     }
   },
   "t2m_trend_score": {
@@ -75,7 +76,7 @@
   "sst_warming_2025_vs_1982_1991_texture": {
     "id": "sst_warming_2025_vs_1982_1991_texture",
     "title": "Sea surface temperature anomaly in 2025 vs 1982-1991",
-    "type": "texture_png",
+    "type": "texture",
     "source_metric": "sst_yearly_mean_c",
     "reducer": {
       "op": "anomaly_vs_mean",
@@ -84,13 +85,13 @@
       "baseline_end_year": 1991
     },
     "palette": {
-      "colors": ["#313695", "#74add1", "#f7f7f7", "#f46d43", "#a50026"],
-      "nan_color": "#000000"
+      "colors": ["#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#b10026"],
+      "nan_color": "#fff9d7"
     },
     "scale": {
       "mode": "linear",
-      "vmin": -3.0,
-      "vmax": 3.0
+      "vmin": 0.0,
+      "vmax": 4.0
     },
     "output": {
       "filename": "sst_warming_2025_vs_1982_1991.png"
@@ -99,7 +100,8 @@
   "sst_warming_2025_vs_1982_1991_mercator_texture": {
     "id": "sst_warming_2025_vs_1982_1991_mercator_texture",
     "title": "Sea surface temperature anomaly in 2025 vs 1982-1991 (Mercator)",
-    "type": "texture_png",
+    "type": "texture",
+    "file_format": "webp",
     "projection": "mercator",
     "web_write": true,
     "source_metric": "sst_yearly_mean_c",
@@ -110,16 +112,16 @@
       "baseline_end_year": 1991
     },
     "palette": {
-      "colors": ["#313695", "#74add1", "#f7f7f7", "#f46d43", "#a50026"],
-      "nan_color": "#000000"
+      "colors": ["#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#b10026"],
+      "nan_color": "#fff9d7"
     },
     "scale": {
       "mode": "linear",
-      "vmin": -3.0,
-      "vmax": 3.0
+      "vmin": 0.0,
+      "vmax": 4.0
     },
     "output": {
-      "filename": "sst_warming_2025_vs_1982_1991_mercator.png"
+      "filename": "sst_warming_2025_vs_1982_1991_mercator.webp"
     }
   },
   "sst_trend_score": {

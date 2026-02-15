@@ -38,6 +38,8 @@ const DEFAULT_BASE_ZOOM = 2.5;
 const MERCATOR_MAX_LAT = 85.05112878;
 const TEXTURE_SOURCE_ID = "climateTextureSource";
 const TEXTURE_LAYER_ID = "climateTextureLayer";
+const BACKDROP_BLUE = "#0000ff";
+const BACKDROP_WHITE = "#ffffff";
 
 function baseZoomForViewportWidth(width: number) {
   if (width <= 480) return 1.0;
@@ -76,6 +78,32 @@ function panelPaddingForViewport(map: maplibregl.Map, panelOpen: boolean) {
     bottom: 0,
     left: 0,
   };
+}
+
+function setBackdropColor(map: maplibregl.Map, color: string) {
+  map.getContainer().style.backgroundColor = color;
+  map.getCanvas().style.backgroundColor = color;
+}
+
+function textureLayerBeforeId(map: maplibregl.Map): string | undefined {
+  const preferredForegroundLayers = [
+    "coast",
+    "boundary_3",
+    "boundary_2",
+    "boundary_disputed",
+    "label_country_3",
+    "label_country_2",
+    "label_country_1",
+    "label_city",
+    "label_city_capital",
+  ];
+  for (const layerId of preferredForegroundLayers) {
+    if (map.getLayer(layerId)) return layerId;
+  }
+
+  const styleLayers = map.getStyle()?.layers ?? [];
+  const firstSymbol = styleLayers.find((layer) => layer.type === "symbol");
+  return firstSymbol?.id;
 }
 
 export default function MapLibreGlobe({
@@ -146,8 +174,7 @@ export default function MapLibreGlobe({
 
     function applyMapSettings() {
       map.setProjection({ type: "globe" });
-      map.getContainer().style.backgroundColor = "#0000ff";
-      map.getCanvas().style.backgroundColor = "#0000ff";
+      setBackdropColor(map, BACKDROP_BLUE);
 
       const layers = map.getStyle()?.layers || [];
       for (const layer of layers) {
@@ -162,6 +189,7 @@ export default function MapLibreGlobe({
         (layer) => layer.id === activeLayerIdRef.current,
       );
       if (!selected || !selected.imageUrl) {
+        setBackdropColor(map, BACKDROP_BLUE);
         if (map.getLayer(TEXTURE_LAYER_ID)) {
           map.removeLayer(TEXTURE_LAYER_ID);
         }
@@ -170,6 +198,7 @@ export default function MapLibreGlobe({
         }
         return;
       }
+      setBackdropColor(map, BACKDROP_WHITE);
 
       const coordinates: [[number, number], [number, number], [number, number], [number, number]] = [
         [-180, MERCATOR_MAX_LAT],
@@ -206,6 +235,7 @@ export default function MapLibreGlobe({
       }
 
       if (!map.getLayer(TEXTURE_LAYER_ID)) {
+        const beforeId = textureLayerBeforeId(map);
         map.addLayer({
           id: TEXTURE_LAYER_ID,
           type: "raster",
@@ -214,7 +244,7 @@ export default function MapLibreGlobe({
             "raster-opacity": selected.opacity ?? 0.72,
             "raster-resampling": "linear",
           },
-        });
+        }, beforeId);
       } else {
         map.setPaintProperty(
           TEXTURE_LAYER_ID,
@@ -222,7 +252,8 @@ export default function MapLibreGlobe({
           selected.opacity ?? 0.72,
         );
       }
-      map.moveLayer(TEXTURE_LAYER_ID);
+      const beforeId = textureLayerBeforeId(map);
+      map.moveLayer(TEXTURE_LAYER_ID, beforeId);
     }
 
     function ensureHillshadeLayer() {
@@ -468,6 +499,7 @@ export default function MapLibreGlobe({
     const apply = () => {
       const selected = layerOptions.find((layer) => layer.id === activeLayerId);
       if (!selected || !selected.imageUrl) {
+        setBackdropColor(map, BACKDROP_BLUE);
         if (map.getLayer(TEXTURE_LAYER_ID)) {
           map.removeLayer(TEXTURE_LAYER_ID);
         }
@@ -477,6 +509,7 @@ export default function MapLibreGlobe({
         layerControlRef.current?.refresh();
         return;
       }
+      setBackdropColor(map, BACKDROP_WHITE);
       const source = map.getSource(TEXTURE_SOURCE_ID) as
         | (maplibregl.ImageSource & {
             updateImage?: (args: {
@@ -507,6 +540,7 @@ export default function MapLibreGlobe({
         });
       }
       if (!map.getLayer(TEXTURE_LAYER_ID)) {
+        const beforeId = textureLayerBeforeId(map);
         map.addLayer({
           id: TEXTURE_LAYER_ID,
           type: "raster",
@@ -515,10 +549,11 @@ export default function MapLibreGlobe({
             "raster-opacity": selected.opacity ?? 0.72,
             "raster-resampling": "linear",
           },
-        });
+        }, beforeId);
       }
       map.setPaintProperty(TEXTURE_LAYER_ID, "raster-opacity", selected.opacity ?? 0.72);
-      map.moveLayer(TEXTURE_LAYER_ID);
+      const beforeId = textureLayerBeforeId(map);
+      map.moveLayer(TEXTURE_LAYER_ID, beforeId);
       layerControlRef.current?.refresh();
     };
 

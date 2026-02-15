@@ -27,7 +27,7 @@ def test_validate_maps_against_metrics_ok() -> None:
         "version": "0.1",
         "warming_texture": {
             "id": "warming_texture",
-            "type": "texture_png",
+            "type": "texture",
             "source_metric": "t2m_yearly_mean_c",
         },
         "trend_interest": {
@@ -49,7 +49,7 @@ def test_validate_maps_against_metrics_missing_metric_fails() -> None:
         "version": "0.1",
         "warming_texture": {
             "id": "warming_texture",
-            "type": "texture_png",
+            "type": "texture",
             "source_metric": "missing_metric",
         },
     }
@@ -63,7 +63,7 @@ def test_validate_maps_against_metrics_requires_materialized_source() -> None:
         "version": "0.1",
         "warming_texture": {
             "id": "warming_texture",
-            "type": "texture_png",
+            "type": "texture",
             "source_metric": "derived_runtime_only",
         },
     }

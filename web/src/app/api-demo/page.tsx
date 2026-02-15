@@ -1048,13 +1048,13 @@ export default function ApiDemoPage() {
       {
         id: "t2m_warming_2025_vs_1979_1988_mercator_texture",
         label: "Warming (air)",
-        imageUrl: `${mapLayerRoot}/t2m_warming_2025_vs_1979_1988_mercator.png`,
+        imageUrl: `${mapLayerRoot}/t2m_warming_2025_vs_1979_1988_mercator.webp`,
         opacity: 0.72,
       },
       {
         id: "sst_warming_2025_vs_1982_1991_mercator_texture",
         label: "Warming (sea surface)",
-        imageUrl: `${mapLayerRoot}/sst_warming_2025_vs_1982_1991_mercator.png`,
+        imageUrl: `${mapLayerRoot}/sst_warming_2025_vs_1982_1991_mercator.webp`,
         opacity: 0.72,
       },
     ],
