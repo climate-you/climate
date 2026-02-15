@@ -31,6 +31,7 @@
           "type": "string",
           "enum": ["equirectangular", "mercator"]
         },
+        "web_write": { "type": "boolean" },
         "reducer": { "$ref": "#/$defs/reducer" },
         "palette": { "$ref": "#/$defs/palette" },
         "scale": { "$ref": "#/$defs/scale" },

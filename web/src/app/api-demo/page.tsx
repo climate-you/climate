@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
 import MapLibreGlobe from "@/components/MapLibreGlobe";
@@ -1031,7 +1037,7 @@ export default function ApiDemoPage() {
     if (process.env.NEXT_PUBLIC_MAP_LAYER_ROOT) {
       return process.env.NEXT_PUBLIC_MAP_LAYER_ROOT.replace(/\/+$/, "");
     }
-    return "/data/maps/global_0p25";
+    return "/data/maps";
   }, []);
   const mapLayers = useMemo<MapLayerOption[]>(
     () => [

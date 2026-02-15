@@ -206,18 +206,15 @@ export default function MapLibreGlobe({
       }
 
       if (!map.getLayer(TEXTURE_LAYER_ID)) {
-        map.addLayer(
-          {
-            id: TEXTURE_LAYER_ID,
-            type: "raster",
-            source: TEXTURE_SOURCE_ID,
-            paint: {
-              "raster-opacity": selected.opacity ?? 0.72,
-              "raster-resampling": "linear",
-            },
+        map.addLayer({
+          id: TEXTURE_LAYER_ID,
+          type: "raster",
+          source: TEXTURE_SOURCE_ID,
+          paint: {
+            "raster-opacity": selected.opacity ?? 0.72,
+            "raster-resampling": "linear",
           },
-          map.getLayer("coast") ? "coast" : undefined,
-        );
+        });
       } else {
         map.setPaintProperty(
           TEXTURE_LAYER_ID,
@@ -225,6 +222,7 @@ export default function MapLibreGlobe({
           selected.opacity ?? 0.72,
         );
       }
+      map.moveLayer(TEXTURE_LAYER_ID);
     }
 
     function ensureHillshadeLayer() {
@@ -495,14 +493,32 @@ export default function MapLibreGlobe({
       ];
       if (source && typeof source.updateImage === "function") {
         source.updateImage({ url: selected.imageUrl, coordinates });
+      } else {
+        if (map.getLayer(TEXTURE_LAYER_ID)) {
+          map.removeLayer(TEXTURE_LAYER_ID);
+        }
+        if (map.getSource(TEXTURE_SOURCE_ID)) {
+          map.removeSource(TEXTURE_SOURCE_ID);
+        }
+        map.addSource(TEXTURE_SOURCE_ID, {
+          type: "image",
+          url: selected.imageUrl,
+          coordinates,
+        });
       }
-      if (map.getLayer(TEXTURE_LAYER_ID)) {
-        map.setPaintProperty(
-          TEXTURE_LAYER_ID,
-          "raster-opacity",
-          selected.opacity ?? 0.72,
-        );
+      if (!map.getLayer(TEXTURE_LAYER_ID)) {
+        map.addLayer({
+          id: TEXTURE_LAYER_ID,
+          type: "raster",
+          source: TEXTURE_SOURCE_ID,
+          paint: {
+            "raster-opacity": selected.opacity ?? 0.72,
+            "raster-resampling": "linear",
+          },
+        });
       }
+      map.setPaintProperty(TEXTURE_LAYER_ID, "raster-opacity", selected.opacity ?? 0.72);
+      map.moveLayer(TEXTURE_LAYER_ID);
       layerControlRef.current?.refresh();
     };
 

@@ -29,6 +29,7 @@
     "title": "Air temperature anomaly in 2025 vs 1979-1988 (Mercator)",
     "type": "texture_png",
     "projection": "mercator",
+    "web_write": true,
     "source_metric": "t2m_yearly_mean_c",
     "reducer": {
       "op": "anomaly_vs_mean",
@@ -100,6 +101,7 @@
     "title": "Sea surface temperature anomaly in 2025 vs 1982-1991 (Mercator)",
     "type": "texture_png",
     "projection": "mercator",
+    "web_write": true,
     "source_metric": "sst_yearly_mean_c",
     "reducer": {
       "op": "anomaly_vs_mean",

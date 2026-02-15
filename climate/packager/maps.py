@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import shutil
 from typing import Any
 
 import numpy as np
@@ -10,6 +11,7 @@ from climate.tiles.layout import GridSpec, tile_counts, tile_path
 from climate.tiles.spec import read_tile_array
 
 MERCATOR_MAX_LAT = 85.05112878
+WEB_MAPS_ROOT = Path(__file__).resolve().parents[2] / "web" / "public" / "data" / "maps"
 
 
 def package_maps(
@@ -67,10 +69,13 @@ def package_maps(
                 f"source metric grid_id={grid.grid_id}"
             )
 
-        out_dir = maps_root
+        out_dir = maps_root / grid.grid_id / map_id
         out_dir.mkdir(parents=True, exist_ok=True)
 
         if map_type == "texture_png":
+            output = map_spec.get("output", {}) or {}
+            filename = str(output.get("filename") or f"{map_id}.png")
+            png_path = out_dir / filename
             if _write_texture_map(
                 map_id=map_id,
                 out_dir=out_dir,
@@ -82,6 +87,12 @@ def package_maps(
                 debug=debug,
             ):
                 written += 1
+            _copy_texture_to_web_public_if_needed(
+                map_id=map_id,
+                map_spec=map_spec,
+                texture_png_path=png_path,
+                debug=debug,
+            )
             continue
 
         if map_type == "score":
@@ -254,7 +265,7 @@ def _write_texture_map(
     output = spec.get("output", {})
     filename = str(output.get("filename") or f"{map_id}.png")
     png_path = out_dir / filename
-    manifest_path = out_dir / f"{map_id}.manifest.json"
+    manifest_path = out_dir / "manifest.json"
     if resume and png_path.exists() and manifest_path.exists():
         if debug:
             print(f"[maps] Skip existing texture map: {png_path}")
@@ -328,8 +339,8 @@ def _write_score_map(
     binary_name = str(output.get("binary_filename") or f"{map_id}.i16.bin")
     png_path = out_dir / png_name
     bin_path = out_dir / binary_name
-    meta_path = out_dir / f"{map_id}.binary_manifest.json"
-    manifest_path = out_dir / f"{map_id}.manifest.json"
+    meta_path = out_dir / "binary_manifest.json"
+    manifest_path = out_dir / "manifest.json"
     if resume and png_path.exists() and bin_path.exists() and meta_path.exists() and manifest_path.exists():
         if debug:
             print(f"[maps] Skip existing score map: {out_dir}")
@@ -388,6 +399,27 @@ def _write_score_map(
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(f"[maps] Wrote score map: {png_path} + {bin_path}")
     return True
+
+
+def _copy_texture_to_web_public_if_needed(
+    *,
+    map_id: str,
+    map_spec: dict[str, Any],
+    texture_png_path: Path,
+    debug: bool,
+) -> None:
+    if not bool(map_spec.get("web_write", False)):
+        return
+    if not texture_png_path.exists():
+        if debug:
+            print(
+                f"[maps] Skip web copy for {map_id}: texture file not found at {texture_png_path}"
+            )
+        return
+    target_path = WEB_MAPS_ROOT / texture_png_path.name
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(texture_png_path, target_path)
+    print(f"[maps] Copied web texture map: {target_path}")
 
 
 def _score_to_rgb(score: np.ndarray) -> np.ndarray:
