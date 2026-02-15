@@ -62,28 +62,7 @@
       "recent_end_year": 2025,
       "era5_ref_start_year": 1979,
       "era5_ref_end_year": 2000,
-      "cmip_metric_pairs": [
-        {
-          "cmip_preindustrial_metric": "t2m_preindustrial_baseline_access_cm2_c",
-          "cmip_ref_metric": "t2m_cmip_baseline_1979_2000_access_cm2_c"
-        },
-        {
-          "cmip_preindustrial_metric": "t2m_preindustrial_baseline_canesm5_c",
-          "cmip_ref_metric": "t2m_cmip_baseline_1979_2000_canesm5_c"
-        },
-        {
-          "cmip_preindustrial_metric": "t2m_preindustrial_baseline_mpi_esm1_2_lr_c",
-          "cmip_ref_metric": "t2m_cmip_baseline_1979_2000_mpi_esm1_2_lr_c"
-        },
-        {
-          "cmip_preindustrial_metric": "t2m_preindustrial_baseline_ipsl_cm6a_lr_c",
-          "cmip_ref_metric": "t2m_cmip_baseline_1979_2000_ipsl_cm6a_lr_c"
-        },
-        {
-          "cmip_preindustrial_metric": "t2m_preindustrial_baseline_ukesm1_0_ll_c",
-          "cmip_ref_metric": "t2m_cmip_baseline_1979_2000_ukesm1_0_ll_c"
-        }
-      ]
+      "cmip_offset_metric": "t2m_cmip_offset_1979_2000_vs_1850_1900_mean_5models_c"
     },
     "palette": {
       "colors": ["#313695", "#74add1", "#f7f7f7", "#f46d43", "#a50026"],

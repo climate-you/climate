@@ -31,6 +31,42 @@
       "batch_tiles": 4
     }
   },
+  "cmip6_historical_tas_monthly_5model_mean": {
+    "id": "cmip6_historical_tas_monthly_5model_mean",
+    "title": "CMIP6 historical monthly near-surface air temperature (5-model blend)",
+    "grid_id": "global_0p25",
+    "tile_size": 64,
+    "source": {
+      "type": "cds",
+      "dataset": "projections-cmip6",
+      "variable": "near_surface_air_temperature",
+      "postprocess": [{ "fn": "k_to_c" }],
+      "time_range": { "start_year": 1850, "end_year": 2014 },
+      "block_years": 51,
+      "batch_tiles": 4,
+      "params": {
+        "cds_cadence": "monthly",
+        "regrid_to_metric_grid": true,
+        "regrid_method": "bilinear",
+        "cache_tag": "5model_mean",
+        "request_template": {
+          "temporal_resolution": "monthly",
+          "experiment": "historical",
+          "format": "netcdf",
+          "model": [
+            "access_cm2",
+            "canesm5",
+            "mpi_esm1_2_lr",
+            "ipsl_cm6a_lr",
+            "ukesm1_0_ll"
+          ]
+        },
+        "variable_field": "variable",
+        "year_field": "year",
+        "month_field": "month"
+      }
+    }
+  },
   "cmip6_historical_tas_monthly_access_cm2": {
     "id": "cmip6_historical_tas_monthly_access_cm2",
     "title": "CMIP6 historical monthly near-surface air temperature",

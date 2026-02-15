@@ -38,28 +38,7 @@ from climate.tiles.layout import GridSpec, locate_tile, cell_center_latlon
 _SCORE_MAP_VALUES_CACHE: dict[str, np.ndarray] = {}
 _SCORE_MAP_VALUES_CACHE_LOCK = Lock()
 _HEADLINE_RECENT_YEARS = 5
-_CMIP_BASELINE_METRIC_PAIRS: tuple[tuple[str, str], ...] = (
-    (
-        "t2m_preindustrial_baseline_access_cm2_c",
-        "t2m_cmip_baseline_1979_2000_access_cm2_c",
-    ),
-    (
-        "t2m_preindustrial_baseline_canesm5_c",
-        "t2m_cmip_baseline_1979_2000_canesm5_c",
-    ),
-    (
-        "t2m_preindustrial_baseline_mpi_esm1_2_lr_c",
-        "t2m_cmip_baseline_1979_2000_mpi_esm1_2_lr_c",
-    ),
-    (
-        "t2m_preindustrial_baseline_ipsl_cm6a_lr_c",
-        "t2m_cmip_baseline_1979_2000_ipsl_cm6a_lr_c",
-    ),
-    (
-        "t2m_preindustrial_baseline_ukesm1_0_ll_c",
-        "t2m_cmip_baseline_1979_2000_ukesm1_0_ll_c",
-    ),
-)
+_CMIP_OFFSET_METRIC = "t2m_cmip_offset_1979_2000_vs_1850_1900_mean_5models_c"
 
 
 def preload_score_maps_cache(
@@ -301,8 +280,9 @@ def _compute_t2m_preindustrial_headline(
     unit: str,
 ) -> HeadlinePayload:
     current_metric = "t2m_yearly_mean_c"
+    cmip_offset_metric = _CMIP_OFFSET_METRIC
     baseline_label = "1850-1900"
-    method = "ERA5 recent 5y minus ERA5 1979-2000, plus mean CMIP offset"
+    method = "ERA5 recent 5y minus ERA5 1979-2000, plus precomputed CMIP 5-model mean offset"
     try:
         vec = tile_store.try_get_metric_vector(current_metric, lat, lon)
     except FileNotFoundError:
@@ -362,26 +342,12 @@ def _compute_t2m_preindustrial_headline(
 
     era5_recent_local = float(np.mean(y[recent_mask]))
     era5_ref_local = float(np.mean(y[era5_ref_mask]))
-    cmip_offsets: list[float] = []
-    for cmip_preindustrial_metric, cmip_ref_metric in _CMIP_BASELINE_METRIC_PAIRS:
-        try:
-            cmip_preindustrial_vec = tile_store.try_get_metric_vector(
-                cmip_preindustrial_metric, lat, lon
-            )
-            cmip_ref_vec = tile_store.try_get_metric_vector(cmip_ref_metric, lat, lon)
-        except FileNotFoundError:
-            continue
-        if cmip_preindustrial_vec is None or cmip_ref_vec is None:
-            continue
-        cmip_pre_vals = np.asarray(cmip_preindustrial_vec, dtype=np.float64).reshape(-1)
-        cmip_ref_vals = np.asarray(cmip_ref_vec, dtype=np.float64).reshape(-1)
-        cmip_pre_finite = cmip_pre_vals[np.isfinite(cmip_pre_vals)]
-        cmip_ref_finite = cmip_ref_vals[np.isfinite(cmip_ref_vals)]
-        if cmip_pre_finite.size == 0 or cmip_ref_finite.size == 0:
-            continue
-        cmip_offsets.append(float(cmip_ref_finite[-1] - cmip_pre_finite[-1]))
+    try:
+        cmip_offset_vec = tile_store.try_get_metric_vector(cmip_offset_metric, lat, lon)
+    except FileNotFoundError:
+        cmip_offset_vec = None
 
-    if not cmip_offsets:
+    if cmip_offset_vec is None:
         return HeadlinePayload(
             key="t2m_vs_preindustrial_local",
             label="Air temperature change vs pre-industrial",
@@ -392,7 +358,20 @@ def _compute_t2m_preindustrial_headline(
             method=method,
         )
 
-    delta_c = (era5_recent_local - era5_ref_local) + float(np.mean(cmip_offsets))
+    cmip_offset_vals = np.asarray(cmip_offset_vec, dtype=np.float64).reshape(-1)
+    cmip_offset_finite = cmip_offset_vals[np.isfinite(cmip_offset_vals)]
+    if cmip_offset_finite.size == 0:
+        return HeadlinePayload(
+            key="t2m_vs_preindustrial_local",
+            label="Air temperature change vs pre-industrial",
+            value=None,
+            unit=unit.upper(),
+            baseline=baseline_label,
+            period=f"{recent_start}-{latest_year}",
+            method=method,
+        )
+
+    delta_c = (era5_recent_local - era5_ref_local) + float(cmip_offset_finite[-1])
     delta = _to_unit_delta(delta_c, unit)
 
     return HeadlinePayload(
@@ -402,7 +381,7 @@ def _compute_t2m_preindustrial_headline(
         unit=unit.upper(),
         baseline=baseline_label,
         period=f"{recent_start}-{latest_year}",
-        method=f"{method} (n_models={len(cmip_offsets)})",
+        method=method,
     )
 
 

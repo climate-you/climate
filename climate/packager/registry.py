@@ -222,8 +222,9 @@ def _compute_tiles_from_cds_downloads(
             print(f"[cds] Aggregating {time_axis} (daily source, agg={agg})")
         da_parts.append(agg_fn(da_daily, params))
     else:
-        for years_part, paths in downloads:
-            if _is_cds_monthly_dataset(dataset, params):
+        if _is_cds_monthly_dataset(dataset, params) and agg == "cmip_multi_model_offset_from_monthly":
+            monthly_parts_all: list[xr.DataArray] = []
+            for _years_part, paths in downloads:
                 dl_path = paths[0]
                 if dask_enabled:
                     ds = _open_dataset_dask(
@@ -246,19 +247,20 @@ def _compute_tiles_from_cds_downloads(
                         label=f"cds:{metric_id}:{dl_path.name}",
                         metric_id=metric_id,
                     )
-                    if debug:
-                        print(
-                            f"[cds] Aggregating {time_axis} (monthly source, agg={agg}) "
-                            f"for years {years_part[0]}..{years_part[-1]}"
-                        )
-                    da_out = agg_fn(da, params)
-                    da_out = _select_years_if_present(da_out, years_part)
-                    da_parts.append(da_out)
+                    monthly_parts_all.append(da)
                 finally:
                     ds.close()
-            else:
-                daily_parts: list[xr.DataArray] = []
-                for dl_path in paths:
+            if debug:
+                print("[cds] Concatenating monthly parts for cmip_multi_model_offset_from_monthly")
+            da_monthly = xr.concat(
+                monthly_parts_all,
+                dim=find_time_dim(monthly_parts_all[0]),
+            ).sortby(find_time_dim(monthly_parts_all[0]))
+            da_parts.append(agg_fn(da_monthly, params))
+        else:
+            for years_part, paths in downloads:
+                if _is_cds_monthly_dataset(dataset, params):
+                    dl_path = paths[0]
                     if dask_enabled:
                         ds = _open_dataset_dask(
                             dl_path,
@@ -280,24 +282,58 @@ def _compute_tiles_from_cds_downloads(
                             label=f"cds:{metric_id}:{dl_path.name}",
                             metric_id=metric_id,
                         )
-                        daily_parts.append(da)
+                        if debug:
+                            print(
+                                f"[cds] Aggregating {time_axis} (monthly source, agg={agg}) "
+                                f"for years {years_part[0]}..{years_part[-1]}"
+                            )
+                        da_out = agg_fn(da, params)
+                        da_out = _select_years_if_present(da_out, years_part)
+                        da_parts.append(da_out)
                     finally:
                         ds.close()
+                else:
+                    daily_parts: list[xr.DataArray] = []
+                    for dl_path in paths:
+                        if dask_enabled:
+                            ds = _open_dataset_dask(
+                                dl_path,
+                                dask_chunk_lat=dask_chunk_lat,
+                                dask_chunk_lon=dask_chunk_lon,
+                            )
+                        else:
+                            ds = xr.open_dataset(dl_path)
+                        try:
+                            var_name = _pick_data_var(ds, preferred=data_var_hint)
+                            da = ds[var_name]
+                            da = _apply_postprocess(da, postprocess)
+                            da = _maybe_regrid_to_metric_grid(
+                                da=da,
+                                grid=grid,
+                                tile_range=tile_range,
+                                params=params,
+                                debug=debug,
+                                label=f"cds:{metric_id}:{dl_path.name}",
+                                metric_id=metric_id,
+                            )
+                            daily_parts.append(da)
+                        finally:
+                            ds.close()
 
-                if debug:
-                    print(
-                        f"[cds] Concatenating daily parts for years {years_part[0]}..{years_part[-1]}"
-                    )
-                da_daily = xr.concat(daily_parts, dim=find_time_dim(daily_parts[0]))
-                da_daily = da_daily.sortby(find_time_dim(da_daily))
-                if debug:
-                    print(
-                        f"[cds] Aggregating {time_axis} (daily source, agg={agg}) "
-                        f"for years {years_part[0]}..{years_part[-1]}"
-                    )
-                da_out = agg_fn(da_daily, params)
-                da_out = _select_years_if_present(da_out, years_part)
-                da_parts.append(da_out)
+                    if debug:
+                        print(
+                            f"[cds] Concatenating daily parts for years {years_part[0]}..{years_part[-1]}"
+                        )
+                    da_daily = xr.concat(daily_parts, dim=find_time_dim(daily_parts[0]))
+                    da_daily = da_daily.sortby(find_time_dim(da_daily))
+                    if debug:
+                        print(
+                            f"[cds] Aggregating {time_axis} (daily source, agg={agg}) "
+                            f"for years {years_part[0]}..{years_part[-1]}"
+                        )
+                    da_out = agg_fn(da_daily, params)
+                    da_out = _select_years_if_present(da_out, years_part)
+                    da_parts.append(da_out)
 
     written = _concat_and_write_time_tiles(
         da_parts=da_parts,
@@ -691,13 +727,7 @@ def _concat_and_write_time_tiles(
 
     if time_axis == "yearly":
         da = xr.concat(da_parts, dim="year").sortby("year")
-        try:
-            da = da.sel(year=output_years)
-        except Exception as exc:
-            raise RuntimeError(
-                f"Failed to select requested analysis years for {metric_id}: "
-                f"{output_years[0]}..{output_years[-1]}"
-            ) from exc
+        da = _select_years_if_present(da, output_years)
         axis_values: list[object] = [int(v) for v in da["year"].values.tolist()]
         return _tiles_from_time_da(
             da=da,
@@ -763,6 +793,10 @@ def _agg_map() -> dict[str, callable]:
         "annual_mean_from_monthly": lambda da, _params: annual_mean_from_monthly(da),
         "monthly_mean_from_daily": lambda da, _params: monthly_mean_from_daily(da),
         "annual_mean_from_daily": lambda da, _params: annual_mean_from_daily(da),
+        "cmip_multi_model_offset_from_monthly": lambda da, params: _cmip_multi_model_offset_from_monthly(
+            da,
+            params,
+        ),
         "climatology_mean_from_monthly": lambda da, params: climatology_mean_from_monthly(
             da,
             start_year=int((params or {}).get("start_year")),
@@ -780,6 +814,42 @@ def _agg_map() -> dict[str, callable]:
             debug=bool((params or {}).get("_debug", False)),
         ),
 }
+
+
+def _cmip_multi_model_offset_from_monthly(
+    da: xr.DataArray,
+    params: dict[str, Any] | None,
+) -> xr.DataArray:
+    p = params or {}
+    pre_start_year = int(p.get("preindustrial_start_year", 1850))
+    pre_end_year = int(p.get("preindustrial_end_year", 1900))
+    ref_start_year = int(p.get("ref_start_year", 1979))
+    ref_end_year = int(p.get("ref_end_year", 2000))
+    label_year = int(p.get("label_year", ref_end_year))
+
+    tname = find_time_dim(da)
+    if not np.issubdtype(da[tname].dtype, np.datetime64):
+        da = xr.decode_cf(da.to_dataset(name="v"))["v"]
+
+    lat_name, lon_name = _find_lat_lon_names(da.to_dataset(name="v"))
+    keep_dims = {tname, lat_name, lon_name}
+    extra_dims = [dim for dim in da.dims if dim not in keep_dims]
+    if extra_dims:
+        da = da.mean(dim=extra_dims, skipna=True, keep_attrs=False)
+
+    preindustrial = climatology_mean_from_monthly(
+        da,
+        start_year=pre_start_year,
+        end_year=pre_end_year,
+        label_year=label_year,
+    )
+    reference = climatology_mean_from_monthly(
+        da,
+        start_year=ref_start_year,
+        end_year=ref_end_year,
+        label_year=label_year,
+    )
+    return reference - preindustrial
 
 
 def _is_cds_monthly_dataset(dataset: str, params: dict[str, Any] | None) -> bool:
@@ -816,6 +886,49 @@ def _year_blocks(
             blocks.append((start_date, end_date, years))
         y = y1 + 1
     return blocks
+
+
+def _cds_year_blocks_for_metric(
+    *,
+    agg: str,
+    source: dict[str, Any],
+    download_start_year: int,
+    download_end_year: int,
+) -> list[tuple[str, str, list[int]]]:
+    if agg == "cmip_multi_model_offset_from_monthly":
+        params = source.get("params", {}) or {}
+        windows = [
+            (
+                int(params.get("preindustrial_start_year", 1850)),
+                int(params.get("preindustrial_end_year", 1900)),
+            ),
+            (
+                int(params.get("ref_start_year", 1979)),
+                int(params.get("ref_end_year", 2000)),
+            ),
+        ]
+        blocks: list[tuple[str, str, list[int]]] = []
+        seen: set[tuple[int, int]] = set()
+        for w_start, w_end in windows:
+            start = max(download_start_year, min(w_start, w_end))
+            end = min(download_end_year, max(w_start, w_end))
+            if start > end:
+                continue
+            key = (start, end)
+            if key in seen:
+                continue
+            seen.add(key)
+            years = list(range(start, end + 1))
+            blocks.append((f"{start}-01-01", f"{end}-12-31", years))
+        return blocks
+
+    block_years = int(source.get("block_years", 1))
+    return _year_blocks(
+        download_start_year,
+        download_end_year,
+        block_years,
+        dataset_start=None,
+    )
 
 
 def _month_blocks(block_months: int) -> list[list[str]]:
@@ -1710,17 +1823,11 @@ def package_registry(
                         dataset = source.get("dataset")
                         params = source.get("params", {}) or {}
                         if _is_cds_monthly_dataset(str(dataset), params):
-                            block_years = int(
-                                source.get(
-                                    "block_years",
-                                    download_end_year - download_start_year + 1,
-                                )
-                            )
-                            blocks = _year_blocks(
-                                download_start_year,
-                                download_end_year,
-                                block_years,
-                                dataset_start=None,
+                            blocks = _cds_year_blocks_for_metric(
+                                agg=agg,
+                                source=source,
+                                download_start_year=download_start_year,
+                                download_end_year=download_end_year,
                             )
                             return len(blocks)
                         block_years = int(source.get("block_years", 1))
@@ -1831,19 +1938,19 @@ def package_registry(
                                     raise ValueError(
                                         "CDS daily stats requires block_years=1 (per-year requests)."
                                     )
-                            else:
-                                block_years = int(
-                                    source.get(
-                                        "block_years",
-                                        download_end_year - download_start_year + 1,
-                                    )
+                                blocks = _year_blocks(
+                                    download_start_year,
+                                    download_end_year,
+                                    block_years,
+                                    dataset_start=None,
                                 )
-                            blocks = _year_blocks(
-                                download_start_year,
-                                download_end_year,
-                                block_years,
-                                dataset_start=None,
-                            )
+                            else:
+                                blocks = _cds_year_blocks_for_metric(
+                                    agg=agg,
+                                    source=source,
+                                    download_start_year=download_start_year,
+                                    download_end_year=download_end_year,
+                                )
                             if not blocks:
                                 raise ValueError(
                                     f"No valid CDS blocks for {download_start_year}-{download_end_year}"
@@ -2169,18 +2276,19 @@ def package_registry(
                             raise ValueError(
                                 "CDS daily stats requires block_years=1 (per-year requests)."
                             )
-                    else:
-                        block_years = int(
-                            source.get(
-                                "block_years", download_end_year - download_start_year + 1
-                            )
+                        blocks = _year_blocks(
+                            download_start_year,
+                            download_end_year,
+                            block_years,
+                            dataset_start=None,
                         )
-                    blocks = _year_blocks(
-                        download_start_year,
-                        download_end_year,
-                        block_years,
-                        dataset_start=None,
-                    )
+                    else:
+                        blocks = _cds_year_blocks_for_metric(
+                            agg=agg,
+                            source=source,
+                            download_start_year=download_start_year,
+                            download_end_year=download_end_year,
+                        )
                     if not blocks:
                         raise ValueError(
                             f"No valid CDS blocks for {download_start_year}-{download_end_year}"

@@ -33,230 +33,25 @@
     },
     "materialize": "on_api"
   },
-  "t2m_preindustrial_baseline_access_cm2_c": {
-    "id": "t2m_preindustrial_baseline_access_cm2_c",
-    "title": "2m temperature baseline mean (1850-1900)",
+  "t2m_cmip_offset_1979_2000_vs_1850_1900_mean_5models_c": {
+    "id": "t2m_cmip_offset_1979_2000_vs_1850_1900_mean_5models_c",
+    "title": "CMIP6 local offset mean: 1979-2000 vs 1850-1900 (5-model mean)",
     "unit": "C",
     "dtype": "float32",
     "missing": "nan",
     "time_axis": "yearly",
     "source": {
       "type": "cds",
-      "dataset_ref": "cmip6_historical_tas_monthly_access_cm2",
-      "agg": "climatology_mean_from_monthly",
+      "dataset_ref": "cmip6_historical_tas_monthly_5model_mean",
+      "agg": "cmip_multi_model_offset_from_monthly",
       "params": {
-        "start_year": 1850,
-        "end_year": 1900,
-        "label_year": 1900
-      },
-      "time_range": { "start_year": 1900, "end_year": 1900 }
-    },
-    "storage": {
-      "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
-    }
-  },
-  "t2m_cmip_baseline_1979_2000_access_cm2_c": {
-    "id": "t2m_cmip_baseline_1979_2000_access_cm2_c",
-    "title": "CMIP6 local baseline mean (1979-2000)",
-    "unit": "C",
-    "dtype": "float32",
-    "missing": "nan",
-    "time_axis": "yearly",
-    "source": {
-      "type": "cds",
-      "dataset_ref": "cmip6_historical_tas_monthly_access_cm2",
-      "agg": "climatology_mean_from_monthly",
-      "params": {
-        "start_year": 1979,
-        "end_year": 2000,
+        "preindustrial_start_year": 1850,
+        "preindustrial_end_year": 1900,
+        "ref_start_year": 1979,
+        "ref_end_year": 2000,
         "label_year": 2000
       },
-      "time_range": { "start_year": 2000, "end_year": 2000 }
-    },
-    "storage": {
-      "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
-    }
-  },
-  "t2m_preindustrial_baseline_canesm5_c": {
-    "id": "t2m_preindustrial_baseline_canesm5_c",
-    "title": "2m temperature baseline mean (1850-1900, CanESM5)",
-    "unit": "C",
-    "dtype": "float32",
-    "missing": "nan",
-    "time_axis": "yearly",
-    "source": {
-      "type": "cds",
-      "dataset_ref": "cmip6_historical_tas_monthly_canesm5",
-      "agg": "climatology_mean_from_monthly",
-      "params": {
-        "start_year": 1850,
-        "end_year": 1900,
-        "label_year": 1900
-      },
-      "time_range": { "start_year": 1900, "end_year": 1900 }
-    },
-    "storage": {
-      "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
-    }
-  },
-  "t2m_cmip_baseline_1979_2000_canesm5_c": {
-    "id": "t2m_cmip_baseline_1979_2000_canesm5_c",
-    "title": "CMIP6 local baseline mean (1979-2000, CanESM5)",
-    "unit": "C",
-    "dtype": "float32",
-    "missing": "nan",
-    "time_axis": "yearly",
-    "source": {
-      "type": "cds",
-      "dataset_ref": "cmip6_historical_tas_monthly_canesm5",
-      "agg": "climatology_mean_from_monthly",
-      "params": {
-        "start_year": 1979,
-        "end_year": 2000,
-        "label_year": 2000
-      },
-      "time_range": { "start_year": 2000, "end_year": 2000 }
-    },
-    "storage": {
-      "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
-    }
-  },
-  "t2m_preindustrial_baseline_mpi_esm1_2_lr_c": {
-    "id": "t2m_preindustrial_baseline_mpi_esm1_2_lr_c",
-    "title": "2m temperature baseline mean (1850-1900, MPI-ESM1-2-LR)",
-    "unit": "C",
-    "dtype": "float32",
-    "missing": "nan",
-    "time_axis": "yearly",
-    "source": {
-      "type": "cds",
-      "dataset_ref": "cmip6_historical_tas_monthly_mpi_esm1_2_lr",
-      "agg": "climatology_mean_from_monthly",
-      "params": {
-        "start_year": 1850,
-        "end_year": 1900,
-        "label_year": 1900
-      },
-      "time_range": { "start_year": 1900, "end_year": 1900 }
-    },
-    "storage": {
-      "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
-    }
-  },
-  "t2m_cmip_baseline_1979_2000_mpi_esm1_2_lr_c": {
-    "id": "t2m_cmip_baseline_1979_2000_mpi_esm1_2_lr_c",
-    "title": "CMIP6 local baseline mean (1979-2000, MPI-ESM1-2-LR)",
-    "unit": "C",
-    "dtype": "float32",
-    "missing": "nan",
-    "time_axis": "yearly",
-    "source": {
-      "type": "cds",
-      "dataset_ref": "cmip6_historical_tas_monthly_mpi_esm1_2_lr",
-      "agg": "climatology_mean_from_monthly",
-      "params": {
-        "start_year": 1979,
-        "end_year": 2000,
-        "label_year": 2000
-      },
-      "time_range": { "start_year": 2000, "end_year": 2000 }
-    },
-    "storage": {
-      "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
-    }
-  },
-  "t2m_preindustrial_baseline_ipsl_cm6a_lr_c": {
-    "id": "t2m_preindustrial_baseline_ipsl_cm6a_lr_c",
-    "title": "2m temperature baseline mean (1850-1900, IPSL-CM6A-LR)",
-    "unit": "C",
-    "dtype": "float32",
-    "missing": "nan",
-    "time_axis": "yearly",
-    "source": {
-      "type": "cds",
-      "dataset_ref": "cmip6_historical_tas_monthly_ipsl_cm6a_lr",
-      "agg": "climatology_mean_from_monthly",
-      "params": {
-        "start_year": 1850,
-        "end_year": 1900,
-        "label_year": 1900
-      },
-      "time_range": { "start_year": 1900, "end_year": 1900 }
-    },
-    "storage": {
-      "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
-    }
-  },
-  "t2m_cmip_baseline_1979_2000_ipsl_cm6a_lr_c": {
-    "id": "t2m_cmip_baseline_1979_2000_ipsl_cm6a_lr_c",
-    "title": "CMIP6 local baseline mean (1979-2000, IPSL-CM6A-LR)",
-    "unit": "C",
-    "dtype": "float32",
-    "missing": "nan",
-    "time_axis": "yearly",
-    "source": {
-      "type": "cds",
-      "dataset_ref": "cmip6_historical_tas_monthly_ipsl_cm6a_lr",
-      "agg": "climatology_mean_from_monthly",
-      "params": {
-        "start_year": 1979,
-        "end_year": 2000,
-        "label_year": 2000
-      },
-      "time_range": { "start_year": 2000, "end_year": 2000 }
-    },
-    "storage": {
-      "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
-    }
-  },
-  "t2m_preindustrial_baseline_ukesm1_0_ll_c": {
-    "id": "t2m_preindustrial_baseline_ukesm1_0_ll_c",
-    "title": "2m temperature baseline mean (1850-1900, UKESM1-0-LL)",
-    "unit": "C",
-    "dtype": "float32",
-    "missing": "nan",
-    "time_axis": "yearly",
-    "source": {
-      "type": "cds",
-      "dataset_ref": "cmip6_historical_tas_monthly_ukesm1_0_ll",
-      "agg": "climatology_mean_from_monthly",
-      "params": {
-        "start_year": 1850,
-        "end_year": 1900,
-        "label_year": 1900
-      },
-      "time_range": { "start_year": 1900, "end_year": 1900 }
-    },
-    "storage": {
-      "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
-    }
-  },
-  "t2m_cmip_baseline_1979_2000_ukesm1_0_ll_c": {
-    "id": "t2m_cmip_baseline_1979_2000_ukesm1_0_ll_c",
-    "title": "CMIP6 local baseline mean (1979-2000, UKESM1-0-LL)",
-    "unit": "C",
-    "dtype": "float32",
-    "missing": "nan",
-    "time_axis": "yearly",
-    "source": {
-      "type": "cds",
-      "dataset_ref": "cmip6_historical_tas_monthly_ukesm1_0_ll",
-      "agg": "climatology_mean_from_monthly",
-      "params": {
-        "start_year": 1979,
-        "end_year": 2000,
-        "label_year": 2000
-      },
-      "time_range": { "start_year": 2000, "end_year": 2000 }
+      "time_range": { "start_year": 1850, "end_year": 2000 }
     },
     "storage": {
       "tiled": true,

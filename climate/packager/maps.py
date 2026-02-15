@@ -134,25 +134,12 @@ def _compute_blended_preindustrial_values(
     recent_end = int(reducer["recent_end_year"])
     era5_ref_start = int(reducer["era5_ref_start_year"])
     era5_ref_end = int(reducer["era5_ref_end_year"])
-    cmip_pairs_raw = reducer.get("cmip_metric_pairs")
-    cmip_pairs: list[tuple[str, str]] = []
-    if isinstance(cmip_pairs_raw, list) and cmip_pairs_raw:
-        for idx, item in enumerate(cmip_pairs_raw):
-            if not isinstance(item, dict):
-                raise ValueError(f"Invalid cmip_metric_pairs[{idx}]: expected object")
-            pre = item.get("cmip_preindustrial_metric")
-            ref = item.get("cmip_ref_metric")
-            if not isinstance(pre, str) or not isinstance(ref, str):
-                raise ValueError(
-                    "Each cmip_metric_pairs entry must include "
-                    "'cmip_preindustrial_metric' and 'cmip_ref_metric' strings"
-                )
-            cmip_pairs.append((pre, ref))
-    else:
-        # Backward compatibility for older single-pair config.
-        cmip_pre_metric = str(reducer["cmip_preindustrial_metric"])
-        cmip_ref_metric = str(reducer["cmip_ref_metric"])
-        cmip_pairs.append((cmip_pre_metric, cmip_ref_metric))
+    cmip_offset_metric = reducer.get("cmip_offset_metric")
+    if not isinstance(cmip_offset_metric, str) or not cmip_offset_metric:
+        raise ValueError(
+            "blended_preindustrial_anomaly reducer requires non-empty "
+            "'cmip_offset_metric'."
+        )
 
     era5_recent, grid, axis = _load_scalar_grid_from_metric(
         series_root=series_root,
@@ -174,37 +161,21 @@ def _compute_blended_preindustrial_values(
             "end_year": era5_ref_end,
         },
     )
-    cmip_offsets: list[np.ndarray] = []
-    for cmip_pre_metric, cmip_ref_metric in cmip_pairs:
-        cmip_pre_spec = metrics_manifest.get(cmip_pre_metric)
-        cmip_ref_spec = metrics_manifest.get(cmip_ref_metric)
-        if not isinstance(cmip_pre_spec, dict):
-            raise ValueError(f"Unknown cmip_preindustrial_metric: {cmip_pre_metric}")
-        if not isinstance(cmip_ref_spec, dict):
-            raise ValueError(f"Unknown cmip_ref_metric: {cmip_ref_metric}")
-
-        cmip_pre, grid_pre, _ = _load_scalar_grid_from_metric(
-            series_root=series_root,
-            metric_id=cmip_pre_metric,
-            metric_spec=cmip_pre_spec,
-            reducer={"op": "latest_year"},
+    cmip_offset_spec = metrics_manifest.get(cmip_offset_metric)
+    if not isinstance(cmip_offset_spec, dict):
+        raise ValueError(f"Unknown cmip_offset_metric: {cmip_offset_metric}")
+    cmip_offset, grid_cmip_offset, _ = _load_scalar_grid_from_metric(
+        series_root=series_root,
+        metric_id=cmip_offset_metric,
+        metric_spec=cmip_offset_spec,
+        reducer={"op": "latest_year"},
+    )
+    if not (grid.grid_id == grid_ref.grid_id == grid_cmip_offset.grid_id):
+        raise ValueError(
+            "Grid mismatch in blended_preindustrial_anomaly reducer: "
+            f"{grid.grid_id}, {grid_ref.grid_id}, {grid_cmip_offset.grid_id}"
         )
-        cmip_ref, grid_cmip_ref, _ = _load_scalar_grid_from_metric(
-            series_root=series_root,
-            metric_id=cmip_ref_metric,
-            metric_spec=cmip_ref_spec,
-            reducer={"op": "latest_year"},
-        )
-
-        if not (grid.grid_id == grid_ref.grid_id == grid_pre.grid_id == grid_cmip_ref.grid_id):
-            raise ValueError(
-                "Grid mismatch in blended_preindustrial_anomaly reducer: "
-                f"{grid.grid_id}, {grid_ref.grid_id}, {grid_pre.grid_id}, {grid_cmip_ref.grid_id}"
-            )
-        cmip_offsets.append(np.asarray(cmip_ref - cmip_pre, dtype=np.float64))
-
-    cmip_offset_mean = _nanmean_no_warning(np.stack(cmip_offsets, axis=0), axis=0)
-    values = (era5_recent - era5_ref) + cmip_offset_mean
+    values = (era5_recent - era5_ref) + cmip_offset
     return values, grid, axis
 
 
