@@ -1079,6 +1079,7 @@ export default function ApiDemoPage() {
   const wheelGestureConsumedRef = useRef(false);
   const wheelGestureConsumedAtRef = useRef(0);
   const wheelGestureResetTimerRef = useRef<number | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
   const panelViewportRef = useRef<HTMLDivElement | null>(null);
   const [graphsPerPage, setGraphsPerPage] = useState(2);
   const prevGraphsPerPageRef = useRef(2);
@@ -1411,6 +1412,26 @@ export default function ApiDemoPage() {
   }, []);
 
   useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    if (panelOpen) {
+      panel.focus({ preventScroll: true });
+      return;
+    }
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && panel.contains(active)) {
+      active.blur();
+    }
+  }, [panelOpen]);
+
+  const keepPanelFocused = useCallback(() => {
+    if (!panelOpen) return;
+    window.requestAnimationFrame(() => {
+      panelRef.current?.focus({ preventScroll: true });
+    });
+  }, [panelOpen]);
+
+  useEffect(() => {
     const place = resp?.location.place;
     if (!place?.geonameid) return;
     setSelectedLocation({
@@ -1508,7 +1529,7 @@ export default function ApiDemoPage() {
 
   return (
     <main className={styles.app}>
-      <div className={styles.map}>
+      <div className={styles.map} onPointerDownCapture={keepPanelFocused}>
         <MapLibreGlobe
           panelOpen={panelOpen}
           focusLocation={picked}
@@ -1591,6 +1612,7 @@ export default function ApiDemoPage() {
       </div>
 
       <aside
+        ref={panelRef}
         className={`${styles.locationPanel} ${panelOpen ? styles.locationPanelOpen : ""}`}
         aria-live="polite"
         tabIndex={0}
