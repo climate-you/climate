@@ -423,6 +423,47 @@ function formatIntegerOnlyAxisTick(value: number): string {
   return Math.abs(value - rounded) < 1e-6 ? `${rounded}` : "";
 }
 
+const CHART_AXIS_LABEL_COLOR = "#666b78";
+const CHART_AXIS_LINE_COLOR = "#cfd4dd";
+const CHART_SPLIT_LINE_COLOR = "rgba(200,200,200,0.3)";
+
+function sharedChartScaffold() {
+  return {
+    grid: { left: 36, right: 24, top: 36, bottom: 20, containLabel: true },
+    legend: {
+      right: 24,
+      top: 0,
+      itemWidth: 30,
+      itemHeight: 10,
+      textStyle: { color: "#2d3139", fontSize: 12 },
+    },
+  };
+}
+
+function sharedXAxisStyle() {
+  return {
+    axisLabel: { color: CHART_AXIS_LABEL_COLOR },
+    axisLine: { lineStyle: { color: CHART_AXIS_LINE_COLOR } },
+    splitLine: { show: true, lineStyle: { color: CHART_SPLIT_LINE_COLOR } },
+  };
+}
+
+function sharedYAxisStyle() {
+  return {
+    nameLocation: "middle" as const,
+    nameRotate: 90,
+    nameGap: 46,
+    nameTextStyle: {
+      color: CHART_AXIS_LABEL_COLOR,
+      fontSize: 13,
+      align: "center" as const,
+      verticalAlign: "middle" as const,
+    },
+    minInterval: 1,
+    splitLine: { lineStyle: { color: CHART_SPLIT_LINE_COLOR } },
+  };
+}
+
 function trendLegendLabel(
   graph: GraphPayload,
   data: ChartRow[],
@@ -661,14 +702,7 @@ function buildHotDaysOption({
     animationDuration: 700,
     animationDurationUpdate: transitionMs,
     animationEasing: "cubicOut",
-    grid: { left: 36, right: 24, top: 36, bottom: 20, containLabel: true },
-    legend: {
-      right: 24,
-      top: 0,
-      itemWidth: 30,
-      itemHeight: 10,
-      textStyle: { color: "#2d3139", fontSize: 12 },
-    },
+    ...sharedChartScaffold(),
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "shadow" },
@@ -709,29 +743,17 @@ function buildHotDaysOption({
     xAxis: {
       type: "category",
       data: xValues,
-      axisLabel: { color: "#666b78" },
-      axisLine: { lineStyle: { color: "#cfd4dd" } },
-      splitLine: { show: true, lineStyle: { color: "rgba(200,200,200,0.3)" } },
+      ...sharedXAxisStyle(),
     },
     yAxis: {
       type: "value",
       name: yAxisTitle(graph, unit),
-      nameLocation: "middle",
-      nameRotate: 90,
-      nameGap: 46,
-      nameTextStyle: {
-        color: "#666b78",
-        fontSize: 13,
-        align: "center",
-        verticalAlign: "middle",
-      },
+      ...sharedYAxisStyle(),
       axisLabel: {
-        color: "#666b78",
+        color: CHART_AXIS_LABEL_COLOR,
         formatter: (value: number) => `${Math.round(value)}`,
       },
       min: 0,
-      minInterval: 1,
-      splitLine: { lineStyle: { color: "rgba(200,200,200,0.3)" } },
     },
     series: chartSeries,
   };
@@ -836,14 +858,7 @@ function buildTemperatureOption({
     animationDuration: 700,
     animationDurationUpdate: transitionMs,
     animationEasing: "cubicOut",
-    grid: { left: 36, right: 24, top: 36, bottom: 20, containLabel: true },
-    legend: {
-      right: 24,
-      top: 0,
-      itemWidth: 30,
-      itemHeight: 10,
-      textStyle: { color: "#2d3139", fontSize: 12 },
-    },
+    ...sharedChartScaffold(),
     tooltip: {
       trigger: "axis",
       formatter: (params: unknown) => {
@@ -880,34 +895,22 @@ function buildTemperatureOption({
       type: "time",
       min: xMin,
       max: xMax,
-      axisLabel: { color: "#666b78" },
-      axisLine: { lineStyle: { color: "#cfd4dd" } },
-      splitLine: { show: true, lineStyle: { color: "rgba(200,200,200,0.3)" } },
+      ...sharedXAxisStyle(),
     },
     yAxis: {
       type: "value",
       name: yAxisName,
-      nameLocation: "middle",
-      nameRotate: 90,
-      nameGap: 46,
-      nameTextStyle: {
-        color: "#666b78",
-        fontSize: 13,
-        align: "center",
-        verticalAlign: "middle",
-      },
+      ...sharedYAxisStyle(),
       axisLabel: {
-        color: "#666b78",
+        color: CHART_AXIS_LABEL_COLOR,
         formatter: (value: number) =>
           isTemperatureAxis
             ? formatIntegerOnlyAxisTick(value)
             : `${Math.round(value)}`,
       },
-      minInterval: 1,
       scale: true,
       min: yMin,
       max: yMax,
-      splitLine: { lineStyle: { color: "rgba(200,200,200,0.3)" } },
     },
     series: chartSeries,
   };
