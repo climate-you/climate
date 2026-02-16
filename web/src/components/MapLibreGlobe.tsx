@@ -19,6 +19,8 @@ type Props = {
   onLayerChange: (layerId: string) => void;
   onPick: (lat: number, lon: number) => void;
   onHome: () => void;
+  showControls?: boolean;
+  enablePick?: boolean;
 };
 
 const initialView = {
@@ -114,6 +116,8 @@ export default function MapLibreGlobe({
   onLayerChange,
   onPick,
   onHome,
+  showControls = true,
+  enablePick = true,
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -126,6 +130,8 @@ export default function MapLibreGlobe({
   const focusLocationRef = useRef(focusLocation);
   const layerOptionsRef = useRef(layerOptions);
   const activeLayerIdRef = useRef(activeLayerId);
+  const showControlsRef = useRef(showControls);
+  const enablePickRef = useRef(enablePick);
 
   useEffect(() => {
     onPickRef.current = onPick;
@@ -154,6 +160,14 @@ export default function MapLibreGlobe({
   useEffect(() => {
     activeLayerIdRef.current = activeLayerId;
   }, [activeLayerId]);
+
+  useEffect(() => {
+    showControlsRef.current = showControls;
+  }, [showControls]);
+
+  useEffect(() => {
+    enablePickRef.current = enablePick;
+  }, [enablePick]);
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -426,11 +440,13 @@ export default function MapLibreGlobe({
     map.on("style.load", ensureHillshadeLayer);
     map.on("load", applyMapSettings);
     map.on("load", applyTextureLayer);
-    map.addControl(createHomeControl(), "top-left");
-    const layerControl = createLayerControl();
-    layerControlRef.current = layerControl;
-    map.addControl(layerControl, "top-left");
-    map.addControl(new maplibregl.NavigationControl(), "top-left");
+    if (showControlsRef.current) {
+      map.addControl(createHomeControl(), "top-left");
+      const layerControl = createLayerControl();
+      layerControlRef.current = layerControl;
+      map.addControl(layerControl, "top-left");
+      map.addControl(new maplibregl.NavigationControl(), "top-left");
+    }
 
     const onResize = () => {
       const previousMinZoom = map.getMinZoom();
@@ -450,7 +466,8 @@ export default function MapLibreGlobe({
     };
     window.addEventListener("resize", onResize);
 
-    map.on("click", (event) => {
+    const onMapClick = (event: maplibregl.MapMouseEvent) => {
+      if (!enablePickRef.current) return;
       const { lng, lat } = event.lngLat;
 
       if (!markerRef.current) {
@@ -472,10 +489,12 @@ export default function MapLibreGlobe({
         easing: cubicOut,
         essential: true,
       });
-    });
+    };
+    map.on("click", onMapClick);
 
     return () => {
       window.removeEventListener("resize", onResize);
+      map.off("click", onMapClick);
       markerRef.current?.remove();
       markerRef.current = null;
       layerControlRef.current = null;

@@ -14,6 +14,66 @@
   height: 100%;
 }
 
+.map :global(.maplibregl-ctrl-top-left),
+.map :global(.maplibregl-ctrl-top-right) {
+  transition:
+    opacity 520ms ease,
+    transform 520ms ease;
+}
+
+.appIntro .map :global(.maplibregl-ctrl-top-left),
+.appIntro .map :global(.maplibregl-ctrl-top-right) {
+  opacity: 0;
+  transform: translateY(-10px);
+  pointer-events: none;
+}
+
+.appReady .map :global(.maplibregl-ctrl-top-left),
+.appReady .map :global(.maplibregl-ctrl-top-right) {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.map :global(.maplibregl-canvas:focus),
+.map :global(.maplibregl-canvas:focus-visible),
+.map :global(.maplibregl-canvas-container:focus),
+.map :global(.maplibregl-canvas-container:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+
+.coldOpenOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 1;
+  transition:
+    opacity 520ms ease,
+    transform 520ms ease,
+    filter 520ms ease;
+}
+
+.coldOpenOverlayFading {
+  opacity: 0;
+  transform: translateY(-8px);
+  filter: blur(4px);
+}
+
+.coldOpenMessage {
+  margin: 0;
+  width: min(92vw, 1200px);
+  color: #040404;
+  font-size: 105px;
+  font-weight: 300;
+  line-height: 0.95;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
 .locationPanel {
   position: absolute;
   top: 50%;
@@ -215,6 +275,15 @@
   z-index: 4;
   border-radius: 12px;
   border: 4px solid #0d0c0c;
+  transition:
+    opacity 520ms ease,
+    transform 520ms ease;
+}
+
+.appIntro .searchOverlay {
+  opacity: 0;
+  transform: translateY(-10px);
+  pointer-events: none;
 }
 
 .searchWrap {
