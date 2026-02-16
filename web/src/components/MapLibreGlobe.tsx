@@ -42,6 +42,9 @@ const TEXTURE_SOURCE_ID = "climateTextureSource";
 const TEXTURE_LAYER_ID = "climateTextureLayer";
 const BACKDROP_BLUE = "#0000ff";
 const BACKDROP_WHITE = "#ffffff";
+const CITY_SNAP_MAX_ZOOM = 6;
+const CITY_SNAP_RADIUS_PX = 28;
+const CITY_SNAP_LAYER_IDS = ["label_city_capital", "label_city"] as const;
 
 function baseZoomForViewportWidth(width: number) {
   if (width <= 480) return 1.0;
@@ -106,6 +109,58 @@ function textureLayerBeforeId(map: maplibregl.Map): string | undefined {
   const styleLayers = map.getStyle()?.layers ?? [];
   const firstSymbol = styleLayers.find((layer) => layer.type === "symbol");
   return firstSymbol?.id;
+}
+
+function focusZoomTarget(map: maplibregl.Map): number {
+  return Math.max(map.getZoom(), FOCUS_LOCATION_ZOOM);
+}
+
+function cityFeatureCoordinates(
+  feature: maplibregl.MapGeoJSONFeature,
+): [number, number] | null {
+  if (feature.geometry.type !== "Point") return null;
+  const coords = feature.geometry.coordinates;
+  if (!Array.isArray(coords) || coords.length < 2) return null;
+  const lng = Number(coords[0]);
+  const lat = Number(coords[1]);
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+  return [lng, lat];
+}
+
+function snapTargetAtLowZoom(
+  map: maplibregl.Map,
+  event: maplibregl.MapMouseEvent,
+): [number, number] | null {
+  if (map.getZoom() > CITY_SNAP_MAX_ZOOM) return null;
+  const layers = CITY_SNAP_LAYER_IDS.filter((id) => Boolean(map.getLayer(id)));
+  if (!layers.length) return null;
+
+  const { x, y } = event.point;
+  const radius = CITY_SNAP_RADIUS_PX;
+  const features = map.queryRenderedFeatures(
+    [
+      [x - radius, y - radius],
+      [x + radius, y + radius],
+    ],
+    { layers },
+  );
+  if (!features.length) return null;
+
+  let best: [number, number] | null = null;
+  let bestDistanceSq = Number.POSITIVE_INFINITY;
+  for (const feature of features) {
+    const coords = cityFeatureCoordinates(feature);
+    if (!coords) continue;
+    const projected = map.project({ lng: coords[0], lat: coords[1] });
+    const dx = projected.x - x;
+    const dy = projected.y - y;
+    const distanceSq = dx * dx + dy * dy;
+    if (distanceSq < bestDistanceSq) {
+      bestDistanceSq = distanceSq;
+      best = coords;
+    }
+  }
+  return best;
 }
 
 export default function MapLibreGlobe({
@@ -206,7 +261,12 @@ export default function MapLibreGlobe({
       }
       setBackdropColor(map, BACKDROP_WHITE);
 
-      const coordinates: [[number, number], [number, number], [number, number], [number, number]] = [
+      const coordinates: [
+        [number, number],
+        [number, number],
+        [number, number],
+        [number, number],
+      ] = [
         [-180, MERCATOR_MAX_LAT],
         [180, MERCATOR_MAX_LAT],
         [180, -MERCATOR_MAX_LAT],
@@ -216,7 +276,12 @@ export default function MapLibreGlobe({
         | (maplibregl.ImageSource & {
             updateImage?: (args: {
               url: string;
-              coordinates: [[number, number], [number, number], [number, number], [number, number]];
+              coordinates: [
+                [number, number],
+                [number, number],
+                [number, number],
+                [number, number],
+              ];
             }) => void;
           })
         | undefined;
@@ -242,15 +307,18 @@ export default function MapLibreGlobe({
 
       if (!map.getLayer(TEXTURE_LAYER_ID)) {
         const beforeId = textureLayerBeforeId(map);
-        map.addLayer({
-          id: TEXTURE_LAYER_ID,
-          type: "raster",
-          source: TEXTURE_SOURCE_ID,
-          paint: {
-            "raster-opacity": selected.opacity ?? 0.72,
-            "raster-resampling": "linear",
+        map.addLayer(
+          {
+            id: TEXTURE_LAYER_ID,
+            type: "raster",
+            source: TEXTURE_SOURCE_ID,
+            paint: {
+              "raster-opacity": selected.opacity ?? 0.72,
+              "raster-resampling": "linear",
+            },
           },
-        }, beforeId);
+          beforeId,
+        );
       } else {
         map.setPaintProperty(
           TEXTURE_LAYER_ID,
@@ -347,7 +415,9 @@ export default function MapLibreGlobe({
       };
     }
 
-    function createLayerControl(): maplibregl.IControl & { refresh: () => void } {
+    function createLayerControl(): maplibregl.IControl & {
+      refresh: () => void;
+    } {
       let container: HTMLDivElement | undefined;
       let button: HTMLButtonElement | undefined;
       let menu: HTMLDivElement | undefined;
@@ -469,19 +539,22 @@ export default function MapLibreGlobe({
     const onMapClick = (event: maplibregl.MapMouseEvent) => {
       if (!enablePickRef.current) return;
       const { lng, lat } = event.lngLat;
+      const snapped = snapTargetAtLowZoom(map, event);
+      const targetLng = snapped?.[0] ?? lng;
+      const targetLat = snapped?.[1] ?? lat;
 
       if (!markerRef.current) {
         markerRef.current = new maplibregl.Marker({ color: "#ff0000" })
-          .setLngLat([lng, lat])
+          .setLngLat([targetLng, targetLat])
           .addTo(map);
       } else {
-        markerRef.current.setLngLat([lng, lat]);
+        markerRef.current.setLngLat([targetLng, targetLat]);
       }
 
-      onPickRef.current(lat, lng);
+      onPickRef.current(targetLat, targetLng);
       map.flyTo({
-        center: [lng, lat],
-        zoom: FOCUS_LOCATION_ZOOM,
+        center: [targetLng, targetLat],
+        zoom: focusZoomTarget(map),
         pitch: 0,
         bearing: 0,
         padding: getPanelPadding(),
@@ -525,11 +598,21 @@ export default function MapLibreGlobe({
         | (maplibregl.ImageSource & {
             updateImage?: (args: {
               url: string;
-              coordinates: [[number, number], [number, number], [number, number], [number, number]];
+              coordinates: [
+                [number, number],
+                [number, number],
+                [number, number],
+                [number, number],
+              ];
             }) => void;
           })
         | undefined;
-      const coordinates: [[number, number], [number, number], [number, number], [number, number]] = [
+      const coordinates: [
+        [number, number],
+        [number, number],
+        [number, number],
+        [number, number],
+      ] = [
         [-180, MERCATOR_MAX_LAT],
         [180, MERCATOR_MAX_LAT],
         [180, -MERCATOR_MAX_LAT],
@@ -552,17 +635,24 @@ export default function MapLibreGlobe({
       }
       if (!map.getLayer(TEXTURE_LAYER_ID)) {
         const beforeId = textureLayerBeforeId(map);
-        map.addLayer({
-          id: TEXTURE_LAYER_ID,
-          type: "raster",
-          source: TEXTURE_SOURCE_ID,
-          paint: {
-            "raster-opacity": selected.opacity ?? 0.72,
-            "raster-resampling": "linear",
+        map.addLayer(
+          {
+            id: TEXTURE_LAYER_ID,
+            type: "raster",
+            source: TEXTURE_SOURCE_ID,
+            paint: {
+              "raster-opacity": selected.opacity ?? 0.72,
+              "raster-resampling": "linear",
+            },
           },
-        }, beforeId);
+          beforeId,
+        );
       }
-      map.setPaintProperty(TEXTURE_LAYER_ID, "raster-opacity", selected.opacity ?? 0.72);
+      map.setPaintProperty(
+        TEXTURE_LAYER_ID,
+        "raster-opacity",
+        selected.opacity ?? 0.72,
+      );
       const beforeId = textureLayerBeforeId(map);
       map.moveLayer(TEXTURE_LAYER_ID, beforeId);
       layerControlRef.current?.refresh();
@@ -588,7 +678,7 @@ export default function MapLibreGlobe({
 
     map.flyTo({
       center: [lon, lat],
-      zoom: FOCUS_LOCATION_ZOOM,
+      zoom: focusZoomTarget(map),
       pitch: 0,
       bearing: 0,
       padding: panelPaddingForViewport(map, panelOpen),
@@ -612,7 +702,7 @@ export default function MapLibreGlobe({
       rafId = requestAnimationFrame(() => {
         map.easeTo({
           center: [lon, lat],
-          zoom: FOCUS_LOCATION_ZOOM,
+          zoom: focusZoomTarget(map),
           padding: panelPaddingForViewport(map, true),
           duration: FOCUS_RECENTER_DURATION_MS,
           easing: cubicOut,

@@ -1,16 +1,16 @@
 - Place Resolver:
   - (needed?) Add a “best match” endpoint for a free‑text query (single request)
   - (needed?) Add prefix‑length + fuzziness tuning knobs to autocomplete
-  - Use zoom level to decide whether to snap to bigger cities (eg. Paris instead of Clichy)
+  - paris selects saint vincent de paul, 3 entries in csv: 2976607, 2976608, 12808657
+  - filter out PPLX and only use PPA2 for city name
 - UI:
-  - Clean location label (font, population)
   - Rephrase graph captions
   - Rephrase title
   - Add scale to UI when showing warming map layers
   - Clicking on space picks a point
   - Home page with cold open
   - Globe textures menu overlaps with cities search bar
-  - Clicking next to big city should select it
+  - Test on mobile
 - Graphs:
   - zoomout graph needs work
   - extra coral reef stress graph + new texture for 3D globe
