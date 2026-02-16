@@ -162,7 +162,6 @@ export default function MapLibreGlobe({
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
       style: "/custom_map.json",
-      projection: { type: "globe" },
       center: initialView.center,
       zoom: baseZoom,
       minZoom: baseZoom,
@@ -175,13 +174,6 @@ export default function MapLibreGlobe({
     function applyMapSettings() {
       map.setProjection({ type: "globe" });
       setBackdropColor(map, BACKDROP_BLUE);
-
-      const layers = map.getStyle()?.layers || [];
-      for (const layer of layers) {
-        if (layer.type === "sky") {
-          map.setPaintProperty(layer.id, "sky-opacity", 0);
-        }
-      }
     }
 
     function applyTextureLayer() {

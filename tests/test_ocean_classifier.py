@@ -5,7 +5,7 @@ import json
 
 import numpy as np
 
-from apps.api.climate_api.store.ocean_classifier import OceanClassifier
+from climate_api.store.ocean_classifier import OceanClassifier
 
 
 def _write_mask(tmp_path: Path, data: np.ndarray) -> tuple[Path, Path]:

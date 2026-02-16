@@ -1,5 +1,0 @@
-# City, Country (or ISO2)
-Tamarin, Mauritius
-Jaisalmer, India
-Troyes, France
-Reims, France

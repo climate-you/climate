@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from apps.api.climate_api.store.ocean_classifier import OceanHit
-from apps.api.climate_api.store.place_resolver import PlaceResolver
+from climate_api.store.ocean_classifier import OceanHit
+from climate_api.store.place_resolver import PlaceResolver
 
 
 class _AlwaysOcean:
