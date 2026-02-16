@@ -34,7 +34,10 @@
     opacity 200ms ease,
     visibility 0s linear 300ms;
   overflow: hidden;
-  font-family: Calibri, "Segoe UI", Arial, Helvetica, sans-serif;
+  font-family:
+    "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Helvetica,
+    "Segoe UI", Arial, sans-serif;
+  font-weight: 300;
 }
 
 .locationPanelOpen {
@@ -101,7 +104,7 @@
   margin: 0;
   font-size: 2rem;
   line-height: 1.15;
-  font-weight: 700;
+  font-weight: 300;
   position: relative;
   z-index: 1;
   pointer-events: none;
@@ -122,9 +125,9 @@
 
 .headlineValue {
   font-size: 1.8rem;
-  font-weight: 700;
+  font-weight: 300;
   line-height: 1.1;
-  color: #d61f45;
+  color: #ff0000;
 }
 
 .panelActions {
