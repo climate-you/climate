@@ -1598,7 +1598,11 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
           className={`${styles.coldOpenOverlay} ${introFading ? styles.coldOpenOverlayFading : ""}`}
           aria-hidden="true"
         >
-          <h1 className={styles.coldOpenMessage}>Please select location</h1>
+          <h1 className={styles.coldOpenMessage}>
+            <span className={styles.coldOpenMessageAccent}>Ple</span>
+            <span className={styles.coldOpenMessageDark}>ase select locat</span>
+            <span className={styles.coldOpenMessageAccent}>ion</span>
+          </h1>
         </div>
       ) : null}
 

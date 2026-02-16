@@ -66,12 +66,19 @@
 .coldOpenMessage {
   margin: 0;
   width: min(92vw, 1200px);
-  color: #040404;
-  font-size: 105px;
+  font-size: 107px;
   font-weight: 300;
   line-height: 0.95;
   text-align: center;
   letter-spacing: 0.02em;
+}
+
+.coldOpenMessageDark {
+  color: #040404;
+}
+
+.coldOpenMessageAccent {
+  color: #ff0000;
 }
 
 .locationPanel {
@@ -396,6 +403,10 @@
 }
 
 @media (max-width: 900px) {
+  .coldOpenMessage {
+    font-size: 80px;
+  }
+
   .app {
     height: calc(100vh - 20px);
     margin: 10px auto;
@@ -423,5 +434,11 @@
 
   .unitControl {
     position: static;
+  }
+}
+
+@media (max-width: 480px) {
+  .coldOpenMessage {
+    font-size: 58px;
   }
 }
