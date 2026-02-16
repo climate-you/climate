@@ -364,7 +364,13 @@ function EChartCanvas({
     });
   }, [option]);
 
-  return <div ref={rootRef} style={{ width: "100%", height }} />;
+  return (
+    <div
+      ref={rootRef}
+      data-echart-canvas="true"
+      style={{ width: "100%", height }}
+    />
+  );
 }
 
 function formatDateLabel(ts: number): string {
@@ -1202,6 +1208,16 @@ export default function ApiDemoPage() {
           ? Math.min(maxGraphPage, graphPage + 1)
           : Math.max(0, graphPage - 1);
       if (nextPage === graphPage) return false;
+      const viewport = panelViewportRef.current;
+      if (viewport) {
+        viewport
+          .querySelectorAll<HTMLElement>('[data-echart-canvas="true"]')
+          .forEach((node) => {
+            const chart = echarts.getInstanceByDom(node);
+            if (!chart) return;
+            chart.dispatchAction({ type: "hideTip" });
+          });
+      }
       setGraphPage(nextPage);
       return true;
     },
@@ -1211,6 +1227,16 @@ export default function ApiDemoPage() {
     (nextPage: number): boolean => {
       const clamped = Math.max(0, Math.min(maxGraphPage, nextPage));
       if (clamped === graphPage) return false;
+      const viewport = panelViewportRef.current;
+      if (viewport) {
+        viewport
+          .querySelectorAll<HTMLElement>('[data-echart-canvas="true"]')
+          .forEach((node) => {
+            const chart = echarts.getInstanceByDom(node);
+            if (!chart) return;
+            chart.dispatchAction({ type: "hideTip" });
+          });
+      }
       setGraphPage(clamped);
       return true;
     },
