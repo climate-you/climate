@@ -1046,7 +1046,7 @@ function GraphCard({
 }
 
 export default function ApiDemoPage() {
-  const graphsPerPage = 2;
+  const minPanelViewportHeightForTwoGraphs = 600;
   const wheelStepThreshold = 130;
   const wheelGestureGapMs = 160;
   const wheelSustainRepeatMs = 520;
@@ -1073,6 +1073,9 @@ export default function ApiDemoPage() {
   const wheelGestureConsumedRef = useRef(false);
   const wheelGestureConsumedAtRef = useRef(0);
   const wheelGestureResetTimerRef = useRef<number | null>(null);
+  const panelViewportRef = useRef<HTMLDivElement | null>(null);
+  const [graphsPerPage, setGraphsPerPage] = useState(2);
+  const prevGraphsPerPageRef = useRef(2);
   const [graphPage, setGraphPage] = useState(0);
   const apiBase = useMemo(() => {
     if (process.env.NEXT_PUBLIC_CLIMATE_API_BASE) {
@@ -1170,10 +1173,27 @@ export default function ApiDemoPage() {
   const stepCount = maxGraphPage + 1;
   const pageStart = graphPage * graphsPerPage;
   const visibleGraphs = pagedGraphs.slice(pageStart, pageStart + graphsPerPage);
-  const graphSlots = [
-    visibleGraphs[0] ?? null,
-    visibleGraphs[1] ?? null,
-  ] as const;
+  const graphSlots = useMemo(
+    () =>
+      Array.from(
+        { length: graphsPerPage },
+        (_, index) => visibleGraphs[index] ?? null,
+      ),
+    [graphsPerPage, visibleGraphs],
+  );
+
+  useEffect(() => {
+    setGraphPage((prev) => Math.min(prev, maxGraphPage));
+  }, [maxGraphPage]);
+
+  useEffect(() => {
+    const previous = prevGraphsPerPageRef.current;
+    if (previous === graphsPerPage) return;
+    setGraphPage((prev) =>
+      Math.floor((prev * previous) / Math.max(1, graphsPerPage)),
+    );
+    prevGraphsPerPageRef.current = graphsPerPage;
+  }, [graphsPerPage]);
 
   const goGraphPage = useCallback(
     (direction: 1 | -1): boolean => {
@@ -1345,6 +1365,24 @@ export default function ApiDemoPage() {
     if (mapLayers.some((layer) => layer.id === activeLayerId)) return;
     setActiveLayerId(mapLayers[0].id);
   }, [activeLayerId, mapLayers]);
+
+  useEffect(() => {
+    const viewport = panelViewportRef.current;
+    if (!viewport) return;
+    const updateGraphsPerPage = () => {
+      const next =
+        viewport.clientHeight < minPanelViewportHeightForTwoGraphs ? 1 : 2;
+      setGraphsPerPage((prev) => (prev === next ? prev : next));
+    };
+    updateGraphsPerPage();
+    const observer = new ResizeObserver(updateGraphsPerPage);
+    observer.observe(viewport);
+    window.addEventListener("resize", updateGraphsPerPage);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateGraphsPerPage);
+    };
+  }, []);
 
   useEffect(() => {
     const place = resp?.location.place;
@@ -1629,7 +1667,7 @@ export default function ApiDemoPage() {
           </div>
         </div>
 
-        <div className={styles.panelViewport}>
+        <div ref={panelViewportRef} className={styles.panelViewport}>
           {graphSlots.map((entry, slotIndex) =>
             entry ? (
               <GraphCard

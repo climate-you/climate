@@ -3,7 +3,9 @@
   - (needed?) Add prefix‑length + fuzziness tuning knobs to autocomplete
   - Use zoom level to decide whether to snap to bigger cities (eg. Paris instead of Clichy)
 - UI:
-  - Clean location label (font, flag, population)
+  - Clean location label (font, population)
+  - Rephrase graph captions
+  - Rephrase title
   - Add scale to UI when showing warming map layers
   - Clicking on space picks a point
 - Graphs:
@@ -20,6 +22,7 @@
     - update README with typical smoke test
   - tile_coverage reports some metrics with 98% - check why
   - we should have a single test script that runs packager check + tile coverage + unit tests + smoke tests
+  - we should have the same css properties for all graphs
 
 ---
 
