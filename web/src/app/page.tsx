@@ -411,6 +411,12 @@ function yAxisTitle(graph: GraphPayload, unit: "C" | "F"): string {
   return `Temperature (${unit === "F" ? "°F" : "°C"})`;
 }
 
+function formatIntegerOnlyAxisTick(value: number): string {
+  if (!Number.isFinite(value)) return "";
+  const rounded = Math.round(value);
+  return Math.abs(value - rounded) < 1e-6 ? `${rounded}` : "";
+}
+
 function trendLegendLabel(
   graph: GraphPayload,
   data: ChartRow[],
@@ -649,7 +655,7 @@ function buildHotDaysOption({
     animationDuration: 700,
     animationDurationUpdate: transitionMs,
     animationEasing: "cubicOut",
-    grid: { left: 74, right: 24, top: 36, bottom: 20, containLabel: true },
+    grid: { left: 36, right: 24, top: 36, bottom: 20, containLabel: true },
     legend: {
       right: 24,
       top: 0,
@@ -706,7 +712,7 @@ function buildHotDaysOption({
       name: yAxisTitle(graph, unit),
       nameLocation: "middle",
       nameRotate: 90,
-      nameGap: 56,
+      nameGap: 46,
       nameTextStyle: {
         color: "#666b78",
         fontSize: 13,
@@ -805,6 +811,8 @@ function buildTemperatureOption({
   );
   let yMin: number | undefined;
   let yMax: number | undefined;
+  const yAxisName = yAxisTitle(graph, unit);
+  const isTemperatureAxis = yAxisName.startsWith("Temperature");
   if (allValues.length > 0) {
     const min = Math.min(...allValues);
     const max = Math.max(...allValues);
@@ -822,7 +830,7 @@ function buildTemperatureOption({
     animationDuration: 700,
     animationDurationUpdate: transitionMs,
     animationEasing: "cubicOut",
-    grid: { left: 74, right: 24, top: 36, bottom: 20, containLabel: true },
+    grid: { left: 36, right: 24, top: 36, bottom: 20, containLabel: true },
     legend: {
       right: 24,
       top: 0,
@@ -872,10 +880,10 @@ function buildTemperatureOption({
     },
     yAxis: {
       type: "value",
-      name: yAxisTitle(graph, unit),
+      name: yAxisName,
       nameLocation: "middle",
       nameRotate: 90,
-      nameGap: 56,
+      nameGap: 46,
       nameTextStyle: {
         color: "#666b78",
         fontSize: 13,
@@ -884,7 +892,10 @@ function buildTemperatureOption({
       },
       axisLabel: {
         color: "#666b78",
-        formatter: (value: number) => `${Math.round(value)}`,
+        formatter: (value: number) =>
+          isTemperatureAxis
+            ? formatIntegerOnlyAxisTick(value)
+            : `${Math.round(value)}`,
       },
       minInterval: 1,
       scale: true,
@@ -1522,7 +1533,11 @@ export default function ApiDemoPage() {
         onWheel={handlePanelWheel}
         onKeyDown={handlePanelKeyDown}
       >
-        <div className={styles.panelSteps} role="tablist" aria-label="Graph steps">
+        <div
+          className={styles.panelSteps}
+          role="tablist"
+          aria-label="Graph steps"
+        >
           {Array.from({ length: stepCount }, (_, idx) => (
             <button
               key={`step-dot-${idx}`}
