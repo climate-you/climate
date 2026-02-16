@@ -54,6 +54,33 @@
   background: #ffffff;
   color: #111111;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.panelClose:hover {
+  background: #f4f4f4;
+  border-color: #9a9a9a;
+}
+
+.panelClose:focus-visible {
+  outline: 2px solid #111111;
+  outline-offset: 1px;
+}
+
+.panelCloseIcon {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  fill: none;
+  pointer-events: none;
 }
 
 .panelTitleWrap {
@@ -61,12 +88,6 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-}
-
-.panelFlag {
-  font-size: 1.65rem;
-  line-height: 1;
-  margin-top: 2px;
 }
 
 .panelTitle {
@@ -119,6 +140,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 10px 10px 10px;
 }
 
 .panelStepDot {

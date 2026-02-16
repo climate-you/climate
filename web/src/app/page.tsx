@@ -359,7 +359,7 @@ function EChartCanvas({
     if (!chartRef.current) return;
     chartRef.current.setOption(option, {
       notMerge: false,
-      replaceMerge: ["series"],
+      replaceMerge: ["series", "xAxis", "yAxis"],
       lazyUpdate: true,
     });
   }, [option]);
@@ -395,15 +395,6 @@ function formatAxisTitle(graph: GraphPayload, value: unknown): string {
   }
   const label = formatDateLabel(toChartTimestamp(value as number | string));
   return label || asString;
-}
-
-function countryCodeToFlag(countryCode: string | null | undefined): string {
-  const cc = String(countryCode ?? "")
-    .trim()
-    .toUpperCase();
-  if (!/^[A-Z]{2}$/.test(cc)) return "";
-  const base = 127397;
-  return String.fromCodePoint(cc.charCodeAt(0) + base, cc.charCodeAt(1) + base);
 }
 
 function formatPopulation(value: number | null | undefined): string | null {
@@ -726,6 +717,7 @@ function buildHotDaysOption({
         color: "#666b78",
         formatter: (value: number) => `${Math.round(value)}`,
       },
+      min: 0,
       minInterval: 1,
       splitLine: { lineStyle: { color: "rgba(200,200,200,0.3)" } },
     },
@@ -1437,7 +1429,6 @@ export default function ApiDemoPage() {
 
   const locationLabel =
     selectedLocation?.label ?? resp?.location.place.label ?? "";
-  const locationFlag = countryCodeToFlag(selectedLocation?.countryCode);
   const populationText = formatPopulation(selectedLocation?.population);
 
   return (
@@ -1593,15 +1584,17 @@ export default function ApiDemoPage() {
               aria-label="Close panel"
               onClick={() => setPanelOpen(false)}
             >
-              x
+              <svg
+                className={styles.panelCloseIcon}
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path d="M6 6L18 18" />
+                <path d="M18 6L6 18" />
+              </svg>
             </button>
           </div>
           <div className={styles.panelTitleWrap}>
-            {locationFlag ? (
-              <span className={styles.panelFlag} aria-hidden="true">
-                {locationFlag}
-              </span>
-            ) : null}
             <div>
               <div className={styles.panelTitleLine}>
                 <h2 className={styles.panelTitle}>{locationLabel}</h2>
