@@ -18,6 +18,7 @@
 - Packager script:
   - era5 is downloaded as whole globe but then sliced, maybe this should be in the datasets/metrics as currently we need to force `--batch-tiles 4` for the packager to read the slices
   - maps are copied to `web/public/data`, should they go in a release folder? or the next app pointed to `data/releases/`?
+  - release process not clear, `/api/v/<release>/panel` ignores the `release` tag and reads panels from `registry/`
 - Code:
   - add more python tests
   - add e2e tests
