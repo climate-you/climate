@@ -53,6 +53,7 @@ type GraphPayload = {
 };
 
 type PanelResponse = {
+  release: string;
   location: {
     query?: { lat: number; lon: number };
     place: {
@@ -115,6 +116,15 @@ type NearestLocationResponse = {
     country_code?: string | null;
     population?: number | null;
   };
+};
+
+type ResolveLocationResponse = {
+  result?: AutocompleteItem | null;
+};
+
+type ReleaseResolveResponse = {
+  requested_release: string;
+  release: string;
 };
 
 type ChartRow = {
@@ -1061,6 +1071,10 @@ function GraphCard({
 const COLD_OPEN_FADE_MS = 520;
 
 export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
+  const envDefaultReleaseRaw = process.env.NEXT_PUBLIC_RELEASE;
+  const envDefaultRelease = envDefaultReleaseRaw
+    ? envDefaultReleaseRaw.trim()
+    : "";
   const minPanelViewportHeightForTwoGraphs = 600;
   const wheelStepThreshold = 130;
   const wheelGestureGapMs = 160;
@@ -1096,6 +1110,14 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const [introVisible, setIntroVisible] = useState(coldOpen);
   const [introFading, setIntroFading] = useState(false);
   const introTimerRef = useRef<number | null>(null);
+  const [requestedRelease, setRequestedRelease] = useState<string>(
+    envDefaultRelease
+      ? envDefaultRelease.toLowerCase() === "latest"
+        ? "latest"
+        : envDefaultRelease
+      : "latest",
+  );
+  const [sessionRelease, setSessionRelease] = useState<string | null>(null);
   const apiBase = useMemo(() => {
     if (process.env.NEXT_PUBLIC_CLIMATE_API_BASE) {
       return process.env.NEXT_PUBLIC_CLIMATE_API_BASE.replace(/\/+$/, "");
@@ -1103,11 +1125,17 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     if (typeof window === "undefined") return "http://localhost:8001";
     return `http://${window.location.hostname}:8001`;
   }, []);
-  const mapLayerRoot = useMemo(() => {
-    if (process.env.NEXT_PUBLIC_MAP_LAYER_ROOT) {
-      return process.env.NEXT_PUBLIC_MAP_LAYER_ROOT.replace(/\/+$/, "");
+  const mapAssetBase = useMemo(() => {
+    if (process.env.NEXT_PUBLIC_MAP_ASSET_BASE) {
+      return process.env.NEXT_PUBLIC_MAP_ASSET_BASE.replace(/\/+$/, "");
     }
-    return "/data/maps";
+    return apiBase;
+  }, [apiBase]);
+  const releaseForSession = sessionRelease ?? requestedRelease;
+  const encodedRelease = encodeURIComponent(releaseForSession);
+  const pinSessionRelease = useCallback((releaseValue: string | null | undefined) => {
+    if (!releaseValue) return;
+    setSessionRelease((prev) => prev ?? releaseValue);
   }, []);
   const mapLayers = useMemo<MapLayerOption[]>(
     () => [
@@ -1118,23 +1146,23 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       {
         id: "t2m_warming_2025_vs_1979_1988_mercator_texture",
         label: "Warming (air)",
-        imageUrl: `${mapLayerRoot}/t2m_warming_2025_vs_1979_1988_mercator.webp`,
+        imageUrl: `${mapAssetBase}/assets/v/${encodedRelease}/maps/global_0p25/t2m_warming_2025_vs_1979_1988_mercator_texture/t2m_warming_2025_vs_1979_1988_mercator.webp`,
         opacity: 0.72,
       },
       {
         id: "t2m_blended_preindustrial_anomaly_2021_2025_mercator_texture",
         label: "Warming vs pre-industrial (air)",
-        imageUrl: `${mapLayerRoot}/t2m_blended_preindustrial_anomaly_2021_2025_mercator.webp`,
+        imageUrl: `${mapAssetBase}/assets/v/${encodedRelease}/maps/global_0p25/t2m_blended_preindustrial_anomaly_2021_2025_mercator_texture/t2m_blended_preindustrial_anomaly_2021_2025_mercator.webp`,
         opacity: 0.72,
       },
       {
         id: "sst_warming_2025_vs_1982_1991_mercator_texture",
         label: "Warming (sea surface)",
-        imageUrl: `${mapLayerRoot}/sst_warming_2025_vs_1982_1991_mercator.webp`,
+        imageUrl: `${mapAssetBase}/assets/v/${encodedRelease}/maps/global_0p25/sst_warming_2025_vs_1982_1991_mercator_texture/sst_warming_2025_vs_1982_1991_mercator.webp`,
         opacity: 0.72,
       },
     ],
-    [mapLayerRoot],
+    [encodedRelease, mapAssetBase],
   );
   const [activeLayerId, setActiveLayerId] = useState<string>(
     mapLayers[0]?.id ?? "",
@@ -1145,6 +1173,39 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       resp.headlines.find((h) => h.key === "t2m_vs_preindustrial_local") ?? null
     );
   }, [resp]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const qp = new URLSearchParams(window.location.search).get("release");
+    if (!qp) return;
+    const trimmed = qp.trim();
+    if (!trimmed) return;
+    const normalized = trimmed.toLowerCase() === "latest" ? "latest" : trimmed;
+    setRequestedRelease(normalized);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolveRelease() {
+      try {
+        const url = `${apiBase}/api/v/${encodeURIComponent(requestedRelease)}/release`;
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(await r.text());
+        const data = (await r.json()) as ReleaseResolveResponse;
+        if (cancelled) return;
+        setSessionRelease(data.release);
+      } catch {
+        if (cancelled) return;
+        setSessionRelease(requestedRelease);
+      }
+    }
+
+    void resolveRelease();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBase, requestedRelease]);
 
   const panelData = useMemo(() => {
     if (!resp) return [];
@@ -1257,19 +1318,20 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   );
 
   async function load(nextLat = lat, nextLon = lon, nextUnit = unit) {
-    const url = `${apiBase}/api/v/dev/panel?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
-      nextLon,
-    )}&unit=${nextUnit}`;
+    const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/panel?lat=${encodeURIComponent(
+      nextLat,
+    )}&lon=${encodeURIComponent(nextLon)}&unit=${nextUnit}`;
     const r = await fetch(url);
     if (!r.ok) throw new Error(await r.text());
     const data = (await r.json()) as PanelResponse;
+    pinSessionRelease(data.release);
     setResp(data);
     return data;
   }
 
   const fetchAutocomplete = useCallback(
     async (q: string) => {
-      const url = `${apiBase}/api/v/dev/locations/autocomplete?q=${encodeURIComponent(
+      const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/autocomplete?q=${encodeURIComponent(
         q,
       )}&limit=8`;
       const r = await fetch(url);
@@ -1277,21 +1339,19 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       const data = (await r.json()) as AutocompleteResponse;
       return data.results ?? [];
     },
-    [apiBase],
+    [apiBase, releaseForSession],
   );
 
   async function resolveByLabel(label: string) {
-    const url = `${apiBase}/api/v/dev/locations/resolve?label=${encodeURIComponent(
-      label,
-    )}`;
+    const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/resolve?label=${encodeURIComponent(label)}`;
     const r = await fetch(url);
     if (!r.ok) throw new Error(await r.text());
-    const data = (await r.json()) as { result?: AutocompleteItem | null };
+    const data = (await r.json()) as ResolveLocationResponse;
     return data.result ?? null;
   }
 
   async function fetchNearestLocation(nextLat: number, nextLon: number) {
-    const url = `${apiBase}/api/v/dev/location/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
+    const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/location/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
       nextLon,
     )}`;
     const r = await fetch(url);
@@ -1567,7 +1627,6 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const locationLabel =
     selectedLocation?.label ?? resp?.location.place.label ?? "";
   const populationText = formatPopulation(selectedLocation?.population);
-
   return (
     <main
       className={`${styles.app} ${introVisible ? styles.appIntro : styles.appReady}`}
@@ -1579,6 +1638,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
         <MapLibreGlobe
           panelOpen={panelOpen}
           focusLocation={picked}
+          releaseLabel={sessionRelease}
           layerOptions={mapLayers}
           activeLayerId={activeLayerId || null}
           onLayerChange={(layerId) => setActiveLayerId(layerId)}

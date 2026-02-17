@@ -1,39 +1,35 @@
 from __future__ import annotations
 
-import time
 import logging
+import time
 
-from fastapi import Request
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from uvicorn.logging import AccessFormatter
 
+from .cache import Cache, make_redis_client
 from .config import load_settings
+from .logging import configure_access_logger, format_access_line
+from .release import ReleaseResolver
+from .schemas import (
+    GraphListResponse,
+    LocationAutocompleteItem,
+    LocationAutocompleteResponse,
+    LocationNearestResponse,
+    LocationResolveResponse,
+    PanelListResponse,
+    PlaceInfo,
+    QueryPoint,
+    ReleaseResolveResponse,
+)
 from .services.panels import (
     build_panel_tiles_registry,
     build_scored_panels_tiles_registry,
-    preload_score_maps_cache,
 )
-from climate.registry.panels import load_panels
-from climate.registry.maps import load_maps
-from .schemas import (
-    PanelListResponse,
-    GraphListResponse,
-    LocationInfo,
-    LocationAutocompleteResponse,
-    LocationAutocompleteItem,
-    LocationResolveResponse,
-    LocationNearestResponse,
-    QueryPoint,
-    PlaceInfo,
-)
-from .cache import Cache, make_redis_client
-from .logging import configure_access_logger, format_access_line
-
-from .store.place_resolver import PlaceResolver
 from .store.location_index import LocationIndex
 from .store.ocean_classifier import OceanClassifier
-from .store.tile_data_store import TileDataStore
+from .store.place_resolver import PlaceResolver
 
 logging.getLogger("uvicorn.access").disabled = True
 
@@ -62,11 +58,11 @@ def _configure_uvicorn_like_access_logger() -> None:
 def create_app() -> FastAPI:
     settings = load_settings()
 
-    cache = Cache(prefix=f"climate_api:{settings.release}")
+    cache = Cache(prefix="climate_api")
     uvicorn_logger = logging.getLogger("uvicorn.error")
     if settings.redis_url:
         cache.redis = make_redis_client(settings.redis_url)
-        uvicorn_logger.info(f"Redis cache enabled: {settings.redis_url}")
+        uvicorn_logger.info("Redis cache enabled: %s", settings.redis_url)
     else:
         uvicorn_logger.warning(
             "Redis cache disabled (REDIS_URL not set); using in-process cache only."
@@ -84,8 +80,8 @@ def create_app() -> FastAPI:
                 settings.ocean_mask_npz,
                 settings.ocean_names_json,
             )
-        except Exception as e:
-            uvicorn_logger.warning("Ocean classifier disabled: %s", e)
+        except Exception as exc:
+            uvicorn_logger.warning("Ocean classifier disabled: %s", exc)
 
     place_resolver = PlaceResolver(
         locations_csv=settings.locations_csv,
@@ -99,33 +95,9 @@ def create_app() -> FastAPI:
     )
     location_index = LocationIndex(settings.locations_index_csv)
 
-    tile_store = TileDataStore.discover(
-        settings.tiles_series_root,
-        start_year_fallback=1979,
-    )
-    panels_manifest = load_panels()
-    maps_manifest = load_maps()
-    if settings.score_map_preload:
-        loaded_count, skipped_constant_count = preload_score_maps_cache(
-            maps_manifest=maps_manifest,
-            tile_store=tile_store,
-            maps_root=settings.maps_root,
-        )
-        uvicorn_logger.info(
-            "Preloaded score maps into memory: loaded=%d skipped_constant=%d",
-            loaded_count,
-            skipped_constant_count,
-        )
-
     app = FastAPI(title="Climate API", version="0.1")
     access_logger = configure_access_logger()
-
-    # expose for next step (routes can use these later)
-    app.state.place_resolver = place_resolver
-    app.state.location_index = location_index
-    app.state.tile_store = tile_store
-    app.state.panels_manifest = panels_manifest
-    app.state.maps_manifest = maps_manifest
+    release_resolver = ReleaseResolver(settings=settings, logger=uvicorn_logger)
 
     @app.middleware("http")
     async def access_log_with_timing(request: Request, call_next):
@@ -158,6 +130,14 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.get("/api/v/{release}/release", response_model=ReleaseResolveResponse)
+    def resolve_release(release: str):
+        context = release_resolver.resolve_release_context(release)
+        return ReleaseResolveResponse(
+            requested_release=release,
+            release=context.release,
+        )
+
     @app.get("/api/v/{release}/panel", response_model=PanelListResponse)
     def get_panel(
         release: str,
@@ -165,33 +145,21 @@ def create_app() -> FastAPI:
         lon: float = Query(...),
         unit: str = Query("C", pattern="^(C|F|c|f)$"),
     ):
-        if release != settings.release and settings.release != "dev":
-            # v0: simple guard; later you can support multiple releases on disk
-            raise HTTPException(status_code=404, detail=f"Unknown release: {release}")
-
-        try:
-            lon = _normalize_lon(lon)
-            panels_manifest = app.state.panels_manifest
-            maps_manifest = app.state.maps_manifest
-            return build_scored_panels_tiles_registry(
-                place_resolver=place_resolver,
-                tile_store=tile_store,
-                cache=cache,
-                ttl_panel_s=settings.ttl_panel_s,
-                release=settings.release,
-                lat=lat,
-                lon=lon,
-                unit=unit,
-                panels_manifest=panels_manifest,
-                maps_manifest=maps_manifest,
-                maps_root=settings.maps_root,
-            )
-        except FileNotFoundError as e:
-            raise HTTPException(status_code=404, detail=str(e))
-        except KeyError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+        context = release_resolver.resolve_release_context(release)
+        lon = _normalize_lon(lon)
+        return build_scored_panels_tiles_registry(
+            place_resolver=place_resolver,
+            tile_store=context.tile_store,
+            cache=cache,
+            ttl_panel_s=settings.ttl_panel_s,
+            release=context.release,
+            lat=lat,
+            lon=lon,
+            unit=unit,
+            panels_manifest=context.panels_manifest,
+            maps_manifest=context.maps_manifest,
+            maps_root=context.maps_root,
+        )
 
     @app.get(
         "/api/v/{release}/locations/autocomplete",
@@ -202,10 +170,8 @@ def create_app() -> FastAPI:
         q: str = Query(..., min_length=2),
         limit: int = Query(10, ge=1, le=50),
     ):
-        if release != settings.release and settings.release != "dev":
-            raise HTTPException(status_code=404, detail=f"Unknown release: {release}")
-
-        hits = app.state.location_index.autocomplete(q, limit=limit)
+        release_resolver.resolve_release_context(release)
+        hits = location_index.autocomplete(q, limit=limit)
         results = [
             LocationAutocompleteItem(
                 geonameid=h.geonameid,
@@ -228,19 +194,14 @@ def create_app() -> FastAPI:
         geonameid: int | None = Query(None),
         label: str | None = Query(None),
     ):
-        if release != settings.release and settings.release != "dev":
-            raise HTTPException(status_code=404, detail=f"Unknown release: {release}")
-
-        idx = app.state.location_index
+        release_resolver.resolve_release_context(release)
         hit = None
         if geonameid is not None:
-            hit = idx.resolve_by_id(geonameid)
+            hit = location_index.resolve_by_id(geonameid)
         elif label:
-            hit = idx.resolve_by_label(label)
+            hit = location_index.resolve_by_label(label)
         else:
-            raise HTTPException(
-                status_code=400, detail="Provide geonameid or label."
-            )
+            raise HTTPException(status_code=400, detail="Provide geonameid or label.")
 
         result = None
         if hit is not None:
@@ -253,7 +214,10 @@ def create_app() -> FastAPI:
                 population=hit.population,
             )
 
-        return LocationResolveResponse(query=str(geonameid or label or ""), result=result)
+        return LocationResolveResponse(
+            query=str(geonameid or label or ""),
+            result=result,
+        )
 
     @app.get(
         "/api/v/{release}/location/nearest",
@@ -264,11 +228,9 @@ def create_app() -> FastAPI:
         lat: float = Query(...),
         lon: float = Query(...),
     ):
-        if release != settings.release and settings.release != "dev":
-            raise HTTPException(status_code=404, detail=f"Unknown release: {release}")
-
+        release_resolver.resolve_release_context(release)
         lon = _normalize_lon(lon)
-        place = app.state.place_resolver.resolve_place(lat, lon)
+        place = place_resolver.resolve_place(lat, lon)
         return LocationNearestResponse(
             query=QueryPoint(lat=float(lat), lon=float(lon)),
             result=PlaceInfo(
@@ -290,21 +252,19 @@ def create_app() -> FastAPI:
         panel_id: str = Query("air_temperature"),
         unit: str = Query("C", pattern="^(C|F|c|f)$"),
     ):
-        if release != settings.release and settings.release != "dev":
-            raise HTTPException(status_code=404, detail=f"Unknown release: {release}")
-
+        context = release_resolver.resolve_release_context(release)
         lon = _normalize_lon(lon)
         resp = build_panel_tiles_registry(
             place_resolver=place_resolver,
-            tile_store=tile_store,
+            tile_store=context.tile_store,
             cache=cache,
             ttl_panel_s=settings.ttl_panel_s,
-            release=settings.release,
+            release=context.release,
             lat=lat,
             lon=lon,
             unit=unit,
             panel_id=panel_id,
-            panels_manifest=app.state.panels_manifest,
+            panels_manifest=context.panels_manifest,
         )
         return GraphListResponse(
             release=resp.release,
@@ -313,6 +273,30 @@ def create_app() -> FastAPI:
             panel_id=panel_id,
             graph_ids=[g.id for g in resp.panel.graphs],
         )
+
+    @app.get("/assets/v/{release}/{asset_path:path}")
+    def get_release_asset(release: str, asset_path: str):
+        canonical_release = release_resolver.resolve_release_alias(release)
+        release_root = release_resolver.release_root(canonical_release)
+        relative_path = asset_path.lstrip("/")
+        if not relative_path:
+            raise HTTPException(status_code=404, detail="Asset path is required.")
+
+        candidate = (release_root / relative_path).resolve()
+        try:
+            candidate.relative_to(release_root)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid asset path.") from exc
+
+        if not candidate.exists() or not candidate.is_file():
+            raise HTTPException(status_code=404, detail=f"Asset not found: {relative_path}")
+
+        headers = {
+            "Cache-Control": "no-store"
+            if release == "latest"
+            else "public, max-age=31536000, immutable"
+        }
+        return FileResponse(candidate, headers=headers)
 
     return app
 

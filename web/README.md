@@ -20,8 +20,14 @@ Override with:
 export NEXT_PUBLIC_CLIMATE_API_BASE="http://localhost:8001"
 ```
 
-Optional map layer root override:
+Optional map asset base override:
 
 ```bash
-export NEXT_PUBLIC_MAP_LAYER_ROOT="/data/maps"
+export NEXT_PUBLIC_MAP_ASSET_BASE="http://localhost:8001"
+```
+
+Preview a specific release:
+
+```text
+http://localhost:3000/?release=2022-02-17
 ```

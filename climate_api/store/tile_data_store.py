@@ -7,7 +7,13 @@ from typing import Any
 import json
 import numpy as np
 
-from climate.registry.metrics import DEFAULT_METRICS_PATH, DEFAULT_SCHEMA_PATH, REPO_ROOT, load_metrics
+from climate.registry.metrics import (
+    DEFAULT_DATASETS_PATH,
+    DEFAULT_METRICS_PATH,
+    DEFAULT_SCHEMA_PATH,
+    REPO_ROOT,
+    load_metrics,
+)
 from climate.tiles.layout import GridSpec, locate_tile, tile_path
 from climate.tiles.spec import read_cell_series
 
@@ -23,6 +29,7 @@ def _grid_from_id(grid_id: str, *, tile_size: int) -> GridSpec:
 def _load_registry_metrics(
     metrics_path: Path | str | None,
     schema_path: Path | str | None,
+    datasets_path: Path | str | None,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, GridSpec]]:
     if metrics_path is None:
         return {}, {}
@@ -30,7 +37,17 @@ def _load_registry_metrics(
     if not path.exists():
         return {}, {}
     schema = Path(schema_path) if schema_path is not None else DEFAULT_SCHEMA_PATH
-    manifest = load_metrics(path=path, schema_path=schema, validate=True)
+    datasets = (
+        Path(datasets_path)
+        if datasets_path is not None
+        else DEFAULT_DATASETS_PATH
+    )
+    manifest = load_metrics(
+        path=path,
+        schema_path=schema,
+        datasets_path=datasets,
+        validate=True,
+    )
 
     metrics: dict[str, dict[str, Any]] = {}
     grids: dict[str, GridSpec] = {}
@@ -79,6 +96,7 @@ class TileDataStore:
         start_year_fallback: int = 1979,
         metrics_path: Path | str | None = DEFAULT_METRICS_PATH,
         schema_path: Path | str | None = DEFAULT_SCHEMA_PATH,
+        datasets_path: Path | str | None = DEFAULT_DATASETS_PATH,
     ) -> "TileDataStore":
         """
         Discover grid_id and tile_size from folder layout.
@@ -87,7 +105,11 @@ class TileDataStore:
           {tiles_root}/{grid_id}/{metric}/z{tile_size}/rXXX_cYYY.bin.zst
         """
         tiles_root = Path(tiles_root)
-        metrics, grids = _load_registry_metrics(metrics_path, schema_path)
+        metrics, grids = _load_registry_metrics(
+            metrics_path,
+            schema_path,
+            datasets_path,
+        )
         if grids:
             grid = grids.get("global_0p25") or next(iter(grids.values()))
             return cls(

@@ -84,6 +84,11 @@ class GraphListResponse(BaseModel):
     graph_ids: List[str]
 
 
+class ReleaseResolveResponse(BaseModel):
+    requested_release: str
+    release: str
+
+
 class QueryPoint(BaseModel):
     lat: float
     lon: float

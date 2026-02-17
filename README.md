@@ -105,7 +105,14 @@ Optional environment overrides:
 
 ```bash
 export NEXT_PUBLIC_CLIMATE_API_BASE="http://localhost:8001"
-export NEXT_PUBLIC_MAP_LAYER_ROOT="/data/maps"
+export NEXT_PUBLIC_RELEASE="latest"
+export NEXT_PUBLIC_MAP_ASSET_BASE="http://localhost:8001"
+```
+
+Release override in UI preview mode:
+
+```text
+http://localhost:3000/?release=dev
 ```
 
 ## Validation and tests

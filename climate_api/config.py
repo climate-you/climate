@@ -8,6 +8,8 @@ from typing import Optional
 @dataclass(frozen=True)
 class Settings:
     release: str
+    releases_root: Path
+    latest_release_file: Path
     locations_csv: Path
     kdtree_path: Optional[Path]
     locations_index_csv: Path
@@ -15,8 +17,6 @@ class Settings:
     ocean_names_json: Optional[Path]
     ocean_off_city_max_km: float
     ocean_city_override_max_km: float
-    tiles_series_root: Path
-    maps_root: Path
     redis_url: Optional[str]
     ttl_resolve_s: int
     ttl_panel_s: int
@@ -35,7 +35,13 @@ def load_settings() -> Settings:
     # Defaults match your repo layout
     repo_root = Path(os.environ.get("REPO_ROOT", ".")).resolve()
 
-    release = os.environ.get("RELEASE", "dev")
+    release = os.environ.get("RELEASE", "latest")
+    releases_root = Path(
+        os.environ.get("RELEASES_ROOT", repo_root / "data" / "releases")
+    )
+    latest_release_file = Path(
+        os.environ.get("LATEST_RELEASE_FILE", releases_root / "LATEST")
+    )
     locations_csv = Path(
         os.environ.get(
             "LOCATIONS_CSV", repo_root / "data" / "locations" / "locations.csv"
@@ -93,18 +99,6 @@ def load_settings() -> Settings:
     ocean_city_override_max_km = float(
         os.environ.get("OCEAN_CITY_OVERRIDE_MAX_KM", "2.0")
     )
-    tiles_series_root = Path(
-        os.environ.get(
-            "TILES_SERIES_ROOT",
-            repo_root / "data" / "releases" / release / "series",
-        )
-    )
-    maps_root = Path(
-        os.environ.get(
-            "MAPS_ROOT",
-            repo_root / "data" / "releases" / release / "maps",
-        )
-    )
     redis_url = os.environ.get("REDIS_URL")  # e.g. redis://localhost:6379/0
     ttl_resolve_s = int(os.environ.get("TTL_RESOLVE_S", "86400"))  # 1 day
     ttl_panel_s = int(os.environ.get("TTL_PANEL_S", "86400"))  # 1 day
@@ -112,6 +106,8 @@ def load_settings() -> Settings:
 
     return Settings(
         release=release,
+        releases_root=releases_root,
+        latest_release_file=latest_release_file,
         locations_csv=locations_csv,
         kdtree_path=kdtree_path,
         locations_index_csv=locations_index_csv,
@@ -119,8 +115,6 @@ def load_settings() -> Settings:
         ocean_names_json=ocean_names_json,
         ocean_off_city_max_km=ocean_off_city_max_km,
         ocean_city_override_max_km=ocean_city_override_max_km,
-        tiles_series_root=tiles_series_root,
-        maps_root=maps_root,
         redis_url=redis_url,
         ttl_resolve_s=ttl_resolve_s,
         ttl_panel_s=ttl_panel_s,

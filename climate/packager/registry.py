@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
 import os
 import re
 import signal
+import shutil
 import threading
 import zipfile
 from pathlib import Path
@@ -35,6 +37,13 @@ from climate.registry.metrics import (
     DEFAULT_SCHEMA_PATH,
     DEFAULT_DATASETS_PATH,
     load_metrics,
+)
+from climate.registry.panels import (
+    DEFAULT_PANELS_PATH,
+    DEFAULT_PANELS_SCHEMA_PATH,
+    load_panels,
+    validate_panels_against_maps,
+    validate_panels_against_metrics,
 )
 from climate.tiles.layout import GridSpec, cell_center_latlon, tile_counts, tile_path
 from climate.tiles.spec import write_tile
@@ -1584,6 +1593,58 @@ def _metric_tile_range(grid: GridSpec, tile_range: TileRange | None) -> TileRang
     return tile_range
 
 
+def _snapshot_release_registry(
+    *,
+    release_root: Path,
+    metrics_path: Path,
+    datasets_path: Path,
+    maps_path: Path,
+    panels_path: Path,
+) -> dict[str, str]:
+    registry_root = release_root / "registry"
+    registry_root.mkdir(parents=True, exist_ok=True)
+
+    copied: dict[str, str] = {}
+    sources = {
+        "metrics.json": metrics_path,
+        "datasets.json": datasets_path,
+        "maps.json": maps_path,
+        "panels.json": panels_path,
+    }
+    for filename, src in sources.items():
+        if not src.exists():
+            raise FileNotFoundError(f"Missing registry file for release snapshot: {src}")
+        dst = registry_root / filename
+        shutil.copy2(src, dst)
+        copied[filename] = str(dst.relative_to(release_root))
+    return copied
+
+
+def _write_release_manifest(
+    *,
+    release_root: Path,
+    release: str,
+    out_root: Path,
+    maps_out_root: Path,
+    registry_snapshot: dict[str, str],
+) -> None:
+    def _path_for_manifest(path: Path) -> str:
+        try:
+            return str(path.resolve().relative_to(release_root.resolve()))
+        except ValueError:
+            return str(path)
+
+    payload = {
+        "release": release,
+        "created_at_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "series_root": _path_for_manifest(out_root),
+        "maps_root": _path_for_manifest(maps_out_root),
+        "registry": registry_snapshot,
+    }
+    manifest_path = release_root / "manifest.json"
+    manifest_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
 def package_registry(
     *,
     out_root: Path,
@@ -1612,6 +1673,8 @@ def package_registry(
     download_only: bool = False,
     maps_path: Path | str | None = None,
     maps_schema_path: Path | str | None = None,
+    panels_path: Path | str | None = None,
+    panels_schema_path: Path | str | None = None,
     maps_out_root: Path | None = None,
     map_ids: list[str] | None = None,
     all_maps: bool = False,
@@ -1650,15 +1713,34 @@ def package_registry(
         if maps_schema_path is not None
         else DEFAULT_MAPS_SCHEMA_PATH
     )
-    if not skip_maps and maps_path_eff.exists():
+    if maps_path_eff.exists():
         maps_manifest = load_maps(
             path=maps_path_eff,
             schema_path=maps_schema_path_eff,
             validate=True,
         )
         validate_maps_against_metrics(maps_manifest, manifest)
-    elif not skip_maps and debug:
+    elif debug:
         print(f"[maps] No maps registry found at {maps_path_eff}; skipping map packaging.")
+
+    panels_path_eff = (
+        Path(panels_path) if panels_path is not None else DEFAULT_PANELS_PATH
+    )
+    panels_schema_path_eff = (
+        Path(panels_schema_path)
+        if panels_schema_path is not None
+        else DEFAULT_PANELS_SCHEMA_PATH
+    )
+    if not panels_path_eff.exists():
+        raise FileNotFoundError(f"Missing panels registry: {panels_path_eff}")
+    panels_manifest = load_panels(
+        path=panels_path_eff,
+        schema_path=panels_schema_path_eff,
+        validate=True,
+    )
+    validate_panels_against_metrics(panels_manifest, manifest)
+    if maps_manifest is not None:
+        validate_panels_against_maps(panels_manifest, maps_manifest)
 
     effective_metric_ids: set[str] | None = set(metric_ids) if metric_ids else None
     if effective_metric_ids is None and maps_manifest is not None and (map_ids or all_maps):
@@ -2484,12 +2566,12 @@ def package_registry(
         finally:
             signal.signal(signal.SIGINT, prev_handler)
 
+    maps_out_root_eff = (
+        Path(maps_out_root)
+        if maps_out_root is not None
+        else out_root.parent / "maps"
+    )
     if not download_only and not skip_maps and maps_manifest is not None:
-        maps_out_root_eff = (
-            Path(maps_out_root)
-            if maps_out_root is not None
-            else out_root.parent / "maps"
-        )
         maps_written = package_maps(
             series_root=out_root,
             maps_root=maps_out_root_eff,
@@ -2501,6 +2583,24 @@ def package_registry(
             debug=debug,
         )
         print(f"DONE: wrote {maps_written} map asset(s) into {maps_out_root_eff}")
+
+    if not download_only:
+        release_root = out_root.parent
+        registry_snapshot = _snapshot_release_registry(
+            release_root=release_root,
+            metrics_path=metrics_path,
+            datasets_path=datasets_path,
+            maps_path=maps_path_eff,
+            panels_path=panels_path_eff,
+        )
+        _write_release_manifest(
+            release_root=release_root,
+            release=release,
+            out_root=out_root,
+            maps_out_root=maps_out_root_eff,
+            registry_snapshot=registry_snapshot,
+        )
+        print(f"DONE: wrote release manifest: {release_root / 'manifest.json'}")
 
     return 0
 
