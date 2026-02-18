@@ -98,6 +98,18 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Climate API", version="0.1")
     access_logger = configure_access_logger()
     release_resolver = ReleaseResolver(settings=settings, logger=uvicorn_logger)
+    if settings.score_map_preload:
+        try:
+            warm_context = release_resolver.resolve_release_context("latest")
+            uvicorn_logger.info(
+                "Startup score-map warmup completed for release '%s'.",
+                warm_context.release,
+            )
+        except Exception as exc:
+            uvicorn_logger.warning(
+                "Startup score-map warmup skipped (latest/dev): %s",
+                exc,
+            )
 
     @app.middleware("http")
     async def access_log_with_timing(request: Request, call_next):
@@ -304,12 +316,16 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="Invalid asset path.") from exc
 
         if not candidate.exists() or not candidate.is_file():
-            raise HTTPException(status_code=404, detail=f"Asset not found: {relative_path}")
+            raise HTTPException(
+                status_code=404, detail=f"Asset not found: {relative_path}"
+            )
 
         headers = {
-            "Cache-Control": "no-store"
-            if release == "latest"
-            else "public, max-age=31536000, immutable"
+            "Cache-Control": (
+                "no-store"
+                if release == "latest"
+                else "public, max-age=31536000, immutable"
+            )
         }
         return FileResponse(candidate, headers=headers)
 

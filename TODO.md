@@ -11,9 +11,6 @@
   - zoomout graph needs work
   - extra coral reef stress graph + new texture for 3D globe
   - precipitations graph (?)
-- Cache:
-  - Redis keys are `climate_api:panel:dev:registry:air_temperature:C:cells:global_0p25:688:151`, shouldn't we cache the whole panel instead of individual graphs? Check speed gain.
-  - `--score-map-preload` should force loading maps for latest release without having to hit it first
 - Code:
   - add more python tests
   - add e2e tests
