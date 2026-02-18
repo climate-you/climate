@@ -10,7 +10,6 @@
           "title": "Annual temperature",
           "x_axis_label": "Year",
           "y_axis_label": "Temperature (°C)",
-          "caption": { "type": "fn", "fn": "fifty_year_caption", "params": {} },
           "source": "CDS ERA5 2m temperature monthly means (1979-2025)",
           "series": [
             {
@@ -47,6 +46,7 @@
           "title": "Temperature zoom-out",
           "x_axis_label": "Date",
           "y_axis_label": "Temperature (°C)",
+          "caption": { "type": "fn", "fn": "fifty_year_caption", "params": {} },
           "source": "CDS ERA5 daily and monthly 2m temperature means",
           "animation": {
             "autoplay": false,

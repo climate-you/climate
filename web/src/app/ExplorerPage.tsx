@@ -1069,6 +1069,8 @@ function GraphCard({
 }
 
 const COLD_OPEN_FADE_MS = 520;
+const COLD_OPEN_PRIMARY_HOLD_MS = 10000;
+const COLD_OPEN_QUESTION_DELAY_MS = 2000;
 
 export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const envDefaultReleaseRaw = process.env.NEXT_PUBLIC_RELEASE;
@@ -1112,7 +1114,11 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const [graphPage, setGraphPage] = useState(0);
   const [introVisible, setIntroVisible] = useState(coldOpen);
   const [introFading, setIntroFading] = useState(false);
-  const introTimerRef = useRef<number | null>(null);
+  const [introPromptVisible, setIntroPromptVisible] = useState(!coldOpen);
+  const [introQuestionVisible, setIntroQuestionVisible] = useState(!coldOpen);
+  const introDismissTimerRef = useRef<number | null>(null);
+  const introPhaseTimerRef = useRef<number | null>(null);
+  const introQuestionTimerRef = useRef<number | null>(null);
   const [requestedRelease, setRequestedRelease] = useState<string>(
     envDefaultRelease
       ? envDefaultRelease.toLowerCase() === "latest"
@@ -1136,10 +1142,13 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   }, [apiBase]);
   const releaseForSession = sessionRelease ?? requestedRelease;
   const encodedRelease = encodeURIComponent(releaseForSession);
-  const pinSessionRelease = useCallback((releaseValue: string | null | undefined) => {
-    if (!releaseValue) return;
-    setSessionRelease((prev) => prev ?? releaseValue);
-  }, []);
+  const pinSessionRelease = useCallback(
+    (releaseValue: string | null | undefined) => {
+      if (!releaseValue) return;
+      setSessionRelease((prev) => prev ?? releaseValue);
+    },
+    [],
+  );
   const mapLayers = useMemo<MapLayerOption[]>(
     () => [
       {
@@ -1522,27 +1531,58 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const dismissColdOpen = useCallback(() => {
     if (!introVisible || introFading) return;
     setIntroFading(true);
-    introTimerRef.current = window.setTimeout(() => {
+    introDismissTimerRef.current = window.setTimeout(() => {
       setIntroVisible(false);
       setIntroFading(false);
-      introTimerRef.current = null;
+      introDismissTimerRef.current = null;
     }, COLD_OPEN_FADE_MS);
   }, [introFading, introVisible]);
+
+  const showIntroPrompt = useCallback(() => {
+    if (!introVisible || introPromptVisible) return;
+    setIntroPromptVisible(true);
+  }, [introPromptVisible, introVisible]);
+
+  useEffect(() => {
+    if (!introVisible || introPromptVisible) return;
+    introPhaseTimerRef.current = window.setTimeout(() => {
+      setIntroPromptVisible(true);
+      introPhaseTimerRef.current = null;
+    }, COLD_OPEN_PRIMARY_HOLD_MS);
+  }, [introPromptVisible, introVisible]);
+
+  useEffect(() => {
+    if (!introVisible || introPromptVisible || introQuestionVisible) return;
+    introQuestionTimerRef.current = window.setTimeout(() => {
+      setIntroQuestionVisible(true);
+      introQuestionTimerRef.current = null;
+    }, COLD_OPEN_QUESTION_DELAY_MS);
+  }, [introPromptVisible, introQuestionVisible, introVisible]);
 
   const handleColdOpenInteractionCapture = useCallback(
     (e: React.SyntheticEvent) => {
       if (!introVisible) return;
       e.preventDefault();
       e.stopPropagation();
+      if (!introPromptVisible) {
+        showIntroPrompt();
+        return;
+      }
       dismissColdOpen();
     },
-    [dismissColdOpen, introVisible],
+    [dismissColdOpen, introPromptVisible, introVisible, showIntroPrompt],
   );
 
   useEffect(
     () => () => {
-      if (introTimerRef.current) {
-        window.clearTimeout(introTimerRef.current);
+      if (introDismissTimerRef.current) {
+        window.clearTimeout(introDismissTimerRef.current);
+      }
+      if (introPhaseTimerRef.current) {
+        window.clearTimeout(introPhaseTimerRef.current);
+      }
+      if (introQuestionTimerRef.current) {
+        window.clearTimeout(introQuestionTimerRef.current);
       }
     },
     [],
@@ -1642,6 +1682,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
 
   const locationLabel =
     selectedLocation?.label ?? resp?.location.place.label ?? "";
+  const titleLocationLabel = locationLabel || "this location";
   const populationText = formatPopulation(selectedLocation?.population);
   return (
     <main
@@ -1674,11 +1715,36 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
           className={`${styles.coldOpenOverlay} ${introFading ? styles.coldOpenOverlayFading : ""}`}
           aria-hidden="true"
         >
-          <h1 className={styles.coldOpenMessage}>
-            <span className={styles.coldOpenMessageAccent}>Ple</span>
-            <span className={styles.coldOpenMessageDark}>ase select locat</span>
-            <span className={styles.coldOpenMessageAccent}>ion</span>
-          </h1>
+          <div className={styles.coldOpenMessageStack}>
+            <h1
+              className={`${styles.coldOpenMessage} ${styles.coldOpenMessagePrimary} ${
+                introPromptVisible ? styles.coldOpenMessagePrimaryHidden : ""
+              }`}
+            >
+              Human activities have caused{" "}
+              <span className={styles.coldOpenMessageAccent}>1.1°C</span> of
+              global warming since 1850-1900.
+              <span
+                className={`${styles.coldOpenQuestion} ${
+                  introQuestionVisible ? styles.coldOpenQuestionVisible : ""
+                }`}
+              >
+                What does this mean{" "}
+                <span className={styles.coldOpenMessageAccent}>for you</span> ?
+              </span>
+            </h1>
+            <h1
+              className={`${styles.coldOpenMessage} ${
+                introPromptVisible ? styles.coldOpenMessageSecondaryVisible : ""
+              }`}
+            >
+              <span className={styles.coldOpenMessageAccent}>Ple</span>
+              <span className={styles.coldOpenMessageDark}>
+                ase select locat
+              </span>
+              <span className={styles.coldOpenMessageAccent}>ion</span>
+            </h1>
+          </div>
         </div>
       ) : null}
 
@@ -1834,13 +1900,25 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
           <div className={styles.panelTitleWrap}>
             <div>
               <div className={styles.panelTitleLine}>
-                <h2 className={styles.panelTitle}>{locationLabel}</h2>
-                {typeof tempHeadline?.value === "number" &&
-                Number.isFinite(tempHeadline.value) ? (
-                  <span className={styles.headlineValue}>
-                    {formatHeadlineDelta(tempHeadline.value, unit)}
+                <h2 className={styles.panelTitle}>
+                  <span className={styles.panelTitleSmall}>In</span>{" "}
+                  {titleLocationLabel},{" "}
+                  <span className={styles.panelTitleSmall}>
+                    human activities have caused{" "}
                   </span>
-                ) : null}
+                  {typeof tempHeadline?.value === "number" &&
+                  Number.isFinite(tempHeadline.value) ? (
+                    <span className={styles.panelTitleTempAccent}>
+                      {formatHeadlineDelta(tempHeadline.value, unit)}
+                    </span>
+                  ) : (
+                    "warming"
+                  )}
+                  <span className={styles.panelTitleSmall}>
+                    {" "}
+                    since 1850-1900.
+                  </span>
+                </h2>
               </div>
               {populationText ? (
                 <p className={styles.panelPopulation}>
