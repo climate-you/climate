@@ -227,6 +227,8 @@
   gap: 10px;
   width: calc(100% - 120px);
   box-sizing: border-box;
+  position: relative;
+  z-index: 12;
 }
 
 .panelTitleWrap > div {
@@ -241,7 +243,7 @@
   font-weight: 300;
   position: relative;
   z-index: 1;
-  pointer-events: none;
+  pointer-events: auto;
   width: 100%;
 }
 
@@ -254,9 +256,68 @@
 }
 
 .panelTitleLine {
+  position: relative;
+  z-index: 12;
   display: flex;
   align-items: baseline;
   gap: 10px;
+}
+
+.infoBubble {
+  position: relative;
+  z-index: 13;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.infoBubbleButton {
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(17, 17, 17, 0.35);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #111111;
+  font-size: 11px;
+  line-height: 1;
+  cursor: help;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.infoBubbleTooltip {
+  position: absolute;
+  z-index: 14;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 170px;
+  max-width: 260px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: #ffffff;
+  color: #111111;
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.infoBubble:hover .infoBubbleTooltip,
+.infoBubble:focus-within .infoBubbleTooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-50%);
 }
 
 .panelPopulation {
@@ -442,6 +503,12 @@
 .graphTitle {
   font-size: 15px;
   font-weight: 600;
+}
+
+.graphTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .stepButtons {

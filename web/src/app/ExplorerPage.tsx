@@ -424,6 +424,23 @@ function formatPopulation(value: number | null | undefined): string | null {
   return new Intl.NumberFormat("en-US").format(Math.trunc(value));
 }
 
+function InfoBubble({ text, label }: { text: string; label: string }) {
+  return (
+    <span className={styles.infoBubble}>
+      <button
+        type="button"
+        className={styles.infoBubbleButton}
+        aria-label={label}
+      >
+        i
+      </button>
+      <span className={styles.infoBubbleTooltip} role="tooltip">
+        {text}
+      </span>
+    </span>
+  );
+}
+
 function yAxisTitle(graph: GraphPayload, unit: "C" | "F"): string {
   if (graph.id === "t2m_hot_days" || graph.id === "sst_hot_days") {
     return "Number of days";
@@ -980,6 +997,10 @@ function GraphCard({
   const transitionMs = graph.animation?.transition_ms ?? 900;
   const isHotDaysChart =
     graph.id === "t2m_hot_days" || graph.id === "sst_hot_days";
+  const graphInfoText =
+    graph.id === "t2m_hot_days"
+      ? "Number of hot days (NHD) per year are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979. Units: Hot days / year."
+      : "Random text for now about this graph.";
   const isZoomOutGraph = graph.id === "t2m_zoomout";
   const allVisibleData = useMemo(
     () =>
@@ -1031,11 +1052,16 @@ function GraphCard({
   return (
     <div className={styles.graphCard}>
       {showTitle ? (
-        <h3 className={styles.graphTitle}>
-          {graph.title === "Annual temperature"
-            ? "Annual air temperature"
-            : graph.title}
-        </h3>
+        <div className={styles.graphTitleRow}>
+          <h3 className={styles.graphTitle}>
+            {graph.title === "Annual temperature"
+              ? "Annual air temperature"
+              : graph.id === "t2m_hot_days"
+                ? "Number of hot days"
+                : graph.title}
+          </h3>
+          <InfoBubble label="Graph title information" text={graphInfoText} />
+        </div>
       ) : null}
       {hasAnimation ? (
         <div className={styles.stepButtons}>
@@ -1061,7 +1087,7 @@ function GraphCard({
       {graph.error ? (
         <div className={styles.graphError}>{graph.error}</div>
       ) : null}
-      {graph.caption ? (
+      {graph.caption && graph.id !== "t2m_hot_days" ? (
         <div className={styles.graphCaption}>{graph.caption}</div>
       ) : null}
     </div>
@@ -1918,6 +1944,10 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
                     {" "}
                     since 1850-1900.
                   </span>
+                  <InfoBubble
+                    label="Panel title information"
+                    text="Random text for now about this location summary."
+                  />
                 </h2>
               </div>
               {populationText ? (

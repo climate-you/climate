@@ -121,10 +121,6 @@
           "title": "Hot days per year (air temperature)",
           "x_axis_label": "Year",
           "y_axis_label": "Days/year",
-          "caption": {
-            "type": "static",
-            "text": "Hot days are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979. Units: Hot days / year."
-          },
           "source": "CDS ERA5 2m temperature daily means (1979-2025)",
           "series": [
             {
