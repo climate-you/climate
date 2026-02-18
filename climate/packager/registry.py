@@ -1184,7 +1184,8 @@ def _download_batch_monthly_means(
         tile_range.tile_r1,
         tile_range.tile_c1,
     )
-    area_req = tuple(round(coord, 2) for coord in area)
+    # Keep enough precision for cell-center-aligned requests (e.g. 0.125, 0.025).
+    area_req = tuple(round(coord, 5) for coord in area)
 
     dataset_tag = re.sub(r"[^a-z0-9]+", "_", str(dataset).lower()).strip("_")
     prefix = f"cds_monthly_{dataset_tag}_{variable}"
@@ -1360,7 +1361,8 @@ def _download_batch_daily_stats(
             print(f"[cache] Wrote sliced cache: {dl_path}")
             return dl_path
 
-    area_req = tuple(round(coord, 2) for coord in area)
+    # Keep enough precision for cell-center-aligned requests (e.g. 0.125, 0.025).
+    area_req = tuple(round(coord, 5) for coord in area)
     months_label = "all" if not months else ",".join(months)
     if debug:
         print(
@@ -1455,15 +1457,16 @@ def _slice_daily_cache_to_tile_batch(
         lat_name, lon_name = _find_lat_lon_names(ds)
         lat = ds[lat_name]
         lon = ds[lon_name]
+        eps = float(grid.deg) * 0.51
         lat_slice = (
-            slice(north, south)
+            slice(north + eps, south - eps)
             if float(lat.values[0]) >= float(lat.values[-1])
-            else slice(south, north)
+            else slice(south - eps, north + eps)
         )
         lon_slice = (
-            slice(west, east)
+            slice(west - eps, east + eps)
             if float(lon.values[0]) <= float(lon.values[-1])
-            else slice(east, west)
+            else slice(east + eps, west - eps)
         )
         ds_sub = ds.sel({lat_name: lat_slice, lon_name: lon_slice})
         dst_path.parent.mkdir(parents=True, exist_ok=True)

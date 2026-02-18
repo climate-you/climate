@@ -17,7 +17,7 @@
 - Code:
   - add more python tests
   - add e2e tests
-  - tile_coverage reports some metrics with 98% - check why
+  - [WIP] tile_coverage reports some metrics with 98% - check why
   - README: present project + images for github
 
 ---
