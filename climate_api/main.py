@@ -235,7 +235,7 @@ def create_app() -> FastAPI:
         )
 
     @app.get(
-        "/api/v/{release}/location/nearest",
+        "/api/v/{release}/locations/nearest",
         response_model=LocationNearestResponse,
     )
     def nearest_location(

@@ -1365,7 +1365,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   }
 
   async function fetchNearestLocation(nextLat: number, nextLon: number) {
-    const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/location/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
+    const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
       nextLon,
     )}`;
     const r = await fetch(url);
