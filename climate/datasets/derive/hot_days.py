@@ -59,6 +59,9 @@ def hot_days_per_year_xr(
 
     hot = da.groupby(f"{tname}.dayofyear") > p90
     hotdays = hot.groupby(f"{tname}.year").sum(dim=tname, skipna=True)
+    # Preserve missing-domain masks (e.g. land for SST) as NaN instead of 0.
+    has_obs = da.notnull().groupby(f"{tname}.year").any(dim=tname)
+    hotdays = hotdays.where(has_obs)
     hotdays = hotdays.astype("float32")
     hotdays = hotdays.rename("hot_days_per_year")
     if debug:
