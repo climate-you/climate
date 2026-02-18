@@ -1,13 +1,11 @@
 - UI:
   - Add scale to UI when showing warming map layers
-  - Home page with cold open: test globe fading in from all blue so we don't see tiles loading.
-  - Add info bubble next to title and graphs' titles to explain how data is computed.
   - Globe textures menu overlaps with cities search bar
   - Test on mobile
   - Dark mode
 - Graphs:
+  - Add text to info bubbles to explain how data is computed.
   - zoomout graph needs work + rephrase graph captions
-  - "Hot days per year" => "Number of Hot Days (NHD)"
   - extra coral reef stress graph + new texture for 3D globe
 - Code:
   - add more python tests

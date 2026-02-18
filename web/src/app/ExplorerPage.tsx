@@ -1095,8 +1095,9 @@ function GraphCard({
 }
 
 const COLD_OPEN_FADE_MS = 520;
-const COLD_OPEN_PRIMARY_HOLD_MS = 10000;
-const COLD_OPEN_QUESTION_DELAY_MS = 2000;
+const COLD_OPEN_PRIMARY_HOLD_MS = 6000;
+const COLD_OPEN_QUESTION_DELAY_MS = 1700;
+const COLD_OPEN_PRIMARY_REVEAL_DELAY_MS = 80;
 
 export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const envDefaultReleaseRaw = process.env.NEXT_PUBLIC_RELEASE;
@@ -1141,9 +1142,11 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const [introVisible, setIntroVisible] = useState(coldOpen);
   const [introFading, setIntroFading] = useState(false);
   const [introPromptVisible, setIntroPromptVisible] = useState(!coldOpen);
+  const [introPrimaryVisible, setIntroPrimaryVisible] = useState(!coldOpen);
   const [introQuestionVisible, setIntroQuestionVisible] = useState(!coldOpen);
   const introDismissTimerRef = useRef<number | null>(null);
   const introPhaseTimerRef = useRef<number | null>(null);
+  const introPrimaryTimerRef = useRef<number | null>(null);
   const introQuestionTimerRef = useRef<number | null>(null);
   const [requestedRelease, setRequestedRelease] = useState<string>(
     envDefaultRelease
@@ -1578,6 +1581,14 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   }, [introPromptVisible, introVisible]);
 
   useEffect(() => {
+    if (!introVisible || introPromptVisible || introPrimaryVisible) return;
+    introPrimaryTimerRef.current = window.setTimeout(() => {
+      setIntroPrimaryVisible(true);
+      introPrimaryTimerRef.current = null;
+    }, COLD_OPEN_PRIMARY_REVEAL_DELAY_MS);
+  }, [introPrimaryVisible, introPromptVisible, introVisible]);
+
+  useEffect(() => {
     if (!introVisible || introPromptVisible || introQuestionVisible) return;
     introQuestionTimerRef.current = window.setTimeout(() => {
       setIntroQuestionVisible(true);
@@ -1606,6 +1617,9 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       }
       if (introPhaseTimerRef.current) {
         window.clearTimeout(introPhaseTimerRef.current);
+      }
+      if (introPrimaryTimerRef.current) {
+        window.clearTimeout(introPrimaryTimerRef.current);
       }
       if (introQuestionTimerRef.current) {
         window.clearTimeout(introQuestionTimerRef.current);
@@ -1710,6 +1724,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     selectedLocation?.label ?? resp?.location.place.label ?? "";
   const titleLocationLabel = locationLabel || "this location";
   const populationText = formatPopulation(selectedLocation?.population);
+  const showIntroMap = !introVisible || introPromptVisible;
   return (
     <main
       className={`${styles.app} ${introVisible ? styles.appIntro : styles.appReady}`}
@@ -1717,7 +1732,10 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       onTouchStartCapture={handleColdOpenInteractionCapture}
       onWheelCapture={handleColdOpenInteractionCapture}
     >
-      <div className={styles.map} onPointerDownCapture={keepPanelFocused}>
+      <div
+        className={`${styles.map} ${showIntroMap ? styles.mapVisible : styles.mapHidden}`}
+        onPointerDownCapture={keepPanelFocused}
+      >
         <MapLibreGlobe
           panelOpen={panelOpen}
           focusLocation={picked}
@@ -1747,9 +1765,15 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
                 introPromptVisible ? styles.coldOpenMessagePrimaryHidden : ""
               }`}
             >
-              Human activities have caused{" "}
-              <span className={styles.coldOpenMessageAccent}>1.1°C</span> of
-              global warming since 1850-1900.
+              <span
+                className={`${styles.coldOpenPrimaryLine} ${
+                  introPrimaryVisible ? styles.coldOpenPrimaryLineVisible : ""
+                }`}
+              >
+                Human activities have caused{" "}
+                <span className={styles.coldOpenMessageAccent}>1.1°C</span> of
+                global warming since 1850-1900.
+              </span>
               <span
                 className={`${styles.coldOpenQuestion} ${
                   introQuestionVisible ? styles.coldOpenQuestionVisible : ""

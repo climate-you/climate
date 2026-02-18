@@ -10,8 +10,20 @@
 }
 
 .map {
+  position: relative;
   width: 100%;
   height: 100%;
+  background: #1d5fff;
+}
+
+.mapVisible {
+  opacity: 1;
+  transition: opacity 700ms ease;
+}
+
+.mapHidden {
+  opacity: 0;
+  transition: opacity 700ms ease;
 }
 
 .map :global(.maplibregl-ctrl-top-left),
@@ -122,6 +134,23 @@
 
 .coldOpenMessageAccent {
   color: #ff0000;
+}
+
+.coldOpenPrimaryLine {
+  display: block;
+  opacity: 0;
+  transform: translateY(10px);
+  filter: blur(2px);
+  transition:
+    opacity 900ms ease,
+    transform 900ms ease,
+    filter 900ms ease;
+}
+
+.coldOpenPrimaryLineVisible {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
 }
 
 .coldOpenQuestion {
