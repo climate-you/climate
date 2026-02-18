@@ -12,7 +12,7 @@ import zipfile
 from pathlib import Path
 import time
 from typing import Any, Iterable
-from concurrent.futures import ProcessPoolExecutor, as_completed, wait, FIRST_COMPLETED
+from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
 
 import numpy as np
 import xarray as xr
@@ -588,6 +588,82 @@ def _resolve_batch_tiles(batch_tiles: int | None, source: dict[str, Any]) -> int
     if source.get("batch_tiles_override") is not None:
         return int(source["batch_tiles_override"])
     return int(source.get("batch_tiles", 1))
+
+
+def _shutdown_process_pool(
+    executor: ProcessPoolExecutor,
+    *,
+    metric_id: str,
+    timeout_s: float = 30.0,
+    debug: bool = False,
+) -> None:
+    """
+    Shutdown a ProcessPoolExecutor with a timeout, then force-terminate stuck
+    workers if needed.
+    """
+    shutdown_error: list[BaseException] = []
+    done = threading.Event()
+
+    def _graceful_shutdown() -> None:
+        try:
+            executor.shutdown(wait=True, cancel_futures=False)
+        except BaseException as exc:
+            shutdown_error.append(exc)
+        finally:
+            done.set()
+
+    t = threading.Thread(target=_graceful_shutdown, daemon=True)
+    t.start()
+
+    if done.wait(timeout=float(timeout_s)):
+        if shutdown_error:
+            raise shutdown_error[0]
+        return
+
+    print(
+        f"[warn] Timed out waiting {float(timeout_s):.0f}s for worker shutdown "
+        f"for metric={metric_id}; terminating stuck worker processes."
+    )
+    processes = getattr(executor, "_processes", None)
+    if isinstance(processes, dict):
+        for proc in list(processes.values()):
+            if proc is None:
+                continue
+            try:
+                if proc.is_alive():
+                    proc.terminate()
+            except Exception:
+                pass
+
+        kill_deadline = time.time() + 5.0
+        for proc in list(processes.values()):
+            if proc is None:
+                continue
+            try:
+                timeout = max(0.0, kill_deadline - time.time())
+                proc.join(timeout=timeout)
+            except Exception:
+                pass
+
+        for proc in list(processes.values()):
+            if proc is None:
+                continue
+            try:
+                if proc.is_alive() and hasattr(proc, "kill"):
+                    proc.kill()
+            except Exception:
+                pass
+
+    try:
+        executor.shutdown(wait=False, cancel_futures=True)
+    except Exception:
+        pass
+
+    if debug and not done.is_set():
+        print(f"[debug] Forced process pool shutdown for metric={metric_id}")
+
+    if shutdown_error:
+        raise shutdown_error[0]
 
 
 def _apply_postprocess(da: xr.DataArray, steps: list[object] | None) -> xr.DataArray:
@@ -1973,7 +2049,8 @@ def package_registry(
                 summary_thread = threading.Thread(target=_summary_loop, daemon=True)
                 summary_thread.start()
                 print(f"Starting processing pool with {workers_eff} worker(s)")
-                with ProcessPoolExecutor(max_workers=workers_eff) as executor:
+                executor = ProcessPoolExecutor(max_workers=workers_eff)
+                try:
                     futures = []
                     stop_downloads = False
                     future_errors: list[str] = []
@@ -2287,14 +2364,37 @@ def package_registry(
                         else:
                             raise ValueError(f"Unsupported source type: {source_type}")
 
-                    for fut in as_completed(futures):
-                        try:
-                            fut.result()
-                        except Exception:
-                            # Already tracked and logged by callback.
-                            pass
-                    summary_stop.set()
-                    summary_thread.join(timeout=1)
+                    pending = set(futures)
+                    stalled_checks = 0
+                    while pending:
+                        done, pending = wait(
+                            pending, timeout=5, return_when=FIRST_COMPLETED
+                        )
+                        if done:
+                            stalled_checks = 0
+                            for fut in done:
+                                try:
+                                    fut.result()
+                                except Exception:
+                                    # Already tracked and logged by callback.
+                                    pass
+                            continue
+
+                        stalled_checks += 1
+                        with counters_lock:
+                            in_flight = n_batches_processed - batches_completed
+                        if in_flight <= 0:
+                            print(
+                                f"[warn] Futures remained pending with no in-flight "
+                                f"jobs for metric={metric_id}; continuing to shutdown."
+                            )
+                            break
+                        if stalled_checks % 12 == 0:
+                            print(
+                                f"[warn] Waiting on worker futures for metric={metric_id} "
+                                f"({len(pending)} pending, in_flight={in_flight})"
+                            )
+
                     if future_errors:
                         preview = "; ".join(future_errors[:3])
                         raise RuntimeError(
@@ -2318,6 +2418,15 @@ def package_registry(
                             f"{batches_completed}/{batches_total} post-processes "
                             f"({in_flight} jobs queued)"
                         )
+                finally:
+                    summary_stop.set()
+                    summary_thread.join(timeout=1)
+                    _shutdown_process_pool(
+                        executor,
+                        metric_id=metric_id,
+                        timeout_s=30.0,
+                        debug=debug,
+                    )
 
                 print(
                     f"DONE: wrote {total_written} tile(s) for metric={metric_id} "
