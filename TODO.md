@@ -11,6 +11,7 @@
   - Home page with cold open
   - Globe textures menu overlaps with cities search bar
   - Test on mobile
+  - Dark mode
 - Graphs:
   - zoomout graph needs work
   - extra coral reef stress graph + new texture for 3D globe
@@ -28,6 +29,7 @@
     - update README with typical smoke test
   - tile_coverage reports some metrics with 98% - check why
   - we should have a single test script that runs packager check + tile coverage + unit tests + smoke tests
+  - README: present project + images for github
 
 ---
 
