@@ -11,8 +11,6 @@
   - zoomout graph needs work
   - extra coral reef stress graph + new texture for 3D globe
   - precipitations graph (?)
-- Packager script:
-  - era5 is downloaded as whole globe but then sliced, maybe this should be in the datasets/metrics as currently we need to force `--batch-tiles 4` for the packager to read the slices
 - Cache:
   - Redis keys are `climate_api:panel:dev:registry:air_temperature:C:cells:global_0p25:688:151`, shouldn't we cache the whole panel instead of individual graphs? Check speed gain.
   - `--score-map-preload` should force loading maps for latest release without having to hit it first

@@ -86,6 +86,7 @@
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_t2m",
+      "batch_tiles_override": 4,
       "agg": "identity",
       "params": {
         "daily_statistic": "daily_mean"
@@ -107,6 +108,7 @@
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_t2m",
+      "batch_tiles_override": 4,
       "agg": "hot_days_per_year",
       "params": {
         "baseline_years": 10,

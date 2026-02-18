@@ -179,6 +179,7 @@
         "type": { "const": "cds" },
         "dataset_ref": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "agg": { "type": "string", "description": "Aggregator applied after download, e.g. annual_mean_from_monthly." },
+        "batch_tiles_override": { "type": "integer", "minimum": 1 },
         "params": { "type": "object", "additionalProperties": true },
         "time_range": {
           "type": "object",
@@ -226,6 +227,7 @@
         "type": { "const": "erddap" },
         "dataset_ref": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "agg": { "type": "string" },
+        "batch_tiles_override": { "type": "integer", "minimum": 1 },
         "params": { "type": "object", "additionalProperties": true },
         "time_range": {
           "type": "object",

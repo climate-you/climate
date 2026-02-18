@@ -16,6 +16,7 @@ if "cdsapi" not in sys.modules:
 from climate.packager.registry import (
     TileRange,
     _concat_and_write_time_tiles,
+    _resolve_batch_tiles,
     _resolve_year_ranges,
 )
 from climate.registry.metrics import load_metrics
@@ -115,6 +116,7 @@ def test_metric_cannot_override_dataset_download_fields(tmp_path: Path) -> None:
                 "type": "erddap",
                 "dataset_ref": "oisst_sst_v21_daily",
                 "agg": "hot_days_per_year",
+                "batch_tiles_override": 2,
                 "time_range": {"start_year": 1984, "end_year": 1989},
                 "params": {"baseline_years": 10, "percentile": 90},
             },
@@ -130,7 +132,15 @@ def test_metric_cannot_override_dataset_download_fields(tmp_path: Path) -> None:
     assert src["time_range"] == {"start_year": 1982, "end_year": 2025}
     assert src["block_years"] == 4
     assert src["batch_tiles"] == 4
+    assert src["batch_tiles_override"] == 2
     assert src["_analysis_time_range"] == {"start_year": 1984, "end_year": 1989}
+
+
+def test_batch_tiles_override_precedence() -> None:
+    source = {"batch_tiles": 24, "batch_tiles_override": 4}
+    assert _resolve_batch_tiles(None, source) == 4
+    assert _resolve_batch_tiles(8, source) == 8
+    assert _resolve_batch_tiles(None, {"batch_tiles": 24}) == 24
 
 
 def test_dataset_block_alignment_for_download_window() -> None:

@@ -575,6 +575,21 @@ def _iter_batches(tile_range: TileRange, batch_tiles: int) -> Iterable[TileRange
             yield TileRange(rr0, rr1, cc0, cc1)
 
 
+def _resolve_batch_tiles(batch_tiles: int | None, source: dict[str, Any]) -> int:
+    """
+    Resolve effective batch size with precedence:
+      1) CLI --batch-tiles
+      2) metric source.batch_tiles_override
+      3) dataset source.batch_tiles
+      4) fallback = 1
+    """
+    if batch_tiles is not None:
+        return int(batch_tiles)
+    if source.get("batch_tiles_override") is not None:
+        return int(source["batch_tiles_override"])
+    return int(source.get("batch_tiles", 1))
+
+
 def _apply_postprocess(da: xr.DataArray, steps: list[object] | None) -> xr.DataArray:
     if not steps:
         return da
@@ -1847,11 +1862,7 @@ def package_registry(
                 f"download={download_start_year}..{download_end_year}"
             )
 
-        batch_tiles_eff = (
-            int(batch_tiles)
-            if batch_tiles is not None
-            else int(source.get("batch_tiles", 1))
-        )
+        batch_tiles_eff = _resolve_batch_tiles(batch_tiles, source)
         n_batches_processed = 0
         download_count = 0
         total_written = 0
