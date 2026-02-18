@@ -2,7 +2,6 @@
   - Rephrase graph captions
   - Rephrase title
   - Add scale to UI when showing warming map layers
-  - Clicking on space picks a point
   - Home page with cold open
   - Globe textures menu overlaps with cities search bar
   - Test on mobile

@@ -547,6 +547,7 @@ export default function MapLibreGlobe({
 
     const onMapClick = (event: maplibregl.MapMouseEvent) => {
       if (!enablePickRef.current) return;
+      if (!map.transform.isPointOnMapSurface(event.point)) return;
       const { lng, lat } = event.lngLat;
       const snapped = snapTargetAtLowZoom(map, event);
       const targetLng = snapped?.[0] ?? lng;
