@@ -13,8 +13,8 @@ class _AlwaysOcean:
 
 def _write_locations_csv(path: Path) -> None:
     path.write_text(
-        "geonameid,lat,lon,label\n"
-        '3372562,37.83333,-25.15000,"Nordeste, Portugal"\n',
+        "geonameid,lat,lon,label,population\n"
+        '3372562,37.83333,-25.15000,"Nordeste, Portugal",5000\n',
         encoding="utf-8",
     )
 
@@ -33,6 +33,7 @@ def test_city_override_keeps_city_label_when_near_city(tmp_path: Path) -> None:
 
     place = resolver.resolve_place(37.83333, -25.15000)
     assert place.label == "Nordeste, Portugal"
+    assert place.population is None
 
 
 def test_city_override_allows_ocean_label_when_farther(tmp_path: Path) -> None:
@@ -49,3 +50,4 @@ def test_city_override_allows_ocean_label_when_farther(tmp_path: Path) -> None:
 
     place = resolver.resolve_place(37.90000, -25.15000)
     assert place.label.startswith("North Atlantic Ocean")
+    assert place.population is None

@@ -1,5 +1,3 @@
-- Place Resolver:
-  - Should not have a population displayed for ocean locations
 - UI:
   - Rephrase graph captions
   - Rephrase title

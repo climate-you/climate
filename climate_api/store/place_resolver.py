@@ -222,9 +222,15 @@ class PlaceResolver:
             city_label = str(geonameid)
 
         label = city_label
+        population: int | None = (
+            int(self._populations[i])
+            if i < len(self._populations) and int(self._populations[i]) > 0
+            else None
+        )
         if self.ocean_classifier is not None:
             ocean = self.ocean_classifier.classify(lat, lon)
             if ocean.in_water:
+                population = None
                 if dist is None:
                     dist = _haversine_km_pair(lat, lon, self._lats[i], self._lons[i])
                 use_city_override = (
@@ -256,11 +262,7 @@ class PlaceResolver:
                 and str(self._country_codes[i]).strip()
                 else None
             ),
-            population=(
-                int(self._populations[i])
-                if i < len(self._populations) and int(self._populations[i]) > 0
-                else None
-            ),
+            population=population,
         )
 
         if self.cache is not None:
