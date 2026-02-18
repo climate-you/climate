@@ -120,7 +120,9 @@ http://localhost:3000/?release=dev
 Registry validation:
 
 ```bash
-python scripts/validate_all.py
+python scripts/validate/all.py
+# or for a packaged release:
+python scripts/validate/all.py --release dev
 ```
 
 Python tests:
@@ -129,12 +131,32 @@ Python tests:
 PYTHONPATH=. pytest -q
 ```
 
+API smoke tests (panel + autocomplete + resolve + nearest + release + latest release):
+
+```bash
+python scripts/bench_api_endpoints.py --base-url http://127.0.0.1:8001 --release dev --smoke --smoke-only --n 1 --timeout-s 5
+```
+
+Single-command validation suite (registry + tile coverage + pytest + API smoke):
+
+```bash
+python scripts/validate_suite.py --base-url http://127.0.0.1:8001 --release dev
+```
+
+Release validation (release registry + release manifest + referenced metrics tile coverage at 100% + smoke):
+
+```bash
+python scripts/validate_suite.py \
+  --release dev \
+  --smoke-only \
+  --smoke-n 1
+```
+
 ## Utility scripts
 
 Benchmarks:
 
-- `scripts/benchmark/bench_api_endpoints.py`
-- `scripts/benchmark/bench_place_resolver.py`
+- `scripts/bench_api_endpoints.py`
 
 Operations:
 

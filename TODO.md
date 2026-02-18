@@ -19,12 +19,7 @@
 - Code:
   - add more python tests
   - add e2e tests
-  - benchmark scripts:
-    - is the `bench_place_resolver` script needed?
-    - `bench_api_endpoints` doesn't test `nearest` endpoint
-    - update README with typical smoke test
   - tile_coverage reports some metrics with 98% - check why
-  - we should have a single test script that runs packager check + tile coverage + unit tests + smoke tests
   - README: present project + images for github
 
 ---

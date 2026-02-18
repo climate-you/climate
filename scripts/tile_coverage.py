@@ -19,7 +19,19 @@ from pathlib import Path
 
 import numpy as np
 
-from climate.registry.metrics import DEFAULT_METRICS_PATH, DEFAULT_SCHEMA_PATH, load_metrics
+from climate.registry.maps import DEFAULT_MAPS_PATH, DEFAULT_MAPS_SCHEMA_PATH, load_maps
+from climate.registry.metrics import (
+    DEFAULT_DATASETS_PATH,
+    DEFAULT_DATASETS_SCHEMA_PATH,
+    DEFAULT_METRICS_PATH,
+    DEFAULT_SCHEMA_PATH,
+    load_metrics,
+)
+from climate.registry.panels import (
+    DEFAULT_PANELS_PATH,
+    DEFAULT_PANELS_SCHEMA_PATH,
+    load_panels,
+)
 from climate.tiles.layout import GridSpec
 from climate.tiles.spec import read_tile_array
 
@@ -126,12 +138,16 @@ def _metric_summary(
     tile_size: int,
     max_tiles: int,
     summary_only: bool,
-) -> None:
+) -> dict[str, float]:
     grid = _grid_from_id(grid_id, tile_size=tile_size)
     zdir = root / "series" / grid.grid_id / metric_id / f"z{grid.tile_size}"
     if not zdir.exists():
         print(f"[warn] Tile directory not found: {zdir}")
-        return
+        return {
+            "tiles_found": 0.0,
+            "tiles_expected": 0.0,
+            "real_coverage_pct": 0.0,
+        }
 
     files = _iter_tile_files(zdir)
     if max_tiles and max_tiles > 0:
@@ -139,7 +155,11 @@ def _metric_summary(
 
     if not files:
         print(f"[warn] No tile files found in: {zdir}")
-        return
+        return {
+            "tiles_found": 0.0,
+            "tiles_expected": 0.0,
+            "real_coverage_pct": 0.0,
+        }
 
     total_tiles = 0
     total_tiles_expected = ((grid.nlat + grid.tile_size - 1) // grid.tile_size) * (
@@ -197,21 +217,120 @@ def _metric_summary(
         f"container_nonempty={total_container_nonempty}/{total_container_cells_expected}  ({overall_c:.2f}%)  "
         f"real_nonempty={total_real_nonempty}/{total_real_cells}  ({overall_r:.2f}%)\n"
     )
+    return {
+        "tiles_found": float(total_tiles),
+        "tiles_expected": float(total_tiles_expected),
+        "real_coverage_pct": float(overall_r),
+    }
 
 
-def _registry_metrics(metrics_path: Path, schema_path: Path) -> list[tuple[str, dict]]:
-    manifest = load_metrics(metrics_path, schema_path=schema_path, validate=True)
+def _is_materialized_tiled(spec: dict) -> bool:
+    storage = spec.get("storage", {})
+    return bool(storage.get("tiled", True)) and spec.get("materialize") in (
+        None,
+        "on_packager",
+    )
+
+
+def _registry_metrics(
+    metrics_path: Path,
+    schema_path: Path,
+    datasets_path: Path,
+    datasets_schema_path: Path,
+) -> list[tuple[str, dict]]:
+    manifest = load_metrics(
+        metrics_path,
+        schema_path=schema_path,
+        datasets_path=datasets_path,
+        datasets_schema_path=datasets_schema_path,
+        validate=True,
+    )
     items: list[tuple[str, dict]] = []
     for metric_id, spec in manifest.items():
         if metric_id == "version":
             continue
-        storage = spec.get("storage", {})
-        if not storage.get("tiled", True):
-            continue
-        if spec.get("materialize") not in (None, "on_packager"):
+        if not _is_materialized_tiled(spec):
             continue
         items.append((metric_id, spec))
     return items
+
+
+def _referenced_registry_metrics(
+    *,
+    metrics_path: Path,
+    metrics_schema_path: Path,
+    datasets_path: Path,
+    datasets_schema_path: Path,
+    maps_path: Path,
+    maps_schema_path: Path,
+    panels_path: Path,
+    panels_schema_path: Path,
+) -> list[tuple[str, dict]]:
+    metrics = load_metrics(
+        metrics_path,
+        schema_path=metrics_schema_path,
+        datasets_path=datasets_path,
+        datasets_schema_path=datasets_schema_path,
+        validate=True,
+    )
+    maps = load_maps(maps_path, schema_path=maps_schema_path, validate=True)
+    panels = load_panels(panels_path, schema_path=panels_schema_path, validate=True)
+
+    seeds: set[str] = set()
+
+    for map_id, spec in maps.items():
+        if map_id == "version" or not isinstance(spec, dict):
+            continue
+        source_metric = spec.get("source_metric")
+        if isinstance(source_metric, str) and source_metric:
+            seeds.add(source_metric)
+
+    panels_root = panels.get("panels", {})
+    if isinstance(panels_root, dict):
+        for panel in panels_root.values():
+            if not isinstance(panel, dict):
+                continue
+            graphs = panel.get("graphs", [])
+            if not isinstance(graphs, list):
+                continue
+            for graph in graphs:
+                if not isinstance(graph, dict):
+                    continue
+                series_list = graph.get("series", [])
+                if not isinstance(series_list, list):
+                    continue
+                for series in series_list:
+                    if not isinstance(series, dict):
+                        continue
+                    metric_id = series.get("metric")
+                    if isinstance(metric_id, str) and metric_id:
+                        seeds.add(metric_id)
+
+    visited: set[str] = set()
+    stack = list(seeds)
+    while stack:
+        metric_id = stack.pop()
+        if metric_id in visited:
+            continue
+        visited.add(metric_id)
+        spec = metrics.get(metric_id)
+        if not isinstance(spec, dict):
+            continue
+        source = spec.get("source", {})
+        if source.get("type") != "derived":
+            continue
+        for dep in source.get("inputs", []) or []:
+            if isinstance(dep, str) and dep:
+                stack.append(dep)
+
+    selected: list[tuple[str, dict]] = []
+    for metric_id in sorted(visited):
+        spec = metrics.get(metric_id)
+        if metric_id == "version" or not isinstance(spec, dict):
+            continue
+        if _is_materialized_tiled(spec):
+            selected.append((metric_id, spec))
+    return selected
 
 
 def main() -> None:
@@ -219,13 +338,34 @@ def main() -> None:
     ap.add_argument("--root", type=Path, default=Path("data/releases/dev"))
     ap.add_argument("--metric", type=str, default=None)
     ap.add_argument("--metrics-path", type=Path, default=DEFAULT_METRICS_PATH)
+    ap.add_argument("--datasets-path", type=Path, default=DEFAULT_DATASETS_PATH)
     ap.add_argument("--schema-path", type=Path, default=DEFAULT_SCHEMA_PATH)
+    ap.add_argument(
+        "--datasets-schema-path", type=Path, default=DEFAULT_DATASETS_SCHEMA_PATH
+    )
+    ap.add_argument("--maps-path", type=Path, default=DEFAULT_MAPS_PATH)
+    ap.add_argument("--maps-schema-path", type=Path, default=DEFAULT_MAPS_SCHEMA_PATH)
+    ap.add_argument("--panels-path", type=Path, default=DEFAULT_PANELS_PATH)
+    ap.add_argument(
+        "--panels-schema-path", type=Path, default=DEFAULT_PANELS_SCHEMA_PATH
+    )
+    ap.add_argument(
+        "--only-referenced-metrics",
+        action="store_true",
+        help="Check only metrics referenced by maps/panels, plus derived dependencies.",
+    )
+    ap.add_argument(
+        "--require-real-coverage-pct",
+        type=float,
+        default=None,
+        help="Fail if any checked metric is below this real coverage percentage.",
+    )
     ap.add_argument("--max-tiles", type=int, default=0, help="0 = no limit")
     ap.add_argument("--summary-only", action="store_true")
     args = ap.parse_args()
 
     if args.metric:
-        _metric_summary(
+        stats = _metric_summary(
             root=args.root,
             metric_id=args.metric,
             grid_id="global_0p25",
@@ -233,14 +373,39 @@ def main() -> None:
             max_tiles=args.max_tiles,
             summary_only=args.summary_only,
         )
+        if (
+            args.require_real_coverage_pct is not None
+            and stats["real_coverage_pct"] < args.require_real_coverage_pct
+        ):
+            raise SystemExit(2)
         return
 
-    for metric_id, spec in _registry_metrics(args.metrics_path, args.schema_path):
+    if args.only_referenced_metrics:
+        metrics = _referenced_registry_metrics(
+            metrics_path=args.metrics_path,
+            metrics_schema_path=args.schema_path,
+            datasets_path=args.datasets_path,
+            datasets_schema_path=args.datasets_schema_path,
+            maps_path=args.maps_path,
+            maps_schema_path=args.maps_schema_path,
+            panels_path=args.panels_path,
+            panels_schema_path=args.panels_schema_path,
+        )
+    else:
+        metrics = _registry_metrics(
+            args.metrics_path,
+            args.schema_path,
+            args.datasets_path,
+            args.datasets_schema_path,
+        )
+
+    failures: list[str] = []
+    for metric_id, spec in metrics:
         storage = spec.get("storage", {})
         tile_size = int(storage.get("tile_size", 64))
         grid_id = spec.get("grid_id", "global_0p25")
         print(f"== metric: {metric_id}  grid={grid_id}  tile_size={tile_size} ==")
-        _metric_summary(
+        stats = _metric_summary(
             root=args.root,
             metric_id=metric_id,
             grid_id=grid_id,
@@ -248,6 +413,19 @@ def main() -> None:
             max_tiles=args.max_tiles,
             summary_only=args.summary_only,
         )
+        if (
+            args.require_real_coverage_pct is not None
+            and stats["real_coverage_pct"] < args.require_real_coverage_pct
+        ):
+            failures.append(
+                f"{metric_id}: real coverage {stats['real_coverage_pct']:.2f}% < {args.require_real_coverage_pct:.2f}%"
+            )
+
+    if failures:
+        print("Coverage checks failed:")
+        for item in failures:
+            print(f"- {item}")
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

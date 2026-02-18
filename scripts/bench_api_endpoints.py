@@ -123,6 +123,16 @@ def main() -> None:
         help="Run a smoke check on response codes and schema.",
     )
     ap.add_argument(
+        "--smoke-only",
+        action="store_true",
+        help="Run only smoke checks (skip benchmark loops).",
+    )
+    ap.add_argument(
+        "--skip-latest-release-smoke",
+        action="store_true",
+        help="Skip smoke check for /api/v/latest/release.",
+    )
+    ap.add_argument(
         "--max-p95-panel-ms",
         type=float,
         default=None,
@@ -139,6 +149,18 @@ def main() -> None:
         type=float,
         default=None,
         help="Fail if resolve p95 exceeds this threshold.",
+    )
+    ap.add_argument(
+        "--max-p95-nearest-ms",
+        type=float,
+        default=None,
+        help="Fail if nearest p95 exceeds this threshold.",
+    )
+    ap.add_argument(
+        "--max-p95-release-ms",
+        type=float,
+        default=None,
+        help="Fail if release p95 exceeds this threshold.",
     )
     ap.add_argument(
         "--autocomplete-query",
@@ -193,13 +215,26 @@ def main() -> None:
             f"{args.base_url}/api/v/{args.release}/locations/resolve?{query}"
         )
 
+    nearest_urls = []
+    for lat, lon in points:
+        query = urllib.parse.urlencode({"lat": f"{lat:.5f}", "lon": f"{lon:.5f}"})
+        nearest_urls.append(
+            f"{args.base_url}/api/v/{args.release}/locations/nearest?{query}"
+        )
+    release_urls = [f"{args.base_url}/api/v/{args.release}/release"] * args.n
+
     if args.json_out is not None:
         args.json = True
+    if args.smoke_only:
+        args.smoke = True
 
     results = {
         "panel": {},
         "autocomplete": {},
         "resolve": {},
+        "nearest": {},
+        "release": {},
+        "latest_release_smoke": None,
         "smoke": None,
         "regression_failed": False,
     }
@@ -208,41 +243,73 @@ def main() -> None:
         if not args.quiet and not args.json:
             print(msg)
 
-    _print("Panel endpoint:")
-    ok, fail, avg, median, panel_p95 = _bench_urls(panel_urls, args.timeout_s)
-    _print(f"  Requests: {ok} ok, {fail} failed")
-    _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {panel_p95:.1f} ms")
-    results["panel"] = {
-        "ok": ok,
-        "failed": fail,
-        "avg_ms": avg,
-        "median_ms": median,
-        "p95_ms": panel_p95,
-    }
+    panel_p95 = auto_p95 = resolve_p95 = nearest_p95 = release_p95 = float("nan")
+    if not args.smoke_only:
+        _print("Panel endpoint:")
+        ok, fail, avg, median, panel_p95 = _bench_urls(panel_urls, args.timeout_s)
+        _print(f"  Requests: {ok} ok, {fail} failed")
+        _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {panel_p95:.1f} ms")
+        results["panel"] = {
+            "ok": ok,
+            "failed": fail,
+            "avg_ms": avg,
+            "median_ms": median,
+            "p95_ms": panel_p95,
+        }
 
-    _print("Autocomplete endpoint:")
-    ok, fail, avg, median, auto_p95 = _bench_urls(auto_urls, args.timeout_s)
-    _print(f"  Requests: {ok} ok, {fail} failed")
-    _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {auto_p95:.1f} ms")
-    results["autocomplete"] = {
-        "ok": ok,
-        "failed": fail,
-        "avg_ms": avg,
-        "median_ms": median,
-        "p95_ms": auto_p95,
-    }
+        _print("Autocomplete endpoint:")
+        ok, fail, avg, median, auto_p95 = _bench_urls(auto_urls, args.timeout_s)
+        _print(f"  Requests: {ok} ok, {fail} failed")
+        _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {auto_p95:.1f} ms")
+        results["autocomplete"] = {
+            "ok": ok,
+            "failed": fail,
+            "avg_ms": avg,
+            "median_ms": median,
+            "p95_ms": auto_p95,
+        }
 
-    _print("Resolve endpoint:")
-    ok, fail, avg, median, resolve_p95 = _bench_urls(resolve_urls, args.timeout_s)
-    _print(f"  Requests: {ok} ok, {fail} failed")
-    _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {resolve_p95:.1f} ms")
-    results["resolve"] = {
-        "ok": ok,
-        "failed": fail,
-        "avg_ms": avg,
-        "median_ms": median,
-        "p95_ms": resolve_p95,
-    }
+        _print("Resolve endpoint:")
+        ok, fail, avg, median, resolve_p95 = _bench_urls(resolve_urls, args.timeout_s)
+        _print(f"  Requests: {ok} ok, {fail} failed")
+        _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {resolve_p95:.1f} ms")
+        results["resolve"] = {
+            "ok": ok,
+            "failed": fail,
+            "avg_ms": avg,
+            "median_ms": median,
+            "p95_ms": resolve_p95,
+        }
+
+        _print("Nearest endpoint:")
+        ok, fail, avg, median, nearest_p95 = _bench_urls(nearest_urls, args.timeout_s)
+        _print(f"  Requests: {ok} ok, {fail} failed")
+        _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {nearest_p95:.1f} ms")
+        results["nearest"] = {
+            "ok": ok,
+            "failed": fail,
+            "avg_ms": avg,
+            "median_ms": median,
+            "p95_ms": nearest_p95,
+        }
+
+        _print("Release endpoint:")
+        ok, fail, avg, median, release_p95 = _bench_urls(release_urls, args.timeout_s)
+        _print(f"  Requests: {ok} ok, {fail} failed")
+        _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {release_p95:.1f} ms")
+        results["release"] = {
+            "ok": ok,
+            "failed": fail,
+            "avg_ms": avg,
+            "median_ms": median,
+            "p95_ms": release_p95,
+        }
+    else:
+        results["panel"] = None
+        results["autocomplete"] = None
+        results["resolve"] = None
+        results["nearest"] = None
+        results["release"] = None
 
     if args.smoke:
         _print("Smoke checks:")
@@ -277,6 +344,52 @@ def main() -> None:
         _require("result" in data, "resolve missing result")
         _require(data["result"] is not None, "resolve result is null")
 
+        # Nearest smoke
+        status, body = _request(nearest_urls[0], args.timeout_s)
+        _require(status == 200, f"nearest status {status}")
+        data = json.loads(body.decode("utf-8"))
+        _require("query" in data, "nearest missing query")
+        _require("result" in data, "nearest missing result")
+        for key in ("geonameid", "label", "lat", "lon", "distance_km"):
+            _require(key in data["result"], f"nearest result missing {key}")
+
+        # Release smoke
+        status, body = _request(release_urls[0], args.timeout_s)
+        _require(status == 200, f"release status {status}")
+        data = json.loads(body.decode("utf-8"))
+        _require("requested_release" in data, "release missing requested_release")
+        _require("release" in data, "release missing release")
+        _require(
+            data["requested_release"] == args.release,
+            f"release requested_release mismatch: {data['requested_release']} != {args.release}",
+        )
+        _require(
+            data["release"] == data["requested_release"],
+            "release mismatch: requested_release != release",
+        )
+
+        if not args.skip_latest_release_smoke:
+            # Latest release smoke: critical for web bootstrap path.
+            latest_release_url = f"{args.base_url}/api/v/latest/release"
+            status, body = _request(latest_release_url, args.timeout_s)
+            _require(status == 200, f"latest release status {status}")
+            data = json.loads(body.decode("utf-8"))
+            _require(
+                "requested_release" in data, "latest release missing requested_release"
+            )
+            _require("release" in data, "latest release missing release")
+            _require(
+                data["requested_release"] == "latest",
+                f"latest release requested_release mismatch: {data['requested_release']} != latest",
+            )
+            _require(
+                isinstance(data["release"], str) and bool(data["release"]),
+                "latest release resolved release is empty",
+            )
+            results["latest_release_smoke"] = True
+        else:
+            results["latest_release_smoke"] = None
+
         _print("  ok")
         results["smoke"] = True
     else:
@@ -299,6 +412,16 @@ def main() -> None:
     if args.max_p95_resolve_ms is not None and resolve_p95 > args.max_p95_resolve_ms:
         _print(
             f"Resolve p95 regression: {resolve_p95:.1f} ms > {args.max_p95_resolve_ms:.1f} ms"
+        )
+        regress_fail = True
+    if args.max_p95_nearest_ms is not None and nearest_p95 > args.max_p95_nearest_ms:
+        _print(
+            f"Nearest p95 regression: {nearest_p95:.1f} ms > {args.max_p95_nearest_ms:.1f} ms"
+        )
+        regress_fail = True
+    if args.max_p95_release_ms is not None and release_p95 > args.max_p95_release_ms:
+        _print(
+            f"Release p95 regression: {release_p95:.1f} ms > {args.max_p95_release_ms:.1f} ms"
         )
         regress_fail = True
 
