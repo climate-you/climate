@@ -1,10 +1,11 @@
 - UI:
-  - Add scale to UI when showing warming map layers
-  - Globe textures menu overlaps with cities search bar
+  - Add scale to UI when showing globe textures
+  - Globe textures: move icon to bottom, and close menu on user interaction outside menu (click on search, etc.)
   - Test on mobile
   - Dark mode
+  - Search bar: remove blue border, remove "Searching..." text, and remove "min 3 chars" text
 - Graphs:
-  - Add text to info bubbles to explain how data is computed.
+  - Add text to info bubbles to explain how data is computed
   - zoomout graph needs work + rephrase graph captions
   - extra coral reef stress graph + new texture for 3D globe
 - Code:
