@@ -1,6 +1,5 @@
 - Place Resolver:
-  - (needed?) Add a “best match” endpoint for a free‑text query (single request)
-  - (needed?) Add prefix‑length + fuzziness tuning knobs to autocomplete
+  - Should not have a population displayed for ocean locations
 - UI:
   - Rephrase graph captions
   - Rephrase title
@@ -36,4 +35,8 @@
 
 For later:
 
-- case study pages that illustrate recent headlines like "2025 was second hottest year on record", effect of el nino/la nina on temperatures, etc.
+- Place Resolver:
+  - Add a “best match” endpoint for a free‑text query (single request) (replace `autocomplete`->`resolve` by `best-match`)
+  - Add prefix‑length + fuzziness tuning knobs to autocomplete (`Lodnon` -> `London`)
+- UX:
+  - case study pages that illustrate recent headlines like "2025 was second hottest year on record", effect of el nino/la nina on temperatures, etc.
