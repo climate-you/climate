@@ -456,6 +456,7 @@ def build_panel_tiles_registry(
     unit: str,
     panel_id: str,
     panels_manifest: dict[str, Any] | None = None,
+    selected_place: PlaceInfo | None = None,
 ) -> PanelResponse:
     unit = unit.upper()
 
@@ -490,6 +491,8 @@ def build_panel_tiles_registry(
     for grid_id in sorted(grid_cells.keys()):
         _grid, cell, _t = grid_cells[grid_id]
         cache_key_parts.append(f"{grid_id}:{cell.i_lat}:{cell.i_lon}")
+    if selected_place is not None:
+        cache_key_parts.append(f"selected:{int(selected_place.geonameid)}")
     cache_key = ":".join(cache_key_parts)
 
     if cache is not None:
@@ -497,7 +500,10 @@ def build_panel_tiles_registry(
         if hit is not None:
             return PanelResponse.model_validate(hit)
 
-    place = place_resolver.resolve_place(lat, lon)
+    if selected_place is not None:
+        place = selected_place
+    else:
+        place = place_resolver.resolve_place(lat, lon)
 
     series_payload: Dict[str, SeriesPayload] = {}
     graphs_out: List[GraphPayload] = []
@@ -710,6 +716,7 @@ def build_scored_panels_tiles_registry(
     panels_manifest: dict[str, Any],
     maps_manifest: dict[str, Any],
     maps_root: Path,
+    selected_place: PlaceInfo | None = None,
 ) -> PanelListResponse:
     panels = panels_manifest.get("panels", {})
     if not isinstance(panels, dict):
@@ -761,6 +768,7 @@ def build_scored_panels_tiles_registry(
             unit=unit,
             panel_id=panel_id,
             panels_manifest=panels_manifest,
+            selected_place=selected_place,
         )
         if location is None:
             location = panel_resp.location
@@ -770,7 +778,10 @@ def build_scored_panels_tiles_registry(
         scored_panels.append(ScoredPanelPayload(score=score, panel=panel_resp.panel))
 
     if location is None:
-        place = place_resolver.resolve_place(lat, lon)
+        if selected_place is not None:
+            place = selected_place
+        else:
+            place = place_resolver.resolve_place(lat, lon)
         location = LocationInfo(
             query=QueryPoint(lat=float(lat), lon=float(lon)),
             place=PlaceInfo(

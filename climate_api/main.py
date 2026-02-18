@@ -144,9 +144,23 @@ def create_app() -> FastAPI:
         lat: float = Query(...),
         lon: float = Query(...),
         unit: str = Query("C", pattern="^(C|F|c|f)$"),
+        selected_geonameid: int | None = Query(None, ge=1),
     ):
         context = release_resolver.resolve_release_context(release)
         lon = _normalize_lon(lon)
+        selected_place = None
+        if selected_geonameid is not None:
+            hit = location_index.resolve_by_id(selected_geonameid)
+            if hit is not None:
+                selected_place = PlaceInfo(
+                    geonameid=hit.geonameid,
+                    label=hit.label,
+                    lat=hit.lat,
+                    lon=hit.lon,
+                    distance_km=0.0,
+                    country_code=hit.country_code,
+                    population=hit.population,
+                )
         return build_scored_panels_tiles_registry(
             place_resolver=place_resolver,
             tile_store=context.tile_store,
@@ -159,6 +173,7 @@ def create_app() -> FastAPI:
             panels_manifest=context.panels_manifest,
             maps_manifest=context.maps_manifest,
             maps_root=context.maps_root,
+            selected_place=selected_place,
         )
 
     @app.get(

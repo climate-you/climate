@@ -1096,6 +1096,9 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   );
   const [selectedLocation, setSelectedLocation] =
     useState<SelectedLocationMeta | null>(null);
+  const [selectedGeonameidForPanel, setSelectedGeonameidForPanel] = useState<
+    number | null
+  >(null);
   const debounceRef = useRef<number | null>(null);
   const wheelAccumRef = useRef(0);
   const wheelLastEventTsRef = useRef(0);
@@ -1317,10 +1320,21 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     [graphPage, maxGraphPage],
   );
 
-  async function load(nextLat = lat, nextLon = lon, nextUnit = unit) {
-    const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/panel?lat=${encodeURIComponent(
-      nextLat,
-    )}&lon=${encodeURIComponent(nextLon)}&unit=${nextUnit}`;
+  async function load(
+    nextLat = lat,
+    nextLon = lon,
+    nextUnit = unit,
+    nextSelectedGeonameid = selectedGeonameidForPanel,
+  ) {
+    const params = new URLSearchParams({
+      lat: String(nextLat),
+      lon: String(nextLon),
+      unit: nextUnit,
+    });
+    if (nextSelectedGeonameid !== null) {
+      params.set("selected_geonameid", String(nextSelectedGeonameid));
+    }
+    const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/panel?${params.toString()}`;
     const r = await fetch(url);
     if (!r.ok) throw new Error(await r.text());
     const data = (await r.json()) as PanelResponse;
@@ -1365,6 +1379,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     setLat(item.lat);
     setLon(item.lon);
     setPicked({ lat: item.lat, lon: item.lon });
+    setSelectedGeonameidForPanel(item.geonameid);
     setSelectedLocation({
       geonameid: item.geonameid,
       label: item.label,
@@ -1372,13 +1387,14 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       population: item.population,
     });
     setPanelOpen(true);
-    void load(item.lat, item.lon);
+    void load(item.lat, item.lon, unit, item.geonameid);
   }
 
   async function handlePick(la: number, lo: number) {
     setLat(la);
     setLon(lo);
     setPicked({ lat: la, lon: lo });
+    setSelectedGeonameidForPanel(null);
     setPanelOpen(true);
 
     try {
@@ -1417,7 +1433,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
         });
         return;
       }
-      await load(la, lo);
+      await load(la, lo, unit, null);
     } catch (err) {
       setSuggestError(
         err instanceof Error ? err.message : "Failed to load location data",
