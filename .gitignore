@@ -3,8 +3,8 @@
 .DS_Store
 *.egg-info
 __pycache__
-build/
-data/*
-htmlcov/
-web/public/data/*
-web/web/
+/build/
+/data/*
+/htmlcov/
+/web/public/data/*
+/web/web/

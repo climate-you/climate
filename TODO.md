@@ -1,8 +1,6 @@
 - Place Resolver:
   - (needed?) Add a “best match” endpoint for a free‑text query (single request)
   - (needed?) Add prefix‑length + fuzziness tuning knobs to autocomplete
-  - paris selects saint vincent de paul, 3 entries in csv: 2976607, 2976608, 12808657
-  - filter out PPLX and only use PPA2 for city name
 - UI:
   - Rephrase graph captions
   - Rephrase title
