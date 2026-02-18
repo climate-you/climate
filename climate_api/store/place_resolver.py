@@ -78,7 +78,7 @@ class PlaceResolver:
         ocean_city_override_max_km: float = 2.0,
         cache: Cache | None = None,
         ttl_resolve_s: int = 86400,
-        round_decimals: int = 2,
+        round_decimals: int = 3,
     ):
         self.locations_csv = Path(locations_csv)
         self.cache = cache
