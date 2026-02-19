@@ -26,6 +26,12 @@ from climate.datasets.products.era5 import (
 from climate.datasets.sources.cds import retrieve
 from climate.packager.maps import package_maps
 from climate.packager.tiles import normalize_missing_value, write_axis_json
+from climate.registry.layers import (
+    DEFAULT_LAYERS_PATH,
+    DEFAULT_LAYERS_SCHEMA_PATH,
+    load_layers,
+    validate_layers_against_maps,
+)
 from climate.registry.maps import (
     DEFAULT_MAPS_PATH,
     DEFAULT_MAPS_SCHEMA_PATH,
@@ -1694,6 +1700,7 @@ def _snapshot_release_registry(
     metrics_path: Path,
     datasets_path: Path,
     maps_path: Path,
+    layers_path: Path,
     panels_path: Path,
 ) -> dict[str, str]:
     registry_root = release_root / "registry"
@@ -1704,6 +1711,7 @@ def _snapshot_release_registry(
         "metrics.json": metrics_path,
         "datasets.json": datasets_path,
         "maps.json": maps_path,
+        "layers.json": layers_path,
         "panels.json": panels_path,
     }
     for filename, src in sources.items():
@@ -1768,6 +1776,8 @@ def package_registry(
     download_only: bool = False,
     maps_path: Path | str | None = None,
     maps_schema_path: Path | str | None = None,
+    layers_path: Path | str | None = None,
+    layers_schema_path: Path | str | None = None,
     panels_path: Path | str | None = None,
     panels_schema_path: Path | str | None = None,
     maps_out_root: Path | None = None,
@@ -1817,6 +1827,27 @@ def package_registry(
         validate_maps_against_metrics(maps_manifest, manifest)
     elif debug:
         print(f"[maps] No maps registry found at {maps_path_eff}; skipping map packaging.")
+
+    layers_path_eff = (
+        Path(layers_path) if layers_path is not None else DEFAULT_LAYERS_PATH
+    )
+    layers_schema_path_eff = (
+        Path(layers_schema_path)
+        if layers_schema_path is not None
+        else DEFAULT_LAYERS_SCHEMA_PATH
+    )
+    if not layers_path_eff.exists():
+        raise FileNotFoundError(f"Missing layers registry: {layers_path_eff}")
+    layers_manifest = load_layers(
+        path=layers_path_eff,
+        schema_path=layers_schema_path_eff,
+        validate=True,
+    )
+    if maps_manifest is None:
+        raise FileNotFoundError(
+            "Layers registry requires maps registry, but maps manifest was not loaded."
+        )
+    validate_layers_against_maps(layers_manifest, maps_manifest)
 
     panels_path_eff = (
         Path(panels_path) if panels_path is not None else DEFAULT_PANELS_PATH
@@ -2715,6 +2746,7 @@ def package_registry(
             metrics_path=metrics_path,
             datasets_path=datasets_path,
             maps_path=maps_path_eff,
+            layers_path=layers_path_eff,
             panels_path=panels_path_eff,
         )
         _write_release_manifest(

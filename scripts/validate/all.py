@@ -45,6 +45,7 @@ def main() -> int:
 
     metrics = registry_root / "metrics.json"
     maps = registry_root / "maps.json"
+    layers = registry_root / "layers.json"
     panels = registry_root / "panels.json"
     datasets = registry_root / "datasets.json"
 
@@ -66,6 +67,14 @@ def main() -> int:
             str(metrics),
             "--datasets",
             str(datasets),
+        ],
+        [
+            "python",
+            str(scripts_dir / "layers.py"),
+            "--layers",
+            str(layers),
+            "--maps",
+            str(maps),
         ],
         [
             "python",

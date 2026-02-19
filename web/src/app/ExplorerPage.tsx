@@ -125,6 +125,16 @@ type ResolveLocationResponse = {
 type ReleaseResolveResponse = {
   requested_release: string;
   release: string;
+  layers: Array<{
+    id: string;
+    label: string;
+    map_id: string;
+    asset_path: string;
+    description?: string | null;
+    icon?: string | null;
+    opacity?: number | null;
+    legend?: Record<string, unknown> | null;
+  }>;
 };
 
 type ChartRow = {
@@ -1156,6 +1166,9 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       : "latest",
   );
   const [sessionRelease, setSessionRelease] = useState<string | null>(null);
+  const [releaseLayers, setReleaseLayers] = useState<
+    ReleaseResolveResponse["layers"]
+  >([]);
   const apiBase = useMemo(() => {
     if (process.env.NEXT_PUBLIC_CLIMATE_API_BASE) {
       return process.env.NEXT_PUBLIC_CLIMATE_API_BASE.replace(/\/+$/, "");
@@ -1179,31 +1192,16 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     [],
   );
   const mapLayers = useMemo<MapLayerOption[]>(
-    () => [
-      {
-        id: "none",
-        label: "None",
-      },
-      {
-        id: "t2m_warming_2025_vs_1979_1988_mercator_texture",
-        label: "Warming (air)",
-        imageUrl: `${mapAssetBase}/assets/v/${encodedRelease}/maps/global_0p25/t2m_warming_2025_vs_1979_1988_mercator_texture/t2m_warming_2025_vs_1979_1988_mercator.webp`,
-        opacity: 0.72,
-      },
-      {
-        id: "t2m_blended_preindustrial_anomaly_2021_2025_mercator_texture",
-        label: "Warming vs pre-industrial (air)",
-        imageUrl: `${mapAssetBase}/assets/v/${encodedRelease}/maps/global_0p25/t2m_blended_preindustrial_anomaly_2021_2025_mercator_texture/t2m_blended_preindustrial_anomaly_2021_2025_mercator.webp`,
-        opacity: 0.72,
-      },
-      {
-        id: "sst_warming_2025_vs_1982_1991_mercator_texture",
-        label: "Warming (sea surface)",
-        imageUrl: `${mapAssetBase}/assets/v/${encodedRelease}/maps/global_0p25/sst_warming_2025_vs_1982_1991_mercator_texture/sst_warming_2025_vs_1982_1991_mercator.webp`,
-        opacity: 0.72,
-      },
-    ],
-    [encodedRelease, mapAssetBase],
+    () => {
+      const configuredLayers = releaseLayers.map((layer) => ({
+        id: layer.id,
+        label: layer.label,
+        imageUrl: `${mapAssetBase}/assets/v/${encodedRelease}/${layer.asset_path}`,
+        opacity: typeof layer.opacity === "number" ? layer.opacity : 0.72,
+      }));
+      return [{ id: "none", label: "None" }, ...configuredLayers];
+    },
+    [encodedRelease, mapAssetBase, releaseLayers],
   );
   const [activeLayerId, setActiveLayerId] = useState<string>(
     mapLayers[0]?.id ?? "",
@@ -1236,9 +1234,11 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
         const data = (await r.json()) as ReleaseResolveResponse;
         if (cancelled) return;
         setSessionRelease(data.release);
+        setReleaseLayers(Array.isArray(data.layers) ? data.layers : []);
       } catch {
         if (cancelled) return;
         setSessionRelease(requestedRelease);
+        setReleaseLayers([]);
       }
     }
 

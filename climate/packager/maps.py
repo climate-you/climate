@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import shutil
 from typing import Any
 
 import numpy as np
@@ -11,7 +10,6 @@ from climate.tiles.layout import GridSpec, tile_counts, tile_path
 from climate.tiles.spec import read_tile_array
 
 MERCATOR_MAX_LAT = 85.05112878
-WEB_MAPS_ROOT = Path(__file__).resolve().parents[2] / "web" / "public" / "data" / "maps"
 
 
 def package_maps(
@@ -82,7 +80,6 @@ def package_maps(
         out_dir.mkdir(parents=True, exist_ok=True)
 
         if map_type == "texture":
-            texture_path = _texture_output_path(map_id=map_id, out_dir=out_dir, spec=map_spec)
             if _write_texture_map(
                 map_id=map_id,
                 out_dir=out_dir,
@@ -94,12 +91,6 @@ def package_maps(
                 debug=debug,
             ):
                 written += 1
-            _copy_texture_to_web_public_if_needed(
-                map_id=map_id,
-                map_spec=map_spec,
-                texture_path=texture_path,
-                debug=debug,
-            )
             continue
 
         if map_type == "score":
@@ -466,27 +457,6 @@ def _write_score_map(
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(f"[maps] Wrote score map: {png_path} + {bin_path}")
     return True
-
-
-def _copy_texture_to_web_public_if_needed(
-    *,
-    map_id: str,
-    map_spec: dict[str, Any],
-    texture_path: Path,
-    debug: bool,
-) -> None:
-    if not bool(map_spec.get("web_write", False)):
-        return
-    if not texture_path.exists():
-        if debug:
-            print(
-                f"[maps] Skip web copy for {map_id}: texture file not found at {texture_path}"
-            )
-        return
-    target_path = WEB_MAPS_ROOT / texture_path.name
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(texture_path, target_path)
-    print(f"[maps] Copied web texture map: {target_path}")
 
 
 def _resolve_texture_file_format(spec: dict[str, Any]) -> str:

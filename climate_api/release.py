@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from climate.registry.layers import load_layers, validate_layers_against_maps
 from climate.registry.maps import load_maps, validate_maps_against_metrics
 from climate.registry.metrics import load_metrics
 from climate.registry.panels import (
@@ -32,6 +33,101 @@ class ReleaseContext:
     panels_manifest: dict[str, Any]
     maps_manifest: dict[str, Any]
     maps_root: Path
+    layers: list[dict[str, Any]]
+
+
+def _resolve_texture_file_format(map_spec: dict[str, Any]) -> str:
+    explicit = map_spec.get("file_format")
+    output = map_spec.get("output", {}) or {}
+    filename = output.get("filename")
+    if isinstance(filename, str):
+        suffix = Path(filename).suffix.lower()
+        if suffix in (".png", ".webp"):
+            suffix_format = suffix[1:]
+            if explicit is None:
+                return suffix_format
+            explicit_norm = str(explicit).strip().lower()
+            if explicit_norm != suffix_format:
+                raise ValueError(
+                    f"Texture output filename extension '.{suffix_format}' does not match "
+                    f"file_format '{explicit_norm}'."
+                )
+            return explicit_norm
+    if explicit is None:
+        return "png"
+    explicit_norm = str(explicit).strip().lower()
+    if explicit_norm not in ("png", "webp"):
+        raise ValueError(
+            f"Unsupported texture file_format '{explicit}'. Expected one of: png, webp."
+        )
+    return explicit_norm
+
+
+def _resolve_texture_filename(*, map_id: str, map_spec: dict[str, Any]) -> str:
+    output = map_spec.get("output", {}) or {}
+    filename = output.get("filename")
+    file_format = _resolve_texture_file_format(map_spec)
+    if isinstance(filename, str) and filename:
+        if Path(filename).suffix:
+            return filename
+        return f"{filename}.{file_format}"
+    return f"{map_id}.{file_format}"
+
+
+def _build_release_layers(
+    *,
+    layers_manifest: dict[str, Any],
+    maps_manifest: dict[str, Any],
+    metrics_manifest: dict[str, Any],
+) -> list[dict[str, Any]]:
+    maps = {
+        key: spec
+        for key, spec in maps_manifest.items()
+        if key != "version" and isinstance(spec, dict)
+    }
+    metrics = {
+        key: spec
+        for key, spec in metrics_manifest.items()
+        if key != "version" and isinstance(spec, dict)
+    }
+    out: list[dict[str, Any]] = []
+    for layer_id, layer_spec in layers_manifest.items():
+        if layer_id == "version" or not isinstance(layer_spec, dict):
+            continue
+        map_id = str(layer_spec["map_id"])
+        map_spec = maps.get(map_id)
+        if map_spec is None:
+            raise ValueError(f"Layer '{layer_id}' references unknown map_id '{map_id}'.")
+        if map_spec.get("type") != "texture":
+            raise ValueError(
+                f"Layer '{layer_id}' references non-texture map_id '{map_id}'."
+            )
+        source_metric = str(map_spec.get("source_metric", ""))
+        metric_spec = metrics.get(source_metric)
+        if not isinstance(metric_spec, dict):
+            raise ValueError(
+                f"Map '{map_id}' references unknown source_metric '{source_metric}'."
+            )
+        grid_id = str(map_spec.get("grid_id") or metric_spec.get("grid_id") or "")
+        if not grid_id:
+            raise ValueError(f"Map '{map_id}' does not define a grid_id.")
+        filename = _resolve_texture_filename(map_id=map_id, map_spec=map_spec)
+        descriptor: dict[str, Any] = {
+            "id": str(layer_spec["id"]),
+            "label": str(layer_spec["label"]),
+            "map_id": map_id,
+            "asset_path": f"maps/{grid_id}/{map_id}/{filename}",
+        }
+        if "description" in layer_spec:
+            descriptor["description"] = layer_spec.get("description")
+        if "icon" in layer_spec:
+            descriptor["icon"] = layer_spec.get("icon")
+        if "opacity" in layer_spec:
+            descriptor["opacity"] = layer_spec.get("opacity")
+        if "legend" in layer_spec:
+            descriptor["legend"] = layer_spec.get("legend")
+        out.append(descriptor)
+    return out
 
 
 class ReleaseResolver:
@@ -90,6 +186,7 @@ class ReleaseResolver:
         datasets_path = registry_root / "datasets.json"
         maps_path = registry_root / "maps.json"
         panels_path = registry_root / "panels.json"
+        layers_path = registry_root / "layers.json"
         for required_path in (metrics_path, datasets_path, maps_path, panels_path):
             if not required_path.exists():
                 raise FileNotFoundError(
@@ -112,6 +209,21 @@ class ReleaseResolver:
         validate_maps_against_metrics(maps_manifest, metrics_manifest)
         validate_panels_against_metrics(panels_manifest, metrics_manifest)
         validate_panels_against_maps(panels_manifest, maps_manifest)
+        layers: list[dict[str, Any]] = []
+        if layers_path.exists():
+            layers_manifest = load_layers(path=layers_path, validate=True)
+            validate_layers_against_maps(layers_manifest, maps_manifest)
+            layers = _build_release_layers(
+                layers_manifest=layers_manifest,
+                maps_manifest=maps_manifest,
+                metrics_manifest=metrics_manifest,
+            )
+        else:
+            self._logger.warning(
+                "Release %s has no layers registry at %s; returning empty layers list.",
+                canonical_release,
+                layers_path,
+            )
 
         maps_root = release_root / "maps"
         if self._settings.score_map_preload:
@@ -134,6 +246,7 @@ class ReleaseResolver:
             panels_manifest=panels_manifest,
             maps_manifest=maps_manifest,
             maps_root=maps_root,
+            layers=layers,
         )
 
     def resolve_release_context(self, requested_release: str) -> ReleaseContext:

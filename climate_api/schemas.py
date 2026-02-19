@@ -84,9 +84,21 @@ class GraphListResponse(BaseModel):
     graph_ids: List[str]
 
 
+class LayerDescriptor(BaseModel):
+    id: str
+    label: str
+    map_id: str
+    asset_path: str
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    opacity: Optional[float] = None
+    legend: Optional[Dict[str, Any]] = None
+
+
 class ReleaseResolveResponse(BaseModel):
     requested_release: str
     release: str
+    layers: List[LayerDescriptor] = []
 
 
 class QueryPoint(BaseModel):

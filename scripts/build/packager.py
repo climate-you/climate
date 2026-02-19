@@ -5,6 +5,7 @@ import argparse
 from pathlib import Path
 
 from climate.packager.registry import TileRange, package_registry
+from climate.registry.layers import DEFAULT_LAYERS_PATH, DEFAULT_LAYERS_SCHEMA_PATH
 from climate.registry.metrics import DEFAULT_METRICS_PATH, DEFAULT_SCHEMA_PATH
 from climate.registry.maps import DEFAULT_MAPS_PATH, DEFAULT_MAPS_SCHEMA_PATH
 from climate.registry.panels import DEFAULT_PANELS_PATH, DEFAULT_PANELS_SCHEMA_PATH
@@ -50,6 +51,8 @@ def main() -> None:
     ap.add_argument("--datasets-path", type=Path, default=None)
     ap.add_argument("--maps-path", type=Path, default=DEFAULT_MAPS_PATH)
     ap.add_argument("--maps-schema-path", type=Path, default=DEFAULT_MAPS_SCHEMA_PATH)
+    ap.add_argument("--layers-path", type=Path, default=DEFAULT_LAYERS_PATH)
+    ap.add_argument("--layers-schema-path", type=Path, default=DEFAULT_LAYERS_SCHEMA_PATH)
     ap.add_argument("--panels-path", type=Path, default=DEFAULT_PANELS_PATH)
     ap.add_argument("--panels-schema-path", type=Path, default=DEFAULT_PANELS_SCHEMA_PATH)
     ap.add_argument(
@@ -132,6 +135,8 @@ def main() -> None:
         download_only=args.download_only,
         maps_path=args.maps_path,
         maps_schema_path=args.maps_schema_path,
+        layers_path=args.layers_path,
+        layers_schema_path=args.layers_schema_path,
         panels_path=args.panels_path,
         panels_schema_path=args.panels_schema_path,
         maps_out_root=args.maps_out_root,

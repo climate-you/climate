@@ -13,6 +13,13 @@ from .maps import (
     load_maps_schema,
     validate_maps,
 )
+from .layers import (
+    DEFAULT_LAYERS_PATH,
+    DEFAULT_LAYERS_SCHEMA_PATH,
+    load_layers,
+    load_layers_schema,
+    validate_layers,
+)
 
 __all__ = [
     "DEFAULT_METRICS_PATH",
@@ -30,4 +37,9 @@ __all__ = [
     "load_maps",
     "load_maps_schema",
     "validate_maps",
+    "DEFAULT_LAYERS_PATH",
+    "DEFAULT_LAYERS_SCHEMA_PATH",
+    "load_layers",
+    "load_layers_schema",
+    "validate_layers",
 ]

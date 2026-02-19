@@ -1,0 +1,24 @@
+{
+  "version": "0.1",
+  "warming_air": {
+    "id": "warming_air",
+    "label": "Warming (air)",
+    "description": "Air temperature anomaly in 2025 vs 1979-1988",
+    "map_id": "t2m_warming_2025_vs_1979_1988_mercator_texture",
+    "opacity": 0.72
+  },
+  "warming_vs_preindustrial_air": {
+    "id": "warming_vs_preindustrial_air",
+    "label": "Warming vs pre-industrial (air)",
+    "description": "Blended air temperature anomaly vs pre-industrial baseline",
+    "map_id": "t2m_blended_preindustrial_anomaly_2021_2025_mercator_texture",
+    "opacity": 0.72
+  },
+  "warming_sst": {
+    "id": "warming_sst",
+    "label": "Warming (sea surface)",
+    "description": "Sea surface temperature anomaly in 2025 vs 1982-1991",
+    "map_id": "sst_warming_2025_vs_1982_1991_mercator_texture",
+    "opacity": 0.72
+  }
+}

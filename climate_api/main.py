@@ -148,6 +148,7 @@ def create_app() -> FastAPI:
         return ReleaseResolveResponse(
             requested_release=release,
             release=context.release,
+            layers=context.layers,
         )
 
     @app.get("/api/v/{release}/panel", response_model=PanelListResponse)

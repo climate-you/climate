@@ -57,7 +57,13 @@ def main() -> int:
         print("Manifest registry field must be an object.")
         return 1
 
-    for filename in ("metrics.json", "datasets.json", "maps.json", "panels.json"):
+    for filename in (
+        "metrics.json",
+        "datasets.json",
+        "maps.json",
+        "layers.json",
+        "panels.json",
+    ):
         rel = registry.get(filename)
         if not isinstance(rel, str) or not rel:
             print(f"Manifest registry missing entry for {filename}")

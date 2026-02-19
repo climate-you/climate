@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Climate Layer Registry",
+  "description": "Schema for registry/layers.json mapping layer_id to UI layer entries.",
+  "type": "object",
+  "properties": {
+    "version": { "type": "string" }
+  },
+  "patternProperties": {
+    "^(?!version$)[a-z][a-z0-9_]*$": { "$ref": "#/$defs/layer" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "layer": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "label": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "map_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "opacity": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "legend": { "type": "object", "additionalProperties": true }
+      },
+      "required": ["id", "label", "map_id"],
+      "additionalProperties": false
+    }
+  }
+}
