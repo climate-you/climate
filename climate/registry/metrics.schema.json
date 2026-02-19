@@ -37,6 +37,11 @@
           "type": "string",
           "pattern": "^[a-z0-9_.]+$"
         },
+        "domain": {
+          "type": "string",
+          "enum": ["global", "ocean", "land"],
+          "description": "Expected spatial domain for coverage validation."
+        },
         "time_axis": {
           "type": "string",
           "enum": ["yearly", "monthly", "daily", "subdaily"]
@@ -69,6 +74,7 @@
         "dtype": { "type": "string", "enum": ["float32", "float64", "int16", "int32", "uint16", "uint32"] },
         "missing": { "type": ["string", "number", "null"] },
         "grid_id": { "type": "string", "pattern": "^[a-z0-9_.]+$" },
+        "domain": { "type": "string", "enum": ["global", "ocean", "land"] },
         "time_axis": { "type": "string", "enum": ["yearly", "monthly", "daily", "subdaily"] },
         "axis": { "$ref": "#/$defs/axis" },
         "source": { "$ref": "#/$defs/source" },

@@ -86,6 +86,16 @@ def main() -> int:
         help="Fail if any checked metric is below this real coverage percent (default: 100).",
     )
     ap.add_argument(
+        "--tile-global-domain",
+        action="store_true",
+        help="Disable domain-aware coverage and enforce global real coverage for all metrics.",
+    )
+    ap.add_argument(
+        "--tile-ocean-mask-metric",
+        default="sst_yearly_mean_c",
+        help="Ocean mask metric id used by domain-aware tile coverage (default: sst_yearly_mean_c).",
+    )
+    ap.add_argument(
         "--skip-registry",
         action="store_true",
         help="Skip registry validation.",
@@ -165,6 +175,14 @@ def main() -> int:
             "--max-tiles",
             str(args.tile_max_tiles),
         ]
+        if not args.tile_global_domain:
+            tile_cmd.extend(
+                [
+                    "--domain-aware",
+                    "--ocean-mask-metric",
+                    str(args.tile_ocean_mask_metric),
+                ]
+            )
         if use_referenced_metrics:
             tile_cmd.append("--only-referenced-metrics")
         if args.tile_require_real_coverage_pct is not None:

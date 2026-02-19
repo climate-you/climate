@@ -277,6 +277,28 @@ def _apply_derived_inheritance(metrics: dict[str, Any]) -> dict[str, Any]:
         if storage:
             merged["storage"] = storage
 
+        base_domain = input_specs[0].get("domain")
+        for input_id, input_spec in zip(inputs[1:], input_specs[1:]):
+            input_domain = input_spec.get("domain")
+            if base_domain is None or input_domain is None:
+                continue
+            if input_domain != base_domain:
+                raise MetricsSchemaError(
+                    f"Metric {key} derived inputs have mismatched domain: "
+                    f"{inputs[0]}={base_domain}, {input_id}={input_domain}"
+                )
+        if merged.get("domain") is None and base_domain is not None:
+            merged["domain"] = base_domain
+        elif (
+            merged.get("domain") is not None
+            and base_domain is not None
+            and merged.get("domain") != base_domain
+        ):
+            raise MetricsSchemaError(
+                f"Metric {key} domain={merged.get('domain')} does not match "
+                f"derived input domain={base_domain}"
+            )
+
         out[key] = merged
 
     return out

@@ -1521,30 +1521,31 @@ def _slice_daily_cache_to_tile_batch(
     grid: GridSpec,
     tile_range: TileRange,
 ) -> None:
-    area, _total_h, _total_w = _compute_batch_bbox(
-        grid,
-        tile_range.tile_r0,
-        tile_range.tile_c0,
-        tile_range.tile_r1,
-        tile_range.tile_c1,
-    )
-    north, west, south, east = area
+    target_lat, target_lon = _batch_target_lat_lon(grid, tile_range)
+    tol = float(grid.deg) * 0.51
     with xr.open_dataset(src_path) as ds:
         lat_name, lon_name = _find_lat_lon_names(ds)
-        lat = ds[lat_name]
-        lon = ds[lon_name]
-        eps = float(grid.deg) * 0.51
-        lat_slice = (
-            slice(north + eps, south - eps)
-            if float(lat.values[0]) >= float(lat.values[-1])
-            else slice(south - eps, north + eps)
+        ds_norm = ds.sortby(lat_name)
+        lon_raw = np.asarray(ds_norm[lon_name].values, dtype=np.float64)
+        lon_norm = ((lon_raw + 180.0) % 360.0) - 180.0
+        if np.any(np.abs(lon_raw - lon_norm) > 1e-10):
+            ds_norm = ds_norm.assign_coords({lon_name: lon_norm})
+        ds_norm = ds_norm.sortby(lon_name)
+
+        ds_sub = ds_norm.reindex(
+            {lat_name: target_lat, lon_name: target_lon},
+            method="nearest",
+            tolerance=tol,
         )
-        lon_slice = (
-            slice(west - eps, east + eps)
-            if float(lon.values[0]) <= float(lon.values[-1])
-            else slice(east + eps, west - eps)
-        )
-        ds_sub = ds.sel({lat_name: lat_slice, lon_name: lon_slice})
+        if (
+            ds_sub.sizes.get(lat_name, 0) != target_lat.size
+            or ds_sub.sizes.get(lon_name, 0) != target_lon.size
+        ):
+            raise RuntimeError(
+                "Sliced cache does not match requested batch grid: "
+                f"got ({ds_sub.sizes.get(lat_name, 0)} lat x {ds_sub.sizes.get(lon_name, 0)} lon), "
+                f"expected ({target_lat.size} lat x {target_lon.size} lon)"
+            )
         dst_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = dst_path.with_suffix(dst_path.suffix + ".tmp")
         ds_sub.to_netcdf(tmp)

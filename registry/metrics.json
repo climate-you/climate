@@ -6,6 +6,7 @@
     "unit": "C",
     "dtype": "float32",
     "missing": "nan",
+    "domain": "global",
     "time_axis": "yearly",
     "source": {
       "type": "cds",
@@ -23,6 +24,7 @@
     "unit": "C",
     "dtype": "float32",
     "missing": "nan",
+    "domain": "global",
     "time_axis": "yearly",
     "source": {
       "type": "derived",
@@ -39,6 +41,7 @@
     "unit": "C",
     "dtype": "float32",
     "missing": "nan",
+    "domain": "global",
     "time_axis": "yearly",
     "source": {
       "type": "cds",
@@ -64,6 +67,7 @@
     "unit": "C",
     "dtype": "float32",
     "missing": "nan",
+    "domain": "global",
     "time_axis": "monthly",
     "source": {
       "type": "cds",
@@ -82,6 +86,7 @@
     "unit": "C",
     "dtype": "float32",
     "missing": "nan",
+    "domain": "global",
     "time_axis": "daily",
     "source": {
       "type": "cds",
@@ -104,6 +109,7 @@
     "unit": "days",
     "dtype": "float32",
     "missing": "nan",
+    "domain": "global",
     "time_axis": "yearly",
     "source": {
       "type": "cds",
@@ -127,6 +133,7 @@
     "unit": "C",
     "dtype": "float32",
     "missing": "nan",
+    "domain": "ocean",
     "time_axis": "yearly",
     "source": {
       "type": "erddap",
@@ -144,6 +151,7 @@
     "unit": "days",
     "dtype": "float32",
     "missing": "nan",
+    "domain": "ocean",
     "time_axis": "yearly",
     "source": {
       "type": "erddap",

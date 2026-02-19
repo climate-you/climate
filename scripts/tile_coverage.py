@@ -100,6 +100,28 @@ def _count_nonempty_cells_window(
     return nonempty, total
 
 
+def _nonempty_mask_window(
+    hdr_nyears: int, arr: np.ndarray, valid_h: int, valid_w: int
+) -> np.ndarray:
+    """
+    Returns a boolean mask (valid_h, valid_w) where True means "at least one
+    finite value across time" for float tiles.
+    """
+    if valid_h <= 0 or valid_w <= 0:
+        return np.zeros((0, 0), dtype=bool)
+
+    if hdr_nyears == 0:
+        a = arr[:valid_h, :valid_w]
+        if not np.issubdtype(a.dtype, np.floating):
+            return np.ones((valid_h, valid_w), dtype=bool)
+        return ~np.isnan(a)
+
+    a = arr[:valid_h, :valid_w, :]
+    if not np.issubdtype(a.dtype, np.floating):
+        return np.ones((valid_h, valid_w), dtype=bool)
+    return ~np.all(np.isnan(a), axis=2)
+
+
 def _count_nonempty_cells(hdr_nyears: int, arr: np.ndarray) -> tuple[int, int]:
     """
     Returns (nonempty_cells, total_cells) for float tiles using NaN as missing.
@@ -138,6 +160,8 @@ def _metric_summary(
     tile_size: int,
     max_tiles: int,
     summary_only: bool,
+    domain_mask: np.ndarray | None = None,
+    domain_label: str = "global",
 ) -> dict[str, float]:
     grid = _grid_from_id(grid_id, tile_size=tile_size)
     zdir = root / "series" / grid.grid_id / metric_id / f"z{grid.tile_size}"
@@ -171,6 +195,12 @@ def _metric_summary(
 
     total_real_cells = grid.nlat * grid.nlon
     total_real_nonempty = 0
+    domain_total_cells = (
+        int(np.count_nonzero(domain_mask))
+        if domain_mask is not None
+        else total_real_cells
+    )
+    domain_nonempty = 0
 
     for p in files:
         rc = _parse_tile_rc(p)
@@ -187,12 +217,20 @@ def _metric_summary(
         nonempty_r, total_r = _count_nonempty_cells_window(
             hdr.nyears, arr, valid_h, valid_w
         )
+        nonempty_mask_r = _nonempty_mask_window(hdr.nyears, arr, valid_h, valid_w)
         frac_r = 100.0 * (nonempty_r / total_r if total_r else 0.0)
 
         total_tiles += 1
         total_container_cells += total_c
         total_container_nonempty += nonempty_c
         total_real_nonempty += nonempty_r
+        if domain_mask is not None:
+            r0 = tr * grid.tile_size
+            c0 = tc * grid.tile_size
+            dm = domain_mask[r0 : r0 + valid_h, c0 : c0 + valid_w]
+            domain_nonempty += int(np.count_nonzero(nonempty_mask_r & dm))
+        else:
+            domain_nonempty += nonempty_r
 
         if not summary_only:
             print(
@@ -212,15 +250,20 @@ def _metric_summary(
     overall_r = 100.0 * (
         total_real_nonempty / total_real_cells if total_real_cells else 0.0
     )
+    overall_domain = 100.0 * (
+        domain_nonempty / domain_total_cells if domain_total_cells else 0.0
+    )
     print(
         f"\nSUMMARY: metric={metric_id} tiles={total_tiles}/{total_tiles_expected}  "
         f"container_nonempty={total_container_nonempty}/{total_container_cells_expected}  ({overall_c:.2f}%)  "
-        f"real_nonempty={total_real_nonempty}/{total_real_cells}  ({overall_r:.2f}%)\n"
+        f"real_nonempty={total_real_nonempty}/{total_real_cells}  ({overall_r:.2f}%)  "
+        f"domain={domain_label} nonempty={domain_nonempty}/{domain_total_cells}  ({overall_domain:.2f}%)\n"
     )
     return {
         "tiles_found": float(total_tiles),
         "tiles_expected": float(total_tiles_expected),
         "real_coverage_pct": float(overall_r),
+        "domain_coverage_pct": float(overall_domain),
     }
 
 
@@ -333,6 +376,60 @@ def _referenced_registry_metrics(
     return selected
 
 
+def _metric_domain(spec: dict) -> str:
+    domain = spec.get("domain")
+    if isinstance(domain, str) and domain in {"global", "ocean", "land"}:
+        return domain
+
+    # Backward-compatible fallback for old release registries without domain.
+    source = spec.get("source", {})
+    dataset_ref = source.get("_dataset_ref") or source.get("dataset_ref")
+    dataset_key = source.get("dataset_key")
+
+    tokens = []
+    if isinstance(dataset_ref, str):
+        tokens.append(dataset_ref.lower())
+    if isinstance(dataset_key, str):
+        tokens.append(dataset_key.lower())
+
+    if any("oisst" in tok or "sst" in tok for tok in tokens):
+        return "ocean"
+    return "global"
+
+
+def _build_metric_presence_mask(
+    *,
+    root: Path,
+    metric_id: str,
+    grid_id: str,
+    tile_size: int,
+) -> np.ndarray:
+    grid = _grid_from_id(grid_id, tile_size=tile_size)
+    zdir = root / "series" / grid.grid_id / metric_id / f"z{grid.tile_size}"
+    if not zdir.exists():
+        raise SystemExit(f"Mask metric tiles not found: {zdir}")
+
+    files = _iter_tile_files(zdir)
+    if not files:
+        raise SystemExit(f"No mask tiles found: {zdir}")
+
+    mask = np.zeros((grid.nlat, grid.nlon), dtype=bool)
+    for p in files:
+        rc = _parse_tile_rc(p)
+        if rc is None:
+            continue
+        tr, tc = rc
+        hdr, arr = read_tile_array(p)
+        valid_h, valid_w = _valid_hw(grid, tr, tc)
+        if valid_h <= 0 or valid_w <= 0:
+            continue
+        local = _nonempty_mask_window(hdr.nyears, arr, valid_h, valid_w)
+        r0 = tr * grid.tile_size
+        c0 = tc * grid.tile_size
+        mask[r0 : r0 + valid_h, c0 : c0 + valid_w] = local
+    return mask
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", type=Path, default=Path("data/releases/dev"))
@@ -362,7 +459,21 @@ def main() -> None:
     )
     ap.add_argument("--max-tiles", type=int, default=0, help="0 = no limit")
     ap.add_argument("--summary-only", action="store_true")
+    ap.add_argument(
+        "--domain-aware",
+        action="store_true",
+        help="Evaluate coverage against expected metric domain (e.g. ocean-only for SST).",
+    )
+    ap.add_argument(
+        "--ocean-mask-metric",
+        type=str,
+        default="sst_yearly_mean_c",
+        help="Metric used as ocean-domain mask when --domain-aware is enabled.",
+    )
     args = ap.parse_args()
+
+    if args.domain_aware and args.max_tiles:
+        raise SystemExit("--domain-aware requires --max-tiles 0 (full coverage scan).")
 
     if args.metric:
         stats = _metric_summary(
@@ -372,6 +483,7 @@ def main() -> None:
             tile_size=64,
             max_tiles=args.max_tiles,
             summary_only=args.summary_only,
+            domain_label="global",
         )
         if (
             args.require_real_coverage_pct is not None
@@ -400,10 +512,30 @@ def main() -> None:
         )
 
     failures: list[str] = []
+    ocean_mask_cache: dict[tuple[str, int, str], np.ndarray] = {}
+    metrics_by_id = {metric_id: spec for metric_id, spec in metrics}
     for metric_id, spec in metrics:
         storage = spec.get("storage", {})
         tile_size = int(storage.get("tile_size", 64))
         grid_id = spec.get("grid_id", "global_0p25")
+        domain_mask = None
+        domain_label = "global"
+        if args.domain_aware:
+            domain_label = _metric_domain(spec)
+            if domain_label == "ocean":
+                if args.ocean_mask_metric not in metrics_by_id:
+                    raise SystemExit(
+                        f"--ocean-mask-metric={args.ocean_mask_metric!r} not found in loaded metrics."
+                    )
+                key = (grid_id, tile_size, args.ocean_mask_metric)
+                if key not in ocean_mask_cache:
+                    ocean_mask_cache[key] = _build_metric_presence_mask(
+                        root=args.root,
+                        metric_id=args.ocean_mask_metric,
+                        grid_id=grid_id,
+                        tile_size=tile_size,
+                    )
+                domain_mask = ocean_mask_cache[key]
         print(f"== metric: {metric_id}  grid={grid_id}  tile_size={tile_size} ==")
         stats = _metric_summary(
             root=args.root,
@@ -412,13 +544,19 @@ def main() -> None:
             tile_size=tile_size,
             max_tiles=args.max_tiles,
             summary_only=args.summary_only,
+            domain_mask=domain_mask,
+            domain_label=domain_label,
         )
+        check_pct = (
+            stats["domain_coverage_pct"] if args.domain_aware else stats["real_coverage_pct"]
+        )
+        check_label = "domain coverage" if args.domain_aware else "real coverage"
         if (
             args.require_real_coverage_pct is not None
-            and stats["real_coverage_pct"] < args.require_real_coverage_pct
+            and check_pct < args.require_real_coverage_pct
         ):
             failures.append(
-                f"{metric_id}: real coverage {stats['real_coverage_pct']:.2f}% < {args.require_real_coverage_pct:.2f}%"
+                f"{metric_id}: {check_label} {check_pct:.2f}% < {args.require_real_coverage_pct:.2f}%"
             )
 
     if failures:
