@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 
-def _run(cmd: list[str], root: Path) -> int:
+def _run(cmd: list[str], root: Path, *, env: dict[str, str] | None = None) -> int:
     print(f"[run] {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=root)
+    result = subprocess.run(cmd, cwd=root, env=env)
     return int(result.returncode)
 
 
@@ -102,6 +103,16 @@ def main() -> int:
     )
     ap.add_argument("--skip-tiles", action="store_true", help="Skip tile coverage check.")
     ap.add_argument("--skip-pytest", action="store_true", help="Skip Python unit tests.")
+    ap.add_argument(
+        "--run-api-e2e",
+        action="store_true",
+        help="Run opt-in API e2e tests in tests/test_api_e2e.py (requires release/location data).",
+    )
+    ap.add_argument(
+        "--api-e2e-release",
+        default=None,
+        help="Release id for API e2e tests (defaults to --release).",
+    )
     ap.add_argument("--skip-smoke", action="store_true", help="Skip API smoke checks.")
     ap.add_argument(
         "--smoke-only",
@@ -209,6 +220,17 @@ def main() -> int:
         steps.append(tile_cmd)
     if not args.skip_pytest:
         steps.append([sys.executable, "-m", "pytest", "-q"])
+    if args.run_api_e2e:
+        steps.append(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "--cov-append",
+                "tests/test_api_e2e.py",
+            ]
+        )
     if not args.skip_smoke:
         smoke_cmd = [
             sys.executable,
@@ -232,7 +254,13 @@ def main() -> int:
         steps.append(smoke_cmd)
 
     for cmd in steps:
-        code = _run(cmd, root=root)
+        env = None
+        if args.run_api_e2e and cmd[-1] == "tests/test_api_e2e.py":
+            e2e_release = args.api_e2e_release or args.release
+            env = dict(os.environ)
+            env["RUN_API_E2E"] = "1"
+            env["API_E2E_RELEASE"] = e2e_release
+        code = _run(cmd, root=root, env=env)
         if code != 0:
             print(f"[fail] validation suite failed (exit={code}): {' '.join(cmd)}")
             return code

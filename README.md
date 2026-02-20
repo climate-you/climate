@@ -131,6 +131,21 @@ Python tests:
 PYTHONPATH=. pytest -q
 ```
 
+API e2e tests (opt-in; require release/location data in `data/releases/<release>` and `data/locations`):
+
+```bash
+PYTHONPATH=. RUN_API_E2E=1 API_E2E_RELEASE=dev pytest -q tests/test_api_e2e.py
+```
+
+Notes:
+
+- `tests/test_api_e2e.py` is discovered by `pytest`, but skipped by default unless `RUN_API_E2E=1`.
+- You can also run all tests including e2e in one pass:
+
+```bash
+PYTHONPATH=. RUN_API_E2E=1 API_E2E_RELEASE=dev pytest -q
+```
+
 API smoke tests (panel + autocomplete + resolve + nearest + release + latest release):
 
 ```bash
@@ -141,6 +156,18 @@ Single-command validation suite (registry + tile coverage + pytest + API smoke):
 
 ```bash
 python scripts/validate_suite.py --base-url http://127.0.0.1:8001 --release dev
+```
+
+Validation suite with opt-in API e2e:
+
+```bash
+python scripts/validate_suite.py --base-url http://127.0.0.1:8001 --release dev --run-api-e2e
+```
+
+Use a different release for e2e inputs:
+
+```bash
+python scripts/validate_suite.py --release dev --run-api-e2e --api-e2e-release new
 ```
 
 Release validation (release registry + release manifest + referenced metrics tile coverage at 100% + smoke):

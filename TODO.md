@@ -9,7 +9,6 @@
   - extra coral reef stress graph + new texture for 3D globe (beware of different grid size)
 - Code:
   - add more python tests so coverage is higher (current 21%)
-  - add e2e tests
   - Update README for github: project intro + few screenshots + diagram showing datasets->metrics->etc.
 
 ---
