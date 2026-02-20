@@ -12,7 +12,6 @@
   - add more python tests
   - add e2e tests
   - README: present project + images for github
-  - dev local changes to panels.json cp
 
 ---
 

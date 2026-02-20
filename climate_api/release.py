@@ -9,10 +9,23 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from climate.registry.layers import load_layers, validate_layers_against_maps
-from climate.registry.maps import load_maps, validate_maps_against_metrics
-from climate.registry.metrics import load_metrics
+from climate.registry.layers import (
+    DEFAULT_LAYERS_PATH,
+    load_layers,
+    validate_layers_against_maps,
+)
+from climate.registry.maps import (
+    DEFAULT_MAPS_PATH,
+    load_maps,
+    validate_maps_against_metrics,
+)
+from climate.registry.metrics import (
+    DEFAULT_DATASETS_PATH,
+    DEFAULT_METRICS_PATH,
+    load_metrics,
+)
 from climate.registry.panels import (
+    DEFAULT_PANELS_PATH,
     load_panels,
     validate_panels_against_maps,
     validate_panels_against_metrics,
@@ -181,12 +194,35 @@ class ReleaseResolver:
     @functools.lru_cache(maxsize=32)
     def _load_release_context(self, canonical_release: str) -> ReleaseContext:
         release_root = self.release_root(canonical_release)
-        registry_root = release_root / "registry"
-        metrics_path = registry_root / "metrics.json"
-        datasets_path = registry_root / "datasets.json"
-        maps_path = registry_root / "maps.json"
-        panels_path = registry_root / "panels.json"
-        layers_path = registry_root / "layers.json"
+        if canonical_release == "dev":
+            manifest_path = release_root / "manifest.json"
+            registry_root = release_root / "registry"
+            self._logger.info(
+                "Release %s uses repo-root registry files for development mode.",
+                canonical_release,
+            )
+            if manifest_path.exists():
+                self._logger.warning(
+                    "Development release ignores manifest file at %s.",
+                    manifest_path,
+                )
+            if registry_root.exists():
+                self._logger.warning(
+                    "Development release ignores release-scoped registry directory at %s.",
+                    registry_root,
+                )
+            metrics_path = DEFAULT_METRICS_PATH
+            datasets_path = DEFAULT_DATASETS_PATH
+            maps_path = DEFAULT_MAPS_PATH
+            panels_path = DEFAULT_PANELS_PATH
+            layers_path = DEFAULT_LAYERS_PATH
+        else:
+            registry_root = release_root / "registry"
+            metrics_path = registry_root / "metrics.json"
+            datasets_path = registry_root / "datasets.json"
+            maps_path = registry_root / "maps.json"
+            panels_path = registry_root / "panels.json"
+            layers_path = registry_root / "layers.json"
         for required_path in (metrics_path, datasets_path, maps_path, panels_path):
             if not required_path.exists():
                 raise FileNotFoundError(
