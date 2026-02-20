@@ -1980,7 +1980,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
         <div className={styles.searchWrap}>
           <input
             className={styles.searchInput}
-            placeholder="Search a city (min 3 chars)..."
+            placeholder="Type a city name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onFocus={() => {
@@ -2032,13 +2032,13 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
               ))}
             </div>
           ) : null}
-          {suggestLoading ? (
-            <div className={styles.searchStatus}>Searching...</div>
-          ) : null}
-          {suggestError ? (
-            <div className={styles.searchError}>{suggestError}</div>
-          ) : null}
         </div>
+        {suggestLoading ? (
+          <div className={styles.searchStatus}>Searching...</div>
+        ) : null}
+        {suggestError ? (
+          <div className={styles.searchError}>{suggestError}</div>
+        ) : null}
       </div>
       {!introVisible ? (
         <div className={styles.sourcesLinkDock}>

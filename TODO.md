@@ -2,7 +2,7 @@
   - Add scale to UI when showing globe textures
   - Globe textures: move icon to bottom, and close menu on user interaction outside menu (click on search, etc.)
   - Test on mobile
-  - Search bar: remove blue border, remove "Searching..." text, and remove "min 3 chars" text
+  - Revisit source links.
 - Graphs:
   - zoomout graph needs work + rephrase graph captions + info bubble
   - extra coral reef stress graph + new texture for 3D globe
