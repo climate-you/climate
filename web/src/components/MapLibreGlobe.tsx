@@ -47,6 +47,8 @@ const BACKDROP_WHITE = "#ffffff";
 const CITY_SNAP_MAX_ZOOM = 6;
 const CITY_SNAP_RADIUS_PX = 28;
 const CITY_SNAP_LAYER_IDS = ["label_city_capital", "label_city"] as const;
+const LAYER_MENU_AUTO_CLOSE_MS = 800;
+const LAYER_MENU_FADE_MS = 500;
 
 function baseZoomForViewportWidth(width: number) {
   if (width <= 480) return 1.0;
@@ -431,6 +433,36 @@ export default function MapLibreGlobe({
       let button: HTMLButtonElement | undefined;
       let menu: HTMLDivElement | undefined;
       let isOpen = false;
+      let autoCloseTimeoutId: number | undefined;
+      let hideTimeoutId: number | undefined;
+      const clearAutoCloseTimer = () => {
+        if (autoCloseTimeoutId === undefined) return;
+        window.clearTimeout(autoCloseTimeoutId);
+        autoCloseTimeoutId = undefined;
+      };
+      const clearHideTimer = () => {
+        if (hideTimeoutId === undefined) return;
+        window.clearTimeout(hideTimeoutId);
+        hideTimeoutId = undefined;
+      };
+      const scheduleAutoClose = () => {
+        clearAutoCloseTimer();
+        autoCloseTimeoutId = window.setTimeout(() => {
+          closeMenu();
+        }, LAYER_MENU_AUTO_CLOSE_MS);
+      };
+      const closeMenu = () => {
+        isOpen = false;
+        clearAutoCloseTimer();
+        clearHideTimer();
+        if (!menu) return;
+        menu.style.opacity = "0";
+        menu.style.pointerEvents = "none";
+        hideTimeoutId = window.setTimeout(() => {
+          if (!menu || isOpen) return;
+          menu.style.visibility = "hidden";
+        }, LAYER_MENU_FADE_MS);
+      };
       const renderMenuOptions = () => {
         if (!menu) return;
         menu.innerHTML = "";
@@ -454,24 +486,44 @@ export default function MapLibreGlobe({
           item.style.whiteSpace = "nowrap";
           item.addEventListener("click", () => {
             onLayerChangeRef.current(option.id);
-            isOpen = false;
-            if (menu) menu.style.display = "none";
           });
           menu.appendChild(item);
         }
       };
-      const onToggleMenu = () => {
-        isOpen = !isOpen;
-        if (menu) {
-          menu.style.display = isOpen ? "block" : "none";
-        }
+      const openMenu = () => {
+        if (!menu) return;
+        isOpen = true;
+        clearAutoCloseTimer();
+        clearHideTimer();
+        menu.style.visibility = "visible";
+        menu.style.pointerEvents = "auto";
+        // Force a new frame so opacity transition runs when reopening.
+        void menu.offsetWidth;
+        menu.style.opacity = "1";
         renderMenuOptions();
+      };
+      const onDocumentKeyDown = (event: KeyboardEvent) => {
+        if (!isOpen) return;
+        if (event.key === "Escape") closeMenu();
+      };
+      const onControlPointerEnter = () => {
+        if (!isOpen) return;
+        clearAutoCloseTimer();
+      };
+      const onControlPointerLeave = () => {
+        if (!isOpen) return;
+        scheduleAutoClose();
+      };
+      const onButtonPointerEnter = () => {
+        openMenu();
       };
       return {
         onAdd() {
           container = document.createElement("div");
           container.className = "maplibregl-ctrl maplibregl-ctrl-group";
           container.style.position = "relative";
+          container.addEventListener("pointerenter", onControlPointerEnter);
+          container.addEventListener("pointerleave", onControlPointerLeave);
 
           button = document.createElement("button");
           button.type = "button";
@@ -482,10 +534,9 @@ export default function MapLibreGlobe({
           button.style.fontSize = "16px";
           button.style.lineHeight = "29px";
           button.style.color = "#111";
-          button.addEventListener("click", onToggleMenu);
+          button.addEventListener("pointerenter", onButtonPointerEnter);
 
           menu = document.createElement("div");
-          menu.style.display = "none";
           menu.style.position = "absolute";
           menu.style.left = "100%";
           menu.style.top = "0";
@@ -498,14 +549,25 @@ export default function MapLibreGlobe({
           menu.style.padding = "6px";
           menu.style.maxHeight = "40vh";
           menu.style.overflowY = "auto";
+          menu.style.opacity = "0";
+          menu.style.visibility = "hidden";
+          menu.style.pointerEvents = "none";
+          menu.style.transition = `opacity ${LAYER_MENU_FADE_MS}ms ease`;
           renderMenuOptions();
+
+          document.addEventListener("keydown", onDocumentKeyDown);
 
           container.appendChild(button);
           container.appendChild(menu);
           return container;
         },
         onRemove() {
-          button?.removeEventListener("click", onToggleMenu);
+          clearAutoCloseTimer();
+          clearHideTimer();
+          container?.removeEventListener("pointerenter", onControlPointerEnter);
+          container?.removeEventListener("pointerleave", onControlPointerLeave);
+          document.removeEventListener("keydown", onDocumentKeyDown);
+          button?.removeEventListener("pointerenter", onButtonPointerEnter);
           container?.remove();
         },
         refresh() {
@@ -526,10 +588,10 @@ export default function MapLibreGlobe({
     map.addControl(initialAttribution, "bottom-right");
     if (showControlsRef.current) {
       map.addControl(createHomeControl(), "top-left");
+      map.addControl(new maplibregl.NavigationControl(), "top-left");
       const layerControl = createLayerControl();
       layerControlRef.current = layerControl;
       map.addControl(layerControl, "top-left");
-      map.addControl(new maplibregl.NavigationControl(), "top-left");
     }
 
     const onResize = () => {
