@@ -7,10 +7,12 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
 import MapLibreGlobe from "@/components/MapLibreGlobe";
 import type { MapLayerOption } from "@/components/MapLibreGlobe";
+import SourcesOverlay from "@/components/SourcesOverlay";
 import styles from "./page.module.css";
 
 type TimeDuration = {
@@ -435,18 +437,59 @@ function formatPopulation(value: number | null | undefined): string | null {
 }
 
 function InfoBubble({ text, label }: { text: string; label: string }) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ left: number; top: number } | null>(
+    null,
+  );
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+
+  const updateCoords = useCallback(() => {
+    const btn = buttonRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    setCoords({
+      left: Math.round(rect.left),
+      top: Math.round(rect.bottom + 8),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    updateCoords();
+    window.addEventListener("resize", updateCoords);
+    window.addEventListener("scroll", updateCoords, true);
+    return () => {
+      window.removeEventListener("resize", updateCoords);
+      window.removeEventListener("scroll", updateCoords, true);
+    };
+  }, [open, updateCoords]);
+
   return (
     <span className={styles.infoBubble}>
       <button
+        ref={buttonRef}
         type="button"
         className={styles.infoBubbleButton}
         aria-label={label}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
       >
         i
       </button>
-      <span className={styles.infoBubbleTooltip} role="tooltip">
-        {text}
-      </span>
+      {open && coords
+        ? createPortal(
+            <span
+              className={styles.infoBubbleTooltipGlobal}
+              style={{ left: `${coords.left}px`, top: `${coords.top}px` }}
+              role="tooltip"
+            >
+              {text}
+            </span>,
+            document.body,
+          )
+        : null}
     </span>
   );
 }
@@ -1009,8 +1052,8 @@ function GraphCard({
     graph.id === "t2m_hot_days" || graph.id === "sst_hot_days";
   const graphInfoText =
     graph.id === "t2m_hot_days"
-      ? "Number of hot days (NHD) per year are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979. Units: Hot days / year."
-      : "Random text for now about this graph.";
+      ? "Number of hot days (NHD) per year are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979."
+      : "Annual air temperature is derived from daily air temperature at 2 meters above the surface at this location, aggregated into yearly averages.";
   const isZoomOutGraph = graph.id === "t2m_zoomout";
   const allVisibleData = useMemo(
     () =>
@@ -1165,6 +1208,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const [introPromptVisible, setIntroPromptVisible] = useState(!coldOpen);
   const [introPrimaryVisible, setIntroPrimaryVisible] = useState(!coldOpen);
   const [introQuestionVisible, setIntroQuestionVisible] = useState(!coldOpen);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const introDismissTimerRef = useRef<number | null>(null);
   const introPhaseTimerRef = useRef<number | null>(null);
   const introPrimaryTimerRef = useRef<number | null>(null);
@@ -1232,6 +1276,26 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     if (!trimmed) return;
     const normalized = trimmed.toLowerCase() === "latest" ? "latest" : trimmed;
     setRequestedRelease(normalized);
+  }, []);
+
+  const setSourcesOpenWithUrl = useCallback((open: boolean) => {
+    setSourcesOpen(open);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (open) {
+      url.searchParams.set("sources", "1");
+    } else {
+      url.searchParams.delete("sources");
+    }
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const showSources = new URLSearchParams(window.location.search).has(
+      "sources",
+    );
+    if (showSources) setSourcesOpen(true);
   }, []);
 
   useEffect(() => {
@@ -1882,6 +1946,21 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
           ) : null}
         </div>
       </div>
+      {!introVisible ? (
+        <div className={styles.sourcesLinkDock}>
+          <button
+            type="button"
+            className={styles.searchMetaLink}
+            onClick={() => setSourcesOpenWithUrl(true)}
+          >
+            Sources
+          </button>
+        </div>
+      ) : null}
+
+      {sourcesOpen ? (
+        <SourcesOverlay onClose={() => setSourcesOpenWithUrl(false)} />
+      ) : null}
 
       <aside
         ref={panelRef}
@@ -1990,7 +2069,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
                   </span>
                   <InfoBubble
                     label="Panel title information"
-                    text="Random text for now about this location summary."
+                    text="Local warming since pre-industrial is estimated as: observed local warming since 1979-2000, plus a model-based offset from 1850-1900 to 1979-2000."
                   />
                 </h2>
               </div>

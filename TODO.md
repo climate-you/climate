@@ -4,11 +4,9 @@
   - Test on mobile
   - Dark mode
   - Search bar: remove blue border, remove "Searching..." text, and remove "min 3 chars" text
-  - Add Source page
   - when backend down, page shows "In this location, human activities have caused warming since 1850-1900", maybe a clearer error page?
 - Graphs:
-  - Add text to info bubbles to explain how data is computed
-  - zoomout graph needs work + rephrase graph captions
+  - zoomout graph needs work + rephrase graph captions + info bubble
   - extra coral reef stress graph + new texture for 3D globe
 - Code:
   - add more python tests
