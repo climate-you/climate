@@ -507,11 +507,62 @@ function formatIntegerOnlyAxisTick(value: number): string {
   return Math.abs(value - rounded) < 1e-6 ? `${rounded}` : "";
 }
 
-const CHART_AXIS_LABEL_COLOR = "#666b78";
-const CHART_AXIS_LINE_COLOR = "#cfd4dd";
-const CHART_SPLIT_LINE_COLOR = "rgba(200,200,200,0.3)";
+type ChartThemeTokens = {
+  axisLabelColor: string;
+  axisLineColor: string;
+  splitLineColor: string;
+  legendColor: string;
+  tooltipBg: string;
+  tooltipBorder: string;
+  tooltipText: string;
+  barBase: string;
+  barAccent: string;
+  meanLine: string;
+  trendArea: string;
+  dailyLine: string;
+  rawLine: string;
+};
+
+function chartThemeTokens(): ChartThemeTokens {
+  const dark =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  if (dark) {
+    return {
+      axisLabelColor: "#b8c2da",
+      axisLineColor: "#3b4a6f",
+      splitLineColor: "rgba(110, 135, 194, 0.35)",
+      legendColor: "#dbe6ff",
+      tooltipBg: "#0f172a",
+      tooltipBorder: "rgba(140, 179, 255, 0.45)",
+      tooltipText: "#e6eeff",
+      barBase: "#6d7aa8",
+      barAccent: "#ff5b7f",
+      meanLine: "#8cb3ff",
+      trendArea: "rgba(255, 91, 127, 0.28)",
+      dailyLine: "rgba(184, 194, 218, 0.75)",
+      rawLine: "#ff6f8d",
+    };
+  }
+  return {
+    axisLabelColor: "#666b78",
+    axisLineColor: "#cfd4dd",
+    splitLineColor: "rgba(200,200,200,0.3)",
+    legendColor: "#2d3139",
+    tooltipBg: "#ffffff",
+    tooltipBorder: "rgba(0, 0, 0, 0.18)",
+    tooltipText: "#111111",
+    barBase: "#ccccff",
+    barAccent: "#ff1744",
+    meanLine: "#1736ff",
+    trendArea: "rgba(255, 0, 0, 0.24)",
+    dailyLine: "rgba(180,180,180,0.7)",
+    rawLine: "#ff2e55",
+  };
+}
 
 function sharedChartScaffold() {
+  const theme = chartThemeTokens();
   return {
     grid: { left: 36, right: 24, top: 36, bottom: 20, containLabel: true },
     legend: {
@@ -519,32 +570,34 @@ function sharedChartScaffold() {
       top: 0,
       itemWidth: 30,
       itemHeight: 10,
-      textStyle: { color: "#2d3139", fontSize: 12 },
+      textStyle: { color: theme.legendColor, fontSize: 12 },
     },
   };
 }
 
 function sharedXAxisStyle() {
+  const theme = chartThemeTokens();
   return {
-    axisLabel: { color: CHART_AXIS_LABEL_COLOR },
-    axisLine: { lineStyle: { color: CHART_AXIS_LINE_COLOR } },
-    splitLine: { show: true, lineStyle: { color: CHART_SPLIT_LINE_COLOR } },
+    axisLabel: { color: theme.axisLabelColor },
+    axisLine: { lineStyle: { color: theme.axisLineColor } },
+    splitLine: { show: true, lineStyle: { color: theme.splitLineColor } },
   };
 }
 
 function sharedYAxisStyle() {
+  const theme = chartThemeTokens();
   return {
     nameLocation: "middle" as const,
     nameRotate: 90,
     nameGap: 46,
     nameTextStyle: {
-      color: CHART_AXIS_LABEL_COLOR,
+      color: theme.axisLabelColor,
       fontSize: 13,
       align: "center" as const,
       verticalAlign: "middle" as const,
     },
     minInterval: 1,
-    splitLine: { lineStyle: { color: CHART_SPLIT_LINE_COLOR } },
+    splitLine: { lineStyle: { color: theme.splitLineColor } },
   };
 }
 
@@ -696,6 +749,7 @@ function buildHotDaysOption({
   transitionMs: number;
   unit: "C" | "F";
 }): EChartsOption {
+  const theme = chartThemeTokens();
   const xValues = data.map((row) => row.x);
   const barKey = graph.series_keys.find(
     (k) => series[k]?.style?.type === "bar",
@@ -734,7 +788,7 @@ function buildHotDaysOption({
       type: "bar",
       stack: "hot-days",
       data: belowMean,
-      itemStyle: { color: "#ccccff" },
+      itemStyle: { color: theme.barBase },
       emphasis: { focus: "none" },
       z: 2,
       animationDurationUpdate: transitionMs,
@@ -744,7 +798,7 @@ function buildHotDaysOption({
       type: "bar",
       stack: "hot-days",
       data: aboveMean,
-      itemStyle: { color: "#ff1744" },
+      itemStyle: { color: theme.barAccent },
       emphasis: { focus: "none" },
       z: 2,
       animationDurationUpdate: transitionMs,
@@ -754,12 +808,12 @@ function buildHotDaysOption({
     chartSeries.push({
       name: keyLabel(meanKey),
       type: "line",
-      color: "#1736ff",
+      color: theme.meanLine,
       data: meanDisplayValues,
       smooth: 0.35,
       showSymbol: false,
-      itemStyle: { color: "#1736ff" },
-      lineStyle: { width: 3, color: "#1736ff" },
+      itemStyle: { color: theme.meanLine },
+      lineStyle: { width: 3, color: theme.meanLine },
       z: 3,
       animationDurationUpdate: transitionMs,
       emphasis: { focus: "series" },
@@ -769,13 +823,13 @@ function buildHotDaysOption({
     chartSeries.push({
       name: trendLegendLabel(graph, data, trendKey, unit),
       type: "line",
-      color: "rgba(255, 0, 0, 0.24)",
+      color: theme.trendArea,
       data: data.map((row) => (row[trendKey] as number | null) ?? null),
       smooth: false,
       showSymbol: false,
-      itemStyle: { color: "rgba(255, 0, 0, 0.24)" },
+      itemStyle: { color: theme.trendArea },
       lineStyle: { width: 0, color: "rgba(255, 0, 0, 0)" },
-      areaStyle: { color: "rgba(255, 0, 0, 0.24)" },
+      areaStyle: { color: theme.trendArea },
       z: 4,
       animationDurationUpdate: transitionMs,
       emphasis: { focus: "series" },
@@ -790,6 +844,9 @@ function buildHotDaysOption({
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "shadow" },
+      backgroundColor: theme.tooltipBg,
+      borderColor: theme.tooltipBorder,
+      textStyle: { color: theme.tooltipText },
       formatter: (params: unknown) => {
         const rows = Array.isArray(params) ? params : [params];
         const first = (rows[0] ?? {}) as {
@@ -834,7 +891,7 @@ function buildHotDaysOption({
       name: yAxisTitle(graph, unit),
       ...sharedYAxisStyle(),
       axisLabel: {
-        color: CHART_AXIS_LABEL_COLOR,
+        color: theme.axisLabelColor,
         formatter: (value: number) => `${Math.round(value)}`,
       },
       min: 0,
@@ -860,6 +917,7 @@ function buildTemperatureOption({
   xMin?: number;
   xMax?: number;
 }): EChartsOption {
+  const theme = chartThemeTokens();
   const chartSeries: NonNullable<EChartsOption["series"]> = visibleKeys.map(
     (key) => {
       const isTrend = key.includes("trend");
@@ -867,12 +925,12 @@ function buildTemperatureOption({
       const isMonthly = key.includes("monthly");
       const isDaily = key.includes("daily");
       const baseColor = isTrend
-        ? "rgba(255, 0, 0, 0.24)"
+        ? theme.trendArea
         : isMean
-          ? "#1736ff"
+          ? theme.meanLine
           : isDaily
-            ? "rgba(180,180,180,0.7)"
-            : "#ff2e55";
+            ? theme.dailyLine
+            : theme.rawLine;
       const rawValues = data.map((row) => (row[key] as number | null) ?? null);
       const displayValues = isMean
         ? deriveMeanFromBase(data, key, rawValues)
@@ -904,7 +962,7 @@ function buildTemperatureOption({
           color: isTrend ? "rgba(255, 0, 0, 0)" : baseColor,
         },
         z: isTrend ? 1 : isMean ? 3 : 2,
-        areaStyle: isTrend ? { color: "rgba(255, 0, 0, 0.24)" } : undefined,
+        areaStyle: isTrend ? { color: theme.trendArea } : undefined,
         animationDuration: isMonthly ? 1200 : 700,
         animationDelay: isMonthly ? (idx: number) => idx * 6 : 0,
         animationDurationUpdate: transitionMs,
@@ -945,6 +1003,9 @@ function buildTemperatureOption({
     ...sharedChartScaffold(),
     tooltip: {
       trigger: "axis",
+      backgroundColor: theme.tooltipBg,
+      borderColor: theme.tooltipBorder,
+      textStyle: { color: theme.tooltipText },
       formatter: (params: unknown) => {
         const rows = Array.isArray(params) ? params : [params];
         const first = (rows[0] ?? {}) as {
@@ -986,7 +1047,7 @@ function buildTemperatureOption({
       name: yAxisName,
       ...sharedYAxisStyle(),
       axisLabel: {
-        color: CHART_AXIS_LABEL_COLOR,
+        color: theme.axisLabelColor,
         formatter: (value: number) =>
           isTemperatureAxis
             ? formatIntegerOnlyAxisTick(value)
