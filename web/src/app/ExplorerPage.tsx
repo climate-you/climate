@@ -1109,6 +1109,17 @@ const COLD_OPEN_PRIMARY_HOLD_MS = 6000;
 const COLD_OPEN_QUESTION_DELAY_MS = 1700;
 const COLD_OPEN_PRIMARY_REVEAL_DELAY_MS = 80;
 
+function isUsLocale(locale: string): boolean {
+  const normalized = locale.trim().toUpperCase();
+  return normalized.endsWith("-US") || normalized.endsWith("_US");
+}
+
+function defaultTemperatureUnitForLocale(): "C" | "F" {
+  if (typeof navigator === "undefined") return "C";
+  const primaryLocale = navigator.languages?.[0] ?? navigator.language ?? "";
+  return isUsLocale(primaryLocale) ? "F" : "C";
+}
+
 export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const envDefaultReleaseRaw = process.env.NEXT_PUBLIC_RELEASE;
   const envDefaultRelease = envDefaultReleaseRaw
@@ -1221,6 +1232,11 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     if (!trimmed) return;
     const normalized = trimmed.toLowerCase() === "latest" ? "latest" : trimmed;
     setRequestedRelease(normalized);
+  }, []);
+
+  useEffect(() => {
+    if (defaultTemperatureUnitForLocale() !== "F") return;
+    setUnit("F");
   }, []);
 
   useEffect(() => {
@@ -1724,6 +1740,8 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     selectedLocation?.label ?? resp?.location.place.label ?? "";
   const titleLocationLabel = locationLabel || "this location";
   const populationText = formatPopulation(selectedLocation?.population);
+  const coldOpenWarmingText =
+    defaultTemperatureUnitForLocale() === "F" ? "+1.9°F" : "+1.1°C";
   const showIntroMap = !introVisible || introPromptVisible;
   return (
     <main
@@ -1771,8 +1789,10 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
                 }`}
               >
                 Human activities have caused{" "}
-                <span className={styles.coldOpenMessageAccent}>1.1°C</span> of
-                global warming since 1850-1900.
+                <span className={styles.coldOpenMessageAccent}>
+                  {coldOpenWarmingText}
+                </span>{" "}
+                of global warming since 1850-1900.
               </span>
               <span
                 className={`${styles.coldOpenQuestion} ${
