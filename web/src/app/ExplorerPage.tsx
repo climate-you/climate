@@ -1256,6 +1256,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     number | null
   >(null);
   const debounceRef = useRef<number | null>(null);
+  const searchWrapRef = useRef<HTMLDivElement | null>(null);
   const wheelAccumRef = useRef(0);
   const wheelLastEventTsRef = useRef(0);
   const wheelGestureConsumedRef = useRef(false);
@@ -1688,6 +1689,34 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   }, [fetchAutocomplete, search]);
 
   useEffect(() => {
+    if (!suggestOpen) return;
+    const closeIfOutside = (target: EventTarget | null) => {
+      if (!searchWrapRef.current) return;
+      if (!(target instanceof Node)) return;
+      if (searchWrapRef.current.contains(target)) return;
+      setSuggestOpen(false);
+      setSuggestIndex(-1);
+    };
+    const onWindowPointerDown = (event: PointerEvent) => {
+      closeIfOutside(event.target);
+    };
+    const onWindowFocusIn = (event: FocusEvent) => {
+      closeIfOutside(event.target);
+    };
+    const onWindowWheel = (event: WheelEvent) => {
+      closeIfOutside(event.target);
+    };
+    window.addEventListener("pointerdown", onWindowPointerDown, true);
+    window.addEventListener("focusin", onWindowFocusIn, true);
+    window.addEventListener("wheel", onWindowWheel, true);
+    return () => {
+      window.removeEventListener("pointerdown", onWindowPointerDown, true);
+      window.removeEventListener("focusin", onWindowFocusIn, true);
+      window.removeEventListener("wheel", onWindowWheel, true);
+    };
+  }, [suggestOpen]);
+
+  useEffect(() => {
     if (!mapLayers.length) return;
     if (mapLayers.some((layer) => layer.id === activeLayerId)) return;
     setActiveLayerId(mapLayers[0].id);
@@ -1919,6 +1948,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
           layerOptions={mapLayers}
           activeLayerId={activeLayerId || null}
           onLayerChange={(layerId) => setActiveLayerId(layerId)}
+          onLayerMenuOpen={() => setSuggestOpen(false)}
           onPick={(la, lo) => {
             void handlePick(la, lo);
           }}
@@ -1977,7 +2007,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       ) : null}
 
       <div className={styles.searchOverlay}>
-        <div className={styles.searchWrap}>
+        <div ref={searchWrapRef} className={styles.searchWrap}>
           <input
             className={styles.searchInput}
             placeholder="Type a city name..."

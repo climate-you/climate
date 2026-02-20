@@ -18,6 +18,7 @@ type Props = {
   layerOptions: MapLayerOption[];
   activeLayerId: string | null;
   onLayerChange: (layerId: string) => void;
+  onLayerMenuOpen?: () => void;
   onPick: (lat: number, lon: number) => void;
   onHome: () => void;
   showControls?: boolean;
@@ -188,6 +189,7 @@ export default function MapLibreGlobe({
   layerOptions,
   activeLayerId,
   onLayerChange,
+  onLayerMenuOpen,
   onPick,
   onHome,
   showControls = true,
@@ -201,6 +203,7 @@ export default function MapLibreGlobe({
   const onPickRef = useRef(onPick);
   const onHomeRef = useRef(onHome);
   const onLayerChangeRef = useRef(onLayerChange);
+  const onLayerMenuOpenRef = useRef(onLayerMenuOpen);
   const panelOpenRef = useRef(panelOpen);
   const focusLocationRef = useRef(focusLocation);
   const layerOptionsRef = useRef(layerOptions);
@@ -219,6 +222,10 @@ export default function MapLibreGlobe({
   useEffect(() => {
     onLayerChangeRef.current = onLayerChange;
   }, [onLayerChange]);
+
+  useEffect(() => {
+    onLayerMenuOpenRef.current = onLayerMenuOpen;
+  }, [onLayerMenuOpen]);
 
   useEffect(() => {
     panelOpenRef.current = panelOpen;
@@ -492,9 +499,14 @@ export default function MapLibreGlobe({
       };
       const openMenu = () => {
         if (!menu) return;
+        if (isOpen) {
+          clearAutoCloseTimer();
+          return;
+        }
         isOpen = true;
         clearAutoCloseTimer();
         clearHideTimer();
+        onLayerMenuOpenRef.current?.();
         menu.style.visibility = "visible";
         menu.style.pointerEvents = "auto";
         // Force a new frame so opacity transition runs when reopening.
