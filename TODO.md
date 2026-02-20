@@ -6,6 +6,7 @@
   - Search bar: remove blue border, remove "Searching..." text, and remove "min 3 chars" text
   - Add Source page
   - Default to ºF when user location in US
+  - when backend down, page shows "In this location, human activities have caused warming since 1850-1900", maybe a clearer error page?
 - Graphs:
   - Add text to info bubbles to explain how data is computed
   - zoomout graph needs work + rephrase graph captions
