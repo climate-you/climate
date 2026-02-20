@@ -39,6 +39,7 @@ const FOCUS_RECENTER_DURATION_MS = 650;
 const PANEL_TRANSITION_MS = 300;
 const DEFAULT_BASE_ZOOM = 2.5;
 const MERCATOR_MAX_LAT = 85.05112878;
+const DATELINE_OVERDRAW_DEG = 0.05;
 const TEXTURE_SOURCE_ID = "climateTextureSource";
 const TEXTURE_LAYER_ID = "climateTextureLayer";
 const BACKDROP_BLUE = "#0000ff";
@@ -89,6 +90,20 @@ function panelPaddingForViewport(map: maplibregl.Map, panelOpen: boolean) {
 function setBackdropColor(map: maplibregl.Map, color: string) {
   map.getContainer().style.backgroundColor = color;
   map.getCanvas().style.backgroundColor = color;
+}
+
+function textureCoordinates(): [
+  [number, number],
+  [number, number],
+  [number, number],
+  [number, number],
+] {
+  return [
+    [-180 - DATELINE_OVERDRAW_DEG, MERCATOR_MAX_LAT],
+    [180 + DATELINE_OVERDRAW_DEG, MERCATOR_MAX_LAT],
+    [180 + DATELINE_OVERDRAW_DEG, -MERCATOR_MAX_LAT],
+    [-180 - DATELINE_OVERDRAW_DEG, -MERCATOR_MAX_LAT],
+  ];
 }
 
 function textureLayerBeforeId(map: maplibregl.Map): string | undefined {
@@ -265,17 +280,7 @@ export default function MapLibreGlobe({
       }
       setBackdropColor(map, BACKDROP_WHITE);
 
-      const coordinates: [
-        [number, number],
-        [number, number],
-        [number, number],
-        [number, number],
-      ] = [
-        [-180, MERCATOR_MAX_LAT],
-        [180, MERCATOR_MAX_LAT],
-        [180, -MERCATOR_MAX_LAT],
-        [-180, -MERCATOR_MAX_LAT],
-      ];
+      const coordinates = textureCoordinates();
       const existingSource = map.getSource(TEXTURE_SOURCE_ID) as
         | (maplibregl.ImageSource & {
             updateImage?: (args: {
@@ -634,17 +639,7 @@ export default function MapLibreGlobe({
             }) => void;
           })
         | undefined;
-      const coordinates: [
-        [number, number],
-        [number, number],
-        [number, number],
-        [number, number],
-      ] = [
-        [-180, MERCATOR_MAX_LAT],
-        [180, MERCATOR_MAX_LAT],
-        [180, -MERCATOR_MAX_LAT],
-        [-180, -MERCATOR_MAX_LAT],
-      ];
+      const coordinates = textureCoordinates();
       if (source && typeof source.updateImage === "function") {
         source.updateImage({ url: selected.imageUrl, coordinates });
       } else {

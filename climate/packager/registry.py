@@ -774,10 +774,35 @@ def _maybe_regrid_to_metric_grid(
                 f"-> dst_grid=({target_lat.size} lat x {target_lon.size} lon)"
             )
 
-    return da_src.interp(
+    interp_da = da_src.interp(
         {lat_name: target_lat, lon_name: target_lon},
         method=interp_method,
     )
+    src_lat = np.asarray(da_src[lat_name].values, dtype=np.float64)
+    src_lon = np.asarray(da_src[lon_name].values, dtype=np.float64)
+    lat_min = float(np.nanmin(src_lat))
+    lat_max = float(np.nanmax(src_lat))
+    lon_min = float(np.nanmin(src_lon))
+    lon_max = float(np.nanmax(src_lon))
+
+    outside_lat = (target_lat < lat_min) | (target_lat > lat_max)
+    outside_lon = (target_lon < lon_min) | (target_lon > lon_max)
+    if np.any(outside_lat) or np.any(outside_lon):
+        # Fill only true out-of-bounds target points with nearest source values.
+        # This keeps interior NaN masks untouched (e.g. land/ocean gaps).
+        nearest_da = da_src.interp(
+            {lat_name: target_lat, lon_name: target_lon},
+            method="nearest",
+            kwargs={"fill_value": "extrapolate"},
+        )
+        outside_2d = np.logical_or.outer(outside_lat, outside_lon)
+        outside_mask = xr.DataArray(
+            outside_2d,
+            coords={lat_name: target_lat, lon_name: target_lon},
+            dims=(lat_name, lon_name),
+        )
+        interp_da = interp_da.where(~outside_mask, nearest_da)
+    return interp_da
 
 
 def _append_yearly_part(

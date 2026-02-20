@@ -11,7 +11,6 @@
   - zoomout graph needs work + rephrase graph captions
   - extra coral reef stress graph + new texture for 3D globe
 - Code:
-  - missing longitude on warming pre-industrial map
   - add more python tests
   - add e2e tests
   - README: present project + images for github

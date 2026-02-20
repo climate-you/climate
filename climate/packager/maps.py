@@ -333,6 +333,7 @@ def _write_texture_map(
     nan_color = str(palette.get("nan_color", "#000000"))
     projection = _resolve_projection(spec)
     projected_values, bounds = _project_texture_values(values, projection=projection)
+    projected_values = _stitch_longitude_edges(projected_values)
 
     rgb = _apply_palette(
         projected_values,
@@ -631,8 +632,14 @@ def _warp_lat_to_mercator(values: np.ndarray) -> np.ndarray:
     lat_clip = lat_src[valid]
     phi = np.deg2rad(lat_clip)
     y_src = np.log(np.tan(np.pi / 4.0 + phi / 2.0))
-    y_north = np.log(np.tan(np.pi / 4.0 + np.deg2rad(MERCATOR_MAX_LAT) / 2.0))
-    y_tgt = np.linspace(y_north, -y_north, num=arr_clip.shape[0], dtype=np.float64)
+    # Target rows match the latitude extent represented by the clipped source
+    # rows, avoiding NaN bands at the very top/bottom due tiny extent mismatch.
+    y_tgt = np.linspace(
+        float(np.max(y_src)),
+        float(np.min(y_src)),
+        num=arr_clip.shape[0],
+        dtype=np.float64,
+    )
 
     out = np.full_like(arr_clip, np.nan, dtype=np.float64)
     order = np.argsort(y_src)
@@ -657,6 +664,34 @@ def _warp_lat_to_mercator(values: np.ndarray) -> np.ndarray:
             if not np.any(use):
                 continue
             out[use, j] = np.interp(y_tgt[use], x, y)
+    return out
+
+
+def _stitch_longitude_edges(values: np.ndarray) -> np.ndarray:
+    arr = np.asarray(values, dtype=np.float64)
+    if arr.ndim != 2 or arr.shape[1] < 2:
+        return arr
+
+    out = arr.copy()
+    left = out[:, 0]
+    right = out[:, -1]
+    left_finite = np.isfinite(left)
+    right_finite = np.isfinite(right)
+
+    both = left_finite & right_finite
+    if np.any(both):
+        avg = (left[both] + right[both]) * 0.5
+        out[both, 0] = avg
+        out[both, -1] = avg
+
+    left_only = left_finite & ~right_finite
+    if np.any(left_only):
+        out[left_only, -1] = left[left_only]
+
+    right_only = right_finite & ~left_finite
+    if np.any(right_only):
+        out[right_only, 0] = right[right_only]
+
     return out
 
 
