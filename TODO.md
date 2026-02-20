@@ -4,11 +4,14 @@
   - Test on mobile
   - Dark mode
   - Search bar: remove blue border, remove "Searching..." text, and remove "min 3 chars" text
+  - Add Source page
+  - Default to ºF when user location in US
 - Graphs:
   - Add text to info bubbles to explain how data is computed
   - zoomout graph needs work + rephrase graph captions
   - extra coral reef stress graph + new texture for 3D globe
 - Code:
+  - missing longitude on warming pre-industrial map
   - add more python tests
   - add e2e tests
   - README: present project + images for github
