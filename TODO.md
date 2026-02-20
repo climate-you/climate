@@ -3,7 +3,6 @@
   - Globe textures: move icon to bottom, and close menu on user interaction outside menu (click on search, etc.)
   - Test on mobile
   - Search bar: remove blue border, remove "Searching..." text, and remove "min 3 chars" text
-  - when backend down, page shows "In this location, human activities have caused warming since 1850-1900", maybe a clearer error page?
 - Graphs:
   - zoomout graph needs work + rephrase graph captions + info bubble
   - extra coral reef stress graph + new texture for 3D globe

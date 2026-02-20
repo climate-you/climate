@@ -1244,6 +1244,8 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const [suggestIndex, setSuggestIndex] = useState<number>(-1);
   const [suggestLoading, setSuggestLoading] = useState<boolean>(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
+  const [panelLoadError, setPanelLoadError] = useState<string | null>(null);
+  const [panelRetrying, setPanelRetrying] = useState<boolean>(false);
   const [panelOpen, setPanelOpen] = useState<boolean>(false);
   const [picked, setPicked] = useState<{ lat: number; lon: number } | null>(
     null,
@@ -1522,6 +1524,31 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     return data;
   }
 
+  async function loadPanel(
+    nextLat = lat,
+    nextLon = lon,
+    nextUnit = unit,
+    nextSelectedGeonameid = selectedGeonameidForPanel,
+  ) {
+    try {
+      const data = await load(
+        nextLat,
+        nextLon,
+        nextUnit,
+        nextSelectedGeonameid,
+      );
+      setPanelLoadError(null);
+      return data;
+    } catch {
+      setResp(null);
+      setSelectedLocation((prev) =>
+        prev ? { ...prev, population: null } : prev,
+      );
+      setPanelLoadError("Couldn’t load climate data.");
+      return null;
+    }
+  }
+
   const fetchAutocomplete = useCallback(
     async (q: string) => {
       const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/autocomplete?q=${encodeURIComponent(
@@ -1566,7 +1593,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       population: item.population,
     });
     setPanelOpen(true);
-    void load(item.lat, item.lon, unit, item.geonameid);
+    void loadPanel(item.lat, item.lon, unit, item.geonameid);
   }
 
   async function handlePick(la: number, lo: number) {
@@ -1610,10 +1637,16 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
             },
           };
         });
+        setPanelLoadError(null);
         return;
       }
-      await load(la, lo, unit, null);
+      await loadPanel(la, lo, unit, null);
     } catch (err) {
+      setResp(null);
+      setSelectedLocation((prev) =>
+        prev ? { ...prev, population: null } : prev,
+      );
+      setPanelLoadError("Couldn’t load climate data.");
       setSuggestError(
         err instanceof Error ? err.message : "Failed to load location data",
       );
@@ -2070,7 +2103,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
                   onClick={() => {
                     if (unit === "C") return;
                     setUnit("C");
-                    void load(lat, lon, "C");
+                    void loadPanel(lat, lon, "C");
                   }}
                 >
                   °C
@@ -2084,7 +2117,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
                   onClick={() => {
                     if (unit === "F") return;
                     setUnit("F");
-                    void load(lat, lon, "F");
+                    void loadPanel(lat, lon, "F");
                   }}
                 >
                   °F
@@ -2111,33 +2144,60 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
             <div>
               <div className={styles.panelTitleLine}>
                 <h2 className={styles.panelTitle}>
-                  <span className={styles.panelTitleSmall}>In</span>{" "}
-                  {titleLocationLabel},{" "}
-                  <span className={styles.panelTitleSmall}>
-                    human activities have caused{" "}
-                  </span>
                   {typeof tempHeadline?.value === "number" &&
                   Number.isFinite(tempHeadline.value) ? (
-                    <span className={styles.panelTitleTempAccent}>
-                      {formatHeadlineDelta(tempHeadline.value, unit)}
-                    </span>
+                    <>
+                      <span className={styles.panelTitleSmall}>In</span>{" "}
+                      {titleLocationLabel},{" "}
+                      <span className={styles.panelTitleSmall}>
+                        human activities have caused{" "}
+                      </span>
+                      <span className={styles.panelTitleTempAccent}>
+                        {formatHeadlineDelta(tempHeadline.value, unit)}
+                      </span>
+                      <span className={styles.panelTitleSmall}>
+                        {" "}
+                        since 1850-1900.
+                      </span>
+                    </>
                   ) : (
-                    "warming"
+                    <span className={styles.panelTitleTempAccent}>
+                      Couldn’t load climate data.
+                    </span>
                   )}
-                  <span className={styles.panelTitleSmall}>
-                    {" "}
-                    since 1850-1900.
-                  </span>
-                  <InfoBubble
-                    label="Panel title information"
-                    text="Local warming since pre-industrial is estimated as: observed local warming since 1979-2000, plus a model-based offset from 1850-1900 to 1979-2000."
-                  />
+                  {!panelLoadError ? (
+                    <InfoBubble
+                      label="Panel title information"
+                      text="Local warming since pre-industrial is estimated as: observed local warming since 1979-2000, plus a model-based offset from 1850-1900 to 1979-2000."
+                    />
+                  ) : null}
                 </h2>
               </div>
               {populationText ? (
                 <p className={styles.panelPopulation}>
                   Population: {populationText}
                 </p>
+              ) : null}
+              {panelLoadError ? (
+                <div className={styles.panelInlineError}>
+                  <button
+                    type="button"
+                    className={styles.panelRetryButton}
+                    onClick={async () => {
+                      if (panelRetrying) return;
+                      setPanelRetrying(true);
+                      await loadPanel(
+                        lat,
+                        lon,
+                        unit,
+                        selectedGeonameidForPanel,
+                      );
+                      setPanelRetrying(false);
+                    }}
+                  >
+                    {panelRetrying ? "Retrying..." : "Retry"}
+                  </button>
+                </div>
               ) : null}
             </div>
           </div>
