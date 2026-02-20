@@ -321,13 +321,14 @@ def create_app() -> FastAPI:
                 status_code=404, detail=f"Asset not found: {relative_path}"
             )
 
-        headers = {
-            "Cache-Control": (
-                "no-store"
-                if release == "latest"
-                else "public, max-age=31536000, immutable"
-            )
-        }
+        if release == "latest":
+            cache_control = "no-store"
+        elif canonical_release == "dev":
+            cache_control = "public, max-age=0, must-revalidate"
+        else:
+            cache_control = "public, max-age=31536000, immutable"
+
+        headers = {"Cache-Control": cache_control}
         return FileResponse(candidate, headers=headers)
 
     return app
