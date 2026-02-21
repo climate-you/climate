@@ -1,12 +1,12 @@
 - UI:
   - Add scale to UI when showing globe textures
   - Test on mobile (need to run `./scripts/api_backend.sh --lan`):
-    -- `Couldn't load data` appears as the data loads for the first time.
     -- Cold open interaction doesn't respect the sequence order.
+    -- info bubble is cropped outside of screen.
     -- hide the close button: swiping down should close the panel (revisit).
     -- about/sources button should be under the selected location panel, should they be moved to a menu (?)
   - update Licenses/Copyrights
-  - remove captions under sea temperature graph and move it to info bubble.
+  - remove captions under sea temperature graph and move it to info bubble. `This graph shows Sea Surface Temperature.`
 - Graphs:
   - zoomout graph needs work + rephrase graph captions + info bubble
   - extra coral reef stress graph + new texture for 3D globe (beware of different grid size)

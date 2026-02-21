@@ -1289,6 +1289,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const [suggestLoading, setSuggestLoading] = useState<boolean>(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
   const [panelLoadError, setPanelLoadError] = useState<string | null>(null);
+  const [panelLoading, setPanelLoading] = useState<boolean>(false);
   const [panelRetrying, setPanelRetrying] = useState<boolean>(false);
   const [panelOpen, setPanelOpen] = useState<boolean>(false);
   const [picked, setPicked] = useState<{ lat: number; lon: number } | null>(
@@ -1595,6 +1596,8 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     nextUnit = unit,
     nextSelectedGeonameid = selectedGeonameidForPanel,
   ) {
+    setPanelLoading(true);
+    setPanelLoadError(null);
     try {
       const data = await load(
         nextLat,
@@ -1611,6 +1614,8 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       );
       setPanelLoadError("Couldn’t load climate data.");
       return null;
+    } finally {
+      setPanelLoading(false);
     }
   }
 
@@ -2329,8 +2334,12 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
             <div>
               <div className={styles.panelTitleLine}>
                 <h2 className={styles.panelTitle}>
-                  {typeof tempHeadline?.value === "number" &&
-                  Number.isFinite(tempHeadline.value) ? (
+                  {panelLoadError ? (
+                    <span className={styles.panelTitleTempAccent}>
+                      Couldn’t load climate data.
+                    </span>
+                  ) : typeof tempHeadline?.value === "number" &&
+                    Number.isFinite(tempHeadline.value) ? (
                     <>
                       <span className={styles.panelTitleSmall}>In</span>{" "}
                       {titleLocationLabel},{" "}
@@ -2345,10 +2354,10 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
                         since 1850-1900.
                       </span>
                     </>
+                  ) : panelLoading ? (
+                    <span>Loading climate data...</span>
                   ) : (
-                    <span className={styles.panelTitleTempAccent}>
-                      Couldn’t load climate data.
-                    </span>
+                    <span>Pick a location to load climate data.</span>
                   )}
                   {!panelLoadError ? (
                     <InfoBubble
