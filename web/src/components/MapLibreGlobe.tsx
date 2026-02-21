@@ -198,7 +198,9 @@ export default function MapLibreGlobe({
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const layerControlRef = useRef<{ refresh: () => void } | null>(null);
-  const attributionControlRef = useRef<maplibregl.AttributionControl | null>(null);
+  const attributionControlRef = useRef<maplibregl.AttributionControl | null>(
+    null,
+  );
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const onPickRef = useRef(onPick);
   const onHomeRef = useRef(onHome);
@@ -418,8 +420,8 @@ export default function MapLibreGlobe({
           button.ariaLabel = "Return to initial globe position";
           button.title = "Home";
           button.textContent = "⌂";
-          button.style.fontSize = "18px";
-          button.style.lineHeight = "29px";
+          button.style.fontSize = "26px";
+          button.style.lineHeight = "1";
           button.style.color = "#111";
           button.addEventListener("click", onClick);
 
@@ -543,8 +545,8 @@ export default function MapLibreGlobe({
           button.ariaLabel = "Select map layer";
           button.title = "Layers";
           button.textContent = "◫";
-          button.style.fontSize = "16px";
-          button.style.lineHeight = "29px";
+          button.style.fontSize = "24px";
+          button.style.lineHeight = "1";
           button.style.color = "#111";
           button.addEventListener("pointerenter", onButtonPointerEnter);
 

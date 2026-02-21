@@ -1,4 +1,6 @@
 .app {
+  --top-ui-space: 12px;
+  --top-ui-size: 44px;
   position: relative;
   width: 100%;
   height: calc(100vh - 60px);
@@ -31,6 +33,40 @@
   transition:
     opacity 520ms ease,
     transform 520ms ease;
+}
+
+.map :global(.maplibregl-ctrl-top-left) {
+  top: var(--top-ui-space);
+  left: var(--top-ui-space);
+}
+
+.map :global(.maplibregl-ctrl-top-left .maplibregl-ctrl) {
+  margin: 0 0 var(--top-ui-space) 0;
+}
+
+.map :global(.maplibregl-ctrl-top-left .maplibregl-ctrl:last-child) {
+  margin-bottom: 0;
+}
+
+.map :global(.maplibregl-ctrl-top-left .maplibregl-ctrl-group > button) {
+  width: var(--top-ui-size);
+  height: var(--top-ui-size);
+}
+
+.map
+  :global(
+    .maplibregl-ctrl-top-left button.maplibregl-ctrl-zoom-in .maplibregl-ctrl-icon
+  ),
+.map
+  :global(
+    .maplibregl-ctrl-top-left button.maplibregl-ctrl-zoom-out .maplibregl-ctrl-icon
+  ),
+.map
+  :global(
+    .maplibregl-ctrl-top-left button.maplibregl-ctrl-compass .maplibregl-ctrl-icon
+  ) {
+  background-size: calc(var(--top-ui-size) * 0.74)
+    calc(var(--top-ui-size) * 0.74);
 }
 
 .appIntro .map :global(.maplibregl-ctrl-top-left),
@@ -452,8 +488,8 @@
 
 .searchOverlay {
   position: absolute;
-  top: 10px;
-  left: 50px;
+  top: var(--top-ui-space);
+  left: calc(var(--top-ui-space) + var(--top-ui-size) + var(--top-ui-space));
   width: 300px;
   z-index: 4;
   transition:
@@ -469,13 +505,16 @@
 
 .searchWrap {
   position: relative;
+  height: var(--top-ui-size);
   background: var(--surface);
   border-radius: 12px;
   border: 4px solid var(--panel-border);
 }
 
 .searchInput {
+  height: 100%;
   width: 100%;
+  box-sizing: border-box;
   background: var(--surface);
   color: var(--text-primary);
   padding: 8px 10px;
@@ -622,6 +661,11 @@
 }
 
 @media (max-width: 900px) {
+  .app {
+    --top-ui-space: 12px;
+    --top-ui-size: 56px;
+  }
+
   .coldOpenMessage {
     font-size: 80px;
   }
@@ -632,8 +676,6 @@
   }
 
   .searchOverlay {
-    top: 10px;
-    left: 60px;
     width: calc(100% - 80px);
   }
 
@@ -662,7 +704,6 @@
     left: 10px;
     bottom: 10px;
   }
-
 }
 
 @media (max-width: 480px) {

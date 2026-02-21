@@ -1,7 +1,6 @@
 - UI:
   - Add scale to UI when showing globe textures
   - Test on mobile (need to run `./scripts/api_backend.sh --lan`)
-  - Make top left buttons more pleasing: increase size of buttons to match search bar, keep same number of blue pixels up and left, move the search bar a bit to the right to accomodate larger icons
   - update Licenses/Copyrights
 - Graphs:
   - zoomout graph needs work + rephrase graph captions + info bubble
