@@ -5,13 +5,18 @@ import styles from "./AboutOverlay.module.css";
 
 type AboutOverlayProps = {
   onClose: () => void;
+  releaseLabel?: string | null;
 };
 
-export default function AboutOverlay({ onClose }: AboutOverlayProps) {
+export default function AboutOverlay({
+  onClose,
+  releaseLabel = null,
+}: AboutOverlayProps) {
   const defaultUnit = defaultTemperatureUnitForLocale();
   const observedWarmingText =
     defaultUnit === "F" ? "approximately 1.9°F" : "approximately 1.1°C";
-  const parisTargetText = defaultUnit === "F" ? "well below 3.6°F" : "well below 2°C";
+  const parisTargetText =
+    defaultUnit === "F" ? "well below 3.6°F" : "well below 2°C";
 
   return (
     <section className={styles.aboutOverlay} role="dialog" aria-modal="true">
@@ -40,9 +45,9 @@ export default function AboutOverlay({ onClose }: AboutOverlayProps) {
             The IPCC&apos;s 2023 Synthesis Report indicates that global mean
             temperature has already increased by {observedWarmingText}, while
             the Paris Agreement sets the objective of limiting warming to{" "}
-            {parisTargetText}. For us, these global numbers felt abstract, so this project
-            asks a simple question: how do these changes translate at the local
-            level?
+            {parisTargetText}. For us, these global numbers felt abstract, so
+            this project asks a simple question: how do these changes translate
+            at the local level?
           </p>
           <p className={`${styles.aboutText} ${styles.aboutParagraph}`}>
             We focus only on temperature change, over land and sea, to show how
@@ -78,6 +83,9 @@ export default function AboutOverlay({ onClose }: AboutOverlayProps) {
             >
               linkedin.com/in/fanny-chaleon-11146650
             </a>
+          </p>
+          <p className={styles.aboutText}>
+            Release version: {releaseLabel ?? "latest"}
           </p>
         </section>
       </div>

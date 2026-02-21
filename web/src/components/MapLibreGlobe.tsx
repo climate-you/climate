@@ -14,7 +14,6 @@ export type MapLayerOption = {
 type Props = {
   panelOpen: boolean;
   focusLocation: LngLat | null;
-  releaseLabel?: string | null;
   layerOptions: MapLayerOption[];
   activeLayerId: string | null;
   onLayerChange: (layerId: string) => void;
@@ -185,7 +184,6 @@ function snapTargetAtLowZoom(
 export default function MapLibreGlobe({
   panelOpen,
   focusLocation,
-  releaseLabel = null,
   layerOptions,
   activeLayerId,
   onLayerChange,
@@ -198,9 +196,6 @@ export default function MapLibreGlobe({
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const layerControlRef = useRef<{ refresh: () => void } | null>(null);
-  const attributionControlRef = useRef<maplibregl.AttributionControl | null>(
-    null,
-  );
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const onPickRef = useRef(onPick);
   const onHomeRef = useRef(onHome);
@@ -595,11 +590,6 @@ export default function MapLibreGlobe({
     map.on("style.load", ensureHillshadeLayer);
     map.on("load", applyMapSettings);
     map.on("load", applyTextureLayer);
-    const initialAttribution = new maplibregl.AttributionControl({
-      compact: true,
-    });
-    attributionControlRef.current = initialAttribution;
-    map.addControl(initialAttribution, "bottom-right");
     if (showControlsRef.current) {
       map.addControl(createHomeControl(), "top-left");
       map.addControl(new maplibregl.NavigationControl(), "top-left");
@@ -662,27 +652,10 @@ export default function MapLibreGlobe({
       markerRef.current?.remove();
       markerRef.current = null;
       layerControlRef.current = null;
-      attributionControlRef.current = null;
       map.remove();
       mapRef.current = null;
     };
   }, []);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    if (attributionControlRef.current) {
-      map.removeControl(attributionControlRef.current);
-      attributionControlRef.current = null;
-    }
-    const nextAttribution = new maplibregl.AttributionControl({
-      compact: true,
-      customAttribution: releaseLabel ? `Release: ${releaseLabel}` : undefined,
-    });
-    attributionControlRef.current = nextAttribution;
-    map.addControl(nextAttribution, "bottom-right");
-  }, [releaseLabel]);
 
   useEffect(() => {
     const map = mapRef.current;

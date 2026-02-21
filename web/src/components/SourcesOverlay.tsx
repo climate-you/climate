@@ -160,16 +160,58 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
           <h3 className={styles.sourcesSectionTitle}>Licenses/Copyrights</h3>
           <ul className={styles.sourcesList}>
             <li>
-              Data and visual references remain the property of their respective
-              providers and publishers.
+              OpenFreeMap © OpenMapTiles Data from OpenStreetMap (
+              <a
+                href="https://openfreemap.org/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                OpenFreeMap
+              </a>{" "}
+              |{" "}
+              <a
+                href="https://openmaptiles.org/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                OpenMapTiles
+              </a>{" "}
+              |{" "}
+              <a
+                href="https://www.openstreetmap.org/copyright"
+                target="_blank"
+                rel="noreferrer"
+              >
+                OpenStreetMap
+              </a>
+              ).
             </li>
             <li>
-              Reuse is subject to each source&apos;s own license, terms of use,
-              and attribution requirements.
+              ERA5 data are provided via the Copernicus Climate Data Store
+              (C3S), operated by ECMWF on behalf of the European Union, and are
+              distributed under the Creative Commons Attribution 4.0
+              International license (CC BY 4.0). Attribution to Copernicus
+              Climate Change Service (C3S) and ECMWF is required, together with
+              the relevant dataset citation.
             </li>
             <li>
-              Please refer to the original source pages linked above for current
-              licensing and copyright details.
+              ECMWF website materials are subject to ECMWF terms of use; unless
+              otherwise stated on specific pages or assets, ECMWF web content is
+              generally available under CC BY 4.0 with appropriate attribution.
+            </li>
+            <li>
+              CMIP6 data accessed through ESGF are governed by the CMIP6 Terms
+              of Use and associated data licenses. CMIP6 model output is
+              generally distributed under CC BY 4.0, with model-specific
+              licensing details defined in the CMIP6 controlled vocabularies,
+              and users should include the required CMIP6/ESGF acknowledgements
+              and citations.
+            </li>
+            <li>
+              NOAA OISST (via NOAA ERDDAP) is publicly available for use and
+              redistribution at no cost. NOAA data are provided without
+              warranty and are not intended for legal use; users should include
+              NOAA attribution and follow dataset-specific notices.
             </li>
           </ul>
         </section>

@@ -1956,7 +1956,6 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
         <MapLibreGlobe
           panelOpen={panelOpen}
           focusLocation={picked}
-          releaseLabel={sessionRelease}
           layerOptions={mapLayers}
           activeLayerId={activeLayerId || null}
           onLayerChange={(layerId) => setActiveLayerId(layerId)}
@@ -2102,7 +2101,10 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       ) : null}
 
       {aboutOpen ? (
-        <AboutOverlay onClose={() => setAboutOpenWithUrl(false)} />
+        <AboutOverlay
+          onClose={() => setAboutOpenWithUrl(false)}
+          releaseLabel={sessionRelease ?? requestedRelease}
+        />
       ) : null}
 
       {sourcesOpen ? (

@@ -8,6 +8,7 @@
 - Code:
   - add more python tests so coverage is higher (current 21%)
   - Update README for github: project intro + few screenshots + diagram showing datasets->metrics->etc.
+  - clean up unused css and methods in code.
 
 ---
 
