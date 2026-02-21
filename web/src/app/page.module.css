@@ -529,6 +529,9 @@
   left: 16px;
   bottom: 16px;
   z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .searchMetaLink {

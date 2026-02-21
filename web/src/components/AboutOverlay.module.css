@@ -1,0 +1,109 @@
+.aboutOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: var(--overlay-scrim);
+  backdrop-filter: blur(2px);
+}
+
+.aboutCard {
+  width: min(860px, 100%);
+  max-height: min(88vh, 880px);
+  overflow: auto;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family:
+    "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Helvetica,
+    "Segoe UI", Arial, sans-serif;
+  font-weight: 300;
+  border: 1px solid var(--surface-border);
+  border-radius: 14px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.16);
+  padding: 20px;
+}
+
+.aboutHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.aboutTitle {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 300;
+}
+
+.aboutClose {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--surface-border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.aboutClose:hover,
+.aboutClose:focus-visible {
+  background: var(--surface-alt);
+  border-color: var(--surface-border-strong);
+}
+
+.aboutClose:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 1px;
+}
+
+.aboutCloseIcon {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  fill: none;
+  pointer-events: none;
+}
+
+.aboutSection {
+  margin-top: 18px;
+}
+
+.aboutSectionTitle {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 300;
+}
+
+.aboutText {
+  margin-top: 10px;
+  line-height: 1.5;
+}
+
+.aboutParagraph {
+  text-align: justify;
+  text-indent: 1.5em;
+}
+
+@media (max-width: 900px) {
+  .aboutOverlay {
+    padding: 10px;
+  }
+
+  .aboutCard {
+    border-radius: 10px;
+    padding: 14px;
+  }
+}

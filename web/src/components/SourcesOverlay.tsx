@@ -155,6 +155,26 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
             </li>
           </ul>
         </section>
+
+        <section className={styles.sourcesSection}>
+          <h3 className={styles.sourcesSectionTitle}>Licenses/Copyrights</h3>
+          <ul className={styles.sourcesList}>
+            <li>
+              Data and visual references remain the property of their respective
+              providers and publishers.
+            </li>
+            <li>
+              Reuse is subject to each source&apos;s own license, terms of use,
+              and attribution requirements.
+            </li>
+            <li>
+              Please refer to the original source pages linked above for current
+              licensing and copyright details.
+            </li>
+          </ul>
+        </section>
+
+        <br />
       </div>
     </section>
   );

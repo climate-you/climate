@@ -12,7 +12,9 @@ import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
 import MapLibreGlobe from "@/components/MapLibreGlobe";
 import type { MapLayerOption } from "@/components/MapLibreGlobe";
+import AboutOverlay from "@/components/AboutOverlay";
 import SourcesOverlay from "@/components/SourcesOverlay";
+import { defaultTemperatureUnitForLocale } from "@/lib/temperatureUnit";
 import styles from "./page.module.css";
 
 type TimeDuration = {
@@ -1213,17 +1215,6 @@ const COLD_OPEN_PRIMARY_HOLD_MS = 6000;
 const COLD_OPEN_QUESTION_DELAY_MS = 1700;
 const COLD_OPEN_PRIMARY_REVEAL_DELAY_MS = 80;
 
-function isUsLocale(locale: string): boolean {
-  const normalized = locale.trim().toUpperCase();
-  return normalized.endsWith("-US") || normalized.endsWith("_US");
-}
-
-function defaultTemperatureUnitForLocale(): "C" | "F" {
-  if (typeof navigator === "undefined") return "C";
-  const primaryLocale = navigator.languages?.[0] ?? navigator.language ?? "";
-  return isUsLocale(primaryLocale) ? "F" : "C";
-}
-
 export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const envDefaultReleaseRaw = process.env.NEXT_PUBLIC_RELEASE;
   const envDefaultRelease = envDefaultReleaseRaw
@@ -1272,6 +1263,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const [introPromptVisible, setIntroPromptVisible] = useState(!coldOpen);
   const [introPrimaryVisible, setIntroPrimaryVisible] = useState(!coldOpen);
   const [introQuestionVisible, setIntroQuestionVisible] = useState(!coldOpen);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const introDismissTimerRef = useRef<number | null>(null);
   const introPhaseTimerRef = useRef<number | null>(null);
@@ -1342,12 +1334,28 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     setRequestedRelease(normalized);
   }, []);
 
+  const setAboutOpenWithUrl = useCallback((open: boolean) => {
+    setAboutOpen(open);
+    if (open) setSourcesOpen(false);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (open) {
+      url.searchParams.set("about", "1");
+      url.searchParams.delete("sources");
+    } else {
+      url.searchParams.delete("about");
+    }
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+  }, []);
+
   const setSourcesOpenWithUrl = useCallback((open: boolean) => {
     setSourcesOpen(open);
+    if (open) setAboutOpen(false);
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     if (open) {
       url.searchParams.set("sources", "1");
+      url.searchParams.delete("about");
     } else {
       url.searchParams.delete("sources");
     }
@@ -1356,9 +1364,13 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const showSources = new URLSearchParams(window.location.search).has(
-      "sources",
-    );
+    const params = new URLSearchParams(window.location.search);
+    const showAbout = params.has("about");
+    const showSources = params.has("sources");
+    if (showAbout) {
+      setAboutOpen(true);
+      return;
+    }
     if (showSources) setSourcesOpen(true);
   }, []);
 
@@ -2075,11 +2087,22 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
           <button
             type="button"
             className={styles.searchMetaLink}
+            onClick={() => setAboutOpenWithUrl(true)}
+          >
+            About
+          </button>
+          <button
+            type="button"
+            className={styles.searchMetaLink}
             onClick={() => setSourcesOpenWithUrl(true)}
           >
             Sources
           </button>
         </div>
+      ) : null}
+
+      {aboutOpen ? (
+        <AboutOverlay onClose={() => setAboutOpenWithUrl(false)} />
       ) : null}
 
       {sourcesOpen ? (

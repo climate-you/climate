@@ -2,8 +2,7 @@
   - Add scale to UI when showing globe textures
   - Test on mobile (need to run `./scripts/api_backend.sh --lan`)
   - Make top left buttons more pleasing: increase size of buttons to match search bar, keep same number of blue pixels up and left, move the search bar a bit to the right to accomodate larger icons
-  - merge info icon and sources button? (only one button that opens the popup window)
-  - info window with several tabs: About (description of project + authors) | Sources | Licenses/Copyrights)
+  - update Licenses/Copyrights
 - Graphs:
   - zoomout graph needs work + rephrase graph captions + info bubble
   - extra coral reef stress graph + new texture for 3D globe (beware of different grid size)
