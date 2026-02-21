@@ -666,6 +666,10 @@
     --top-ui-size: 56px;
   }
 
+  .coldOpenMessage.coldOpenMessagePrimary {
+    font-size: 52px;
+  }
+
   .coldOpenMessage {
     font-size: 80px;
   }
@@ -707,6 +711,10 @@
 }
 
 @media (max-width: 480px) {
+  .coldOpenMessage.coldOpenMessagePrimary {
+    font-size: 38px;
+  }
+
   .coldOpenMessage {
     font-size: 58px;
   }
