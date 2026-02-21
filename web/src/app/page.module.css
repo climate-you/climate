@@ -699,7 +699,7 @@
     width: 100%;
     height: 60%;
     top: auto;
-    bottom: 0;
+    bottom: 50px;
     padding: 14px;
     transform: translateY(102%);
   }
@@ -713,11 +713,17 @@
   }
 
   .panelActions {
+    position: static;
     gap: 2px;
     padding: 0 0 4px;
   }
 
+  .panelTopRow {
+    position: static;
+  }
+
   .panelTitleWrap {
+    margin-top: -12px;
     width: 100%;
   }
 
@@ -742,7 +748,7 @@
 
   .panelViewport {
     box-sizing: border-box;
-    padding-bottom: 24px;
+    padding-bottom: 12px;
   }
 
   .graphCard {
@@ -755,7 +761,10 @@
   }
 
   .unitControl {
-    position: static;
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    z-index: 10;
   }
 
   .sourcesLinkDock {
@@ -766,7 +775,7 @@
 
 @media (max-width: 480px) {
   .panelTitle {
-    font-size: 1.14rem;
+    font-size: 1.4rem;
   }
 
   .coldOpenMessage.coldOpenMessagePrimary {
