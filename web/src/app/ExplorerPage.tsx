@@ -563,16 +563,41 @@ function chartThemeTokens(): ChartThemeTokens {
   };
 }
 
+function isMobileViewport(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 900px)").matches
+  );
+}
+
 function sharedChartScaffold() {
   const theme = chartThemeTokens();
+  const isMobile = isMobileViewport();
+  const mobileGridSidePadding = 8;
+  const gridLeft = isMobile ? mobileGridSidePadding : 36;
+  const gridRight = isMobile ? mobileGridSidePadding : 24;
+  const legendRight = isMobile ? mobileGridSidePadding : 24;
+  const legendFontSize = isMobile ? 10 : 12;
+  const legendType = isMobile ? "scroll" : "plain";
+  const legendItemWidth = isMobile ? 9 : 30;
+  const legendItemHeight = isMobile ? 9 : 10;
   return {
-    grid: { left: 36, right: 24, top: 36, bottom: 20, containLabel: true },
+    grid: {
+      left: gridLeft,
+      right: gridRight,
+      top: 36,
+      bottom: 20,
+      containLabel: true,
+    },
     legend: {
-      right: 24,
+      type: legendType,
+      orient: "horizontal",
+      ...(isMobile ? { icon: "circle" as const } : {}),
+      right: legendRight,
       top: 0,
-      itemWidth: 30,
-      itemHeight: 10,
-      textStyle: { color: theme.legendColor, fontSize: 12 },
+      itemWidth: legendItemWidth,
+      itemHeight: legendItemHeight,
+      textStyle: { color: theme.legendColor, fontSize: legendFontSize },
     },
   };
 }
@@ -752,6 +777,7 @@ function buildHotDaysOption({
   unit: "C" | "F";
 }): EChartsOption {
   const theme = chartThemeTokens();
+  const isMobile = isMobileViewport();
   const xValues = data.map((row) => row.x);
   const barKey = graph.series_keys.find(
     (k) => series[k]?.style?.type === "bar",
@@ -890,7 +916,7 @@ function buildHotDaysOption({
     },
     yAxis: {
       type: "value",
-      name: yAxisTitle(graph, unit),
+      name: isMobile ? "" : yAxisTitle(graph, unit),
       ...sharedYAxisStyle(),
       axisLabel: {
         color: theme.axisLabelColor,
@@ -920,6 +946,7 @@ function buildTemperatureOption({
   xMax?: number;
 }): EChartsOption {
   const theme = chartThemeTokens();
+  const isMobile = isMobileViewport();
   const chartSeries: NonNullable<EChartsOption["series"]> = visibleKeys.map(
     (key) => {
       const isTrend = key.includes("trend");
@@ -1046,7 +1073,7 @@ function buildTemperatureOption({
     },
     yAxis: {
       type: "value",
-      name: yAxisName,
+      name: isMobile ? "" : yAxisName,
       ...sharedYAxisStyle(),
       axisLabel: {
         color: theme.axisLabelColor,
@@ -1076,9 +1103,31 @@ function GraphCard({
   unit: "C" | "F";
   showTitle?: boolean;
 }) {
+  const chartHostRef = useRef<HTMLDivElement | null>(null);
+  const [chartHeight, setChartHeight] = useState(260);
   const steps = graph.animation?.steps ?? [];
   const hasAnimation = steps.length >= 2;
   const [stepIndex, setStepIndex] = useState(0);
+  const chartMaxHeight = 260;
+  const chartMinAspectRatio = 1.5;
+
+  useEffect(() => {
+    const host = chartHostRef.current;
+    if (!host) return;
+    const updateChartHeight = () => {
+      const width = host.clientWidth;
+      if (!Number.isFinite(width) || width <= 0) return;
+      const nextHeight = Math.max(
+        1,
+        Math.min(chartMaxHeight, Math.floor(width / chartMinAspectRatio)),
+      );
+      setChartHeight((prev) => (prev === nextHeight ? prev : nextHeight));
+    };
+    updateChartHeight();
+    const observer = new ResizeObserver(updateChartHeight);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [chartMaxHeight, chartMinAspectRatio]);
 
   useEffect(() => {
     if (!hasAnimation || graph.animation?.autoplay === false) return;
@@ -1198,7 +1247,9 @@ function GraphCard({
         </div>
       ) : null}
 
-      <EChartCanvas option={option} height={260} />
+      <div ref={chartHostRef}>
+        <EChartCanvas option={option} height={chartHeight} />
+      </div>
 
       {graph.error ? (
         <div className={styles.graphError}>{graph.error}</div>
@@ -1225,6 +1276,8 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const wheelGestureGapMs = 160;
   const wheelSustainRepeatMs = 520;
   const wheelRepeatKickThreshold = 55;
+  const touchSwipeThresholdPx = 44;
+  const touchClosePanelThresholdPx = 72;
   const [lat, setLat] = useState<number>(-20.32556);
   const [lon, setLon] = useState<number>(57.37056);
   const [unit, setUnit] = useState<"C" | "F">("C");
@@ -1253,6 +1306,8 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const wheelGestureConsumedRef = useRef(false);
   const wheelGestureConsumedAtRef = useRef(0);
   const wheelGestureResetTimerRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+  const touchStartXRef = useRef<number | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const panelViewportRef = useRef<HTMLDivElement | null>(null);
   const [graphsPerPage, setGraphsPerPage] = useState(2);
@@ -1302,18 +1357,15 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     },
     [],
   );
-  const mapLayers = useMemo<MapLayerOption[]>(
-    () => {
-      const configuredLayers = releaseLayers.map((layer) => ({
-        id: layer.id,
-        label: layer.label,
-        imageUrl: `${mapAssetBase}/assets/v/${encodedRelease}/${layer.asset_path}`,
-        opacity: typeof layer.opacity === "number" ? layer.opacity : 0.72,
-      }));
-      return [{ id: "none", label: "None" }, ...configuredLayers];
-    },
-    [encodedRelease, mapAssetBase, releaseLayers],
-  );
+  const mapLayers = useMemo<MapLayerOption[]>(() => {
+    const configuredLayers = releaseLayers.map((layer) => ({
+      id: layer.id,
+      label: layer.label,
+      imageUrl: `${mapAssetBase}/assets/v/${encodedRelease}/${layer.asset_path}`,
+      opacity: typeof layer.opacity === "number" ? layer.opacity : 0.72,
+    }));
+    return [{ id: "none", label: "None" }, ...configuredLayers];
+  }, [encodedRelease, mapAssetBase, releaseLayers]);
   const [activeLayerId, setActiveLayerId] = useState<string>(
     mapLayers[0]?.id ?? "",
   );
@@ -1935,6 +1987,80 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     [goGraphPage],
   );
 
+  const handlePanelTouchStart = useCallback(
+    (e: React.TouchEvent<HTMLElement>) => {
+      if (e.touches.length !== 1) {
+        touchStartYRef.current = null;
+        touchStartXRef.current = null;
+        return;
+      }
+      touchStartYRef.current = e.touches[0].clientY;
+      touchStartXRef.current = e.touches[0].clientX;
+    },
+    [],
+  );
+
+  const handlePanelTouchMove = useCallback(
+    (e: React.TouchEvent<HTMLElement>) => {
+      if (touchStartYRef.current === null || touchStartXRef.current === null) {
+        return;
+      }
+      if (e.touches.length !== 1) return;
+      if (
+        typeof window !== "undefined" &&
+        !window.matchMedia("(max-width: 900px)").matches
+      ) {
+        return;
+      }
+      const deltaY = e.touches[0].clientY - touchStartYRef.current;
+      const deltaX = e.touches[0].clientX - touchStartXRef.current;
+      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 8) {
+        // Prevent native scrolling while a horizontal swipe gesture is in progress.
+        e.preventDefault();
+      }
+    },
+    [],
+  );
+
+  const handlePanelTouchEnd = useCallback(
+    (e: React.TouchEvent<HTMLElement>) => {
+      if (touchStartYRef.current === null || touchStartXRef.current === null) {
+        return;
+      }
+      const touch = e.changedTouches[0];
+      if (!touch) {
+        touchStartYRef.current = null;
+        touchStartXRef.current = null;
+        return;
+      }
+      const deltaY = touch.clientY - touchStartYRef.current;
+      const deltaX = touch.clientX - touchStartXRef.current;
+      touchStartYRef.current = null;
+      touchStartXRef.current = null;
+      if (
+        typeof window !== "undefined" &&
+        !window.matchMedia("(max-width: 900px)").matches
+      ) {
+        return;
+      }
+      if (deltaY > 0 && Math.abs(deltaY) > Math.abs(deltaX)) {
+        if (deltaY >= touchClosePanelThresholdPx) {
+          setPanelOpen(false);
+        }
+        return;
+      }
+      if (Math.abs(deltaX) < touchSwipeThresholdPx) return;
+      if (Math.abs(deltaX) <= Math.abs(deltaY)) return;
+      goGraphPage(deltaX < 0 ? 1 : -1);
+    },
+    [goGraphPage, touchClosePanelThresholdPx, touchSwipeThresholdPx],
+  );
+
+  const handlePanelTouchCancel = useCallback(() => {
+    touchStartYRef.current = null;
+    touchStartXRef.current = null;
+  }, []);
+
   const locationLabel =
     selectedLocation?.label ?? resp?.location.place.label ?? "";
   const titleLocationLabel = locationLabel || "this location";
@@ -2118,6 +2244,10 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
         tabIndex={0}
         onWheel={handlePanelWheel}
         onKeyDown={handlePanelKeyDown}
+        onTouchStart={handlePanelTouchStart}
+        onTouchMove={handlePanelTouchMove}
+        onTouchEnd={handlePanelTouchEnd}
+        onTouchCancel={handlePanelTouchCancel}
       >
         <div
           className={styles.panelSteps}

@@ -55,15 +55,21 @@
 
 .map
   :global(
-    .maplibregl-ctrl-top-left button.maplibregl-ctrl-zoom-in .maplibregl-ctrl-icon
+    .maplibregl-ctrl-top-left
+      button.maplibregl-ctrl-zoom-in
+      .maplibregl-ctrl-icon
   ),
 .map
   :global(
-    .maplibregl-ctrl-top-left button.maplibregl-ctrl-zoom-out .maplibregl-ctrl-icon
+    .maplibregl-ctrl-top-left
+      button.maplibregl-ctrl-zoom-out
+      .maplibregl-ctrl-icon
   ),
 .map
   :global(
-    .maplibregl-ctrl-top-left button.maplibregl-ctrl-compass .maplibregl-ctrl-icon
+    .maplibregl-ctrl-top-left
+      button.maplibregl-ctrl-compass
+      .maplibregl-ctrl-icon
   ) {
   background-size: calc(var(--top-ui-size) * 0.74)
     calc(var(--top-ui-size) * 0.74);
@@ -287,6 +293,7 @@
 
 .panelTitleWrap {
   margin-top: -38px;
+  padding-top: 6px;
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -567,7 +574,7 @@
   position: absolute;
   left: 16px;
   bottom: 16px;
-  z-index: 4;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -662,8 +669,8 @@
 
 @media (max-width: 900px) {
   .app {
-    --top-ui-space: 12px;
-    --top-ui-size: 56px;
+    --top-ui-space: 10px;
+    --top-ui-size: 40px;
   }
 
   .coldOpenMessage.coldOpenMessagePrimary {
@@ -680,7 +687,7 @@
   }
 
   .searchOverlay {
-    width: calc(100% - 80px);
+    width: calc(100% - var(--top-ui-size) - 3 * var(--top-ui-space));
   }
 
   .searchWrap {
@@ -693,11 +700,58 @@
     height: 60%;
     top: auto;
     bottom: 0;
+    padding: 14px;
     transform: translateY(102%);
   }
 
   .locationPanelOpen {
     transform: translateY(0);
+  }
+
+  .panelTitle {
+    font-size: 1.2rem;
+  }
+
+  .panelActions {
+    gap: 2px;
+    padding: 0 0 4px;
+  }
+
+  .panelTitleWrap {
+    width: 100%;
+  }
+
+  .panelPopulation {
+    display: none;
+  }
+
+  .panelClose {
+    display: none;
+  }
+
+  .panelSteps {
+    top: auto;
+    bottom: 6px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    flex-direction: row;
+    gap: 10px;
+    padding: 8px 10px;
+  }
+
+  .panelViewport {
+    box-sizing: border-box;
+    padding-bottom: 24px;
+  }
+
+  .graphCard {
+    margin-top: 6px;
+    padding-right: 0;
+  }
+
+  .graphCaption {
+    margin-right: 0;
   }
 
   .unitControl {
@@ -711,6 +765,10 @@
 }
 
 @media (max-width: 480px) {
+  .panelTitle {
+    font-size: 1.14rem;
+  }
+
   .coldOpenMessage.coldOpenMessagePrimary {
     font-size: 38px;
   }

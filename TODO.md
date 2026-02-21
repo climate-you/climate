@@ -1,6 +1,11 @@
 - UI:
   - Add scale to UI when showing globe textures
-  - Test on mobile (need to run `./scripts/api_backend.sh --lan`)
+  - Test on mobile (need to run `./scripts/api_backend.sh --lan`):
+    -- `Couldn't load data` appears as the data loads for the first time.
+    -- Cold open interaction doesn't respect the sequence order.
+    -- move the close button swiping down should close the panel (revisit).
+    -- about/sources button should be under the selected location panel, should they be moved to a menu (?)
+    -- move the temperature widget (where?)
   - update Licenses/Copyrights
 - Graphs:
   - zoomout graph needs work + rephrase graph captions + info bubble
