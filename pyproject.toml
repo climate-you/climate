@@ -49,6 +49,17 @@ make-reef-mask = [
   "rasterio>=1.3",
 ]
 
+# scripts/build/build_water_mask.py
+make-water-mask = [
+  "fiona>=1.9",
+  "rasterio>=1.3",
+]
+
+# scripts/build/build_reef_domain_mask.py
+make-reef-domain-mask = [
+  "scipy>=1.10",
+]
+
 # scripts/build/repack_erddap_cache.py
 repack-erddap-cache = [
   "xarray>=2023.0",

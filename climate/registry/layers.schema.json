@@ -20,6 +20,7 @@
         "icon": { "type": "string" },
         "map_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "opacity": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "resampling": { "type": "string", "enum": ["linear", "nearest"] },
         "legend": { "type": "object", "additionalProperties": true }
       },
       "required": ["id", "label", "map_id"],

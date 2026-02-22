@@ -92,6 +92,7 @@ class LayerDescriptor(BaseModel):
     description: Optional[str] = None
     icon: Optional[str] = None
     opacity: Optional[float] = None
+    resampling: Optional[str] = None
     legend: Optional[Dict[str, Any]] = None
 
 

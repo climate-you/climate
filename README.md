@@ -49,6 +49,72 @@ python scripts/build/packager.py --release dev --all --all-maps --pipeline --wor
 python scripts/build/packager.py --release dev --all --all-maps --batch-tiles 4
 ```
 
+## DHW reef mask workflow (0.05 deg)
+
+Use this when rebuilding the Coral Reef DHW domain mask.
+
+1. Build reef masks (UNEP + NE, both `all_touched`).
+   These scripts auto-download and cache sources under `data/cache/geojson/` by default:
+
+```bash
+python scripts/build/build_reef_mask.py \
+  --source unep_wcmc \
+  --grid-id global_0p05 \
+  --all-touched \
+  --output-npz data/masks/reef_unep_all_touched_global_0p05_mask.npz
+
+python scripts/build/build_reef_mask.py \
+  --source natural_earth \
+  --grid-id global_0p05 \
+  --all-touched \
+  --output-npz data/masks/reef_ne_all_touched_global_0p05_mask.npz
+```
+
+If UNEP TLS fails on your machine, pass `--insecure` for that command only.
+
+2. Build DHW availability union mask (sampled dates):
+
+```bash
+python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 1985-06-15 --end-date 1985-06-15 --output data/masks/dhw_available_1985_06_15_global_0p05_mask.npz --cache-dir /Volumes/SDCard/Climate/cache/erddap_masks
+python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2000-06-15 --end-date 2000-06-15 --output data/masks/dhw_available_2000_06_15_global_0p05_mask.npz --cache-dir /Volumes/SDCard/Climate/cache/erddap_masks
+python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2010-06-15 --end-date 2010-06-15 --output data/masks/dhw_available_2010_06_15_global_0p05_mask.npz --cache-dir /Volumes/SDCard/Climate/cache/erddap_masks
+python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2020-06-15 --end-date 2020-06-15 --output data/masks/dhw_available_2020_06_15_global_0p05_mask.npz --cache-dir /Volumes/SDCard/Climate/cache/erddap_masks
+python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2025-06-15 --end-date 2025-06-15 --output data/masks/dhw_available_2025_06_15_global_0p05_mask.npz --cache-dir /Volumes/SDCard/Climate/cache/erddap_masks
+
+python scripts/build/combine_masks.py \
+  --mode or \
+  --input data/masks/dhw_available_1985_06_15_global_0p05_mask.npz \
+  --input data/masks/dhw_available_2000_06_15_global_0p05_mask.npz \
+  --input data/masks/dhw_available_2010_06_15_global_0p05_mask.npz \
+  --input data/masks/dhw_available_2020_06_15_global_0p05_mask.npz \
+  --input data/masks/dhw_available_2025_06_15_global_0p05_mask.npz \
+  --output data/masks/dhw_available_global_0p05_mask.npz
+```
+
+3. Build water mask and final reef-domain mask with sea-only dilation:
+
+```bash
+python scripts/build/build_water_mask.py \
+  --grid-id global_0p05 \
+  --output-npz data/masks/water_global_0p05_mask.npz
+
+python scripts/build/build_reef_domain_mask.py \
+  --reef-mask data/masks/reef_unep_all_touched_global_0p05_mask.npz \
+  --reef-mask data/masks/reef_ne_all_touched_global_0p05_mask.npz \
+  --water-mask data/masks/water_global_0p05_mask.npz \
+  --dhw-mask data/masks/dhw_available_global_0p05_mask.npz \
+  --dilate-iterations 1 \
+  --output data/masks/crw_dhw_daily_global_0p05_mask.npz
+```
+
+Final formula implemented by `build_reef_domain_mask.py`:
+
+```text
+reef_seed = UNEP_all_touched OR NE_all_touched
+dil = reef_seed OR (dilate(reef_seed) AND water_mask)
+mask = dil AND dhw_available_union
+```
+
 ## Run backend (uvicorn)
 
 Preferred launcher:

@@ -137,6 +137,8 @@ def _build_release_layers(
             descriptor["icon"] = layer_spec.get("icon")
         if "opacity" in layer_spec:
             descriptor["opacity"] = layer_spec.get("opacity")
+        if "resampling" in layer_spec:
+            descriptor["resampling"] = layer_spec.get("resampling")
         if "legend" in layer_spec:
             descriptor["legend"] = layer_spec.get("legend")
         out.append(descriptor)

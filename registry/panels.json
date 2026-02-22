@@ -228,7 +228,7 @@
     },
     "coral_reef_dhw": {
       "title": "Coral Reef Heat Stress",
-      "score_map_id": "dhw_risk_score_trend_score",
+      "score_map_id": "reef_domain_presence_score",
       "graphs": [
         {
           "id": "dhw_risk_days",

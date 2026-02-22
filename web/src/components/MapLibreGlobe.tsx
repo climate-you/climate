@@ -9,6 +9,7 @@ export type MapLayerOption = {
   label: string;
   imageUrl?: string;
   opacity?: number;
+  resampling?: "linear" | "nearest";
 };
 
 type Props = {
@@ -329,7 +330,7 @@ export default function MapLibreGlobe({
             source: TEXTURE_SOURCE_ID,
             paint: {
               "raster-opacity": selected.opacity ?? 0.72,
-              "raster-resampling": "linear",
+              "raster-resampling": selected.resampling ?? "linear",
             },
           },
           beforeId,
@@ -770,7 +771,7 @@ export default function MapLibreGlobe({
             source: TEXTURE_SOURCE_ID,
             paint: {
               "raster-opacity": selected.opacity ?? 0.72,
-              "raster-resampling": "linear",
+              "raster-resampling": selected.resampling ?? "linear",
             },
           },
           beforeId,

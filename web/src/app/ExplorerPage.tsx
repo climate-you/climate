@@ -140,6 +140,7 @@ type ReleaseResolveResponse = {
     description?: string | null;
     icon?: string | null;
     opacity?: number | null;
+    resampling?: "linear" | "nearest" | null;
     legend?: Record<string, unknown> | null;
   }>;
 };
@@ -1022,7 +1023,9 @@ function buildStackedBarOption({
 }): EChartsOption {
   const theme = chartThemeTokens();
   const xValues = data.map((row) => row.x);
-  const barKeys = visibleKeys.filter((key) => series[key]?.style?.type === "bar");
+  const barKeys = visibleKeys.filter(
+    (key) => series[key]?.style?.type === "bar",
+  );
   const defaultStack = "stacked-bars";
   const chartSeries: NonNullable<EChartsOption["series"]> = barKeys.map(
     (key, idx) => {
@@ -1064,7 +1067,9 @@ function buildStackedBarOption({
             (item) =>
               item as { value?: unknown; marker?: string; seriesName?: string },
           )
-          .filter((r) => typeof r.value === "number" && Number.isFinite(r.value))
+          .filter(
+            (r) => typeof r.value === "number" && Number.isFinite(r.value),
+          )
           .map(
             (r) =>
               `${r.marker ?? ""}${r.seriesName ?? ""}: ${Math.round(Number(r.value))}`,
@@ -1332,7 +1337,8 @@ function GraphCard({
   const isHotDaysChart =
     !isStackedBarChart &&
     (graph.id === "t2m_hot_days" || graph.id === "sst_hot_days");
-  const graphInfoText = GRAPH_INFO_TEXT_BY_ID[graph.id] ?? DEFAULT_GRAPH_INFO_TEXT;
+  const graphInfoText =
+    GRAPH_INFO_TEXT_BY_ID[graph.id] ?? DEFAULT_GRAPH_INFO_TEXT;
   const isZoomOutGraph = graph.id === "t2m_zoomout";
   const allVisibleData = useMemo(
     () =>
@@ -1546,6 +1552,10 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       label: layer.label,
       imageUrl: `${mapAssetBase}/assets/v/${encodedRelease}/${layer.asset_path}`,
       opacity: typeof layer.opacity === "number" ? layer.opacity : 0.72,
+      resampling:
+        layer.resampling === "linear" || layer.resampling === "nearest"
+          ? layer.resampling
+          : ("nearest" as const),
     }));
     return [{ id: "none", label: "None" }, ...configuredLayers];
   }, [encodedRelease, mapAssetBase, releaseLayers]);

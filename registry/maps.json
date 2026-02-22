@@ -282,6 +282,56 @@
       "filename": "dhw_risk_score_trend_1985_2025_mercator.webp"
     }
   },
+  "reef_domain_mercator_texture": {
+    "id": "reef_domain_mercator_texture",
+    "title": "Coral reef domain mask (Mercator)",
+    "type": "texture",
+    "file_format": "png",
+    "projection": "mercator",
+    "web_write": true,
+    "source_metric": "dhw_no_risk_days_per_year",
+    "reducer": {
+      "op": "mean",
+      "start_year": 1985,
+      "end_year": 2025
+    },
+    "palette": {
+      "colors": [
+        "#ff0000",
+        "#ff0000"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 1.0
+    },
+    "output": {
+      "filename": "reef_domain_mercator.png"
+    }
+  },
+  "reef_domain_presence_score": {
+    "id": "reef_domain_presence_score",
+    "title": "Coral reef domain presence score",
+    "type": "score",
+    "source_metric": "dhw_no_risk_days_per_year",
+    "reducer": {
+      "op": "mean",
+      "start_year": 1985,
+      "end_year": 2025
+    },
+    "default_score": 0,
+    "score_rules": [
+      { "score": 1, "predicate": { "op": "gte", "threshold": 0.0 } }
+    ],
+    "output": {
+      "png_filename": "reef_domain_presence_score.png",
+      "binary_filename": "reef_domain_presence_score.i16.bin",
+      "dtype": "int16"
+    }
+  },
   "dhw_risk_score_trend_score": {
     "id": "dhw_risk_score_trend_score",
     "title": "Coral reef DHW risk-score trend score",
