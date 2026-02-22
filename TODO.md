@@ -9,6 +9,7 @@
   - update Licenses/Copyrights
   - when data isn't available for graph what happens ?
 - Graphs:
+  - why doesn't Palma, Spain have sea temperature information ?
   - zoomout graph needs work + rephrase graph captions + info bubble
   - extra coral reef stress graph + new texture for 3D globe (beware of different grid size)
 - Code:
