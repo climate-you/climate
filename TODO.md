@@ -3,7 +3,6 @@
   - Test on mobile (need to run `./scripts/api_backend.sh --lan`):
     -- loading new location should clear previous one (?)
     -- should we retain the current graph card on mobile ? Conflicts with the weight logic.
-    -- selecting different map on tap doesn't work well. Solution might conflict with the fade in on desktop.
     -- hide the close button: swiping down should close the panel (revisit).
     -- about/sources button should be under the selected location panel, should they be moved to a menu (?)
   - update Licenses/Copyrights

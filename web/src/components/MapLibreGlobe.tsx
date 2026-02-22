@@ -439,6 +439,9 @@ export default function MapLibreGlobe({
       let isOpen = false;
       let autoCloseTimeoutId: number | undefined;
       let hideTimeoutId: number | undefined;
+      const isCoarsePointerMode = () =>
+        window.matchMedia("(pointer: coarse)").matches ||
+        window.matchMedia("(hover: none)").matches;
       const clearAutoCloseTimer = () => {
         if (autoCloseTimeoutId === undefined) return;
         window.clearTimeout(autoCloseTimeoutId);
@@ -497,6 +500,9 @@ export default function MapLibreGlobe({
           item.style.whiteSpace = "nowrap";
           item.addEventListener("click", () => {
             onLayerChangeRef.current(option.id);
+            if (isCoarsePointerMode()) {
+              closeMenu();
+            }
           });
           menu.appendChild(item);
         }
@@ -532,14 +538,36 @@ export default function MapLibreGlobe({
       };
       const onControlPointerEnter = () => {
         if (!isOpen) return;
+        if (isCoarsePointerMode()) return;
         clearAutoCloseTimer();
       };
-      const onControlPointerLeave = () => {
+      const onControlPointerLeave = (event: PointerEvent) => {
         if (!isOpen) return;
+        if (isCoarsePointerMode() || event.pointerType === "touch") return;
         scheduleAutoClose();
       };
-      const onButtonPointerEnter = () => {
+      const onButtonPointerEnter = (event: PointerEvent) => {
+        if (isCoarsePointerMode() || event.pointerType === "touch") return;
         openMenu();
+      };
+      const onButtonClick = (event: MouseEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (isCoarsePointerMode()) {
+          if (isOpen) {
+            closeMenu();
+            return;
+          }
+          openMenu();
+          return;
+        }
+        openMenu();
+      };
+      const onDocumentPointerDown = (event: PointerEvent) => {
+        if (!isOpen || !isCoarsePointerMode()) return;
+        const target = event.target;
+        if (target instanceof Node && container?.contains(target)) return;
+        closeMenu();
       };
       return {
         onAdd() {
@@ -560,6 +588,7 @@ export default function MapLibreGlobe({
           button.style.lineHeight = "1";
           button.style.color = "#111";
           button.addEventListener("pointerenter", onButtonPointerEnter);
+          button.addEventListener("click", onButtonClick);
 
           menu = document.createElement("div");
           menu.style.position = "absolute";
@@ -582,6 +611,7 @@ export default function MapLibreGlobe({
           renderMenuOptions();
 
           document.addEventListener("keydown", onDocumentKeyDown);
+          document.addEventListener("pointerdown", onDocumentPointerDown, true);
 
           container.appendChild(button);
           container.appendChild(menu);
@@ -597,7 +627,13 @@ export default function MapLibreGlobe({
           container?.removeEventListener("pointerenter", onControlPointerEnter);
           container?.removeEventListener("pointerleave", onControlPointerLeave);
           document.removeEventListener("keydown", onDocumentKeyDown);
+          document.removeEventListener(
+            "pointerdown",
+            onDocumentPointerDown,
+            true,
+          );
           button?.removeEventListener("pointerenter", onButtonPointerEnter);
+          button?.removeEventListener("click", onButtonClick);
           container?.remove();
         },
         refresh() {
