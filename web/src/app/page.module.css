@@ -30,6 +30,7 @@
 
 .map :global(.maplibregl-ctrl-top-left),
 .map :global(.maplibregl-ctrl-top-right) {
+  z-index: 2;
   transition:
     opacity 520ms ease,
     transform 520ms ease;

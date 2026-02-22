@@ -459,6 +459,13 @@ export default function MapLibreGlobe({
         isOpen = false;
         clearAutoCloseTimer();
         clearHideTimer();
+        const controlSlot = container?.parentElement;
+        if (controlSlot) {
+          controlSlot.style.zIndex = "2";
+        }
+        if (container) {
+          container.style.zIndex = "2";
+        }
         if (!menu) return;
         menu.style.opacity = "0";
         menu.style.pointerEvents = "none";
@@ -503,6 +510,14 @@ export default function MapLibreGlobe({
         isOpen = true;
         clearAutoCloseTimer();
         clearHideTimer();
+        const controlSlot = container?.parentElement;
+        if (controlSlot) {
+          // Raise parent slot so the menu can overlay the location panel.
+          controlSlot.style.zIndex = "7";
+        }
+        if (container) {
+          container.style.zIndex = "7";
+        }
         onLayerMenuOpenRef.current?.();
         menu.style.visibility = "visible";
         menu.style.pointerEvents = "auto";
@@ -531,6 +546,7 @@ export default function MapLibreGlobe({
           container = document.createElement("div");
           container.className = "maplibregl-ctrl maplibregl-ctrl-group";
           container.style.position = "relative";
+          container.style.zIndex = "2";
           container.addEventListener("pointerenter", onControlPointerEnter);
           container.addEventListener("pointerleave", onControlPointerLeave);
 
@@ -561,6 +577,7 @@ export default function MapLibreGlobe({
           menu.style.opacity = "0";
           menu.style.visibility = "hidden";
           menu.style.pointerEvents = "none";
+          menu.style.zIndex = "8";
           menu.style.transition = `opacity ${LAYER_MENU_FADE_MS}ms ease`;
           renderMenuOptions();
 
@@ -573,6 +590,10 @@ export default function MapLibreGlobe({
         onRemove() {
           clearAutoCloseTimer();
           clearHideTimer();
+          const controlSlot = container?.parentElement;
+          if (controlSlot) {
+            controlSlot.style.zIndex = "2";
+          }
           container?.removeEventListener("pointerenter", onControlPointerEnter);
           container?.removeEventListener("pointerleave", onControlPointerLeave);
           document.removeEventListener("keydown", onDocumentKeyDown);
