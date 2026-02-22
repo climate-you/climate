@@ -683,7 +683,7 @@
 
   .app {
     height: calc(100vh - 20px);
-    margin: 10px auto;
+    margin: 0px auto;
   }
 
   .searchOverlay {
@@ -779,10 +779,10 @@
   }
 
   .coldOpenMessage.coldOpenMessagePrimary {
-    font-size: 38px;
+    font-size: 36px;
   }
 
   .coldOpenMessage {
-    font-size: 58px;
+    font-size: 31px;
   }
 }

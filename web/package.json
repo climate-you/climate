@@ -10,7 +10,8 @@
     "dev:webpack-fast": "next dev --webpack --disable-source-maps",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:unit": "node --test src/lib/*.test.mjs"
   },
   "dependencies": {
     "echarts": "^5.6.0",

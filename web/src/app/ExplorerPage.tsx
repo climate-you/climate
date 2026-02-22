@@ -1262,9 +1262,11 @@ function GraphCard({
 }
 
 const COLD_OPEN_FADE_MS = 520;
-const COLD_OPEN_PRIMARY_HOLD_MS = 6000;
 const COLD_OPEN_QUESTION_DELAY_MS = 1700;
+const COLD_OPEN_PROMPT_DELAY_MS = 6000;
 const COLD_OPEN_PRIMARY_REVEAL_DELAY_MS = 80;
+const COLD_OPEN_WHEEL_GESTURE_IDLE_MS = 55;
+const COLD_OPEN_WHEEL_ACTIVE_DELTA_MIN = 0.35;
 
 export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const envDefaultReleaseRaw = process.env.NEXT_PUBLIC_RELEASE;
@@ -1325,6 +1327,8 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const introPhaseTimerRef = useRef<number | null>(null);
   const introPrimaryTimerRef = useRef<number | null>(null);
   const introQuestionTimerRef = useRef<number | null>(null);
+  const coldOpenWheelGestureActiveRef = useRef(false);
+  const coldOpenWheelGestureResetTimerRef = useRef<number | null>(null);
   const [requestedRelease, setRequestedRelease] = useState<string>(
     envDefaultRelease
       ? envDefaultRelease.toLowerCase() === "latest"
@@ -1841,16 +1845,29 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
 
   const showIntroPrompt = useCallback(() => {
     if (!introVisible || introPromptVisible) return;
+    if (introPhaseTimerRef.current) {
+      window.clearTimeout(introPhaseTimerRef.current);
+      introPhaseTimerRef.current = null;
+    }
     setIntroPromptVisible(true);
   }, [introPromptVisible, introVisible]);
 
+  const showIntroQuestion = useCallback(() => {
+    if (!introVisible || introQuestionVisible) return;
+    if (introQuestionTimerRef.current) {
+      window.clearTimeout(introQuestionTimerRef.current);
+      introQuestionTimerRef.current = null;
+    }
+    setIntroQuestionVisible(true);
+  }, [introQuestionVisible, introVisible]);
+
   useEffect(() => {
-    if (!introVisible || introPromptVisible) return;
+    if (!introVisible || introQuestionVisible) return;
     introPhaseTimerRef.current = window.setTimeout(() => {
-      setIntroPromptVisible(true);
+      setIntroQuestionVisible(true);
       introPhaseTimerRef.current = null;
-    }, COLD_OPEN_PRIMARY_HOLD_MS);
-  }, [introPromptVisible, introVisible]);
+    }, COLD_OPEN_QUESTION_DELAY_MS);
+  }, [introQuestionVisible, introVisible]);
 
   useEffect(() => {
     if (!introVisible || introPromptVisible || introPrimaryVisible) return;
@@ -1861,11 +1878,11 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   }, [introPrimaryVisible, introPromptVisible, introVisible]);
 
   useEffect(() => {
-    if (!introVisible || introPromptVisible || introQuestionVisible) return;
+    if (!introVisible || !introQuestionVisible || introPromptVisible) return;
     introQuestionTimerRef.current = window.setTimeout(() => {
-      setIntroQuestionVisible(true);
+      setIntroPromptVisible(true);
       introQuestionTimerRef.current = null;
-    }, COLD_OPEN_QUESTION_DELAY_MS);
+    }, COLD_OPEN_PROMPT_DELAY_MS);
   }, [introPromptVisible, introQuestionVisible, introVisible]);
 
   const handleColdOpenInteractionCapture = useCallback(
@@ -1873,14 +1890,115 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       if (!introVisible) return;
       e.preventDefault();
       e.stopPropagation();
+      if (!introQuestionVisible) {
+        showIntroQuestion();
+        return;
+      }
       if (!introPromptVisible) {
         showIntroPrompt();
         return;
       }
       dismissColdOpen();
     },
-    [dismissColdOpen, introPromptVisible, introVisible, showIntroPrompt],
+    [
+      dismissColdOpen,
+      introPromptVisible,
+      introQuestionVisible,
+      introVisible,
+      showIntroPrompt,
+      showIntroQuestion,
+    ],
   );
+
+  const handleColdOpenPointerDownCapture = useCallback(
+    (e: React.PointerEvent<HTMLElement>) => {
+      if (!introVisible) return;
+      if (e.pointerType === "touch") {
+        // Touch interactions are handled in onTouchStartCapture to avoid
+        // processing the same tap twice on mobile browsers.
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      handleColdOpenInteractionCapture(e);
+    },
+    [handleColdOpenInteractionCapture, introVisible],
+  );
+
+  const handleColdOpenWheelCapture = useCallback(
+    (e: React.WheelEvent<HTMLElement>) => {
+      if (!introVisible) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const gestureDelta = Math.max(Math.abs(e.deltaX), Math.abs(e.deltaY));
+      if (!coldOpenWheelGestureActiveRef.current) {
+        if (gestureDelta < COLD_OPEN_WHEEL_ACTIVE_DELTA_MIN) {
+          return;
+        }
+        coldOpenWheelGestureActiveRef.current = true;
+        handleColdOpenInteractionCapture(e);
+      }
+      // Do not extend the gesture session for tiny inertial wheel events.
+      if (gestureDelta < COLD_OPEN_WHEEL_ACTIVE_DELTA_MIN) {
+        return;
+      }
+      if (coldOpenWheelGestureResetTimerRef.current) {
+        window.clearTimeout(coldOpenWheelGestureResetTimerRef.current);
+      }
+      coldOpenWheelGestureResetTimerRef.current = window.setTimeout(() => {
+        coldOpenWheelGestureActiveRef.current = false;
+        coldOpenWheelGestureResetTimerRef.current = null;
+      }, COLD_OPEN_WHEEL_GESTURE_IDLE_MS);
+    },
+    [handleColdOpenInteractionCapture, introVisible],
+  );
+
+  useEffect(() => {
+    if (!introVisible) return;
+    const onWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) return;
+      if (
+        event.key === "Shift" ||
+        event.key === "Control" ||
+        event.key === "Alt" ||
+        event.key === "Meta"
+      ) {
+        return;
+      }
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT")
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (!introQuestionVisible) {
+        showIntroQuestion();
+        return;
+      }
+      if (!introPromptVisible) {
+        showIntroPrompt();
+        return;
+      }
+      dismissColdOpen();
+    };
+    window.addEventListener("keydown", onWindowKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", onWindowKeyDown, true);
+    };
+  }, [
+    dismissColdOpen,
+    introPromptVisible,
+    introQuestionVisible,
+    introVisible,
+    showIntroPrompt,
+    showIntroQuestion,
+  ]);
 
   useEffect(
     () => () => {
@@ -1895,6 +2013,9 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       }
       if (introQuestionTimerRef.current) {
         window.clearTimeout(introQuestionTimerRef.current);
+      }
+      if (coldOpenWheelGestureResetTimerRef.current) {
+        window.clearTimeout(coldOpenWheelGestureResetTimerRef.current);
       }
     },
     [],
@@ -2076,9 +2197,9 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   return (
     <main
       className={`${styles.app} ${introVisible ? styles.appIntro : styles.appReady}`}
-      onPointerDownCapture={handleColdOpenInteractionCapture}
+      onPointerDownCapture={handleColdOpenPointerDownCapture}
       onTouchStartCapture={handleColdOpenInteractionCapture}
-      onWheelCapture={handleColdOpenInteractionCapture}
+      onWheelCapture={handleColdOpenWheelCapture}
     >
       <div
         className={`${styles.map} ${showIntroMap ? styles.mapVisible : styles.mapHidden}`}
