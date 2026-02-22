@@ -5,8 +5,8 @@
     -- should we retain the current graph card on mobile ? Conflicts with the weight logic.
     -- hide the close button: swiping down should close the panel (revisit).
     -- about/sources button should be under the selected location panel, should they be moved to a menu (?)
+    -- bottom offset of selected location panel, how to fix ?
   - update Licenses/Copyrights
-  - remove captions under sea temperature graph and move it to info bubble. `This graph shows Sea Surface Temperature.`
   - when data isn't available for graph what happens ?
 - Graphs:
   - zoomout graph needs work + rephrase graph captions + info bubble

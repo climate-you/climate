@@ -162,6 +162,20 @@ type ExplorerPageProps = {
   coldOpen?: boolean;
 };
 
+const GRAPH_INFO_TEXT_BY_ID: Record<string, string> = {
+  t2m_annual:
+    "Annual air temperature is derived from daily air temperature at 2 meters above the surface, aggregated into yearly averages.",
+  t2m_hot_days:
+    "Number of hot days per year are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979.",
+  sst_hot_days:
+    "Number of sea surface hot days per year are counted as days where the sea surface temperature is warmer than the top 10% warmest days in a 10-year baseline starting in 1979.",
+  sst_annual:
+    "Annual air temperature is derived from daily sea surface temperature, aggregated into yearly averages.",
+  t2m_zoomout: "Todo: placeholder text",
+};
+
+const DEFAULT_GRAPH_INFO_TEXT = "Todo: placeholder text";
+
 function mergeSeries(series: Record<string, SeriesPayload>, keys: string[]) {
   // Merge into rows keyed by x (ISO date or year). We assume x values are unique per series.
   const rows = new Map<string, ChartRow>();
@@ -1196,9 +1210,7 @@ function GraphCard({
   const isHotDaysChart =
     graph.id === "t2m_hot_days" || graph.id === "sst_hot_days";
   const graphInfoText =
-    graph.id === "t2m_hot_days"
-      ? "Number of hot days (NHD) per year are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979."
-      : "Annual air temperature is derived from daily air temperature at 2 meters above the surface at this location, aggregated into yearly averages.";
+    GRAPH_INFO_TEXT_BY_ID[graph.id] ?? DEFAULT_GRAPH_INFO_TEXT;
   const isZoomOutGraph = graph.id === "t2m_zoomout";
   const allVisibleData = useMemo(
     () =>

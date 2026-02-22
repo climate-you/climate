@@ -157,13 +157,9 @@
       "graphs": [
         {
           "id": "sst_annual",
-          "title": "Annual Sea Surface temperature",
+          "title": "Annual sea surface temperature",
           "x_axis_label": "Year",
           "y_axis_label": "Temperature (°C)",
-          "caption": {
-            "type": "static",
-            "text": "This graph shows Sea Surface Temperature. "
-          },
           "source": "ERDDAP SST temperature daily means (2021-2025)",
           "series": [
             {
@@ -197,13 +193,9 @@
         },
         {
           "id": "sst_hot_days",
-          "title": "Hot days per year (sea surface temperature)",
+          "title": "Number of sea surface hot days",
           "x_axis_label": "Year",
           "y_axis_label": "Days/year",
-          "caption": {
-            "type": "static",
-            "text": "Hot days are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979. Units: Hot days / year."
-          },
           "source": "ERDDAP OISST daily means (2021-2025)",
           "series": [
             {
