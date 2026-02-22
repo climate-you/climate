@@ -315,8 +315,24 @@ def _series_axis(tile_store: TileDataStore, metric: str, length: int) -> list[An
     axis = tile_store.axis(metric)
     if axis:
         if len(axis) != length:
-            raise RuntimeError(
-                f"Axis length {len(axis)} != series length {length} for {metric}"
+            # Partial/in-progress packaging can leave axis metadata temporarily out
+            # of sync with tile vector length. Infer a compatible yearly axis when
+            # possible instead of failing the whole panel response.
+            try:
+                axis_int = [int(v) for v in axis]
+            except Exception:
+                axis_int = []
+
+            if axis_int:
+                end_year = axis_int[-1]
+                start_year = end_year - int(length) + 1
+                return list(range(start_year, end_year + 1))
+
+            if len(axis) > length:
+                return list(axis[-length:])
+            # Axis is shorter and non-numeric; pad deterministically from fallback.
+            return list(
+                range(tile_store.start_year_fallback, tile_store.start_year_fallback + length)
             )
         return list(axis)
     return list(
@@ -797,7 +813,6 @@ def build_scored_panels_tiles_registry(
             panel_valid_bbox=None,
             panel_cell_indices=None,
         )
-
     headlines = [
         _compute_t2m_preindustrial_headline(
             tile_store=tile_store,

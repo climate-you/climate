@@ -331,23 +331,28 @@ def _write_texture_map(
     palette = spec.get("palette", {}) or {}
     colors = palette.get("colors", ["#313695", "#74add1", "#f7f7f7", "#f46d43", "#a50026"])
     nan_color = str(palette.get("nan_color", "#000000"))
+    nan_alpha_raw = palette.get("nan_alpha")
+    nan_alpha = float(nan_alpha_raw) if nan_alpha_raw is not None else None
+    if nan_alpha is not None and not (0.0 <= nan_alpha <= 1.0):
+        raise ValueError(f"Invalid palette.nan_alpha for {map_id}: {nan_alpha}. Expected 0..1.")
     projection = _resolve_projection(spec)
     projected_values, bounds = _project_texture_values(values, projection=projection)
     projected_values = _stitch_longitude_edges(projected_values)
 
-    rgb = _apply_palette(
+    image = _apply_palette(
         projected_values,
         vmin=vmin,
         vmax=vmax,
         colors=colors,
         nan_color=nan_color,
+        nan_alpha=nan_alpha,
     )
-    rgb = _resize_if_needed(
-        rgb,
+    image = _resize_if_needed(
+        image,
         width=output.get("width"),
         height=output.get("height"),
     )
-    _save_texture(texture_path, rgb, file_format=file_format)
+    _save_texture(texture_path, image, file_format=file_format)
 
     finite = projected_values[np.isfinite(projected_values)]
     manifest = {
@@ -367,7 +372,11 @@ def _write_texture_map(
             "qlo": float(scale.get("qlo", 0.02)),
             "qhi": float(scale.get("qhi", 0.98)),
         },
-        "palette": {"colors": list(colors), "nan_color": nan_color},
+        "palette": {
+            "colors": list(colors),
+            "nan_color": nan_color,
+            "nan_alpha": nan_alpha,
+        },
         "stats": {
             "min": float(np.min(finite)) if finite.size else None,
             "max": float(np.max(finite)) if finite.size else None,
@@ -702,15 +711,23 @@ def _apply_palette(
     vmax: float,
     colors: list[str],
     nan_color: str,
+    nan_alpha: float | None,
 ) -> np.ndarray:
     rgb_stops = np.asarray([_hex_to_rgb(c) for c in colors], dtype=np.float64)
     nan_rgb = np.asarray(_hex_to_rgb(nan_color), dtype=np.uint8)
 
     values = np.asarray(values, dtype=np.float64)
-    out = np.zeros(values.shape + (3,), dtype=np.uint8)
+    if nan_alpha is None:
+        out = np.zeros(values.shape + (3,), dtype=np.uint8)
+    else:
+        out = np.zeros(values.shape + (4,), dtype=np.uint8)
 
     mask = np.isfinite(values)
-    out[~mask] = nan_rgb
+    if nan_alpha is None:
+        out[~mask] = nan_rgb
+    else:
+        out[~mask, :3] = nan_rgb
+        out[~mask, 3] = int(round(nan_alpha * 255.0))
     if not np.any(mask):
         return out
 
@@ -723,34 +740,48 @@ def _apply_palette(
     i1 = np.clip(i0 + 1, 0, nseg)
     frac = pos - i0
     interp = rgb_stops[i0] * (1.0 - frac[:, None]) + rgb_stops[i1] * frac[:, None]
-    out[mask] = np.clip(interp, 0, 255).astype(np.uint8)
+    out[mask, :3] = np.clip(interp, 0, 255).astype(np.uint8)
+    if out.shape[-1] == 4:
+        out[mask, 3] = 255
     return out
 
 
 def _resize_if_needed(
-    rgb: np.ndarray,
+    image: np.ndarray,
     *,
     width: int | None,
     height: int | None,
 ) -> np.ndarray:
     if width is None and height is None:
-        return rgb
+        return image
     if width is None or height is None:
         raise ValueError("Both output.width and output.height must be set together.")
-    if rgb.shape[1] == int(width) and rgb.shape[0] == int(height):
-        return rgb
+    if image.shape[1] == int(width) and image.shape[0] == int(height):
+        return image
     try:
         from PIL import Image
     except Exception as exc:  # pragma: no cover
         raise RuntimeError(
             "Pillow is required for map PNG resizing. Install with: pip install pillow"
         ) from exc
-    im = Image.fromarray(rgb, mode="RGB")
+    mode = _texture_image_mode(image)
+    im = Image.fromarray(image, mode=mode)
     im = im.resize((int(width), int(height)), resample=Image.BILINEAR)
     return np.asarray(im, dtype=np.uint8)
 
 
-def _save_png(path: Path, rgb: np.ndarray) -> None:
+def _texture_image_mode(image: np.ndarray) -> str:
+    arr = np.asarray(image)
+    if arr.ndim != 3:
+        raise ValueError(f"Expected texture image ndim=3, got shape={arr.shape}")
+    if arr.shape[-1] == 3:
+        return "RGB"
+    if arr.shape[-1] == 4:
+        return "RGBA"
+    raise ValueError(f"Expected texture image channels=3|4, got shape={arr.shape}")
+
+
+def _save_png(path: Path, image: np.ndarray) -> None:
     try:
         from PIL import Image
     except Exception as exc:  # pragma: no cover
@@ -758,13 +789,14 @@ def _save_png(path: Path, rgb: np.ndarray) -> None:
             "Pillow is required for map PNG output. Install with: pip install pillow"
         ) from exc
     path.parent.mkdir(parents=True, exist_ok=True)
-    Image.fromarray(rgb, mode="RGB").save(path, format="PNG")
+    mode = _texture_image_mode(image)
+    Image.fromarray(image, mode=mode).save(path, format="PNG")
 
 
-def _save_texture(path: Path, rgb: np.ndarray, *, file_format: str) -> None:
+def _save_texture(path: Path, image: np.ndarray, *, file_format: str) -> None:
     fmt = file_format.lower()
     if fmt == "png":
-        _save_png(path, rgb)
+        _save_png(path, image)
         return
 
     if fmt == "webp":
@@ -775,7 +807,8 @@ def _save_texture(path: Path, rgb: np.ndarray, *, file_format: str) -> None:
                 "Pillow is required for map WebP output. Install with: pip install pillow"
             ) from exc
         path.parent.mkdir(parents=True, exist_ok=True)
-        Image.fromarray(rgb, mode="RGB").save(path, format="WEBP", quality=85, method=6)
+        mode = _texture_image_mode(image)
+        Image.fromarray(image, mode=mode).save(path, format="WEBP", quality=85, method=6)
         return
 
     raise ValueError(f"Unsupported texture file format: {file_format}")

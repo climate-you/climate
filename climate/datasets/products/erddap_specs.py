@@ -18,13 +18,16 @@ ERDDAP_DATASETS = {
         # Common coord column names returned by ERDDAP CSV
         "lat_col_candidates": ["latitude", "lat"],
         "lon_col_candidates": ["longitude", "lon"],
+        # Keep SST cache footprint lower on disk (same strategy as DHW cache).
+        "compress_cache": True,
+        "compress_cache_level": 4,
     },
     "crw_dhw_daily": {
         "dataset_id": "noaacrwdhwDaily",
         "var": "degree_heating_week",
         "bases": [
-            "https://upwell.pfeg.noaa.gov/erddap",
-            "https://coastwatch.pfeg.noaa.gov/erddap",
+            # CRW DHW is currently published on this host.
+            "https://coastwatch.noaa.gov/erddap",
         ],
         # CRW DHW uses daily time at 12:00Z (as observed from curl)
         "dims": ["time", "latitude", "longitude"],
@@ -36,5 +39,8 @@ ERDDAP_DATASETS = {
         "lon_col_candidates": ["longitude", "lon"],
         # Operational note: large multi-year requests often yield 500/502; use yearly chunks
         "recommended_block_years": 1,
+        # Store cache files compressed to keep long DHW runs manageable on disk.
+        "compress_cache": True,
+        "compress_cache_level": 4,
     },
 }

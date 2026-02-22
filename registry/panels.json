@@ -225,6 +225,54 @@
           ]
         }
       ]
+    },
+    "coral_reef_dhw": {
+      "title": "Coral Reef Heat Stress",
+      "score_map_id": "dhw_risk_score_trend_score",
+      "graphs": [
+        {
+          "id": "dhw_risk_days",
+          "title": "Coral Reef DHW risk days per year",
+          "x_axis_label": "Year",
+          "y_axis_label": "Number of days",
+          "source": "NOAA Coral Reef Watch daily Degree Heating Week (1985-2025)",
+          "series": [
+            {
+              "key": "dhw_no_risk_days",
+              "metric": "dhw_no_risk_days_per_year",
+              "label": "No risk (DHW < 4)",
+              "unit": "days",
+              "style": {
+                "type": "bar",
+                "color": "#33a02c",
+                "stack": "dhw_risk_days"
+              }
+            },
+            {
+              "key": "dhw_moderate_risk_days",
+              "metric": "dhw_moderate_risk_days_per_year",
+              "label": "Moderate risk (4 <= DHW < 8)",
+              "unit": "days",
+              "style": {
+                "type": "bar",
+                "color": "#fdd835",
+                "stack": "dhw_risk_days"
+              }
+            },
+            {
+              "key": "dhw_severe_risk_days",
+              "metric": "dhw_severe_risk_days_per_year",
+              "label": "Severe risk (DHW >= 8)",
+              "unit": "days",
+              "style": {
+                "type": "bar",
+                "color": "#e53935",
+                "stack": "dhw_risk_days"
+              }
+            }
+          ]
+        }
+      ]
     }
   }
 }

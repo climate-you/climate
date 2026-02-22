@@ -57,6 +57,13 @@ from climate.datasets.products.erddap_specs import ERDDAP_DATASETS
 from climate.datasets.sources.erddap import build_griddap_query, make_griddap_url
 from climate.datasets.sources.http import download_to
 from climate.datasets.derive.hot_days import hot_days_per_year_xr
+from climate.datasets.derive.metrics.dhw_metrics import (
+    dhw_no_risk_days_per_year_xr,
+    dhw_moderate_risk_days_per_year_xr,
+    dhw_severe_risk_days_per_year_xr,
+    dhw_risk_score_per_year_xr,
+    dhw_max_per_year_xr,
+)
 from climate.datasets.derive.time_agg import (
     find_time_dim,
     annual_mean_from_monthly,
@@ -76,11 +83,14 @@ class TileRange:
 
 _REGRID_DEBUG_SEEN: set[str] = set()
 _REGRID_DEBUG_SEEN_LOCK = threading.Lock()
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _grid_from_id(grid_id: str, *, tile_size: int) -> GridSpec:
     if grid_id == "global_0p25":
         return GridSpec.global_0p25(tile_size=tile_size)
+    if grid_id == "global_0p05":
+        return GridSpec.global_0p05(tile_size=tile_size)
     raise ValueError(f"Unsupported grid_id: {grid_id}")
 
 
@@ -195,6 +205,7 @@ def _compute_tiles_from_cds_downloads(
     output_years: list[int],
     time_axis: str,
     data_var_hint: str | None = None,
+    dataset_mask: np.ndarray | None = None,
 ) -> int:
     agg_fn = _agg_map().get(agg)
     if agg_fn is None:
@@ -363,6 +374,7 @@ def _compute_tiles_from_cds_downloads(
         compression=compression,
         debug=debug,
         resume=resume,
+        dataset_mask=dataset_mask,
     )
     print(
         f"[cds] Finished writing tiles for metric={metric_id} "
@@ -393,6 +405,7 @@ def _compute_tiles_from_erddap_downloads(
     output_years: list[int],
     time_axis: str,
     data_var_hint: str | None = None,
+    dataset_mask: np.ndarray | None = None,
 ) -> int:
     agg_fn = _agg_map().get(agg)
     if agg_fn is None:
@@ -486,6 +499,7 @@ def _compute_tiles_from_erddap_downloads(
         compression=compression,
         debug=debug,
         resume=resume,
+        dataset_mask=dataset_mask,
     )
     print(
         f"[erddap] Finished writing tiles for metric={metric_id} "
@@ -594,6 +608,81 @@ def _resolve_batch_tiles(batch_tiles: int | None, source: dict[str, Any]) -> int
     if source.get("batch_tiles_override") is not None:
         return int(source["batch_tiles_override"])
     return int(source.get("batch_tiles", 1))
+
+
+def _erddap_cache_dir(cache_root: Path, dataset_key: str) -> Path:
+    # Keep ERDDAP cache files partitioned by dataset to avoid huge mixed folders.
+    return cache_root / "erddap" / str(dataset_key)
+
+
+def _resolve_mask_path(mask_file: str) -> Path:
+    path = Path(mask_file)
+    if path.is_absolute():
+        return path
+    return REPO_ROOT / path
+
+
+def _load_dataset_mask(mask_file: str, *, grid: GridSpec) -> np.ndarray:
+    mask_path = _resolve_mask_path(mask_file)
+    if not mask_path.exists():
+        raise FileNotFoundError(f"Dataset mask not found: {mask_path}")
+
+    with np.load(mask_path, allow_pickle=False) as npz:
+        if "data" not in npz:
+            raise ValueError(f"Invalid mask file {mask_path}: missing 'data' array")
+        raw = np.asarray(npz["data"])
+        if raw.ndim != 2:
+            raise ValueError(
+                f"Invalid mask file {mask_path}: expected 2D data, got shape={raw.shape}"
+            )
+        if raw.shape != (grid.nlat, grid.nlon):
+            raise ValueError(
+                f"Mask grid mismatch for {mask_path}: mask={raw.shape}, "
+                f"grid=({grid.nlat},{grid.nlon})"
+            )
+        if raw.dtype == np.bool_:
+            mask = raw.astype(bool, copy=False)
+        else:
+            if np.issubdtype(raw.dtype, np.floating):
+                mask = np.isfinite(raw) & (raw != 0.0)
+            else:
+                mask = raw != 0
+
+        if "deg" in npz:
+            mask_deg = float(np.asarray(npz["deg"]).reshape(()))
+            if not np.isclose(mask_deg, float(grid.deg), atol=1e-9):
+                raise ValueError(
+                    f"Mask resolution mismatch for {mask_path}: "
+                    f"mask deg={mask_deg}, grid deg={grid.deg}"
+                )
+
+    return mask
+
+
+def _batch_mask_slice(
+    *,
+    dataset_mask: np.ndarray,
+    grid: GridSpec,
+    tile_range: TileRange,
+) -> np.ndarray:
+    ts = grid.tile_size
+    i_lat0 = tile_range.tile_r0 * ts
+    i_lon0 = tile_range.tile_c0 * ts
+    i_lat1_excl = min((tile_range.tile_r1 + 1) * ts, grid.nlat)
+    i_lon1_excl = min((tile_range.tile_c1 + 1) * ts, grid.nlon)
+    return dataset_mask[i_lat0:i_lat1_excl, i_lon0:i_lon1_excl]
+
+
+def _batch_has_any_valid_cells(
+    *,
+    dataset_mask: np.ndarray | None,
+    grid: GridSpec,
+    tile_range: TileRange,
+) -> bool:
+    if dataset_mask is None:
+        return True
+    view = _batch_mask_slice(dataset_mask=dataset_mask, grid=grid, tile_range=tile_range)
+    return bool(np.any(view))
 
 
 def _shutdown_process_pool(
@@ -852,6 +941,7 @@ def _concat_and_write_time_tiles(
     compression: dict | None,
     debug: bool,
     resume: bool,
+    dataset_mask: np.ndarray | None = None,
 ) -> int:
     if not da_parts:
         raise RuntimeError(f"No data blocks for metric={metric_id}")
@@ -874,6 +964,7 @@ def _concat_and_write_time_tiles(
             compression=compression,
             debug=debug,
             resume=resume,
+            dataset_mask=dataset_mask,
         )
 
     time_dim = find_time_dim(da_parts[0])
@@ -915,6 +1006,7 @@ def _concat_and_write_time_tiles(
         compression=compression,
         debug=debug,
         resume=resume,
+        dataset_mask=dataset_mask,
     )
 
 
@@ -944,6 +1036,11 @@ def _agg_map() -> dict[str, callable]:
             percentile=float((params or {}).get("percentile", 90)),
             debug=bool((params or {}).get("_debug", False)),
         ),
+        "dhw_no_risk_days_per_year": lambda da, _params: dhw_no_risk_days_per_year_xr(da),
+        "dhw_moderate_risk_days_per_year": lambda da, _params: dhw_moderate_risk_days_per_year_xr(da),
+        "dhw_severe_risk_days_per_year": lambda da, _params: dhw_severe_risk_days_per_year_xr(da),
+        "dhw_risk_score_per_year": lambda da, _params: dhw_risk_score_per_year_xr(da),
+        "dhw_max_per_year": lambda da, _params: dhw_max_per_year_xr(da),
 }
 
 
@@ -1156,6 +1253,7 @@ def _tiles_from_time_da(
     compression: dict | None,
     debug: bool,
     resume: bool,
+    dataset_mask: np.ndarray | None = None,
 ) -> int:
     axis_len = len(axis_values)
     write_axis_json(out_root, grid, metric_id, axis_name, axis_values)
@@ -1216,6 +1314,33 @@ def _tiles_from_time_da(
                 dtype=dtype,
             )
             tile[:valid_h, :valid_w, :] = np.asarray(arr, dtype=dtype)
+            if dataset_mask is not None:
+                i_lat0 = tr * grid.tile_size
+                i_lon0 = tc * grid.tile_size
+                if dataset_mask.shape == (grid.nlat, grid.nlon):
+                    mask_lat0 = i_lat0
+                    mask_lon0 = i_lon0
+                else:
+                    batch_lat0 = tile_range.tile_r0 * grid.tile_size
+                    batch_lon0 = tile_range.tile_c0 * grid.tile_size
+                    mask_lat0 = i_lat0 - batch_lat0
+                    mask_lon0 = i_lon0 - batch_lon0
+                valid_mask = dataset_mask[
+                    mask_lat0 : mask_lat0 + valid_h,
+                    mask_lon0 : mask_lon0 + valid_w,
+                ]
+                if np.isnan(fill_value):
+                    tile[:valid_h, :valid_w, :] = np.where(
+                        valid_mask[..., np.newaxis],
+                        tile[:valid_h, :valid_w, :],
+                        np.nan,
+                    )
+                else:
+                    tile[:valid_h, :valid_w, :] = np.where(
+                        valid_mask[..., np.newaxis],
+                        tile[:valid_h, :valid_w, :],
+                        fill_value,
+                    )
 
             if debug and debug_tiles_printed < 3:
                 if np.isnan(fill_value):
@@ -1264,6 +1389,62 @@ def _tiles_from_time_da(
     if not debug:
         print(f"Wrote {written} tile(s) for metric={metric_id}")
 
+    return written
+
+
+def _write_missing_yearly_tiles_for_batch(
+    *,
+    out_root: Path,
+    grid: GridSpec,
+    metric_id: str,
+    tile_range: TileRange,
+    dtype: np.dtype,
+    missing: object,
+    compression: dict | None,
+    resume: bool,
+    output_years: list[int],
+) -> int:
+    axis_values = [int(y) for y in output_years]
+    axis_len = len(axis_values)
+    write_axis_json(out_root, grid, metric_id, "yearly", axis_values)
+    fill_value = normalize_missing_value(missing, dtype)
+
+    codec = "zstd"
+    level = 10
+    if compression is not None:
+        codec = compression.get("codec", codec)
+        level = int(compression.get("level", level))
+    if codec == "zstd":
+        ext = ".bin.zst"
+    elif codec == "none":
+        ext = ".bin"
+    else:
+        raise ValueError(f"Unsupported compression codec: {codec}")
+
+    tile = np.full(
+        (grid.tile_size, grid.tile_size, axis_len),
+        fill_value,
+        dtype=dtype,
+    )
+
+    written = 0
+    for tr in range(tile_range.tile_r0, tile_range.tile_r1 + 1):
+        for tc in range(tile_range.tile_c0, tile_range.tile_c1 + 1):
+            out_path = tile_path(
+                out_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
+            )
+            if resume and out_path.exists():
+                continue
+            write_tile(
+                out_path,
+                tile,
+                dtype=dtype,
+                nyears=axis_len,
+                tile_h=grid.tile_size,
+                tile_w=grid.tile_size,
+                compress_level=level,
+            )
+            written += 1
     return written
 
 
@@ -1598,6 +1779,61 @@ def _download_batch_erddap_daily(
     stride_lat: int | None,
     stride_lon: int | None,
 ) -> Path:
+    def _pick_netcdf4_engine() -> str:
+        try:
+            import netCDF4  # noqa: F401
+
+            return "netcdf4"
+        except Exception:
+            pass
+        try:
+            import h5netcdf  # noqa: F401
+
+            return "h5netcdf"
+        except Exception:
+            pass
+        raise RuntimeError(
+            "No NetCDF4-capable backend found for cache compression. "
+            "Install netCDF4 or h5netcdf."
+        )
+
+    def _repack_netcdf_inplace(path: Path, *, level: int) -> None:
+        engine = _pick_netcdf4_engine()
+        level_eff = max(1, min(9, int(level)))
+        repack_tmp = path.with_suffix(path.suffix + ".repack.tmp")
+        if repack_tmp.exists():
+            repack_tmp.unlink()
+        with xr.open_dataset(path) as ds:
+            encoding: dict[str, dict[str, object]] = {}
+            for name, var_da in ds.data_vars.items():
+                if var_da.dtype.kind in {"f", "i", "u"}:
+                    encoding[name] = {
+                        "zlib": True,
+                        "complevel": level_eff,
+                        "shuffle": True,
+                    }
+            ds.to_netcdf(
+                repack_tmp,
+                mode="w",
+                engine=engine,
+                format="NETCDF4",
+                encoding=encoding,
+            )
+        repack_tmp.replace(path)
+
+    def _looks_like_http_404(exc: Exception) -> bool:
+        msg = str(exc).lower()
+        return (
+            "httperror 404" in msg
+            or "404 client error" in msg
+            or "currently unknown datasetid" in msg
+            or " not found" in msg
+        )
+
+    def _looks_like_http_413(exc: Exception) -> bool:
+        msg = str(exc).lower()
+        return "httperror 413" in msg or "413 client error" in msg
+
     spec = ERDDAP_DATASETS.get(dataset_key)
     if spec is None:
         raise ValueError(f"Unknown ERDDAP dataset_key: {dataset_key}")
@@ -1607,6 +1843,8 @@ def _download_batch_erddap_daily(
     spec = dict(spec)
     spec["dataset_id"] = dataset_id
     spec["var"] = var
+    compress_cache = bool(spec.get("compress_cache", False))
+    compress_level = int(spec.get("compress_cache_level", 4))
 
     area, total_h, total_w = _compute_batch_bbox(
         grid,
@@ -1618,10 +1856,15 @@ def _download_batch_erddap_daily(
     north, west, south, east = area
 
     cache_dir.mkdir(parents=True, exist_ok=True)
-    dl_path = (
-        cache_dir
-        / f"erddap_{dataset_key}_{grid.grid_id}_r{tile_range.tile_r0:03d}-{tile_range.tile_r1:03d}_c{tile_range.tile_c0:03d}-{tile_range.tile_c1:03d}_{start_date}_{end_date}.nc"
+    batch_tag = (
+        f"erddap_{dataset_key}_{grid.grid_id}_"
+        f"r{tile_range.tile_r0:03d}-{tile_range.tile_r1:03d}_"
+        f"c{tile_range.tile_c0:03d}-{tile_range.tile_c1:03d}"
     )
+    batch_dir = cache_dir / batch_tag
+    dl_path = batch_dir / f"{batch_tag}_{start_date}_{end_date}.nc"
+    # Backward compatibility for older flat cache layout.
+    legacy_dl_path = cache_dir / f"{batch_tag}_{start_date}_{end_date}.nc"
 
     if dl_path.exists():
         try:
@@ -1633,6 +1876,21 @@ def _download_batch_erddap_daily(
             print(f"[warn] Cached download invalid, deleting: {dl_path} ({exc})")
             try:
                 dl_path.unlink()
+            except Exception:
+                pass
+    if legacy_dl_path.exists():
+        try:
+            _ = xr.open_dataset(legacy_dl_path)
+            _.close()
+            print(f"Using legacy cached download: {legacy_dl_path}")
+            return legacy_dl_path
+        except Exception as exc:
+            print(
+                f"[warn] Legacy cached download invalid, deleting: "
+                f"{legacy_dl_path} ({exc})"
+            )
+            try:
+                legacy_dl_path.unlink()
             except Exception:
                 pass
 
@@ -1660,6 +1918,7 @@ def _download_batch_erddap_daily(
     backoff_max = 600.0
     for la0, la1 in lat_variants:
         for lo0, lo1 in lon_variants:
+            consecutive_413_cycles = 0
             query = build_griddap_query(
                 spec,
                 a_date=start_date,
@@ -1673,9 +1932,11 @@ def _download_batch_erddap_daily(
                 stride_lon=stride_lon or 1,
             )
             for cycle in range(max_cycles):
+                cycle_errors: list[Exception] = []
                 for base in bases:
                     url = make_griddap_url(base, dataset_id, query, "nc")
                     try:
+                        batch_dir.mkdir(parents=True, exist_ok=True)
                         tmp_path = dl_path.with_suffix(dl_path.suffix + ".tmp")
                         if tmp_path.exists():
                             tmp_path.unlink()
@@ -1687,12 +1948,43 @@ def _download_batch_erddap_daily(
                             label=f"[ERDDAP {dataset_key}]",
                             base_label=base,
                         )
+                        if compress_cache:
+                            before_bytes = int(tmp_path.stat().st_size)
+                            _repack_netcdf_inplace(tmp_path, level=compress_level)
+                            after_bytes = int(tmp_path.stat().st_size)
+                            if debug:
+                                print(
+                                    f"[ERDDAP {dataset_key}] Compressed cache "
+                                    f"{before_bytes/1024/1024:.1f}MB -> {after_bytes/1024/1024:.1f}MB "
+                                    f"(level={compress_level})"
+                                )
                         tmp_path.replace(dl_path)
                         print(f"Downloaded: {dl_path}")
                         return dl_path
                     except Exception as exc:
                         last_err = exc
+                        cycle_errors.append(exc)
                         continue
+                if cycle_errors and all(_looks_like_http_404(err) for err in cycle_errors):
+                    # All configured bases reject this dataset id/query as 404.
+                    # Retrying 50 cycles will not help and just burns time.
+                    raise RuntimeError(
+                        f"ERDDAP download failed for {dataset_key}: all bases returned 404 "
+                        f"for dataset_id={dataset_id}. Last error: {cycle_errors[-1]}"
+                    )
+                if cycle_errors and all(_looks_like_http_413(err) for err in cycle_errors):
+                    # 413 can be transient on some ERDDAP hosts/rate windows; allow
+                    # multiple cycles before treating request shape as unusable.
+                    consecutive_413_cycles += 1
+                    if consecutive_413_cycles >= 8:
+                        raise RuntimeError(
+                            f"ERDDAP download failed for {dataset_key}: "
+                            f"{consecutive_413_cycles} consecutive cycles returned 413 "
+                            f"(payload too large). Reduce batch_tiles and/or block_years. "
+                            f"Last error: {cycle_errors[-1]}"
+                        )
+                else:
+                    consecutive_413_cycles = 0
                 wait_s = min(backoff_max, backoff_base * (2**cycle))
                 print(f"[ERDDAP {dataset_key}] All bases failed (cycle {cycle+1}/{max_cycles}); sleeping {wait_s:.0f}s")
                 time.sleep(wait_s)
@@ -1974,6 +2266,18 @@ def package_registry(
         dtype = np.dtype(spec.get("dtype", "float32"))
         missing = spec.get("missing", "nan")
         compression = storage.get("compression")
+        dataset_mask: np.ndarray | None = None
+        mask_file = source.get("mask_file")
+        if mask_file is not None:
+            dataset_mask = _load_dataset_mask(str(mask_file), grid=grid)
+            if debug:
+                valid_ratio = float(np.count_nonzero(dataset_mask)) / float(
+                    dataset_mask.size
+                )
+                print(
+                    f"[mask] metric={metric_id} file={mask_file} "
+                    f"valid={valid_ratio:.4%} ({int(np.count_nonzero(dataset_mask))}/{dataset_mask.size})"
+                )
 
         (
             analysis_start_year,
@@ -2030,6 +2334,7 @@ def package_registry(
                 batches_completed = 0
                 counters_lock = threading.Lock()
                 summary_stop = threading.Event()
+                masked_batches_skipped = 0
 
                 batches_to_process: list[TileRange] = []
                 for batch in _iter_batches(metric_tile_range, batch_tiles_eff):
@@ -2039,6 +2344,28 @@ def package_registry(
                         )
                         if not missing_tiles:
                             continue
+                    if (
+                        (download_only or time_axis == "yearly")
+                        and not _batch_has_any_valid_cells(
+                            dataset_mask=dataset_mask,
+                            grid=grid,
+                            tile_range=batch,
+                        )
+                    ):
+                        masked_batches_skipped += 1
+                        if not download_only and time_axis == "yearly":
+                            total_written += _write_missing_yearly_tiles_for_batch(
+                                out_root=out_root,
+                                grid=grid,
+                                metric_id=metric_id,
+                                tile_range=batch,
+                                dtype=dtype,
+                                missing=missing,
+                                compression=compression,
+                                resume=resume,
+                                output_years=years_int,
+                            )
+                        continue
                     batches_to_process.append(batch)
                     if max_batches is not None and len(batches_to_process) >= int(
                         max_batches
@@ -2046,6 +2373,11 @@ def package_registry(
                         break
 
                 batches_total = len(batches_to_process)
+                if masked_batches_skipped > 0:
+                    print(
+                        f"[mask] metric={metric_id} skipped {masked_batches_skipped} "
+                        "fully masked batch(es)"
+                    )
 
                 def _downloads_per_batch() -> int:
                     if source_type == "cds":
@@ -2281,6 +2613,15 @@ def package_registry(
                             params_dbg = dict(params)
                             if agg_debug and agg == "hot_days_per_year":
                                 params_dbg["_debug"] = True
+                            batch_mask = (
+                                _batch_mask_slice(
+                                    dataset_mask=dataset_mask,
+                                    grid=grid,
+                                    tile_range=batch,
+                                )
+                                if dataset_mask is not None
+                                else None
+                            )
                             futures.append(
                                 executor.submit(
                                     _compute_tiles_from_cds_downloads,
@@ -2304,16 +2645,17 @@ def package_registry(
                                     output_years=years_int,
                                     time_axis=time_axis,
                                     data_var_hint=variable,
+                                    dataset_mask=batch_mask,
                                 )
                             )
                             futures[-1].add_done_callback(_on_future_done)
                             n_batches_processed += 1
                             _collect_done()
                         elif source_type == "erddap":
-                            cache_dir_eff = cache_dir / "erddap"
                             dataset_key = source.get("dataset_key")
                             if not dataset_key:
                                 raise ValueError("ERDDAP source missing dataset_key")
+                            cache_dir_eff = _erddap_cache_dir(cache_dir, str(dataset_key))
                             dataset_spec = ERDDAP_DATASETS.get(dataset_key, {})
                             dataset_start = dataset_spec.get("dataset_start")
                             block_years = int(
@@ -2391,6 +2733,15 @@ def package_registry(
                             params_dbg = dict(params)
                             if agg_debug and agg == "hot_days_per_year":
                                 params_dbg["_debug"] = True
+                            batch_mask = (
+                                _batch_mask_slice(
+                                    dataset_mask=dataset_mask,
+                                    grid=grid,
+                                    tile_range=batch,
+                                )
+                                if dataset_mask is not None
+                                else None
+                            )
                             futures.append(
                                 executor.submit(
                                     _compute_tiles_from_erddap_downloads,
@@ -2413,6 +2764,7 @@ def package_registry(
                                     output_years=years_int,
                                     time_axis=time_axis,
                                     data_var_hint=source.get("variable"),
+                                    dataset_mask=batch_mask,
                                 )
                             )
                             futures[-1].add_done_callback(_on_future_done)
@@ -2515,6 +2867,29 @@ def package_registry(
                 if max_batches is not None and n_batches_processed >= int(max_batches):
                     print(f"Stopping early due to --max-batches={max_batches}")
                     break
+
+                if (
+                    (download_only or time_axis == "yearly")
+                    and not _batch_has_any_valid_cells(
+                        dataset_mask=dataset_mask,
+                        grid=grid,
+                        tile_range=batch,
+                    )
+                ):
+                    if not download_only and time_axis == "yearly":
+                        total_written += _write_missing_yearly_tiles_for_batch(
+                            out_root=out_root,
+                            grid=grid,
+                            metric_id=metric_id,
+                            tile_range=batch,
+                            dtype=dtype,
+                            missing=missing,
+                            compression=compression,
+                            resume=resume,
+                            output_years=years_int,
+                        )
+                    n_batches_processed += 1
+                    continue
 
                 if source_type == "cds":
                     cache_dir_eff = cache_dir / "cds"
@@ -2622,6 +2997,15 @@ def package_registry(
                     if download_only:
                         n_batches_processed += 1
                         continue
+                    batch_mask = (
+                        _batch_mask_slice(
+                            dataset_mask=dataset_mask,
+                            grid=grid,
+                            tile_range=batch,
+                        )
+                        if dataset_mask is not None
+                        else None
+                    )
                     total_written += _compute_tiles_from_cds_downloads(
                         dataset=dataset,
                         agg=agg,
@@ -2643,15 +3027,16 @@ def package_registry(
                         output_years=years_int,
                         time_axis=time_axis,
                         data_var_hint=variable,
+                        dataset_mask=batch_mask,
                     )
 
                     n_batches_processed += 1
                     continue
                 elif source_type == "erddap":
-                    cache_dir_eff = cache_dir / "erddap"
                     dataset_key = source.get("dataset_key")
                     if not dataset_key:
                         raise ValueError("ERDDAP source missing dataset_key")
+                    cache_dir_eff = _erddap_cache_dir(cache_dir, str(dataset_key))
                     dataset_spec = ERDDAP_DATASETS.get(dataset_key, {})
                     dataset_start = dataset_spec.get("dataset_start")
                     block_years = int(
@@ -2708,6 +3093,15 @@ def package_registry(
                     if download_only:
                         n_batches_processed += 1
                         continue
+                    batch_mask = (
+                        _batch_mask_slice(
+                            dataset_mask=dataset_mask,
+                            grid=grid,
+                            tile_range=batch,
+                        )
+                        if dataset_mask is not None
+                        else None
+                    )
                     total_written += _compute_tiles_from_erddap_downloads(
                         agg=agg,
                         postprocess=source.get("postprocess"),
@@ -2728,6 +3122,7 @@ def package_registry(
                         output_years=years_int,
                         time_axis=time_axis,
                         data_var_hint=source.get("variable"),
+                        dataset_mask=batch_mask,
                     )
 
                     n_batches_processed += 1

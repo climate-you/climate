@@ -229,5 +229,19 @@
       "block_years": 1,
       "batch_tiles": 4
     }
+  },
+  "crw_dhw_daily": {
+    "id": "crw_dhw_daily",
+    "title": "NOAA Coral Reef Watch daily Degree Heating Week",
+    "grid_id": "global_0p05",
+    "tile_size": 64,
+    "source": {
+      "type": "erddap",
+      "dataset_key": "crw_dhw_daily",
+      "time_range": { "start_year": 1985, "end_year": 2025 },
+      "block_years": 1,
+      "batch_tiles": 2,
+      "mask_file": "data/masks/crw_dhw_daily_global_0p05_mask.npz"
+    }
   }
 }

@@ -30,6 +30,7 @@ _SOURCE_DOWNLOAD_FIELDS = {
     "stride_time",
     "stride_lat",
     "stride_lon",
+    "mask_file",
 }
 
 

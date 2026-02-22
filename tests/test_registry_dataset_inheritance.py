@@ -104,6 +104,7 @@ def test_metric_cannot_override_dataset_download_fields(tmp_path: Path) -> None:
                 "time_range": {"start_year": 1982, "end_year": 2025},
                 "block_years": 4,
                 "batch_tiles": 4,
+                "mask_file": "data/masks/oisst_mask.npz",
             },
         }
     }
@@ -134,6 +135,7 @@ def test_metric_cannot_override_dataset_download_fields(tmp_path: Path) -> None:
     assert src["time_range"] == {"start_year": 1982, "end_year": 2025}
     assert src["block_years"] == 4
     assert src["batch_tiles"] == 4
+    assert src["mask_file"] == "data/masks/oisst_mask.npz"
     assert src["batch_tiles_override"] == 2
     assert src["_analysis_time_range"] == {"start_year": 1984, "end_year": 1989}
 

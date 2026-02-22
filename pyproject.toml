@@ -37,6 +37,24 @@ make-locations = [
   "scipy>=1.10",
 ]
 
+# scripts/build/build_dataset_mask.py
+make-dataset-mask = [
+  "jsonschema>=4.0",
+  "xarray>=2023.0",
+]
+
+# scripts/build/build_reef_mask.py
+make-reef-mask = [
+  "fiona>=1.9",
+  "rasterio>=1.3",
+]
+
+# scripts/build/repack_erddap_cache.py
+repack-erddap-cache = [
+  "xarray>=2023.0",
+  "netCDF4>=1.6",
+]
+
 # scripts/build/packager.py
 packager = [
   "cdsapi>=0.7",

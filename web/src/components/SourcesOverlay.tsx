@@ -79,21 +79,33 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
               </a>
             </li>
             <li>
-              NOAA ERDDAP:{" "}
+              NOAA ERDDAP (project):{" "}
               <a
-                href="https://coastwatch.pfeg.noaa.gov/erddap/index.html"
+                href="https://coastwatch.noaa.gov/erddap/index.html"
                 target="_blank"
                 rel="noreferrer"
               >
-                ERDDAP project
-              </a>{" "}
-              |{" "}
+                CoastWatch ERDDAP index
+              </a>
+            </li>
+            <li>
+              NOAA ERDDAP (SST):{" "}
               <a
                 href="https://coastwatch.pfeg.noaa.gov/erddap/info/ncdcOisst21Agg_LonPM180/index.html"
                 target="_blank"
                 rel="noreferrer"
               >
                 OISST v2.1 daily SST dataset
+              </a>
+            </li>
+            <li>
+              NOAA ERDDAP (DHW):{" "}
+              <a
+                href="https://coastwatch.noaa.gov/erddap/info/noaacrwdhwDaily/index.html"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Coral Reef Watch DHW daily dataset
               </a>
             </li>
           </ul>

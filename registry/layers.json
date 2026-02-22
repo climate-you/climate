@@ -20,5 +20,12 @@
     "description": "Sea surface temperature anomaly in 2025 vs 1982-1991",
     "map_id": "sst_warming_2025_vs_1982_1991_mercator_texture",
     "opacity": 0.72
+  },
+  "dhw_increase": {
+    "id": "dhw_increase",
+    "label": "Coral heat stress increase",
+    "description": "Trend in coral reef DHW risk score (1985-2025)",
+    "map_id": "dhw_risk_score_trend_1985_2025_mercator_texture",
+    "opacity": 0.85
   }
 }

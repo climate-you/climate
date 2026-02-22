@@ -62,7 +62,8 @@
           "additionalProperties": false
         },
         "block_months": { "type": "integer" },
-        "batch_tiles": { "type": "integer" }
+        "batch_tiles": { "type": "integer" },
+        "mask_file": { "type": "string" }
       },
       "required": ["type", "dataset", "variable"],
       "additionalProperties": false
@@ -92,7 +93,8 @@
         "stride_lat": { "type": "integer" },
         "stride_lon": { "type": "integer" },
         "block_years": { "type": "integer" },
-        "batch_tiles": { "type": "integer" }
+        "batch_tiles": { "type": "integer" },
+        "mask_file": { "type": "string" }
       },
       "required": ["type", "dataset_key"],
       "additionalProperties": false

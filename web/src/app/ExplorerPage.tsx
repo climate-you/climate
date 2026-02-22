@@ -44,14 +44,17 @@ type SeriesPayload = {
   x: Array<number | string>;
   y: (number | null)[];
   unit?: string | null;
-  style?: { type?: "line" | "bar" } | null;
+  style?: { type?: "line" | "bar"; color?: string; stack?: string } | null;
 };
 type GraphPayload = {
   id: string;
   title: string;
   series_keys: string[];
+  source?: string | null;
   caption?: string | null;
   error?: string | null;
+  x_axis_label?: string | null;
+  y_axis_label?: string | null;
   time_range?: TimeRange;
   animation?: GraphAnimation;
 };
@@ -171,6 +174,8 @@ const GRAPH_INFO_TEXT_BY_ID: Record<string, string> = {
     "Number of sea surface hot days per year are counted as days where the sea surface temperature is warmer than the top 10% warmest days in a 10-year baseline starting in 1979.",
   sst_annual:
     "Annual air temperature is derived from daily sea surface temperature, aggregated into yearly averages.",
+  dhw_risk_days:
+    "Coral Reef DHW categories: no risk (DHW < 4), moderate risk (4 <= DHW < 8), severe risk (DHW >= 8).",
   t2m_zoomout: "Todo: placeholder text",
 };
 
@@ -332,6 +337,9 @@ function inBbox(
 }
 
 function keyLabel(key: string): string {
+  if (key.includes("no_risk")) return "No risk";
+  if (key.includes("moderate_risk")) return "Moderate risk";
+  if (key.includes("severe_risk")) return "Severe risk";
   if (key.includes("trend")) return "Trend";
   if (key.includes("5y")) return "5-year mean";
   if (key.includes("7d")) return "7-day mean";
@@ -544,8 +552,18 @@ function InfoBubble({ text, label }: { text: string; label: string }) {
 }
 
 function yAxisTitle(graph: GraphPayload, unit: "C" | "F"): string {
-  if (graph.id === "t2m_hot_days" || graph.id === "sst_hot_days") {
+  if (
+    graph.id === "t2m_hot_days" ||
+    graph.id === "sst_hot_days" ||
+    graph.id === "dhw_risk_days"
+  ) {
     return "Number of days";
+  }
+  if (
+    graph.y_axis_label &&
+    !graph.y_axis_label.toLowerCase().includes("temperature")
+  ) {
+    return graph.y_axis_label;
   }
   return `Temperature (${unit === "F" ? "°F" : "°C"})`;
 }
@@ -975,6 +993,104 @@ function buildHotDaysOption({
   };
 }
 
+function stackedBarColor(
+  seriesItem: SeriesPayload | undefined,
+  index: number,
+): string {
+  const configured = seriesItem?.style?.color;
+  if (typeof configured === "string" && configured.trim().length > 0) {
+    return configured;
+  }
+  const fallback = ["#4caf50", "#fbc02d", "#ef5350", "#fb8c00", "#8e24aa"];
+  return fallback[index % fallback.length];
+}
+
+function buildStackedBarOption({
+  graph,
+  series,
+  data,
+  visibleKeys,
+  transitionMs,
+  unit,
+}: {
+  graph: GraphPayload;
+  series: Record<string, SeriesPayload>;
+  data: ChartRow[];
+  visibleKeys: string[];
+  transitionMs: number;
+  unit: "C" | "F";
+}): EChartsOption {
+  const theme = chartThemeTokens();
+  const xValues = data.map((row) => row.x);
+  const barKeys = visibleKeys.filter((key) => series[key]?.style?.type === "bar");
+  const defaultStack = "stacked-bars";
+  const chartSeries: NonNullable<EChartsOption["series"]> = barKeys.map(
+    (key, idx) => {
+      const s = series[key];
+      const stackName =
+        typeof s?.style?.stack === "string" && s.style.stack.trim().length > 0
+          ? s.style.stack
+          : defaultStack;
+      return {
+        name: keyLabel(key),
+        type: "bar",
+        stack: stackName,
+        data: data.map((row) => (row[key] as number | null) ?? null),
+        itemStyle: { color: stackedBarColor(s, idx) },
+        emphasis: { focus: "series" },
+        z: 2,
+        animationDurationUpdate: transitionMs,
+      };
+    },
+  );
+
+  return {
+    animationDuration: 700,
+    animationDurationUpdate: transitionMs,
+    animationEasing: "cubicOut",
+    ...sharedChartScaffold(),
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      backgroundColor: theme.tooltipBg,
+      borderColor: theme.tooltipBorder,
+      textStyle: { color: theme.tooltipText },
+      formatter: (params: unknown) => {
+        const rows = Array.isArray(params) ? params : [params];
+        const first = (rows[0] ?? {}) as { axisValue?: unknown };
+        const title = formatAxisTitle(graph, first.axisValue);
+        const lines = rows
+          .map(
+            (item) =>
+              item as { value?: unknown; marker?: string; seriesName?: string },
+          )
+          .filter((r) => typeof r.value === "number" && Number.isFinite(r.value))
+          .map(
+            (r) =>
+              `${r.marker ?? ""}${r.seriesName ?? ""}: ${Math.round(Number(r.value))}`,
+          );
+        return [title, ...lines].join("<br/>");
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: xValues,
+      ...sharedXAxisStyle(),
+    },
+    yAxis: {
+      type: "value",
+      name: yAxisTitle(graph, unit),
+      ...sharedYAxisStyle(),
+      axisLabel: {
+        color: theme.axisLabelColor,
+        formatter: (value: number) => `${Math.round(value)}`,
+      },
+      min: 0,
+    },
+    series: chartSeries,
+  };
+}
+
 function buildTemperatureOption({
   graph,
   data,
@@ -1194,6 +1310,12 @@ function GraphCard({
   const visibleKeys = activeStep?.series_keys?.length
     ? activeStep.series_keys
     : graph.series_keys;
+  const barSeriesCount = visibleKeys.filter(
+    (key) => series[key]?.style?.type === "bar",
+  ).length;
+  const isStackedBarChart =
+    barSeriesCount >= 2 &&
+    visibleKeys.every((key) => series[key]?.style?.type === "bar");
   const activeRange = activeStep?.time_range ?? graph.time_range;
   const rangedData = useMemo(
     () => sliceRowsByTimeRange(data, activeRange),
@@ -1208,9 +1330,9 @@ function GraphCard({
   );
   const transitionMs = graph.animation?.transition_ms ?? 900;
   const isHotDaysChart =
-    graph.id === "t2m_hot_days" || graph.id === "sst_hot_days";
-  const graphInfoText =
-    GRAPH_INFO_TEXT_BY_ID[graph.id] ?? DEFAULT_GRAPH_INFO_TEXT;
+    !isStackedBarChart &&
+    (graph.id === "t2m_hot_days" || graph.id === "sst_hot_days");
+  const graphInfoText = GRAPH_INFO_TEXT_BY_ID[graph.id] ?? DEFAULT_GRAPH_INFO_TEXT;
   const isZoomOutGraph = graph.id === "t2m_zoomout";
   const allVisibleData = useMemo(
     () =>
@@ -1226,6 +1348,16 @@ function GraphCard({
     return [Math.min(...stamps), Math.max(...stamps)];
   }, [allVisibleData, filteredData]);
   const option = useMemo(() => {
+    if (isStackedBarChart) {
+      return buildStackedBarOption({
+        graph,
+        series,
+        data: filteredData,
+        visibleKeys,
+        transitionMs,
+        unit,
+      });
+    }
     if (isHotDaysChart) {
       return buildHotDaysOption({
         graph,
@@ -1250,6 +1382,7 @@ function GraphCard({
     filteredData,
     graph,
     isHotDaysChart,
+    isStackedBarChart,
     isZoomOutGraph,
     series,
     transitionMs,

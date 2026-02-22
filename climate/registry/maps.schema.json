@@ -168,6 +168,11 @@
         "nan_color": {
           "type": "string",
           "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "nan_alpha": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
         }
       },
       "required": ["colors"],

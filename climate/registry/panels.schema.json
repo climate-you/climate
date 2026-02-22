@@ -178,7 +178,12 @@
     "series_style": {
       "type": "object",
       "properties": {
-        "type": { "type": "string", "enum": ["line", "bar"] }
+        "type": { "type": "string", "enum": ["line", "bar"] },
+        "color": {
+          "type": "string",
+          "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+        },
+        "stack": { "type": "string", "minLength": 1 }
       },
       "required": ["type"],
       "additionalProperties": false

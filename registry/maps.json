@@ -246,6 +246,65 @@
       "dtype": "int16"
     }
   },
+  "dhw_risk_score_trend_1985_2025_mercator_texture": {
+    "id": "dhw_risk_score_trend_1985_2025_mercator_texture",
+    "title": "Coral reef DHW risk-score trend (1985-2025, Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "web_write": true,
+    "source_metric": "dhw_risk_score_per_year",
+    "reducer": {
+      "op": "trend_slope",
+      "start_year": 1985,
+      "end_year": 2025
+    },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 10.0
+    },
+    "output": {
+      "filename": "dhw_risk_score_trend_1985_2025_mercator.webp"
+    }
+  },
+  "dhw_risk_score_trend_score": {
+    "id": "dhw_risk_score_trend_score",
+    "title": "Coral reef DHW risk-score trend score",
+    "type": "score",
+    "source_metric": "dhw_risk_score_per_year",
+    "reducer": {
+      "op": "trend_slope",
+      "start_year": 1985,
+      "end_year": 2025
+    },
+    "default_score": 0,
+    "score_rules": [
+      { "score": 4, "predicate": { "op": "gt", "threshold": 0.8 } },
+      { "score": 3, "predicate": { "op": "gt", "threshold": 0.4 } },
+      { "score": 2, "predicate": { "op": "gt", "threshold": 0.15 } },
+      { "score": 1, "predicate": { "op": "gt", "threshold": 0.03 } }
+    ],
+    "output": {
+      "png_filename": "dhw_risk_score_trend_score.png",
+      "binary_filename": "dhw_risk_score_trend_score.i16.bin",
+      "dtype": "int16"
+    }
+  },
   "score_0_map": {
     "id": "score_0_map",
     "title": "Score 0 everywhere",

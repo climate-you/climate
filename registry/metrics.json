@@ -163,5 +163,77 @@
       "tiled": true,
       "compression": { "codec": "zstd", "level": 10 }
     }
+  },
+  "dhw_no_risk_days_per_year": {
+    "id": "dhw_no_risk_days_per_year",
+    "title": "Coral reef DHW no-risk days per year",
+    "unit": "days",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "ocean",
+    "time_axis": "yearly",
+    "source": {
+      "type": "erddap",
+      "dataset_ref": "crw_dhw_daily",
+      "agg": "dhw_no_risk_days_per_year"
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
+  "dhw_moderate_risk_days_per_year": {
+    "id": "dhw_moderate_risk_days_per_year",
+    "title": "Coral reef DHW moderate-risk days per year",
+    "unit": "days",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "ocean",
+    "time_axis": "yearly",
+    "source": {
+      "type": "erddap",
+      "dataset_ref": "crw_dhw_daily",
+      "agg": "dhw_moderate_risk_days_per_year"
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
+  "dhw_severe_risk_days_per_year": {
+    "id": "dhw_severe_risk_days_per_year",
+    "title": "Coral reef DHW severe-risk days per year",
+    "unit": "days",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "ocean",
+    "time_axis": "yearly",
+    "source": {
+      "type": "erddap",
+      "dataset_ref": "crw_dhw_daily",
+      "agg": "dhw_severe_risk_days_per_year"
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
+  "dhw_risk_score_per_year": {
+    "id": "dhw_risk_score_per_year",
+    "title": "Coral reef DHW risk score per year",
+    "unit": "score",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "ocean",
+    "time_axis": "yearly",
+    "source": {
+      "type": "erddap",
+      "dataset_ref": "crw_dhw_daily",
+      "agg": "dhw_risk_score_per_year"
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
   }
 }

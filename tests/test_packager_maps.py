@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from climate.packager.maps import _stitch_longitude_edges, _warp_lat_to_mercator
+from climate.packager.maps import _apply_palette, _stitch_longitude_edges, _warp_lat_to_mercator
 
 
 def test_stitch_longitude_edges_averages_finite_edges() -> None:
@@ -51,3 +51,23 @@ def test_warp_lat_to_mercator_has_no_top_bottom_nans_for_finite_input() -> None:
 
     assert np.all(np.isfinite(merc[0, :]))
     assert np.all(np.isfinite(merc[-1, :]))
+
+
+def test_apply_palette_supports_transparent_nan() -> None:
+    values = np.array([[0.0, np.nan], [1.0, 2.0]], dtype=np.float64)
+    out = _apply_palette(
+        values,
+        vmin=0.0,
+        vmax=2.0,
+        colors=["#000000", "#ffffff"],
+        nan_color="#112233",
+        nan_alpha=0.0,
+    )
+
+    assert out.shape == (2, 2, 4)
+    # NaN pixel should use configured color + transparent alpha.
+    np.testing.assert_array_equal(out[0, 1], np.array([0x11, 0x22, 0x33, 0], dtype=np.uint8))
+    # Finite pixels should be fully opaque.
+    assert int(out[0, 0, 3]) == 255
+    assert int(out[1, 0, 3]) == 255
+    assert int(out[1, 1, 3]) == 255
