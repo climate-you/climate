@@ -440,18 +440,45 @@ function formatPopulation(value: number | null | undefined): string | null {
 
 function InfoBubble({ text, label }: { text: string; label: string }) {
   const [open, setOpen] = useState(false);
-  const [coords, setCoords] = useState<{ left: number; top: number } | null>(
-    null,
-  );
+  const [coords, setCoords] = useState<{
+    left: number;
+    top: number;
+    placement: "below" | "left" | "right";
+  } | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
   const updateCoords = useCallback(() => {
     const btn = buttonRef.current;
     if (!btn) return;
     const rect = btn.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const tooltipMinWidth = 170;
+    const spaceRight = viewportWidth - rect.right;
+    const spaceLeft = rect.left;
+    if (spaceRight >= tooltipMinWidth || spaceLeft >= tooltipMinWidth) {
+      if (spaceRight >= spaceLeft) {
+        setCoords({
+          left: Math.round(rect.right),
+          top: Math.round(rect.bottom + 8),
+          placement: "right",
+        });
+        return;
+      }
+      setCoords({
+        left: Math.round(rect.left),
+        top: Math.round(rect.bottom),
+        placement: "left",
+      });
+      return;
+    }
+    const fallbackLeft = Math.min(
+      Math.max(Math.round(rect.left), 0),
+      Math.max(0, viewportWidth - tooltipMinWidth),
+    );
     setCoords({
-      left: Math.round(rect.left),
-      top: Math.round(rect.bottom + 8),
+      left: fallbackLeft,
+      top: Math.round(rect.bottom),
+      placement: "below",
     });
   }, []);
 
@@ -483,7 +510,13 @@ function InfoBubble({ text, label }: { text: string; label: string }) {
       {open && coords
         ? createPortal(
             <span
-              className={styles.infoBubbleTooltipGlobal}
+              className={`${styles.infoBubbleTooltipGlobal} ${
+                coords.placement === "left" ? styles.infoBubbleTooltipLeft : ""
+              } ${
+                coords.placement === "right"
+                  ? styles.infoBubbleTooltipRight
+                  : ""
+              }`}
               style={{ left: `${coords.left}px`, top: `${coords.top}px` }}
               role="tooltip"
             >

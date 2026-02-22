@@ -377,6 +377,14 @@
   pointer-events: none;
 }
 
+.infoBubbleTooltipLeft {
+  transform: translate(-100%, 0);
+}
+
+.infoBubbleTooltipRight {
+  transform: translate(0, 0);
+}
+
 .panelPopulation {
   margin: 6px 0 0;
   font-size: 0.88rem;
