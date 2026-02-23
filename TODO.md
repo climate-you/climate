@@ -5,6 +5,7 @@
   - update Licenses/Copyrights
   - coral reef layer should have blue background ?
   - coral reef map renders all black on mobile
+  - ko-fi account + link (and add to github: see `Display a "Sponsor" button` in settings)
 - Graphs:
   - why doesn't Palma, Spain have sea temperature information ?
   - zoomout graph needs work + rephrase graph captions + info bubble
