@@ -622,12 +622,11 @@
 
 .graphCard {
   position: relative;
-  margin-top: 12px;
   padding-right: 18px;
 }
 
 .panelViewport {
-  height: calc(100% - 112px);
+  height: 100%;
   overflow: hidden;
 }
 
@@ -641,7 +640,6 @@
   z-index: 20;
   display: flex;
   align-items: center;
-  gap: 8px;
 }
 
 .stepButtons {
