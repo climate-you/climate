@@ -3,8 +3,8 @@
   - Test on mobile (need to run `./scripts/api_backend.sh --lan`):
     -- hide the close button: swiping down should close the panel (revisit).
     -- about/sources button should be under the selected location panel, should they be moved to a menu (?)
-    -- bottom offset of selected location panel, how to fix ?
   - update Licenses/Copyrights
+  - coral reef layer should have blue background ?
 - Graphs:
   - why doesn't Palma, Spain have sea temperature information ?
   - zoomout graph needs work + rephrase graph captions + info bubble
