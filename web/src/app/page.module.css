@@ -596,6 +596,9 @@
   border: 1px solid var(--surface-border);
   border-radius: 999px;
   padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-decoration: none;
   cursor: pointer;
 }
@@ -680,6 +683,7 @@
   .app {
     --top-ui-space: 10px;
     --top-ui-size: 40px;
+    --meta-dock-width: 62px;
   }
 
   .coldOpenMessage.coldOpenMessagePrimary {
@@ -704,7 +708,10 @@
   }
 
   .searchOverlay {
-    width: calc(100% - var(--top-ui-size) - 3 * var(--top-ui-space));
+    width: calc(
+      100% - var(--top-ui-size) - var(--meta-dock-width) -
+        (4 * var(--top-ui-space))
+    );
   }
 
   .searchWrap {
@@ -785,8 +792,19 @@
   }
 
   .sourcesLinkDock {
-    left: 10px;
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    top: var(--top-ui-space);
+    right: var(--top-ui-space);
+    left: auto;
+    bottom: auto;
+    z-index: 4;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .searchMetaLink {
+    width: var(--meta-dock-width);
+    text-align: center;
   }
 }
 
