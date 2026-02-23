@@ -6,7 +6,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from .metrics import MetricsSchemaError, REPO_ROOT
+from .metrics import REPO_ROOT
 
 DEFAULT_PANELS_PATH = REPO_ROOT / "registry" / "panels.json"
 DEFAULT_PANELS_SCHEMA_PATH = Path(__file__).with_name("panels.schema.json")

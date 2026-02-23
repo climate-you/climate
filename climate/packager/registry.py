@@ -1780,18 +1780,12 @@ def _download_batch_erddap_daily(
     stride_lon: int | None,
 ) -> Path:
     def _pick_netcdf4_engine() -> str:
-        try:
-            import netCDF4  # noqa: F401
+        import importlib.util
 
+        if importlib.util.find_spec("netCDF4") is not None:
             return "netcdf4"
-        except Exception:
-            pass
-        try:
-            import h5netcdf  # noqa: F401
-
+        if importlib.util.find_spec("h5netcdf") is not None:
             return "h5netcdf"
-        except Exception:
-            pass
         raise RuntimeError(
             "No NetCDF4-capable backend found for cache compression. "
             "Install netCDF4 or h5netcdf."
@@ -2220,12 +2214,12 @@ def package_registry(
             continue
 
         if dask_enabled:
-            try:
-                import dask  # noqa: F401
-            except Exception as exc:
+            import importlib.util
+
+            if importlib.util.find_spec("dask") is None:
                 raise RuntimeError(
                     "dask is required when --dask is enabled. Please install dask."
-                ) from exc
+                )
 
         source = spec.get("source", {})
         storage = spec.get("storage", {})

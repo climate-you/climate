@@ -418,13 +418,6 @@
   border-color: var(--surface-border-strong);
 }
 
-.headlineValue {
-  font-size: 1.8rem;
-  font-weight: 300;
-  line-height: 1.1;
-  color: #ff0000;
-}
-
 .panelActions {
   position: sticky;
   top: 0;
@@ -607,17 +600,6 @@
 .searchMetaLink:focus-visible {
   background: var(--surface-alt);
   border-color: var(--surface-border-strong);
-}
-
-.panelSection {
-  margin-top: 16px;
-}
-
-.panelText {
-  margin-top: 12px;
-  padding: 12px;
-  border: 1px solid var(--surface-border);
-  border-radius: 8px;
 }
 
 .graphCard {

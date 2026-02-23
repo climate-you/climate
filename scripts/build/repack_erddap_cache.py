@@ -5,23 +5,16 @@ import argparse
 import os
 from pathlib import Path
 import time
+import importlib.util
 
 import xarray as xr
 
 
 def _pick_engine() -> str:
-    try:
-        import netCDF4  # noqa: F401
-
+    if importlib.util.find_spec("netCDF4") is not None:
         return "netcdf4"
-    except Exception:
-        pass
-    try:
-        import h5netcdf  # noqa: F401
-
+    if importlib.util.find_spec("h5netcdf") is not None:
         return "h5netcdf"
-    except Exception:
-        pass
     raise RuntimeError(
         "No NetCDF4-capable backend found. Install netCDF4 or h5netcdf."
     )
@@ -194,4 +187,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

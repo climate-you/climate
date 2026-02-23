@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Any, List, Callable
+from typing import Dict, Any, List
 import numpy as np
 import math
 from threading import Lock
@@ -72,97 +72,6 @@ def preload_score_maps_cache(
     return loaded, skipped_constant
 
 
-def _format_delta(value_c: float, unit: str, *, decimals: int = 1, sign: bool = True) -> str:
-    value = float(value_c)
-    unit_upper = unit.upper()
-    if unit_upper == "F":
-        value = value * (9.0 / 5.0)
-    if sign:
-        return f"{value:+.{decimals}f}°{unit_upper}"
-    return f"{value:.{decimals}f}°{unit_upper}"
-
-
-def _fifty_year_caption_from_context(context: dict[str, Any]) -> str:
-    data = dict(context.get("data") or {})
-    place = dict(context.get("place") or {})
-    unit = str(context.get("unit", "C") or "C").upper()
-    city_name = str(place.get("label") or "this location")
-
-    total_span_years_raw = data.get("total_span_years")
-    total_warming_raw = data.get("total_warming")
-    try:
-        total_span_years = int(total_span_years_raw)
-        total_warming = float(total_warming_raw)
-    except Exception:
-        total_span_years = 0
-        total_warming = 0.0
-
-    if total_span_years > 0:
-        if abs(total_warming) < 0.15:
-            change_text = (
-                f"has changed very little (**{_format_delta(total_warming, unit)}**)."
-            )
-        elif total_warming > 0:
-            change_text = (
-                f"is now roughly **{_format_delta(total_warming, unit)} warmer on average** "
-                f"than it was at the start of the record."
-            )
-        else:
-            change_text = (
-                f"is now roughly **{_format_delta(abs(total_warming), unit, sign=False)} cooler on average** "
-                f"than it was at the start of the record."
-            )
-
-        extra_lines: list[str] = []
-        cold_raw = data.get("coldest_month_trend_50y")
-        warm_raw = data.get("warmest_month_trend_50y")
-        if cold_raw is not None and warm_raw is not None:
-            try:
-                cold = float(cold_raw)
-                warm = float(warm_raw)
-            except Exception:
-                cold = None
-                warm = None
-            if cold is not None and warm is not None:
-                extra_lines.append(
-                    "The dashed lines show how the coldest and warmest typical months behave:"
-                )
-                for label, value in (("coldest", cold), ("warmest", warm)):
-                    if value > 0.3:
-                        extra_lines.append(
-                            f"- the **{label} month** is about **{_format_delta(value, unit)} warmer**."
-                        )
-                    elif value < -0.3:
-                        extra_lines.append(
-                            f"- the **{label} month** is about "
-                            f"**{_format_delta(abs(value), unit, sign=False)} cooler**."
-                        )
-                    else:
-                        extra_lines.append(
-                            f"- the **{label} month** has changed by only about "
-                            f"**{_format_delta(value, unit, decimals=2)}**."
-                        )
-
-        base = (
-            f"When you zoom out over about **{total_span_years} years**, year-to-year noise fades. "
-            f"In **{city_name}**, the climate {change_text}"
-        )
-        if extra_lines:
-            return base + "\n\n" + "\n".join(extra_lines)
-        return base
-
-    return (
-        f"When you zoom out over about **{total_span_years} years**, the data window is too short "
-        f"to infer a robust long-term signal for **{city_name}**."
-    )
-
-
-def _caption_fn_registry() -> dict[str, Callable[[dict[str, Any]], str]]:
-    return {
-        "fifty_year_caption": _fifty_year_caption_from_context,
-    }
-
-
 def _caption_from_spec(
     spec: dict[str, Any],
     *,
@@ -179,21 +88,7 @@ def _caption_from_spec(
     fn_name = spec.get("fn")
     if not fn_name:
         return None
-
-    fn_map = _caption_fn_registry()
-    fn = fn_map.get(fn_name)
-    if fn is None:
-        raise KeyError(f"Unknown caption function: {fn_name}")
-
-    params = spec.get("params", {})
-    ctx_data = dict(context)
-    ctx_data["params"] = params
-
-    data = dict(ctx_data.get("data", {}))
-    if isinstance(params, dict):
-        data.update(params)
-    ctx_data["data"] = data
-    return fn(ctx_data)
+    raise KeyError(f"Unknown caption function: {fn_name}")
 
 
 def _series_key(series_spec: dict[str, Any]) -> str:

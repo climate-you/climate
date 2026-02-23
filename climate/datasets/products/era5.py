@@ -5,7 +5,6 @@ import pandas as pd
 import zipfile
 
 from climate.datasets.sources.cds import retrieve
-import calendar
 
 
 ERA5_MONTHLY_MEANS_DATASET = "reanalysis-era5-single-levels-monthly-means"
@@ -148,6 +147,8 @@ def fetch_hourly_tp_timeseries(
     )
 
     if not cache_csv.exists():
+        import cdsapi
+
         client = cdsapi.Client()
         request = {
             "variable": ["total_precipitation"],

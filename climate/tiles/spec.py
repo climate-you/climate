@@ -3,14 +3,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Tuple
 
 import numpy as np
 import struct
 
 try:
     import zstandard as zstd  # pip install zstandard
-except Exception as e:  # pragma: no cover
+except Exception:  # pragma: no cover
     zstd = None  # type: ignore
 
 

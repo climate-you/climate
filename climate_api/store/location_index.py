@@ -5,7 +5,7 @@ from pathlib import Path
 import csv
 import unicodedata
 import re
-from typing import List, Dict, Optional, Iterable
+from typing import List, Dict, Optional
 
 
 @dataclass(frozen=True)
