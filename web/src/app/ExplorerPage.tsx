@@ -1370,6 +1370,8 @@ function GraphCard({
     : graph.series_keys;
   const chartMode = graphChartMode(graph, visibleKeys, series);
   const isStackedBarChart = chartMode === "stacked_bar";
+  const hasGraphError =
+    typeof graph.error === "string" && graph.error.trim().length > 0;
   const activeRange = activeStep?.time_range ?? graph.time_range;
   const rangedData = useMemo(
     () => sliceRowsByTimeRange(data, activeRange),
@@ -1456,7 +1458,7 @@ function GraphCard({
           ) : null}
         </div>
       ) : null}
-      {hasAnimation ? (
+      {hasAnimation && !hasGraphError ? (
         <div className={styles.stepButtons}>
           {steps.map((step, idx) => {
             const active = idx === stepIndex;
@@ -1475,14 +1477,16 @@ function GraphCard({
         </div>
       ) : null}
 
-      <div ref={chartHostRef}>
-        <EChartCanvas option={option} height={chartHeight} />
-      </div>
+      {!hasGraphError ? (
+        <div ref={chartHostRef}>
+          <EChartCanvas option={option} height={chartHeight} />
+        </div>
+      ) : null}
 
-      {graph.error ? (
+      {hasGraphError ? (
         <div className={styles.graphError}>{graph.error}</div>
       ) : null}
-      {graph.caption ? (
+      {!hasGraphError && graph.caption ? (
         <div className={styles.graphCaption}>{graph.caption}</div>
       ) : null}
     </div>
