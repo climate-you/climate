@@ -1541,6 +1541,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const touchStartXRef = useRef<number | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const panelViewportRef = useRef<HTMLDivElement | null>(null);
+  const pendingGraphRestoreIdsRef = useRef<string[] | null>(null);
   const [graphsPerPage, setGraphsPerPage] = useState(2);
   const prevGraphsPerPageRef = useRef(2);
   const [graphPage, setGraphPage] = useState(0);
@@ -1737,6 +1738,12 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       ),
     [graphsPerPage, visibleGraphs],
   );
+  const queueGraphRestoreFromVisible = useCallback(() => {
+    const visibleIds = visibleGraphs
+      .map((entry) => entry?.graph.id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+    pendingGraphRestoreIdsRef.current = visibleIds.length > 0 ? visibleIds : null;
+  }, [visibleGraphs]);
 
   useEffect(() => {
     setGraphPage((prev) => Math.min(prev, maxGraphPage));
@@ -1834,6 +1841,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       setPanelLoadError(null);
       return data;
     } catch {
+      pendingGraphRestoreIdsRef.current = null;
       setResp(null);
       setSelectedLocation((prev) =>
         prev ? { ...prev, population: null } : prev,
@@ -1877,6 +1885,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   }
 
   function applyLocation(item: AutocompleteItem) {
+    queueGraphRestoreFromVisible();
     setSearch("");
     setLat(item.lat);
     setLon(item.lon);
@@ -1893,6 +1902,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   }
 
   async function handlePick(la: number, lo: number) {
+    queueGraphRestoreFromVisible();
     setLat(la);
     setLon(lo);
     setPicked({ lat: la, lon: lo });
@@ -2259,12 +2269,26 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   }, [resp?.location.place]);
 
   useEffect(() => {
-    setGraphPage(0);
+    const pendingIds = pendingGraphRestoreIdsRef.current;
+    if (!pendingIds) return;
+    const indexByGraphId = new Map<string, number>();
+    pagedGraphs.forEach((entry, index) => {
+      indexByGraphId.set(entry.graph.id, index);
+    });
+    const matchedIndexes = pendingIds
+      .map((id) => indexByGraphId.get(id))
+      .filter((index): index is number => index !== undefined);
+    const nextPage =
+      matchedIndexes.length > 0
+        ? Math.floor(matchedIndexes[0] / Math.max(1, graphsPerPage))
+        : 0;
+    setGraphPage(Math.max(0, Math.min(maxGraphPage, nextPage)));
+    pendingGraphRestoreIdsRef.current = null;
     wheelAccumRef.current = 0;
     wheelLastEventTsRef.current = 0;
     wheelGestureConsumedRef.current = false;
     wheelGestureConsumedAtRef.current = 0;
-  }, [lat, lon, unit, pagedGraphs.length]);
+  }, [graphsPerPage, maxGraphPage, pagedGraphs]);
 
   useEffect(
     () => () => {
@@ -2635,6 +2659,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
                   aria-pressed={unit === "C"}
                   onClick={() => {
                     if (unit === "C") return;
+                    queueGraphRestoreFromVisible();
                     setUnit("C");
                     void loadPanel(lat, lon, "C");
                   }}
@@ -2649,6 +2674,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
                   aria-pressed={unit === "F"}
                   onClick={() => {
                     if (unit === "F") return;
+                    queueGraphRestoreFromVisible();
                     setUnit("F");
                     void loadPanel(lat, lon, "F");
                   }}
@@ -2722,6 +2748,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
                     className={styles.panelRetryButton}
                     onClick={async () => {
                       if (panelRetrying) return;
+                      queueGraphRestoreFromVisible();
                       setPanelRetrying(true);
                       await loadPanel(
                         lat,

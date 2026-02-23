@@ -53,96 +53,6 @@
           ]
         },
         {
-          "id": "t2m_zoomout",
-          "title": "Temperature zoom-out",
-          "ui": {
-            "info_text": "Temperature zoom-out view combines daily, monthly, and yearly temperature series to show short- and long-term context.",
-            "chart_mode": "temperature_line",
-            "axis_title_mode": "date"
-          },
-          "x_axis_label": "Date",
-          "y_axis_label": "Temperature ({unit})",
-          "caption": { "type": "fn", "fn": "fifty_year_caption", "params": {} },
-          "source": "CDS ERA5 daily and monthly 2m temperature means",
-          "animation": {
-            "autoplay": false,
-            "loop": false,
-            "step_duration_ms": 2800,
-            "transition_ms": 3000,
-            "steps": [
-              {
-                "id": "last_year",
-                "title": "Last year",
-                "time_range": { "last": { "value": 1, "unit": "years" } },
-                "series_keys": ["t2m_daily_mean", "t2m_daily_mean_7d"]
-              },
-              {
-                "id": "last_5_years",
-                "title": "Last 5 years",
-                "time_range": { "last": { "value": 5, "unit": "years" } },
-                "series_keys": ["t2m_daily_mean_7d", "t2m_monthly_mean"]
-              },
-              {
-                "id": "last_50_years",
-                "title": "Last 50 years",
-                "time_range": { "last": { "value": 50, "unit": "years" } },
-                "series_keys": [
-                  "t2m_monthly_mean",
-                  "t2m_yearly_mean",
-                  "t2m_yearly_trend"
-                ]
-              }
-            ]
-          },
-          "series": [
-            {
-              "key": "t2m_daily_mean",
-              "metric": "t2m_daily_mean_c",
-              "label": "Daily mean",
-              "ui": { "role": "raw" },
-              "unit": "C",
-              "style": { "type": "line", "color": "rgba(180,180,180,0.7)" }
-            },
-            {
-              "key": "t2m_daily_mean_7d",
-              "metric": "t2m_daily_mean_c",
-              "label": "7-day mean",
-              "ui": { "role": "mean" },
-              "unit": "C",
-              "style": { "type": "line", "color": "#1736ff" },
-              "transform": {
-                "fn": "rolling_mean",
-                "params": { "window": 7, "centered": true }
-              }
-            },
-            {
-              "key": "t2m_monthly_mean",
-              "metric": "t2m_monthly_mean_c",
-              "label": "Monthly mean",
-              "ui": { "role": "raw" },
-              "unit": "C",
-              "style": { "type": "line", "color": "#ff2e55" }
-            },
-            {
-              "key": "t2m_yearly_mean",
-              "metric": "t2m_yearly_mean_c",
-              "label": "Yearly mean",
-              "ui": { "role": "mean" },
-              "unit": "C",
-              "style": { "type": "line", "color": "#1736ff" }
-            },
-            {
-              "key": "t2m_yearly_trend",
-              "metric": "t2m_yearly_mean_c",
-              "label": "Trend",
-              "ui": { "role": "trend" },
-              "unit": "C",
-              "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
-              "transform": { "fn": "linear_trend_line" }
-            }
-          ]
-        },
-        {
           "id": "t2m_hot_days",
           "title": "Hot days per year (air temperature)",
           "ui": {
@@ -276,6 +186,101 @@
               "label": "Trend",
               "ui": { "role": "trend" },
               "unit": "days",
+              "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
+              "transform": { "fn": "linear_trend_line" }
+            }
+          ]
+        }
+      ]
+    },
+    "air_temperature_zoomout": {
+      "title": "Air Temperature",
+      "score_map_id": "score_1_map",
+      "graphs": [
+        {
+          "id": "t2m_zoomout",
+          "title": "Temperature zoom-out",
+          "ui": {
+            "info_text": "Temperature zoom-out view combines daily, monthly, and yearly temperature series to show short- and long-term context.",
+            "chart_mode": "temperature_line",
+            "axis_title_mode": "date"
+          },
+          "x_axis_label": "Date",
+          "y_axis_label": "Temperature ({unit})",
+          "source": "CDS ERA5 daily and monthly 2m temperature means",
+          "animation": {
+            "autoplay": false,
+            "loop": false,
+            "step_duration_ms": 2800,
+            "transition_ms": 3000,
+            "steps": [
+              {
+                "id": "last_year",
+                "title": "Last year",
+                "time_range": { "last": { "value": 1, "unit": "years" } },
+                "series_keys": ["t2m_daily_mean", "t2m_daily_mean_7d"]
+              },
+              {
+                "id": "last_5_years",
+                "title": "Last 5 years",
+                "time_range": { "last": { "value": 5, "unit": "years" } },
+                "series_keys": ["t2m_daily_mean_7d", "t2m_monthly_mean"]
+              },
+              {
+                "id": "last_50_years",
+                "title": "Last 50 years",
+                "time_range": { "last": { "value": 50, "unit": "years" } },
+                "series_keys": [
+                  "t2m_monthly_mean",
+                  "t2m_yearly_mean",
+                  "t2m_yearly_trend"
+                ]
+              }
+            ]
+          },
+          "series": [
+            {
+              "key": "t2m_daily_mean",
+              "metric": "t2m_daily_mean_c",
+              "label": "Daily mean",
+              "ui": { "role": "raw" },
+              "unit": "C",
+              "style": { "type": "line", "color": "rgba(180,180,180,0.7)" }
+            },
+            {
+              "key": "t2m_daily_mean_7d",
+              "metric": "t2m_daily_mean_c",
+              "label": "7-day mean",
+              "ui": { "role": "mean" },
+              "unit": "C",
+              "style": { "type": "line", "color": "#1736ff" },
+              "transform": {
+                "fn": "rolling_mean",
+                "params": { "window": 7, "centered": true }
+              }
+            },
+            {
+              "key": "t2m_monthly_mean",
+              "metric": "t2m_monthly_mean_c",
+              "label": "Monthly mean",
+              "ui": { "role": "raw" },
+              "unit": "C",
+              "style": { "type": "line", "color": "#ff2e55" }
+            },
+            {
+              "key": "t2m_yearly_mean",
+              "metric": "t2m_yearly_mean_c",
+              "label": "Yearly mean",
+              "ui": { "role": "mean" },
+              "unit": "C",
+              "style": { "type": "line", "color": "#1736ff" }
+            },
+            {
+              "key": "t2m_yearly_trend",
+              "metric": "t2m_yearly_mean_c",
+              "label": "Trend",
+              "ui": { "role": "trend" },
+              "unit": "C",
               "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
               "transform": { "fn": "linear_trend_line" }
             }
