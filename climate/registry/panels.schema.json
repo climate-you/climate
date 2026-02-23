@@ -36,6 +36,7 @@
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "title": { "type": "string" },
+        "ui": { "$ref": "#/$defs/graph_ui" },
         "caption": { "$ref": "#/$defs/caption" },
         "source": { "type": "string" },
         "x_axis_label": { "type": "string" },
@@ -116,6 +117,7 @@
         "key": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "metric": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "label": { "type": "string" },
+        "ui": { "$ref": "#/$defs/series_ui" },
         "unit": { "type": "string" },
         "transform": { "$ref": "#/$defs/transform" },
         "style": { "$ref": "#/$defs/series_style" },
@@ -175,13 +177,38 @@
         }
       ]
     },
+    "graph_ui": {
+      "type": "object",
+      "properties": {
+        "info_text": { "type": "string" },
+        "chart_mode": {
+          "type": "string",
+          "enum": ["temperature_line", "hot_days_combo", "stacked_bar"]
+        },
+        "axis_title_mode": {
+          "type": "string",
+          "enum": ["year", "date"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "series_ui": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": ["raw", "mean", "trend", "category"]
+        }
+      },
+      "additionalProperties": false
+    },
     "series_style": {
       "type": "object",
       "properties": {
         "type": { "type": "string", "enum": ["line", "bar"] },
         "color": {
           "type": "string",
-          "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+          "pattern": "^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})|rgb\\(\\s*(?:[01]?\\d?\\d|2[0-4]\\d|25[0-5])\\s*,\\s*(?:[01]?\\d?\\d|2[0-4]\\d|25[0-5])\\s*,\\s*(?:[01]?\\d?\\d|2[0-4]\\d|25[0-5])\\s*\\)|rgba\\(\\s*(?:[01]?\\d?\\d|2[0-4]\\d|25[0-5])\\s*,\\s*(?:[01]?\\d?\\d|2[0-4]\\d|25[0-5])\\s*,\\s*(?:[01]?\\d?\\d|2[0-4]\\d|25[0-5])\\s*,\\s*(?:0|1|0?\\.\\d+)\\s*\\))$"
         },
         "stack": { "type": "string", "minLength": 1 }
       },

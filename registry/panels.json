@@ -8,21 +8,30 @@
         {
           "id": "t2m_annual",
           "title": "Annual temperature",
+          "ui": {
+            "info_text": "Annual air temperature is derived from daily air temperature at 2 meters above the surface, aggregated into yearly averages.",
+            "chart_mode": "temperature_line",
+            "axis_title_mode": "year"
+          },
           "x_axis_label": "Year",
-          "y_axis_label": "Temperature (°C)",
+          "y_axis_label": "Temperature ({unit})",
           "source": "CDS ERA5 2m temperature monthly means (1979-2025)",
           "series": [
             {
               "key": "t2m_yearly_mean",
               "metric": "t2m_yearly_mean_c",
               "label": "Annual mean",
-              "unit": "C"
+              "ui": { "role": "raw" },
+              "unit": "C",
+              "style": { "type": "line", "color": "#ff2e55" }
             },
             {
               "key": "t2m_yearly_mean_5y",
               "metric": "t2m_yearly_mean_c",
               "label": "5-year mean",
+              "ui": { "role": "mean" },
               "unit": "C",
+              "style": { "type": "line", "color": "#1736ff" },
               "transform": {
                 "fn": "rolling_mean",
                 "params": { "window": 5, "centered": true }
@@ -36,7 +45,9 @@
               "key": "t2m_yearly_trend",
               "metric": "t2m_yearly_mean_c",
               "label": "Trend",
+              "ui": { "role": "trend" },
               "unit": "C",
+              "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
               "transform": { "fn": "linear_trend_line" }
             }
           ]
@@ -44,8 +55,13 @@
         {
           "id": "t2m_zoomout",
           "title": "Temperature zoom-out",
+          "ui": {
+            "info_text": "Temperature zoom-out view combines daily, monthly, and yearly temperature series to show short- and long-term context.",
+            "chart_mode": "temperature_line",
+            "axis_title_mode": "date"
+          },
           "x_axis_label": "Date",
-          "y_axis_label": "Temperature (°C)",
+          "y_axis_label": "Temperature ({unit})",
           "caption": { "type": "fn", "fn": "fifty_year_caption", "params": {} },
           "source": "CDS ERA5 daily and monthly 2m temperature means",
           "animation": {
@@ -83,13 +99,17 @@
               "key": "t2m_daily_mean",
               "metric": "t2m_daily_mean_c",
               "label": "Daily mean",
-              "unit": "C"
+              "ui": { "role": "raw" },
+              "unit": "C",
+              "style": { "type": "line", "color": "rgba(180,180,180,0.7)" }
             },
             {
               "key": "t2m_daily_mean_7d",
               "metric": "t2m_daily_mean_c",
               "label": "7-day mean",
+              "ui": { "role": "mean" },
               "unit": "C",
+              "style": { "type": "line", "color": "#1736ff" },
               "transform": {
                 "fn": "rolling_mean",
                 "params": { "window": 7, "centered": true }
@@ -99,19 +119,25 @@
               "key": "t2m_monthly_mean",
               "metric": "t2m_monthly_mean_c",
               "label": "Monthly mean",
-              "unit": "C"
+              "ui": { "role": "raw" },
+              "unit": "C",
+              "style": { "type": "line", "color": "#ff2e55" }
             },
             {
               "key": "t2m_yearly_mean",
               "metric": "t2m_yearly_mean_c",
               "label": "Yearly mean",
-              "unit": "C"
+              "ui": { "role": "mean" },
+              "unit": "C",
+              "style": { "type": "line", "color": "#1736ff" }
             },
             {
               "key": "t2m_yearly_trend",
               "metric": "t2m_yearly_mean_c",
               "label": "Trend",
+              "ui": { "role": "trend" },
               "unit": "C",
+              "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
               "transform": { "fn": "linear_trend_line" }
             }
           ]
@@ -119,6 +145,11 @@
         {
           "id": "t2m_hot_days",
           "title": "Hot days per year (air temperature)",
+          "ui": {
+            "info_text": "Number of hot days per year are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979.",
+            "chart_mode": "hot_days_combo",
+            "axis_title_mode": "year"
+          },
           "x_axis_label": "Year",
           "y_axis_label": "Days/year",
           "source": "CDS ERA5 2m temperature daily means (1979-2025)",
@@ -127,14 +158,17 @@
               "key": "t2m_hotdays",
               "metric": "t2m_hotdays_per_year",
               "label": "Hot days",
+              "ui": { "role": "raw" },
               "unit": "days",
-              "style": { "type": "bar" }
+              "style": { "type": "bar", "color": "#ccccff" }
             },
             {
               "key": "t2m_hotdays_5y",
               "metric": "t2m_hotdays_per_year",
               "label": "5-year mean",
+              "ui": { "role": "mean" },
               "unit": "days",
+              "style": { "type": "line", "color": "#1736ff" },
               "transform": {
                 "fn": "rolling_mean",
                 "params": { "window": 5, "centered": true }
@@ -144,7 +178,9 @@
               "key": "t2m_hotdays_trend",
               "metric": "t2m_hotdays_per_year",
               "label": "Trend",
+              "ui": { "role": "trend" },
               "unit": "days",
+              "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
               "transform": { "fn": "linear_trend_line" }
             }
           ]
@@ -158,21 +194,30 @@
         {
           "id": "sst_annual",
           "title": "Annual sea surface temperature",
+          "ui": {
+            "info_text": "Annual sea surface temperature is derived from daily sea surface temperature, aggregated into yearly averages.",
+            "chart_mode": "temperature_line",
+            "axis_title_mode": "year"
+          },
           "x_axis_label": "Year",
-          "y_axis_label": "Temperature (°C)",
+          "y_axis_label": "Temperature ({unit})",
           "source": "ERDDAP SST temperature daily means (2021-2025)",
           "series": [
             {
               "key": "sst_yearly_mean",
               "metric": "sst_yearly_mean_c",
               "label": "Annual mean",
-              "unit": "C"
+              "ui": { "role": "raw" },
+              "unit": "C",
+              "style": { "type": "line", "color": "#ff2e55" }
             },
             {
               "key": "sst_yearly_mean_5y",
               "metric": "sst_yearly_mean_c",
               "label": "5-year mean",
+              "ui": { "role": "mean" },
               "unit": "C",
+              "style": { "type": "line", "color": "#1736ff" },
               "transform": {
                 "fn": "rolling_mean",
                 "params": { "window": 5, "centered": true }
@@ -186,7 +231,9 @@
               "key": "sst_yearly_trend",
               "metric": "sst_yearly_mean_c",
               "label": "Trend",
+              "ui": { "role": "trend" },
               "unit": "C",
+              "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
               "transform": { "fn": "linear_trend_line" }
             }
           ]
@@ -194,6 +241,11 @@
         {
           "id": "sst_hot_days",
           "title": "Number of sea surface hot days",
+          "ui": {
+            "info_text": "Number of sea surface hot days per year are counted as days where the sea surface temperature is warmer than the top 10% warmest days in a 10-year baseline starting in 1979.",
+            "chart_mode": "hot_days_combo",
+            "axis_title_mode": "year"
+          },
           "x_axis_label": "Year",
           "y_axis_label": "Days/year",
           "source": "ERDDAP OISST daily means (2021-2025)",
@@ -202,14 +254,17 @@
               "key": "sst_hotdays",
               "metric": "sst_hotdays_per_year",
               "label": "Hot days",
+              "ui": { "role": "raw" },
               "unit": "days",
-              "style": { "type": "bar" }
+              "style": { "type": "bar", "color": "#ccccff" }
             },
             {
               "key": "sst_hotdays_5y",
               "metric": "sst_hotdays_per_year",
               "label": "5-year mean",
+              "ui": { "role": "mean" },
               "unit": "days",
+              "style": { "type": "line", "color": "#1736ff" },
               "transform": {
                 "fn": "rolling_mean",
                 "params": { "window": 5, "centered": true }
@@ -219,7 +274,9 @@
               "key": "sst_hotdays_trend",
               "metric": "sst_hotdays_per_year",
               "label": "Trend",
+              "ui": { "role": "trend" },
               "unit": "days",
+              "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
               "transform": { "fn": "linear_trend_line" }
             }
           ]
@@ -233,6 +290,11 @@
         {
           "id": "dhw_risk_days",
           "title": "Coral Reef DHW risk days per year",
+          "ui": {
+            "info_text": "Coral Reef DHW categories: no risk (DHW < 4), moderate risk (4 <= DHW < 8), severe risk (DHW >= 8).",
+            "chart_mode": "stacked_bar",
+            "axis_title_mode": "year"
+          },
           "x_axis_label": "Year",
           "y_axis_label": "Number of days",
           "source": "NOAA Coral Reef Watch daily Degree Heating Week (1985-2025)",
@@ -241,6 +303,7 @@
               "key": "dhw_no_risk_days",
               "metric": "dhw_no_risk_days_per_year",
               "label": "No risk (DHW < 4)",
+              "ui": { "role": "category" },
               "unit": "days",
               "style": {
                 "type": "bar",
@@ -252,6 +315,7 @@
               "key": "dhw_moderate_risk_days",
               "metric": "dhw_moderate_risk_days_per_year",
               "label": "Moderate risk (4 <= DHW < 8)",
+              "ui": { "role": "category" },
               "unit": "days",
               "style": {
                 "type": "bar",
@@ -263,6 +327,7 @@
               "key": "dhw_severe_risk_days",
               "metric": "dhw_severe_risk_days_per_year",
               "label": "Severe risk (DHW >= 8)",
+              "ui": { "role": "category" },
               "unit": "days",
               "style": {
                 "type": "bar",

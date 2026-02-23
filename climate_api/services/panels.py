@@ -578,6 +578,8 @@ def build_panel_tiles_registry(
                 x=list(axis_vals),
                 y=_series_to_list(y),
                 unit=unit,
+                label=series_spec.get("label"),
+                ui=series_spec.get("ui"),
                 style=series_spec.get("style"),
             )
             graph_series_keys.append(key)
@@ -637,6 +639,7 @@ def build_panel_tiles_registry(
             GraphPayload(
                 id=graph.get("id", ""),
                 title=graph.get("title", ""),
+                ui=graph.get("ui"),
                 series_keys=graph_series_keys,
                 annotations=graph_annotations,
                 caption=graph_caption,

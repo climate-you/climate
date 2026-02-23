@@ -13,7 +13,6 @@
   - zoomout graph needs work + rephrase graph captions + info bubble
 - Code:
   - clean up unused css and methods in code.
-  - remove hardcoded metric/graph ids from `ExplorerPage.tsx` (legends, captions in `graphInfoText`, colours, etc.), drive everything from `registry/panels.json`
   - Prepare a `demo` release that can be tar-gzed or zipped with correct locations / no zoomout / shorter time range - reef only on great barrier => upload it somewhere and reference it in the docs to have a demo version up and running
   - Finalise doc: public URL, latest screenshots, link to `demo` release
 

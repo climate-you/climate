@@ -44,11 +44,18 @@ type SeriesPayload = {
   x: Array<number | string>;
   y: (number | null)[];
   unit?: string | null;
+  label?: string | null;
+  ui?: { role?: "raw" | "mean" | "trend" | "category" } | null;
   style?: { type?: "line" | "bar"; color?: string; stack?: string } | null;
 };
 type GraphPayload = {
   id: string;
   title: string;
+  ui?: {
+    info_text?: string | null;
+    chart_mode?: "temperature_line" | "hot_days_combo" | "stacked_bar";
+    axis_title_mode?: "year" | "date";
+  } | null;
   series_keys: string[];
   source?: string | null;
   caption?: string | null;
@@ -165,22 +172,6 @@ type PagedGraphItem = {
 type ExplorerPageProps = {
   coldOpen?: boolean;
 };
-
-const GRAPH_INFO_TEXT_BY_ID: Record<string, string> = {
-  t2m_annual:
-    "Annual air temperature is derived from daily air temperature at 2 meters above the surface, aggregated into yearly averages.",
-  t2m_hot_days:
-    "Number of hot days per year are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979.",
-  sst_hot_days:
-    "Number of sea surface hot days per year are counted as days where the sea surface temperature is warmer than the top 10% warmest days in a 10-year baseline starting in 1979.",
-  sst_annual:
-    "Annual air temperature is derived from daily sea surface temperature, aggregated into yearly averages.",
-  dhw_risk_days:
-    "Coral Reef DHW categories: no risk (DHW < 4), moderate risk (4 <= DHW < 8), severe risk (DHW >= 8).",
-  t2m_zoomout: "Todo: placeholder text",
-};
-
-const DEFAULT_GRAPH_INFO_TEXT = "Todo: placeholder text";
 
 function mergeSeries(series: Record<string, SeriesPayload>, keys: string[]) {
   // Merge into rows keyed by x (ISO date or year). We assume x values are unique per series.
@@ -337,18 +328,66 @@ function inBbox(
   return latOk && lonOk;
 }
 
-function keyLabel(key: string): string {
-  if (key.includes("no_risk")) return "No risk";
-  if (key.includes("moderate_risk")) return "Moderate risk";
-  if (key.includes("severe_risk")) return "Severe risk";
-  if (key.includes("trend")) return "Trend";
-  if (key.includes("5y")) return "5-year mean";
-  if (key.includes("7d")) return "7-day mean";
-  if (key.includes("daily")) return "Daily mean";
-  if (key.includes("monthly")) return "Monthly mean";
-  if (key.includes("yearly")) return "Yearly mean";
-  if (key.includes("hotdays")) return "Hot days";
+function fallbackKeyLabel(key: string): string {
   return key.replaceAll("_", " ");
+}
+
+function seriesLabel(series: Record<string, SeriesPayload>, key: string): string {
+  const configured = series[key]?.label;
+  if (typeof configured === "string" && configured.trim().length > 0) {
+    return configured;
+  }
+  return fallbackKeyLabel(key);
+}
+
+function seriesRole(
+  series: Record<string, SeriesPayload>,
+  key: string | undefined,
+): "raw" | "mean" | "trend" | "category" | undefined {
+  if (!key) return undefined;
+  const role = series[key]?.ui?.role;
+  if (
+    role === "raw" ||
+    role === "mean" ||
+    role === "trend" ||
+    role === "category"
+  ) {
+    return role;
+  }
+  return undefined;
+}
+
+function seriesColor(
+  series: Record<string, SeriesPayload>,
+  key: string | undefined,
+  fallback: string,
+): string {
+  if (!key) return fallback;
+  const configured = series[key]?.style?.color;
+  if (typeof configured === "string" && configured.trim().length > 0) {
+    return configured;
+  }
+  return fallback;
+}
+
+function graphChartMode(
+  graph: GraphPayload,
+  visibleKeys: string[],
+  series: Record<string, SeriesPayload>,
+): "temperature_line" | "hot_days_combo" | "stacked_bar" {
+  if (
+    graph.ui?.chart_mode === "temperature_line" ||
+    graph.ui?.chart_mode === "hot_days_combo" ||
+    graph.ui?.chart_mode === "stacked_bar"
+  ) {
+    return graph.ui.chart_mode;
+  }
+  const barSeriesCount = visibleKeys.filter(
+    (key) => series[key]?.style?.type === "bar",
+  ).length;
+  if (barSeriesCount >= 2) return "stacked_bar";
+  if (barSeriesCount === 1 && visibleKeys.length > 1) return "hot_days_combo";
+  return "temperature_line";
 }
 
 function toChartTimestamp(x: number | string): number {
@@ -441,7 +480,7 @@ function formatDateLabel(ts: number): string {
 
 function formatAxisTitle(graph: GraphPayload, value: unknown): string {
   const asString = String(value ?? "");
-  if (graph.id !== "t2m_zoomout") {
+  if (graph.ui?.axis_title_mode !== "date") {
     const directYear = Number.parseInt(asString, 10);
     const year =
       Number.isFinite(directYear) && directYear >= 1000 && directYear <= 3000
@@ -553,20 +592,14 @@ function InfoBubble({ text, label }: { text: string; label: string }) {
 }
 
 function yAxisTitle(graph: GraphPayload, unit: "C" | "F"): string {
-  if (
-    graph.id === "t2m_hot_days" ||
-    graph.id === "sst_hot_days" ||
-    graph.id === "dhw_risk_days"
-  ) {
-    return "Number of days";
-  }
-  if (
-    graph.y_axis_label &&
-    !graph.y_axis_label.toLowerCase().includes("temperature")
-  ) {
+  const unitLabel = unit === "F" ? "°F" : "°C";
+  if (graph.y_axis_label) {
+    if (graph.y_axis_label.includes("{unit}")) {
+      return graph.y_axis_label.replace("{unit}", unitLabel);
+    }
     return graph.y_axis_label;
   }
-  return `Temperature (${unit === "F" ? "°F" : "°C"})`;
+  return `Temperature (${unitLabel})`;
 }
 
 function formatIntegerOnlyAxisTick(value: number): string {
@@ -644,7 +677,7 @@ function sharedChartScaffold() {
   const gridRight = isMobile ? mobileGridSidePadding : 24;
   const legendRight = isMobile ? mobileGridSidePadding : 24;
   const legendFontSize = isMobile ? 10 : 12;
-  const legendType = isMobile ? "scroll" : "plain";
+  const legendType = isMobile ? ("scroll" as const) : ("plain" as const);
   const legendItemWidth = isMobile ? 9 : 30;
   const legendItemHeight = isMobile ? 9 : 10;
   return {
@@ -657,7 +690,7 @@ function sharedChartScaffold() {
     },
     legend: {
       type: legendType,
-      orient: "horizontal",
+      orient: "horizontal" as const,
       ...(isMobile ? { icon: "circle" as const } : {}),
       right: legendRight,
       top: 0,
@@ -698,9 +731,10 @@ function trendLegendLabel(
   graph: GraphPayload,
   data: ChartRow[],
   trendKey: string,
+  series: Record<string, SeriesPayload>,
   unit: "C" | "F",
 ): string {
-  if (graph.id === "t2m_hot_days" || graph.id === "sst_hot_days") {
+  if (graph.ui?.chart_mode === "hot_days_combo") {
     return "Trend";
   }
   const samples = data
@@ -720,7 +754,7 @@ function trendLegendLabel(
   const perDecade = ((last.y - first.y) / years) * 10;
   const sign = perDecade >= 0 ? "+" : "";
   const suffix = `${unit === "F" ? "ºF" : "ºC"}/decade`;
-  return `Trend: ${sign}${perDecade.toFixed(1)}${suffix}`;
+  return `${seriesLabel(series, trendKey)}: ${sign}${perDecade.toFixed(1)}${suffix}`;
 }
 
 function rollingMeanCentered(
@@ -845,13 +879,28 @@ function buildHotDaysOption({
   const theme = chartThemeTokens();
   const isMobile = isMobileViewport();
   const xValues = data.map((row) => row.x);
-  const barKey = graph.series_keys.find(
-    (k) => series[k]?.style?.type === "bar",
+  const barKey =
+    graph.series_keys.find(
+      (k) =>
+        series[k]?.style?.type === "bar" &&
+        seriesRole(series, k) !== "trend" &&
+        seriesRole(series, k) !== "mean",
+    ) ?? graph.series_keys.find((k) => series[k]?.style?.type === "bar");
+  const meanKey = graph.series_keys.find((k) => seriesRole(series, k) === "mean");
+  const trendKey = graph.series_keys.find(
+    (k) => seriesRole(series, k) === "trend",
   );
-  const meanKey = graph.series_keys.find((k) => k.includes("5y"));
-  const trendKey = graph.series_keys.find((k) => k.includes("trend"));
   const isVisible = (key: string | undefined) =>
     Boolean(key && visibleKeys.includes(key));
+  const barLabel = barKey ? seriesLabel(series, barKey) : "Value";
+  const meanLabel = meanKey ? seriesLabel(series, meanKey) : "Mean";
+  const trendLabel = trendKey
+    ? trendLegendLabel(graph, data, trendKey, series, unit)
+    : "Trend";
+  const barBaseColor = seriesColor(series, barKey, theme.barBase);
+  const barAccentColor = theme.barAccent;
+  const meanColor = seriesColor(series, meanKey, theme.meanLine);
+  const trendColor = seriesColor(series, trendKey, theme.trendArea);
 
   const barValues = barKey
     ? data.map((row) => (row[barKey] as number | null) ?? null)
@@ -878,21 +927,21 @@ function buildHotDaysOption({
   const chartSeries: NonNullable<EChartsOption["series"]> = [];
   if (barKey && isVisible(barKey)) {
     chartSeries.push({
-      name: keyLabel(barKey),
+      name: barLabel,
       type: "bar",
       stack: "hot-days",
       data: belowMean,
-      itemStyle: { color: theme.barBase },
+      itemStyle: { color: barBaseColor },
       emphasis: { focus: "none" },
       z: 2,
       animationDurationUpdate: transitionMs,
     });
     chartSeries.push({
-      name: keyLabel(barKey),
+      name: barLabel,
       type: "bar",
       stack: "hot-days",
       data: aboveMean,
-      itemStyle: { color: theme.barAccent },
+      itemStyle: { color: barAccentColor },
       emphasis: { focus: "none" },
       z: 2,
       animationDurationUpdate: transitionMs,
@@ -900,14 +949,14 @@ function buildHotDaysOption({
   }
   if (meanKey && isVisible(meanKey)) {
     chartSeries.push({
-      name: keyLabel(meanKey),
+      name: meanLabel,
       type: "line",
-      color: theme.meanLine,
+      color: meanColor,
       data: meanDisplayValues,
       smooth: 0.35,
       showSymbol: false,
-      itemStyle: { color: theme.meanLine },
-      lineStyle: { width: 3, color: theme.meanLine },
+      itemStyle: { color: meanColor },
+      lineStyle: { width: 3, color: meanColor },
       z: 3,
       animationDurationUpdate: transitionMs,
       emphasis: { focus: "series" },
@@ -915,15 +964,15 @@ function buildHotDaysOption({
   }
   if (trendKey && isVisible(trendKey)) {
     chartSeries.push({
-      name: trendLegendLabel(graph, data, trendKey, unit),
+      name: trendLabel,
       type: "line",
-      color: theme.trendArea,
+      color: trendColor,
       data: data.map((row) => (row[trendKey] as number | null) ?? null),
       smooth: false,
       showSymbol: false,
-      itemStyle: { color: theme.trendArea },
+      itemStyle: { color: trendColor },
       lineStyle: { width: 0, color: "rgba(255, 0, 0, 0)" },
-      areaStyle: { color: theme.trendArea },
+      areaStyle: { color: trendColor },
       z: 4,
       animationDurationUpdate: transitionMs,
       emphasis: { focus: "series" },
@@ -953,7 +1002,7 @@ function buildHotDaysOption({
         if (Number.isInteger(idx) && idx >= 0 && idx < barValues.length) {
           const v = barValues[idx];
           if (typeof v === "number" && Number.isFinite(v)) {
-            lines.push(`Hot days: ${Math.round(v)}`);
+            lines.push(`${barLabel}: ${Math.round(v)}`);
           }
         }
         const extra = new Map<string, number>();
@@ -961,7 +1010,7 @@ function buildHotDaysOption({
           .map((item) => item as { value?: unknown; seriesName?: string })
           .forEach((r) => {
             const label = String(r.seriesName ?? "").trim();
-            if (!label || label.startsWith("Trend") || label === "Hot days")
+            if (!label || label === trendLabel || label === barLabel)
               return;
             if (typeof r.value === "number" && Number.isFinite(r.value)) {
               extra.set(label, Number(r.value));
@@ -1035,7 +1084,7 @@ function buildStackedBarOption({
           ? s.style.stack
           : defaultStack;
       return {
-        name: keyLabel(key),
+        name: seriesLabel(series, key),
         type: "bar",
         stack: stackName,
         data: data.map((row) => (row[key] as number | null) ?? null),
@@ -1098,6 +1147,7 @@ function buildStackedBarOption({
 
 function buildTemperatureOption({
   graph,
+  series,
   data,
   visibleKeys,
   transitionMs,
@@ -1106,6 +1156,7 @@ function buildTemperatureOption({
   xMax,
 }: {
   graph: GraphPayload;
+  series: Record<string, SeriesPayload>;
   data: ChartRow[];
   visibleKeys: string[];
   transitionMs: number;
@@ -1115,19 +1166,18 @@ function buildTemperatureOption({
 }): EChartsOption {
   const theme = chartThemeTokens();
   const isMobile = isMobileViewport();
+  const trendKeys = visibleKeys.filter((key) => seriesRole(series, key) === "trend");
+  const trendSeriesNames = new Set<string>();
   const chartSeries: NonNullable<EChartsOption["series"]> = visibleKeys.map(
     (key) => {
-      const isTrend = key.includes("trend");
-      const isMean = key.includes("5y") || key.includes("7d");
-      const isMonthly = key.includes("monthly");
-      const isDaily = key.includes("daily");
-      const baseColor = isTrend
-        ? theme.trendArea
-        : isMean
-          ? theme.meanLine
-          : isDaily
-            ? theme.dailyLine
-            : theme.rawLine;
+      const role = seriesRole(series, key);
+      const isTrend = role === "trend";
+      const isMean = role === "mean";
+      const baseColor = seriesColor(
+        series,
+        key,
+        isTrend ? theme.trendArea : isMean ? theme.meanLine : theme.rawLine,
+      );
       const rawValues = data.map((row) => (row[key] as number | null) ?? null);
       const displayValues = isMean
         ? deriveMeanFromBase(data, key, rawValues)
@@ -1139,11 +1189,13 @@ function buildTemperatureOption({
             typeof p.value === "number",
         )
         .map((p) => [toChartTimestamp(p.x), p.value]);
+      const displayName = isTrend
+        ? trendLegendLabel(graph, data, key, series, unit)
+        : seriesLabel(series, key);
+      if (isTrend) trendSeriesNames.add(displayName);
       return {
         id: key,
-        name: isTrend
-          ? trendLegendLabel(graph, data, key, unit)
-          : keyLabel(key),
+        name: displayName,
         type: "line",
         color: baseColor,
         data: points,
@@ -1160,16 +1212,16 @@ function buildTemperatureOption({
         },
         z: isTrend ? 1 : isMean ? 3 : 2,
         areaStyle: isTrend ? { color: theme.trendArea } : undefined,
-        animationDuration: isMonthly ? 1200 : 700,
-        animationDelay: isMonthly ? (idx: number) => idx * 6 : 0,
+        animationDuration: 700,
+        animationDelay: 0,
         animationDurationUpdate: transitionMs,
         emphasis: { focus: "series" },
       };
     },
   );
 
-  const keysForRange = visibleKeys.some((k) => !k.includes("trend"))
-    ? visibleKeys.filter((k) => !k.includes("trend"))
+  const keysForRange = visibleKeys.some((k) => !trendKeys.includes(k))
+    ? visibleKeys.filter((k) => !trendKeys.includes(k))
     : visibleKeys;
   const allValues = keysForRange.flatMap((key) =>
     data
@@ -1179,7 +1231,8 @@ function buildTemperatureOption({
   let yMin: number | undefined;
   let yMax: number | undefined;
   const yAxisName = yAxisTitle(graph, unit);
-  const isTemperatureAxis = yAxisName.startsWith("Temperature");
+  const isTemperatureAxis =
+    !graph.y_axis_label || graph.y_axis_label.includes("{unit}");
   if (allValues.length > 0) {
     const min = Math.min(...allValues);
     const max = Math.max(...allValues);
@@ -1221,7 +1274,7 @@ function buildTemperatureOption({
             (item) =>
               item as { value?: unknown; marker?: string; seriesName?: string },
           )
-          .filter((r) => !String(r.seriesName ?? "").startsWith("Trend"))
+          .filter((r) => !trendSeriesNames.has(String(r.seriesName ?? "")))
           .filter(
             (r) =>
               Array.isArray(r.value) && Number.isFinite(Number(r.value[1])),
@@ -1315,12 +1368,8 @@ function GraphCard({
   const visibleKeys = activeStep?.series_keys?.length
     ? activeStep.series_keys
     : graph.series_keys;
-  const barSeriesCount = visibleKeys.filter(
-    (key) => series[key]?.style?.type === "bar",
-  ).length;
-  const isStackedBarChart =
-    barSeriesCount >= 2 &&
-    visibleKeys.every((key) => series[key]?.style?.type === "bar");
+  const chartMode = graphChartMode(graph, visibleKeys, series);
+  const isStackedBarChart = chartMode === "stacked_bar";
   const activeRange = activeStep?.time_range ?? graph.time_range;
   const rangedData = useMemo(
     () => sliceRowsByTimeRange(data, activeRange),
@@ -1334,12 +1383,10 @@ function GraphCard({
     [rangedData, visibleKeys],
   );
   const transitionMs = graph.animation?.transition_ms ?? 900;
-  const isHotDaysChart =
-    !isStackedBarChart &&
-    (graph.id === "t2m_hot_days" || graph.id === "sst_hot_days");
+  const isHotDaysChart = chartMode === "hot_days_combo";
   const graphInfoText =
-    GRAPH_INFO_TEXT_BY_ID[graph.id] ?? DEFAULT_GRAPH_INFO_TEXT;
-  const isZoomOutGraph = graph.id === "t2m_zoomout";
+    typeof graph.ui?.info_text === "string" ? graph.ui.info_text : "";
+  const useAllVisibleDataForSeries = graph.ui?.axis_title_mode === "date";
   const allVisibleData = useMemo(
     () =>
       data.filter((row) =>
@@ -1376,7 +1423,8 @@ function GraphCard({
     }
     return buildTemperatureOption({
       graph,
-      data: isZoomOutGraph ? allVisibleData : filteredData,
+      series,
+      data: useAllVisibleDataForSeries ? allVisibleData : filteredData,
       visibleKeys,
       transitionMs,
       unit,
@@ -1389,7 +1437,7 @@ function GraphCard({
     graph,
     isHotDaysChart,
     isStackedBarChart,
-    isZoomOutGraph,
+    useAllVisibleDataForSeries,
     series,
     transitionMs,
     unit,
@@ -1402,14 +1450,10 @@ function GraphCard({
     <div className={styles.graphCard}>
       {showTitle ? (
         <div className={styles.graphTitleRow}>
-          <h3 className={styles.graphTitle}>
-            {graph.title === "Annual temperature"
-              ? "Annual air temperature"
-              : graph.id === "t2m_hot_days"
-                ? "Number of hot days"
-                : graph.title}
-          </h3>
-          <InfoBubble label="Graph title information" text={graphInfoText} />
+          <h3 className={styles.graphTitle}>{graph.title}</h3>
+          {graphInfoText ? (
+            <InfoBubble label="Graph title information" text={graphInfoText} />
+          ) : null}
         </div>
       ) : null}
       {hasAnimation ? (
@@ -1438,7 +1482,7 @@ function GraphCard({
       {graph.error ? (
         <div className={styles.graphError}>{graph.error}</div>
       ) : null}
-      {graph.caption && graph.id !== "t2m_hot_days" ? (
+      {graph.caption ? (
         <div className={styles.graphCaption}>{graph.caption}</div>
       ) : null}
     </div>
@@ -1654,30 +1698,20 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     return resp.panels.map((item) => ({
       score: item.score,
       panel: item.panel,
-      graphs: [...item.panel.graphs]
-        .sort((a, b) => {
-          const isAHotDays = a.title === "Hot days per year (air temperature)";
-          const isBHotDays = b.title === "Hot days per year (air temperature)";
-          const isAZoomOut = a.title === "Temperature zoom-out";
-          const isBZoomOut = b.title === "Temperature zoom-out";
-          if (isAHotDays && isBZoomOut) return -1;
-          if (isAZoomOut && isBHotDays) return 1;
-          return 0;
-        })
-        .map((graph) => ({
-          graph,
-          data: mergeSeries(
-            resp.series,
-            Array.from(
-              new Set([
-                ...graph.series_keys,
-                ...(graph.animation?.steps ?? []).flatMap(
-                  (s) => s.series_keys ?? [],
-                ),
-              ]),
-            ),
+      graphs: item.panel.graphs.map((graph) => ({
+        graph,
+        data: mergeSeries(
+          resp.series,
+          Array.from(
+            new Set([
+              ...graph.series_keys,
+              ...(graph.animation?.steps ?? []).flatMap(
+                (s) => s.series_keys ?? [],
+              ),
+            ]),
           ),
-        })),
+        ),
+      })),
     }));
   }, [resp]);
 
