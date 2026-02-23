@@ -1,257 +1,125 @@
-# Climate Data Pipeline + API + Web Demo
+# Climate Data Pipeline + API + Web App
 
-## What this repo contains
+Public app: https://www.placeholder.com
 
-- `scripts/build/packager.py`: registry-driven data packaging pipeline
-- `climate_api/`: FastAPI backend (`panel`, `resolve`, `nearest`, `autocomplete`)
-- `web/src/app/page.tsx`: main Next.js front-end page at `/`
+A registry-driven climate data platform with:
 
-## Environment setup
+- a data packaging pipeline (`scripts/build/packager.py` + `climate/packager/*`)
+- shared Python package modules (`climate/`)
+- a FastAPI backend (`climate_api/*`)
+- a Next.js web application (`web/*`)
+- utility scripts for build, validation, benchmarking, and operations (`scripts/`)
 
-1. Activate Python env and expose the repo package:
+## Screenshots
+
+![Global view](docs/images/globe_default.png)
+![Panel view](docs/images/warming_paris.png)
+
+## Repository Organization
+
+- `climate/`: shared package code for dataset derivation, registries, tiles, packager
+- `climate_api/`: FastAPI app, schemas, endpoint services
+- `data/`: local data artifacts (locations, masks, caches, releases)
+- `docs/`: architecture diagrams and runbooks
+- `registry/`: authoritative manifests (datasets, metrics, maps, layers, panels)
+- `scripts/`: operational build, validation, benchmark, and runtime scripts
+- `tests/`: unit/integration/end-to-end test coverage
+- `web/`: Next.js frontend application
+
+Pipeline diagrams: [`docs/project_pipeline_diagrams.md`](docs/project_pipeline_diagrams.md)
+
+## Prerequisites
+
+### Python environment (recommended: Conda)
+
+Using Conda (Anaconda or Miniconda) is the recommended path. Create and use a dedicated environment, then run all Python scripts/backend commands from that environment.
 
 ```bash
-conda activate climate
+conda create -n <your-env-name> python=3.11
+conda activate <your-env-name>
+```
+
+Set repo-local import path when running scripts:
+
+```bash
 export PYTHONPATH="$(pwd)"
 ```
 
-2. Optional CDS credentials in `~/.cdsapirc` for ERA5 downloads:
+You can install packages manually without Conda, but that path is less reproducible and not recommended.
+
+### Node/web environment
+
+Node.js is required for the web application tooling/runtime, and `npm` is required for package management.
+
+```bash
+cd web
+npm install
+```
+
+Optional credentials for ERA5 downloads (`~/.cdsapirc`):
 
 ```yaml
 url: https://cds.climate.copernicus.eu/api
 key: <your-key>
 ```
 
-## Data preparation workflow
+## Quickstart
 
-1. Build locations files used by resolver/autocomplete:
+1. Choose a data path:
 
-```bash
-python scripts/build/build_locations.py --source cities500 --write-index --write-kdtree
-```
+- Preferred for quick start: use the pre-packaged `demo` release archive (includes locations, masks, and release assets).
+- Build-from-scratch path: run the full preparation pipeline (see Data Preparation Overview below).
+- The remaining Quickstart steps assume you selected the pre-packaged `demo` release path.
 
-2. Build ocean mask files used for ocean naming:
+Pre-packaged archive placeholder:
 
-```bash
-python scripts/build/build_ocean_mask.py
-```
+- `TODO` download link: [demo release archive](https://example.com/TODO-demo-release-archive)
 
-3. Package metrics + maps from registry:
-
-```bash
-python scripts/build/packager.py --release dev --all --all-maps
-```
-
-Useful variants:
-
-```bash
-python scripts/build/packager.py --release dev --all --all-maps --pipeline --workers 4
-python scripts/build/packager.py --release dev --all --all-maps --batch-tiles 4
-```
-
-## DHW reef mask workflow (0.05 deg)
-
-Use this when rebuilding the Coral Reef DHW domain mask.
-
-1. Build reef masks (UNEP + NE, both `all_touched`).
-   These scripts auto-download and cache sources under `data/cache/geojson/` by default:
-
-```bash
-python scripts/build/build_reef_mask.py \
-  --source unep_wcmc \
-  --grid-id global_0p05 \
-  --all-touched \
-  --output-npz data/masks/reef_unep_all_touched_global_0p05_mask.npz
-
-python scripts/build/build_reef_mask.py \
-  --source natural_earth \
-  --grid-id global_0p05 \
-  --all-touched \
-  --output-npz data/masks/reef_ne_all_touched_global_0p05_mask.npz
-```
-
-If UNEP TLS fails on your machine, pass `--insecure` for that command only.
-
-2. Build DHW availability union mask (sampled dates):
-
-```bash
-python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 1985-06-15 --end-date 1985-06-15 --output data/masks/dhw_available_1985_06_15_global_0p05_mask.npz --cache-dir /Volumes/SDCard/Climate/cache/erddap_masks
-python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2000-06-15 --end-date 2000-06-15 --output data/masks/dhw_available_2000_06_15_global_0p05_mask.npz --cache-dir /Volumes/SDCard/Climate/cache/erddap_masks
-python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2010-06-15 --end-date 2010-06-15 --output data/masks/dhw_available_2010_06_15_global_0p05_mask.npz --cache-dir /Volumes/SDCard/Climate/cache/erddap_masks
-python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2020-06-15 --end-date 2020-06-15 --output data/masks/dhw_available_2020_06_15_global_0p05_mask.npz --cache-dir /Volumes/SDCard/Climate/cache/erddap_masks
-python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2025-06-15 --end-date 2025-06-15 --output data/masks/dhw_available_2025_06_15_global_0p05_mask.npz --cache-dir /Volumes/SDCard/Climate/cache/erddap_masks
-
-python scripts/build/combine_masks.py \
-  --mode or \
-  --input data/masks/dhw_available_1985_06_15_global_0p05_mask.npz \
-  --input data/masks/dhw_available_2000_06_15_global_0p05_mask.npz \
-  --input data/masks/dhw_available_2010_06_15_global_0p05_mask.npz \
-  --input data/masks/dhw_available_2020_06_15_global_0p05_mask.npz \
-  --input data/masks/dhw_available_2025_06_15_global_0p05_mask.npz \
-  --output data/masks/dhw_available_global_0p05_mask.npz
-```
-
-3. Build water mask and final reef-domain mask with sea-only dilation:
-
-```bash
-python scripts/build/build_water_mask.py \
-  --grid-id global_0p05 \
-  --output-npz data/masks/water_global_0p05_mask.npz
-
-python scripts/build/build_reef_domain_mask.py \
-  --reef-mask data/masks/reef_unep_all_touched_global_0p05_mask.npz \
-  --reef-mask data/masks/reef_ne_all_touched_global_0p05_mask.npz \
-  --water-mask data/masks/water_global_0p05_mask.npz \
-  --dhw-mask data/masks/dhw_available_global_0p05_mask.npz \
-  --dilate-iterations 1 \
-  --output data/masks/crw_dhw_daily_global_0p05_mask.npz
-```
-
-Final formula implemented by `build_reef_domain_mask.py`:
-
-```text
-reef_seed = UNEP_all_touched OR NE_all_touched
-dil = reef_seed OR (dilate(reef_seed) AND water_mask)
-mask = dil AND dhw_available_union
-```
-
-## Run backend (uvicorn)
-
-Preferred launcher:
+2. Start backend:
 
 ```bash
 ./scripts/api_backend.sh
 ```
 
-LAN mode:
-
-```bash
-./scripts/api_backend.sh --lan
-```
-
-With Redis + score-map preload:
-
-```bash
-./scripts/api_backend.sh \
-  --redis-url redis://localhost:6379/0 \
-  --score-map-preload
-```
-
-Usage help:
-
-```bash
-./scripts/api_backend.sh --help
-```
-
-Multi-worker run (without autoreload):
-
-```bash
-./scripts/api_backend.sh --no-reload -- --workers 2
-```
-
-Direct uvicorn alternative:
-
-```bash
-uvicorn climate_api.main:app --reload --reload-dir climate_api --port 8001
-```
-
-Local API base URL: `http://localhost:8001`
-
-## Run web app (Next.js)
+3. Start frontend:
 
 ```bash
 cd web
-npm install
 npm run dev
 ```
 
-Open: `http://localhost:3000/`
+- API: `http://localhost:8001`
+- Web: `http://localhost:3000`
 
-Optional environment overrides:
+## Data Preparation Overview
 
-```bash
-export NEXT_PUBLIC_CLIMATE_API_BASE="http://localhost:8001"
-export NEXT_PUBLIC_RELEASE="latest"
-export NEXT_PUBLIC_MAP_ASSET_BASE="http://localhost:8001"
-```
+If you want to create a release from scratch instead of relying on the pre-packaged `demo` release, follow the runbooks below.
 
-Release override in UI preview mode:
+Before running the API/UI against local data, prepare:
 
-```text
-http://localhost:3000/?release=dev
-```
+- location search artifacts and ocean naming masks
+- optional reef-domain masks for DHW workflows
+- packaged release artifacts (metrics/maps) from dataset caches
 
-## Validation and tests
+Practical note: full global metric production across 40+ years can take days with CDS/ERDDAP sources, especially for daily-variable aggregation workflows (for example air/sea hot-day indicators and coral reef stress indicators).
 
-Registry validation:
+Disk-space note: a single daily variable over ~40 years is often around 20-80 GB of local cache/output footprint. A realistic multi-metric build commonly needs about 150 GB of free space.
 
-```bash
-python scripts/validate/all.py
-# or for a packaged release:
-python scripts/validate/all.py --release dev
-```
+Detailed runbooks:
 
-Python tests:
+- [`docs/runbooks/locations-and-ocean-mask.md`](docs/runbooks/locations-and-ocean-mask.md)
+- [`docs/runbooks/reef-mask.md`](docs/runbooks/reef-mask.md)
+- [`docs/runbooks/dataset-cache-and-packaging.md`](docs/runbooks/dataset-cache-and-packaging.md)
 
-```bash
-PYTHONPATH=. pytest -q
-```
+## Documentation Index
 
-API e2e tests (opt-in; require release/location data in `data/releases/<release>` and `data/locations`):
+| Task                                               | Runbook                                                                                        |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Prepare locations + ocean masks                    | [`docs/runbooks/locations-and-ocean-mask.md`](docs/runbooks/locations-and-ocean-mask.md)       |
+| Rebuild reef-domain masks                          | [`docs/runbooks/reef-mask.md`](docs/runbooks/reef-mask.md)                                     |
+| Build dataset caches, package metrics/maps         | [`docs/runbooks/dataset-cache-and-packaging.md`](docs/runbooks/dataset-cache-and-packaging.md) |
+| Run backend + frontend (with optional Redis cache) | [`docs/runbooks/backend-frontend.md`](docs/runbooks/backend-frontend.md)                       |
+| Validate registry/data/tests/smoke checks          | [`docs/runbooks/validation.md`](docs/runbooks/validation.md)                                   |
+| Understand concepts, grids, and acronyms           | [`docs/concepts-and-glossary.md`](docs/concepts-and-glossary.md)                               |
 
-```bash
-PYTHONPATH=. RUN_API_E2E=1 API_E2E_RELEASE=dev pytest -q tests/test_api_e2e.py
-```
-
-Notes:
-
-- `tests/test_api_e2e.py` is discovered by `pytest`, but skipped by default unless `RUN_API_E2E=1`.
-- You can also run all tests including e2e in one pass:
-
-```bash
-PYTHONPATH=. RUN_API_E2E=1 API_E2E_RELEASE=dev pytest -q
-```
-
-API smoke tests (panel + autocomplete + resolve + nearest + release + latest release):
-
-```bash
-python scripts/bench_api_endpoints.py --base-url http://127.0.0.1:8001 --release dev --smoke --smoke-only --n 1 --timeout-s 5
-```
-
-Single-command validation suite (registry + tile coverage + pytest + API smoke):
-
-```bash
-python scripts/validate_suite.py --base-url http://127.0.0.1:8001 --release dev
-```
-
-Validation suite with opt-in API e2e:
-
-```bash
-python scripts/validate_suite.py --base-url http://127.0.0.1:8001 --release dev --run-api-e2e
-```
-
-Use a different release for e2e inputs:
-
-```bash
-python scripts/validate_suite.py --release dev --run-api-e2e --api-e2e-release new
-```
-
-Release validation (release registry + release manifest + referenced metrics tile coverage at 100% + smoke):
-
-```bash
-python scripts/validate_suite.py \
-  --release dev \
-  --smoke-only \
-  --smoke-n 1
-```
-
-## Utility scripts
-
-Benchmarks:
-
-- `scripts/bench_api_endpoints.py`
-
-Operations:
-
-- `scripts/redis_monitor.py`
-- `scripts/tile_coverage.py`
+For day-to-day development, keep this README as orientation and use runbooks for operational details.
