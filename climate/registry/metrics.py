@@ -382,6 +382,42 @@ def validate_metric_dependencies(manifest: dict[str, Any]) -> None:
             "Metrics without dataset ancestor: " + ", ".join(sorted(missing))
         )
 
+    def _dataset_mask_file(metric_id: str) -> str | None:
+        spec = metrics[metric_id]
+        source = spec.get("source", {})
+        source_type = source.get("type")
+        if source_type in {"cds", "erddap"}:
+            mask_file = source.get("mask_file")
+            if isinstance(mask_file, str) and mask_file.strip():
+                return mask_file
+            return None
+        if source_type == "derived":
+            files: set[str] = set()
+            for dep in deps[metric_id]:
+                dep_mask = _dataset_mask_file(dep)
+                if dep_mask:
+                    files.add(dep_mask)
+            if not files:
+                return None
+            if len(files) > 1:
+                raise MetricsSchemaError(
+                    f"Metric {metric_id} domain=dataset_mask has multiple dataset masks in ancestry: "
+                    + ", ".join(sorted(files))
+                )
+            return next(iter(files))
+        return None
+
+    missing_dataset_mask = [
+        m
+        for m, spec in metrics.items()
+        if spec.get("domain") == "dataset_mask" and not _dataset_mask_file(m)
+    ]
+    if missing_dataset_mask:
+        raise MetricsSchemaError(
+            "Metrics with domain=dataset_mask must have a dataset source.mask_file in their ancestry: "
+            + ", ".join(sorted(missing_dataset_mask))
+        )
+
 
 def _error_sort_key(error) -> tuple[int, str]:
     return (len(error.path), "/".join(str(p) for p in error.path))

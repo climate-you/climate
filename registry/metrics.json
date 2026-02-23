@@ -170,7 +170,7 @@
     "unit": "days",
     "dtype": "float32",
     "missing": "nan",
-    "domain": "ocean",
+    "domain": "dataset_mask",
     "time_axis": "yearly",
     "source": {
       "type": "erddap",
@@ -188,7 +188,7 @@
     "unit": "days",
     "dtype": "float32",
     "missing": "nan",
-    "domain": "ocean",
+    "domain": "dataset_mask",
     "time_axis": "yearly",
     "source": {
       "type": "erddap",
@@ -206,7 +206,7 @@
     "unit": "days",
     "dtype": "float32",
     "missing": "nan",
-    "domain": "ocean",
+    "domain": "dataset_mask",
     "time_axis": "yearly",
     "source": {
       "type": "erddap",
@@ -224,7 +224,7 @@
     "unit": "score",
     "dtype": "float32",
     "missing": "nan",
-    "domain": "ocean",
+    "domain": "dataset_mask",
     "time_axis": "yearly",
     "source": {
       "type": "erddap",

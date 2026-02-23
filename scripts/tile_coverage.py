@@ -37,6 +37,7 @@ from climate.tiles.spec import read_tile_array
 
 
 _TILE_RE = re.compile(r"r(\d+)_c(\d+)\.bin(\.zst)?$")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _parse_tile_rc(path: Path) -> tuple[int, int] | None:
@@ -147,8 +148,10 @@ def _count_nonempty_cells(hdr_nyears: int, arr: np.ndarray) -> tuple[int, int]:
 def _grid_from_id(grid_id: str, tile_size: int) -> GridSpec:
     if grid_id == "global_0p25":
         return GridSpec.global_0p25(tile_size=tile_size)
+    if grid_id == "global_0p05":
+        return GridSpec.global_0p05(tile_size=tile_size)
     raise SystemExit(
-        f"Unsupported grid_id {grid_id!r} (v0 supports 'global_0p25' only)"
+        f"Unsupported grid_id {grid_id!r} (supported: 'global_0p25', 'global_0p05')"
     )
 
 
@@ -378,7 +381,7 @@ def _referenced_registry_metrics(
 
 def _metric_domain(spec: dict) -> str:
     domain = spec.get("domain")
-    if isinstance(domain, str) and domain in {"global", "ocean", "land"}:
+    if isinstance(domain, str) and domain in {"global", "ocean", "land", "dataset_mask"}:
         return domain
 
     # Backward-compatible fallback for old release registries without domain.
@@ -428,6 +431,121 @@ def _build_metric_presence_mask(
         c0 = tc * grid.tile_size
         mask[r0 : r0 + valid_h, c0 : c0 + valid_w] = local
     return mask
+
+
+def _resolve_dataset_mask_file(
+    *,
+    metric_id: str,
+    metrics: dict[str, dict],
+) -> str:
+    visited: set[str] = set()
+
+    def _walk(mid: str) -> set[str]:
+        if mid in visited:
+            return set()
+        visited.add(mid)
+        spec = metrics.get(mid)
+        if not isinstance(spec, dict):
+            return set()
+        source = spec.get("source", {})
+        if not isinstance(source, dict):
+            return set()
+        source_type = source.get("type")
+        if source_type in {"cds", "erddap"}:
+            mask_file = source.get("mask_file")
+            if isinstance(mask_file, str) and mask_file.strip():
+                return {mask_file}
+            return set()
+        if source_type == "derived":
+            files: set[str] = set()
+            for dep in source.get("inputs", []) or []:
+                if isinstance(dep, str):
+                    files.update(_walk(dep))
+            return files
+        return set()
+
+    files = _walk(metric_id)
+    if not files:
+        raise SystemExit(
+            f"Metric {metric_id!r} has domain=dataset_mask but no source.mask_file in ancestry."
+        )
+    if len(files) > 1:
+        raise SystemExit(
+            f"Metric {metric_id!r} has multiple source.mask_file entries in ancestry: {sorted(files)}"
+        )
+    return next(iter(files))
+
+
+def _load_dataset_mask_file(mask_file: str, *, grid: GridSpec) -> np.ndarray:
+    mask_path = Path(mask_file)
+    if not mask_path.is_absolute():
+        mask_path = REPO_ROOT / mask_path
+    if not mask_path.exists():
+        raise SystemExit(f"Dataset mask file not found: {mask_path}")
+
+    with np.load(mask_path, allow_pickle=False) as npz:
+        if "data" not in npz:
+            raise SystemExit(f"Dataset mask file missing 'data' array: {mask_path}")
+        raw = np.asarray(npz["data"])
+        if raw.ndim != 2:
+            raise SystemExit(
+                f"Dataset mask file expected 2D data, got shape={raw.shape}: {mask_path}"
+            )
+        if raw.shape != (grid.nlat, grid.nlon):
+            raise SystemExit(
+                f"Dataset mask grid mismatch for {mask_path}: mask={raw.shape}, "
+                f"metric_grid=({grid.nlat},{grid.nlon})"
+            )
+        if raw.dtype == np.bool_:
+            mask = raw.astype(bool, copy=False)
+        elif np.issubdtype(raw.dtype, np.floating):
+            mask = np.isfinite(raw) & (raw != 0.0)
+        else:
+            mask = raw != 0
+
+        if "deg" in npz:
+            deg = float(np.asarray(npz["deg"]).reshape(()))
+            if not np.isclose(deg, float(grid.deg), atol=1e-9):
+                raise SystemExit(
+                    f"Dataset mask resolution mismatch for {mask_path}: "
+                    f"mask_deg={deg}, metric_deg={grid.deg}"
+                )
+
+    return mask
+
+
+def _remap_mask_to_grid(
+    *,
+    source_mask: np.ndarray,
+    source_grid: GridSpec,
+    target_grid: GridSpec,
+) -> np.ndarray:
+    """
+    Remap a presence mask from source grid to target grid using nearest-cell lookup.
+    Works for mixed grid resolutions (e.g. 0.25 -> 0.05).
+    """
+    if (
+        source_grid.nlat == target_grid.nlat
+        and source_grid.nlon == target_grid.nlon
+        and abs(float(source_grid.deg) - float(target_grid.deg)) < 1e-12
+    ):
+        return source_mask
+
+    lat_t = target_grid.lat_max - (np.arange(target_grid.nlat, dtype=np.float64) + 0.5) * float(
+        target_grid.deg
+    )
+    lat_t = np.clip(lat_t, -source_grid.lat_max + 1e-12, source_grid.lat_max - 1e-12)
+    src_i_lat = np.floor((source_grid.lat_max - lat_t) / float(source_grid.deg)).astype(np.int64)
+    src_i_lat = np.clip(src_i_lat, 0, source_grid.nlat - 1)
+
+    lon_t = target_grid.lon_min + (np.arange(target_grid.nlon, dtype=np.float64) + 0.5) * float(
+        target_grid.deg
+    )
+    lon_t = ((lon_t + 180.0) % 360.0) - 180.0
+    src_i_lon = np.floor((lon_t - source_grid.lon_min) / float(source_grid.deg)).astype(np.int64)
+    src_i_lon = np.clip(src_i_lon, 0, source_grid.nlon - 1)
+
+    return source_mask[src_i_lat[:, None], src_i_lon[None, :]]
 
 
 def main() -> None:
@@ -513,6 +631,7 @@ def main() -> None:
 
     failures: list[str] = []
     ocean_mask_cache: dict[tuple[str, int, str], np.ndarray] = {}
+    dataset_mask_cache: dict[tuple[str, int, str], np.ndarray] = {}
     metrics_by_id = {metric_id: spec for metric_id, spec in metrics}
     for metric_id, spec in metrics:
         storage = spec.get("storage", {})
@@ -529,13 +648,43 @@ def main() -> None:
                     )
                 key = (grid_id, tile_size, args.ocean_mask_metric)
                 if key not in ocean_mask_cache:
-                    ocean_mask_cache[key] = _build_metric_presence_mask(
-                        root=args.root,
-                        metric_id=args.ocean_mask_metric,
-                        grid_id=grid_id,
-                        tile_size=tile_size,
+                    ocean_spec = metrics_by_id[args.ocean_mask_metric]
+                    ocean_storage = ocean_spec.get("storage", {})
+                    ocean_grid_id = str(ocean_spec.get("grid_id", "global_0p25"))
+                    ocean_tile_size = int(ocean_storage.get("tile_size", 64))
+                    ocean_source_key = (
+                        ocean_grid_id,
+                        ocean_tile_size,
+                        args.ocean_mask_metric,
+                    )
+                    if ocean_source_key not in ocean_mask_cache:
+                        ocean_mask_cache[ocean_source_key] = _build_metric_presence_mask(
+                            root=args.root,
+                            metric_id=args.ocean_mask_metric,
+                            grid_id=ocean_grid_id,
+                            tile_size=ocean_tile_size,
+                        )
+                    source_grid = _grid_from_id(ocean_grid_id, ocean_tile_size)
+                    target_grid = _grid_from_id(grid_id, tile_size)
+                    ocean_mask_cache[key] = _remap_mask_to_grid(
+                        source_mask=ocean_mask_cache[ocean_source_key],
+                        source_grid=source_grid,
+                        target_grid=target_grid,
                     )
                 domain_mask = ocean_mask_cache[key]
+            elif domain_label == "dataset_mask":
+                key = (grid_id, tile_size, metric_id)
+                if key not in dataset_mask_cache:
+                    metric_grid = _grid_from_id(grid_id, tile_size)
+                    mask_file = _resolve_dataset_mask_file(
+                        metric_id=metric_id,
+                        metrics=metrics_by_id,
+                    )
+                    dataset_mask_cache[key] = _load_dataset_mask_file(
+                        mask_file,
+                        grid=metric_grid,
+                    )
+                domain_mask = dataset_mask_cache[key]
         print(f"== metric: {metric_id}  grid={grid_id}  tile_size={tile_size} ==")
         stats = _metric_summary(
             root=args.root,

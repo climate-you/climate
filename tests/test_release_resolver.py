@@ -4,9 +4,12 @@ import logging
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pytest
+
 from climate.registry.metrics import DEFAULT_DATASETS_PATH, DEFAULT_METRICS_PATH
 from climate_api.config import Settings
 from climate_api.release import ReleaseResolver
+from fastapi import HTTPException
 
 
 def _settings(releases_root: Path) -> Settings:
@@ -93,3 +96,49 @@ def test_non_dev_release_uses_release_scoped_registry(tmp_path: Path) -> None:
     assert discover_mock.call_args.kwargs["metrics_path"] == registry_root / "metrics.json"
     assert discover_mock.call_args.kwargs["datasets_path"] == registry_root / "datasets.json"
     assert logger.warning.call_count == 0
+
+
+def test_release_alias_validation_and_empty_latest_pointer(tmp_path: Path) -> None:
+    releases_root = tmp_path / "releases"
+    releases_root.mkdir(parents=True)
+    (releases_root / "LATEST").write_text(" \n", encoding="utf-8")
+    resolver = ReleaseResolver(settings=_settings(releases_root), logger=Mock(spec=logging.Logger))
+
+    with pytest.raises(HTTPException, match="Invalid release id"):
+        resolver.resolve_release_alias("../bad")
+    with pytest.raises(HTTPException, match="cannot be empty"):
+        resolver.resolve_release_alias("  ")
+    with pytest.raises(HTTPException, match="Latest release pointer is empty"):
+        resolver.resolve_release_alias("latest")
+
+
+def test_release_root_missing_and_escape_blocked(tmp_path: Path) -> None:
+    releases_root = tmp_path / "releases"
+    releases_root.mkdir(parents=True)
+    resolver = ReleaseResolver(settings=_settings(releases_root), logger=Mock(spec=logging.Logger))
+
+    with pytest.raises(HTTPException, match="Unknown release"):
+        resolver.release_root("missing")
+    with pytest.raises(HTTPException, match="Invalid release path"):
+        resolver.release_root("../outside")
+
+
+def test_resolve_release_context_maps_errors_to_http(tmp_path: Path) -> None:
+    releases_root = tmp_path / "releases"
+    releases_root.mkdir(parents=True)
+    resolver = ReleaseResolver(settings=_settings(releases_root), logger=Mock(spec=logging.Logger))
+
+    with patch.object(resolver, "_load_release_context", side_effect=FileNotFoundError("x")):
+        with pytest.raises(HTTPException) as exc:
+            resolver.resolve_release_context("dev")
+        assert exc.value.status_code == 404
+
+    with patch.object(resolver, "_load_release_context", side_effect=ValueError("bad")):
+        with pytest.raises(HTTPException) as exc:
+            resolver.resolve_release_context("dev")
+        assert exc.value.status_code == 400
+
+    with patch.object(resolver, "_load_release_context", side_effect=RuntimeError("boom")):
+        with pytest.raises(HTTPException) as exc:
+            resolver.resolve_release_context("dev")
+        assert exc.value.status_code == 500

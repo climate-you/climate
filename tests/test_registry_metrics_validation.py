@@ -76,3 +76,25 @@ def test_validate_metric_dependencies_missing_input_fails() -> None:
     }
     with pytest.raises(MetricsSchemaError, match="depends on missing metric"):
         validate_metric_dependencies(manifest)
+
+
+def test_validate_metric_dependencies_dataset_mask_requires_mask_file() -> None:
+    manifest = {
+        "version": "0.1",
+        "a": {
+            "id": "a",
+            "dtype": "float32",
+            "missing": "nan",
+            "time_axis": "yearly",
+            "grid_id": "global_0p05",
+            "domain": "dataset_mask",
+            "source": {
+                "type": "erddap",
+                "dataset_key": "dummy",
+                "_dataset_ref": "dataset_a",
+                "agg": "identity",
+            },
+        },
+    }
+    with pytest.raises(MetricsSchemaError, match="domain=dataset_mask"):
+        validate_metric_dependencies(manifest)

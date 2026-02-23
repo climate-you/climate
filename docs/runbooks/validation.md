@@ -41,6 +41,20 @@ python scripts/validate/all.py --release dev --releases-root data/releases
 PYTHONPATH=. pytest -q
 ```
 
+## `climate_api` coverage only
+
+Use this when you want a backend-only coverage signal (without `climate/` in the report):
+
+```bash
+PYTHONPATH=. pytest -q --override-ini addopts="--cov=climate_api --cov-report=term-missing"
+```
+
+Include opt-in API e2e coverage in the same report:
+
+```bash
+PYTHONPATH=. RUN_API_E2E=1 API_E2E_RELEASE=dev pytest -q --override-ini addopts="--cov=climate_api --cov-report=term-missing"
+```
+
 ## Opt-in API e2e tests
 
 Requires release/location data in `data/releases/<release>` and `data/locations`.
