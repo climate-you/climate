@@ -231,6 +231,24 @@ def test_series_and_axis_misc_branches() -> None:
     assert panels_module._to_unit_delta(1.0, "F") == pytest.approx(1.8)
 
 
+def test_trend_extension_helpers() -> None:
+    axis_end, x_end = panels_module._resolve_trend_extend_value(
+        axis_vals=["2024-10-01", "2024-11-01"], extend_to="2025"
+    )
+    assert axis_end == "2025-12-31"
+    assert isinstance(x_end, float)
+
+    axis_vals, y_out = panels_module._apply_transform_with_axis(
+        axis_vals=["2024-10-01", "2024-11-01"],
+        x=np.array([1.0, 2.0], dtype=np.float64),
+        y=np.array([10.0, 12.0], dtype=np.float32),
+        transform={"fn": "linear_trend_line", "params": {"extend_to": "2025-12-31"}},
+    )
+    assert axis_vals[-1] == "2025-12-31"
+    assert len(axis_vals) == 3
+    assert y_out.shape[0] == 3
+
+
 def test_headline_early_return_branches() -> None:
     # FileNotFound path for current metric
     class _NoCurrent:

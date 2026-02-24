@@ -130,6 +130,79 @@ def _apply_transform(
     raise ValueError(f"Unsupported transform: {fn}")
 
 
+def _resolve_trend_extend_value(
+    *,
+    axis_vals: list[Any],
+    extend_to: Any,
+) -> tuple[Any | None, float | None]:
+    if not axis_vals:
+        return None, None
+
+    x_last = _axis_to_numeric(axis_vals[-1])
+    if not math.isfinite(x_last):
+        return None, None
+
+    extend_to_str = str(extend_to).strip()
+    if not extend_to_str:
+        return None, None
+
+    if all(isinstance(v, (int, np.integer)) for v in axis_vals):
+        try:
+            y_end = int(float(extend_to_str))
+        except Exception:
+            return None, None
+        if float(y_end) <= x_last:
+            return None, None
+        return y_end, float(y_end)
+
+    if all(isinstance(v, (int, float, np.integer, np.floating)) for v in axis_vals):
+        try:
+            x_end = float(extend_to_str)
+        except Exception:
+            return None, None
+        if not math.isfinite(x_end) or x_end <= x_last:
+            return None, None
+        return x_end, x_end
+
+    if len(extend_to_str) == 4 and extend_to_str.isdigit():
+        extend_to_str = f"{extend_to_str}-12-31"
+
+    x_end = _axis_to_numeric(extend_to_str)
+    if not math.isfinite(x_end) or x_end <= x_last:
+        return None, None
+    return extend_to_str, x_end
+
+
+def _apply_transform_with_axis(
+    *,
+    axis_vals: list[Any],
+    x: np.ndarray,
+    y: np.ndarray,
+    transform: dict[str, Any] | str | None,
+) -> tuple[list[Any], np.ndarray]:
+    if not transform:
+        return axis_vals, y
+
+    if isinstance(transform, str):
+        fn = transform
+        params: dict[str, Any] = {}
+    else:
+        fn = transform.get("fn")
+        params = transform.get("params", {})
+
+    if fn == "linear_trend_line":
+        extend_to = params.get("extend_to") if isinstance(params, dict) else None
+        if extend_to is None:
+            return axis_vals, linear_trend_line(x, y)
+        axis_end, x_end = _resolve_trend_extend_value(axis_vals=axis_vals, extend_to=extend_to)
+        if axis_end is None or x_end is None:
+            return axis_vals, linear_trend_line(x, y)
+        x_out = np.concatenate([x.astype(np.float64), np.asarray([x_end], dtype=np.float64)])
+        return [*axis_vals, axis_end], linear_trend_line(x, y, x_out=x_out)
+
+    return axis_vals, _apply_transform(x=x, y=y, transform=transform)
+
+
 def _convert_unit(y: np.ndarray, unit_in: str | None, unit_out: str) -> np.ndarray:
     if not unit_in:
         return y
@@ -466,11 +539,16 @@ def build_panel_tiles_registry(
                 metric_axis_cache[metric] = axis_vals
                 metric_x_cache[metric] = x
 
-            y = _apply_transform(x=x, y=vec, transform=series_spec.get("transform"))
+            axis_vals_out, y = _apply_transform_with_axis(
+                axis_vals=list(axis_vals),
+                x=x,
+                y=vec,
+                transform=series_spec.get("transform"),
+            )
             y = _convert_unit(y, series_spec.get("unit"), unit)
 
             series_payload[key] = SeriesPayload(
-                x=list(axis_vals),
+                x=axis_vals_out,
                 y=_series_to_list(y),
                 unit=unit,
                 label=series_spec.get("label"),

@@ -8,7 +8,9 @@
   - ko-fi account + link (and add to github: see `Display a "Sponsor" button` in settings)
 - Graphs:
   - why doesn't Palma, Spain have sea temperature information ?
-  - zoomout graph needs work + rephrase graph captions + info bubble
+  - for `Annual sea surface temperature`: add Seasons step (?)
+  - rephrase info bubble for `Annual temperature` graph.
+  - add trend value for Number of hot days.
 - Code:
   - Prepare a `demo` release that can be tar-gzed or zipped with correct locations / no zoomout / shorter time range - reef only on great barrier => upload it somewhere and reference it in the docs to have a demo version up and running
   - Finalise doc: public URL, latest screenshots, link to `demo` release

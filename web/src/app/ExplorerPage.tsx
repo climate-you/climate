@@ -1317,20 +1317,26 @@ function GraphCard({
   series,
   unit,
   showTitle = true,
+  stepIndex,
+  onStepIndexChange,
 }: {
   graph: GraphPayload;
   data: ChartRow[];
   series: Record<string, SeriesPayload>;
   unit: "C" | "F";
   showTitle?: boolean;
+  stepIndex: number;
+  onStepIndexChange: (graphId: string, nextStepIndex: number) => void;
 }) {
   const chartHostRef = useRef<HTMLDivElement | null>(null);
   const [chartHeight, setChartHeight] = useState(260);
   const steps = graph.animation?.steps ?? [];
   const hasAnimation = steps.length >= 2;
-  const [stepIndex, setStepIndex] = useState(0);
   const chartMaxHeight = 260;
   const chartMinAspectRatio = 1.5;
+  const safeStepIndex = hasAnimation
+    ? Math.max(0, Math.min(steps.length - 1, Math.trunc(stepIndex)))
+    : 0;
 
   useEffect(() => {
     const host = chartHostRef.current;
@@ -1354,16 +1360,26 @@ function GraphCard({
     if (!hasAnimation || graph.animation?.autoplay === false) return;
     const stepDuration = graph.animation?.step_duration_ms ?? 2600;
     const timer = window.setTimeout(() => {
-      setStepIndex((prev) => {
-        if (prev + 1 < steps.length) return prev + 1;
-        return graph.animation?.loop === false ? prev : 0;
-      });
+      const nextStepIndex =
+        safeStepIndex + 1 < steps.length
+          ? safeStepIndex + 1
+          : graph.animation?.loop === false
+            ? safeStepIndex
+            : 0;
+      onStepIndexChange(graph.id, nextStepIndex);
     }, stepDuration);
     return () => window.clearTimeout(timer);
-  }, [graph.animation, hasAnimation, stepIndex, steps.length]);
+  }, [
+    graph.animation,
+    graph.id,
+    hasAnimation,
+    onStepIndexChange,
+    safeStepIndex,
+    steps.length,
+  ]);
 
   const activeStep = hasAnimation
-    ? steps[Math.min(stepIndex, steps.length - 1)]
+    ? steps[safeStepIndex]
     : null;
   const visibleKeys = activeStep?.series_keys?.length
     ? activeStep.series_keys
@@ -1461,11 +1477,11 @@ function GraphCard({
       {hasAnimation && !hasGraphError ? (
         <div className={styles.stepButtons}>
           {steps.map((step, idx) => {
-            const active = idx === stepIndex;
+            const active = idx === safeStepIndex;
             return (
               <button
                 key={`${graph.id}:${step.id}`}
-                onClick={() => setStepIndex(idx)}
+                onClick={() => onStepIndexChange(graph.id, idx)}
                 className={`${styles.stepButton} ${
                   active ? styles.stepButtonActive : ""
                 }`}
@@ -1549,6 +1565,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const [graphsPerPage, setGraphsPerPage] = useState(2);
   const prevGraphsPerPageRef = useRef(2);
   const [graphPage, setGraphPage] = useState(0);
+  const [graphStepById, setGraphStepById] = useState<Record<string, number>>({});
   const [introVisible, setIntroVisible] = useState(coldOpen);
   const [introFading, setIntroFading] = useState(false);
   const [introPromptVisible, setIntroPromptVisible] = useState(!coldOpen);
@@ -1802,6 +1819,16 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       return true;
     },
     [graphPage, maxGraphPage],
+  );
+  const handleGraphStepChange = useCallback(
+    (graphId: string, nextStepIndex: number) => {
+      setGraphStepById((prev) => {
+        const normalized = Math.max(0, Math.trunc(nextStepIndex));
+        if (prev[graphId] === normalized) return prev;
+        return { ...prev, [graphId]: normalized };
+      });
+    },
+    [],
   );
 
   async function load(
@@ -2625,31 +2652,33 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
         onTouchEnd={handlePanelTouchEnd}
         onTouchCancel={handlePanelTouchCancel}
       >
-        <div
-          className={styles.panelSteps}
-          role="tablist"
-          aria-label="Graph steps"
-        >
-          {Array.from({ length: stepCount }, (_, idx) => (
-            <button
-              key={`step-dot-${idx}`}
-              type="button"
-              role="tab"
-              aria-label={`Go to step ${idx + 1} of ${stepCount}`}
-              aria-selected={idx === graphPage}
-              onClick={() => {
-                const changed = goToGraphPage(idx);
-                if (!changed) return;
-                wheelAccumRef.current = 0;
-                wheelGestureConsumedRef.current = false;
-                wheelGestureConsumedAtRef.current = 0;
-              }}
-              className={`${styles.panelStepDot} ${
-                idx === graphPage ? styles.panelStepDotActive : ""
-              }`}
-            />
-          ))}
-        </div>
+        {stepCount >= 2 ? (
+          <div
+            className={styles.panelSteps}
+            role="tablist"
+            aria-label="Graph steps"
+          >
+            {Array.from({ length: stepCount }, (_, idx) => (
+              <button
+                key={`step-dot-${idx}`}
+                type="button"
+                role="tab"
+                aria-label={`Go to step ${idx + 1} of ${stepCount}`}
+                aria-selected={idx === graphPage}
+                onClick={() => {
+                  const changed = goToGraphPage(idx);
+                  if (!changed) return;
+                  wheelAccumRef.current = 0;
+                  wheelGestureConsumedRef.current = false;
+                  wheelGestureConsumedAtRef.current = 0;
+                }}
+                className={`${styles.panelStepDot} ${
+                  idx === graphPage ? styles.panelStepDotActive : ""
+                }`}
+              />
+            ))}
+          </div>
+        ) : null}
 
         <div className={styles.panelActions}>
           <div className={styles.panelTopRow}>
@@ -2780,6 +2809,8 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
                 data={entry.data}
                 series={resp?.series ?? {}}
                 unit={unit}
+                stepIndex={graphStepById[entry.graph.id] ?? 0}
+                onStepIndexChange={handleGraphStepChange}
               />
             ) : null,
           )}
