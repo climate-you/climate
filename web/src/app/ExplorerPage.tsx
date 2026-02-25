@@ -493,6 +493,18 @@ function formatAxisTitle(graph: GraphPayload, value: unknown): string {
   return label || asString;
 }
 
+function formatDayMonthYearLabel(value: number | string): string {
+  const date = new Date(toChartTimestamp(value));
+  if (!Number.isFinite(date.getTime())) return "";
+  const dd = String(date.getUTCDate()).padStart(2, "0");
+  const mon = new Intl.DateTimeFormat("en-GB", {
+    month: "short",
+    timeZone: "UTC",
+  }).format(date);
+  const yy = String(date.getUTCFullYear()).slice(-2);
+  return `${dd} ${mon} ${yy}`;
+}
+
 function formatPopulation(value: number | null | undefined): string | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return null;
@@ -734,9 +746,6 @@ function trendLegendLabel(
   series: Record<string, SeriesPayload>,
   unit: "C" | "F",
 ): string {
-  if (graph.ui?.chart_mode === "hot_days_combo") {
-    return "Trend";
-  }
   const samples = data
     .map((row) => ({ t: toChartTimestamp(row.x), y: row[trendKey] }))
     .filter(
@@ -753,6 +762,9 @@ function trendLegendLabel(
 
   const perDecade = ((last.y - first.y) / years) * 10;
   const sign = perDecade >= 0 ? "+" : "";
+  if (graph.ui?.chart_mode === "hot_days_combo") {
+    return `${seriesLabel(series, trendKey)}: ${sign}${perDecade.toFixed(1)} days/decade`;
+  }
   const suffix = `${unit === "F" ? "ºF" : "ºC"}/decade`;
   return `${seriesLabel(series, trendKey)}: ${sign}${perDecade.toFixed(1)}${suffix}`;
 }
@@ -1167,6 +1179,10 @@ function buildTemperatureOption({
   const theme = chartThemeTokens();
   const isMobile = isMobileViewport();
   const trendKeys = visibleKeys.filter((key) => seriesRole(series, key) === "trend");
+  const isAnnualTemperatureSeasonsView =
+    graph.id === "t2m_annual" &&
+    visibleKeys.includes("t2m_daily_mean") &&
+    visibleKeys.includes("t2m_monthly_mean");
   const trendSeriesNames = new Set<string>();
   const chartSeries: NonNullable<EChartsOption["series"]> = visibleKeys.map(
     (key) => {
@@ -1267,22 +1283,36 @@ function buildTemperatureOption({
           : undefined;
         const ts = Number(firstValue ?? first.axisValue ?? 0);
         const title = Number.isFinite(ts)
-          ? formatAxisTitle(graph, ts)
+          ? isAnnualTemperatureSeasonsView
+            ? formatDayMonthYearLabel(ts)
+            : formatAxisTitle(graph, ts)
           : String(rows[0]?.axisValue ?? "");
-        const lines = rows
+        const values = rows
           .map(
             (item) =>
-              item as { value?: unknown; marker?: string; seriesName?: string },
+              item as {
+                value?: unknown;
+                marker?: string;
+                seriesName?: string;
+                seriesId?: unknown;
+              },
           )
-          .filter((r) => !trendSeriesNames.has(String(r.seriesName ?? "")))
           .filter(
             (r) =>
               Array.isArray(r.value) && Number.isFinite(Number(r.value[1])),
           )
-          .map(
-            (r) =>
-              `${r.seriesName ?? ""}: ${Number((r.value as unknown[])[1]).toFixed(1)}${unit === "F" ? "°F" : "°C"}`,
-          );
+          .filter((r) => {
+            const key = typeof r.seriesId === "string" ? r.seriesId : "";
+            if (isAnnualTemperatureSeasonsView) {
+              return key === "t2m_daily_mean" || key === "t2m_monthly_mean";
+            }
+            return !trendSeriesNames.has(String(r.seriesName ?? ""));
+          });
+        const lines = values.map((r) => {
+          const key = typeof r.seriesId === "string" ? r.seriesId : "";
+          const label = key ? seriesLabel(series, key) : String(r.seriesName ?? "");
+          return `${label}: ${Number((r.value as unknown[])[1]).toFixed(1)}${unit === "F" ? "°F" : "°C"}`;
+        });
         return [title, ...lines].join("<br/>");
       },
     },
