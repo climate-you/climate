@@ -17,24 +17,30 @@
   --danger: #b91c1c;
   --control-active-bg: #111111;
   --control-active-fg: #ffffff;
+  --map-ui-dark-bg: #0b1220;
+  --map-ui-dark-control-bg: #2a2a2a;
+  --map-ui-dark-border: #ffffff;
+  --map-ui-dark-text: #ffffff;
+  --map-ui-dark-icon-filter: brightness(0) invert(1);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --bg-page: #0b1220;
-    --text-primary: #e8eefb;
-    --surface: #121b2d;
-    --surface-alt: #1a2338;
-    --surface-border: rgba(232, 238, 251, 0.22);
-    --surface-border-strong: rgba(232, 238, 251, 0.44);
-    --panel-border: #6e87c2;
-    --muted-text: rgba(232, 238, 251, 0.72);
-    --overlay-scrim: rgba(4, 10, 24, 0.62);
-    --link: #8cb3ff;
+    --bg-page: #101010;
+    --text-primary: #f2f2f2;
+    --surface: #181818;
+    --surface-alt: #222222;
+    --surface-border: rgba(242, 242, 242, 0.22);
+    --surface-border-strong: rgba(242, 242, 242, 0.42);
+    --panel-border: #8a8a8a;
+    --muted-text: rgba(242, 242, 242, 0.72);
+    --overlay-scrim: rgba(0, 0, 0, 0.62);
+    --link: #d8d8d8;
     --danger: #ff8b8b;
-    --control-active-bg: #8cb3ff;
-    --control-active-fg: #0b1220;
+    --control-active-bg: #e6e6e6;
+    --control-active-fg: #101010;
+    --map-ui-dark-bg: #181818;
   }
 }
 

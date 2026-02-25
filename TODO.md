@@ -1,8 +1,8 @@
 - UI:
+  - BUGFIX: fix scale getting harcoded color for gradient scale for warming layers.
   - BUGFIX: coral reef map renders all black on mobile.
   - update Licenses/Copyrights.
   - update help bubbles: calculation of pre-industrial warming
-  - consider black background on 3D globe in dark mode
   - check UI for coral reef graph
 - Graphs:
   - BUGFIX: why doesn't sea off Palma, Spain lat=39.50297210372494&lon=2.6395117761082076 have sea temperature information ? Afficher la grid for debug purposes.
@@ -11,11 +11,12 @@
   - BUGFIX: nearest point with mixed grid still not implemented
   - Prepare a `demo` release that can be tar-gzed or zipped with correct locations / no zoomout / shorter time range - reef only on great barrier => upload it somewhere and reference it in the docs to have a demo version up and running
   - cloud setup + first VM running
-  - clean up unused css and methods in code.
   - Zoomout - do we need defer loading?
 
 Last steps:
 
+- clean up unused css and methods in code when all features and bugfix are done.
+- test mobile and dark mode.
 - refine ko-fi and stripe account desciption when site is up
 - add link to https://ko-fi.com/climateyou to github when repo is public (see `Display a "Sponsor" button` in settings).
 - Decide/write license for github public repository

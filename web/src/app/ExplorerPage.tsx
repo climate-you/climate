@@ -218,6 +218,15 @@ function warmingLegendForLayer(
   return null;
 }
 
+function useDarkTextureBackdropForLayer(layerId: string | null): boolean {
+  return (
+    layerId === "warming_air" ||
+    layerId === "warming_vs_preindustrial_air" ||
+    layerId === "warming_sst" ||
+    layerId === "reef_domain"
+  );
+}
+
 function mergeSeries(series: Record<string, SeriesPayload>, keys: string[]) {
   // Merge into rows keyed by x (ISO date or year). We assume x values are unique per series.
   const rows = new Map<string, ChartRow>();
@@ -687,18 +696,18 @@ function chartThemeTokens(): ChartThemeTokens {
     window.matchMedia?.("(prefers-color-scheme: dark)").matches;
   if (dark) {
     return {
-      axisLabelColor: "#b8c2da",
-      axisLineColor: "#3b4a6f",
-      splitLineColor: "rgba(110, 135, 194, 0.35)",
-      legendColor: "#dbe6ff",
-      tooltipBg: "#0f172a",
-      tooltipBorder: "rgba(140, 179, 255, 0.45)",
-      tooltipText: "#e6eeff",
-      barBase: "#6d7aa8",
+      axisLabelColor: "#c8c8c8",
+      axisLineColor: "#4e4e4e",
+      splitLineColor: "rgba(184, 184, 184, 0.28)",
+      legendColor: "#ededed",
+      tooltipBg: "#171717",
+      tooltipBorder: "rgba(255, 255, 255, 0.35)",
+      tooltipText: "#f1f1f1",
+      barBase: "#7c7c7c",
       barAccent: "#ff5b7f",
-      meanLine: "#8cb3ff",
+      meanLine: "#d4d4d4",
       trendArea: "rgba(255, 91, 127, 0.28)",
-      dailyLine: "rgba(184, 194, 218, 0.75)",
+      dailyLine: "rgba(206, 206, 206, 0.75)",
       rawLine: "#ff6f8d",
     };
   }
@@ -1707,6 +1716,10 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     () => warmingLegendForLayer(activeLayerId || null, unit),
     [activeLayerId, unit],
   );
+  const darkBackdropLayerActive = useMemo(
+    () => useDarkTextureBackdropForLayer(activeLayerId || null),
+    [activeLayerId],
+  );
   const tempHeadline = useMemo(() => {
     if (!resp?.headlines?.length) return null;
     return (
@@ -2566,6 +2579,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
           focusLocation={picked}
           layerOptions={mapLayers}
           activeLayerId={activeLayerId || null}
+          warmingLayerVisible={darkBackdropLayerActive}
           onLayerChange={(layerId) => setActiveLayerId(layerId)}
           onLayerMenuOpen={() => setSuggestOpen(false)}
           onPick={(la, lo) => {

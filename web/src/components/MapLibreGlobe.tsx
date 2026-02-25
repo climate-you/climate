@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 
 type LngLat = { lat: number; lon: number };
@@ -23,6 +23,7 @@ type Props = {
   onHome: () => void;
   showControls?: boolean;
   enablePick?: boolean;
+  warmingLayerVisible?: boolean;
 };
 
 const initialView = {
@@ -45,6 +46,7 @@ const TEXTURE_SOURCE_ID = "climateTextureSource";
 const TEXTURE_LAYER_ID = "climateTextureLayer";
 const BACKDROP_BLUE = "#0000ff";
 const BACKDROP_WHITE = "#ffffff";
+const BACKDROP_DARK_MODE = "#181818";
 const CITY_SNAP_MAX_ZOOM = 6;
 const CITY_SNAP_RADIUS_PX = 28;
 const CITY_SNAP_LAYER_IDS = ["label_city_capital", "label_city"] as const;
@@ -193,6 +195,7 @@ export default function MapLibreGlobe({
   onHome,
   showControls = true,
   enablePick = true,
+  warmingLayerVisible = false,
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -208,6 +211,12 @@ export default function MapLibreGlobe({
   const activeLayerIdRef = useRef(activeLayerId);
   const showControlsRef = useRef(showControls);
   const enablePickRef = useRef(enablePick);
+  const [prefersDarkMode, setPrefersDarkMode] = useState(false);
+
+const textureBackdrop =
+    prefersDarkMode && warmingLayerVisible
+      ? BACKDROP_DARK_MODE
+      : BACKDROP_WHITE;
 
   useEffect(() => {
     onPickRef.current = onPick;
@@ -250,6 +259,14 @@ export default function MapLibreGlobe({
   }, [enablePick]);
 
   useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const sync = () => setPrefersDarkMode(media.matches);
+    sync();
+    media.addEventListener?.("change", sync);
+    return () => media.removeEventListener?.("change", sync);
+  }, []);
+
+  useEffect(() => {
     if (!mapContainerRef.current) return;
 
     const baseZoom = responsiveBaseZoom();
@@ -285,7 +302,7 @@ export default function MapLibreGlobe({
         }
         return;
       }
-      setBackdropColor(map, BACKDROP_WHITE);
+      setBackdropColor(map, textureBackdrop);
 
       const coordinates = textureCoordinates();
       const existingSource = map.getSource(TEXTURE_SOURCE_ID) as
@@ -440,6 +457,16 @@ export default function MapLibreGlobe({
       let isOpen = false;
       let autoCloseTimeoutId: number | undefined;
       let hideTimeoutId: number | undefined;
+      const isDarkMode = () =>
+        window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const applyMenuTheme = () => {
+        if (!menu) return;
+        const dark = isDarkMode();
+        menu.style.background = dark ? "#2a2a2a" : "#fff";
+        menu.style.border = dark
+          ? "1px solid rgba(255, 255, 255, 0.28)"
+          : "1px solid rgba(0, 0, 0, 0.18)";
+      };
       const isCoarsePointerMode = () =>
         window.matchMedia("(pointer: coarse)").matches ||
         window.matchMedia("(hover: none)").matches;
@@ -480,6 +507,7 @@ export default function MapLibreGlobe({
       };
       const renderMenuOptions = () => {
         if (!menu) return;
+        const dark = isDarkMode();
         menu.innerHTML = "";
         for (const option of layerOptionsRef.current) {
           const item = document.createElement("button");
@@ -494,9 +522,11 @@ export default function MapLibreGlobe({
           item.style.borderRadius = "6px";
           item.style.cursor = "pointer";
           item.style.background = active
-            ? "rgba(17, 17, 17, 0.08)"
+            ? dark
+              ? "rgba(255, 255, 255, 0.18)"
+              : "rgba(17, 17, 17, 0.08)"
             : "transparent";
-          item.style.color = "#111";
+          item.style.color = dark ? "#fff" : "#111";
           item.style.fontSize = "12px";
           item.style.whiteSpace = "nowrap";
           item.addEventListener("click", () => {
@@ -526,6 +556,7 @@ export default function MapLibreGlobe({
           container.style.zIndex = "7";
         }
         onLayerMenuOpenRef.current?.();
+        applyMenuTheme();
         menu.style.visibility = "visible";
         menu.style.pointerEvents = "auto";
         // Force a new frame so opacity transition runs when reopening.
@@ -597,8 +628,7 @@ export default function MapLibreGlobe({
           menu.style.top = "0";
           menu.style.marginLeft = "8px";
           menu.style.minWidth = "220px";
-          menu.style.background = "#fff";
-          menu.style.border = "1px solid rgba(0, 0, 0, 0.18)";
+          applyMenuTheme();
           menu.style.borderRadius = "8px";
           menu.style.boxShadow = "0 6px 18px rgba(0, 0, 0, 0.2)";
           menu.style.padding = "6px";
@@ -732,7 +762,7 @@ export default function MapLibreGlobe({
         layerControlRef.current?.refresh();
         return;
       }
-      setBackdropColor(map, BACKDROP_WHITE);
+      setBackdropColor(map, textureBackdrop);
       const source = map.getSource(TEXTURE_SOURCE_ID) as
         | (maplibregl.ImageSource & {
             updateImage?: (args: {
@@ -789,7 +819,7 @@ export default function MapLibreGlobe({
 
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
-  }, [activeLayerId, layerOptions]);
+  }, [activeLayerId, layerOptions, textureBackdrop]);
 
   useEffect(() => {
     const map = mapRef.current;

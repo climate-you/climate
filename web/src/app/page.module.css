@@ -18,6 +18,12 @@
   background: #1d5fff;
 }
 
+@media (prefers-color-scheme: dark) {
+  .map {
+    background: var(--map-ui-dark-bg);
+  }
+}
+
 .mapVisible {
   opacity: 1;
   transition: opacity 700ms ease;
@@ -151,6 +157,75 @@
   line-height: 1.2;
   cursor: pointer;
   text-decoration: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .map :global(.maplibregl-ctrl-top-left .maplibregl-ctrl-group) {
+    background: var(--map-ui-dark-control-bg);
+    border: 0;
+    border-radius: 6px;
+    box-shadow: none;
+  }
+
+  .map :global(.maplibregl-ctrl-top-left .maplibregl-ctrl-group > button) {
+    background: var(--map-ui-dark-control-bg);
+    border-top-color: rgba(255, 255, 255, 0.18);
+    color: var(--map-ui-dark-text) !important;
+  }
+
+  .map
+    :global(
+      .maplibregl-ctrl-top-left .maplibregl-ctrl-group > button:first-of-type
+    ) {
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+  }
+
+  .map
+    :global(
+      .maplibregl-ctrl-top-left .maplibregl-ctrl-group > button:last-of-type
+    ) {
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+  }
+
+  .map
+    :global(
+      .maplibregl-ctrl-top-left
+        .maplibregl-ctrl-group
+        > button
+        .maplibregl-ctrl-icon
+    ) {
+    filter: var(--map-ui-dark-icon-filter);
+  }
+
+  .map
+    :global(
+      .maplibregl-ctrl-top-left
+        .maplibregl-ctrl-group
+        > button.maplibregl-ctrl-icon
+    ) {
+    color: var(--map-ui-dark-text) !important;
+  }
+
+  .globeLegend {
+    background: var(--map-ui-dark-control-bg);
+    border: 0;
+    color: var(--map-ui-dark-text);
+  }
+
+  .globeLegendBar {
+    border-color: var(--map-ui-dark-border);
+  }
+
+  .globeLegendTick {
+    color: var(--map-ui-dark-text);
+  }
+
+  .globeLegendUnitSwitch {
+    color: var(--map-ui-dark-text);
+  }
+
 }
 
 .coldOpenOverlay {
@@ -656,6 +731,20 @@
 .searchMetaLink:focus-visible {
   background: var(--surface-alt);
   border-color: var(--surface-border-strong);
+}
+
+@media (prefers-color-scheme: dark) {
+  .searchMetaLink {
+    background: var(--map-ui-dark-control-bg);
+    border-color: rgba(255, 255, 255, 0.18);
+    color: var(--map-ui-dark-text);
+  }
+
+  .searchMetaLink:hover,
+  .searchMetaLink:focus-visible {
+    background: #343434;
+    border-color: rgba(255, 255, 255, 0.28);
+  }
 }
 
 .graphCard {
