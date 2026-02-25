@@ -14,6 +14,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+import shutil
+import zipfile
 
 import numpy as np
 import requests
@@ -25,10 +27,17 @@ NATURAL_EARTH_REEF_FALLBACK_URLS = [
     "https://naturalearth.s3.amazonaws.com/10m_physical/ne_10m_reefs.zip",
 ]
 UNEP_WCMC_REEF_FALLBACK_URLS = [
-    "https://data.unep-wcmc.org/datasets/1/download?type=shp",
-    "https://data.unep-wcmc.org/datasets/1/download?format=SHP",
-    "https://data.unep-wcmc.org/datasets/1/download",
+    "https://wcmc.io/WCMC_008",
 ]
+DOWNLOAD_HEADERS = {
+    # Some hosts return HTML/challenge pages to generic clients.
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "*/*",
+}
 
 
 def _grid_from_id(grid_id: str, tile_size: int) -> GridSpec:
@@ -39,6 +48,85 @@ def _grid_from_id(grid_id: str, tile_size: int) -> GridSpec:
     raise ValueError(f"Unsupported grid_id: {grid_id}")
 
 
+def _pick_best_shapefile(candidates: list[Path]) -> Path:
+    try:
+        import fiona
+    except Exception as exc:
+        raise RuntimeError(
+            "fiona is required to read vector files. Install with: pip install fiona"
+        ) from exc
+
+    polygon_files: list[tuple[int, Path]] = []
+    non_point_files: list[tuple[int, Path]] = []
+    for p in candidates:
+        try:
+            with fiona.open(str(p), "r") as src:
+                geom = str(src.schema.get("geometry", "")).lower()
+                if "polygon" in geom:
+                    polygon_files.append((len(src), p))
+                elif "point" not in geom:
+                    non_point_files.append((len(src), p))
+        except Exception:
+            continue
+    if polygon_files:
+        # Prefer the polygon layer with the largest feature count.
+        polygon_files.sort(key=lambda x: x[0], reverse=True)
+        return polygon_files[0][1]
+    if non_point_files:
+        # Fallback for Natural Earth reefs (LineString geometry).
+        non_point_files.sort(key=lambda x: x[0], reverse=True)
+        return non_point_files[0][1]
+    raise RuntimeError(
+        "No usable shapefile found in input. Expected polygon/line geometry layers."
+    )
+
+
+def _resolve_read_path(input_path: Path) -> Path:
+    if input_path.is_dir():
+        shp_files = [p for p in input_path.rglob("*.shp") if not p.name.startswith(".")]
+        if not shp_files:
+            raise RuntimeError(f"No shapefiles found in directory: {input_path}")
+        return _pick_best_shapefile(shp_files)
+
+    if input_path.suffix.lower() == ".zip":
+        if not zipfile.is_zipfile(input_path):
+            raise RuntimeError(f"Input zip is invalid: {input_path}")
+        extract_dir = input_path.parent / f"{input_path.stem}_extracted"
+        stamp_path = extract_dir / ".source_stamp"
+        src_stamp = f"{input_path.resolve()}::{input_path.stat().st_size}::{int(input_path.stat().st_mtime)}"
+        needs_extract = True
+        if extract_dir.exists() and stamp_path.exists():
+            try:
+                needs_extract = stamp_path.read_text().strip() != src_stamp
+            except Exception:
+                needs_extract = True
+        if needs_extract and extract_dir.exists():
+            shutil.rmtree(extract_dir)
+        if needs_extract:
+            extract_dir.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(input_path, "r") as zf:
+                zf.extractall(extract_dir)
+            stamp_path.write_text(src_stamp + "\n")
+        shp_files = [
+            p for p in extract_dir.rglob("*.shp") if not p.name.startswith(".")
+        ]
+        if not shp_files:
+            # Handle stale/partial extraction defensively.
+            if extract_dir.exists():
+                shutil.rmtree(extract_dir)
+            extract_dir.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(input_path, "r") as zf:
+                zf.extractall(extract_dir)
+            stamp_path.write_text(src_stamp + "\n")
+            shp_files = [
+                p for p in extract_dir.rglob("*.shp") if not p.name.startswith(".")
+            ]
+        if not shp_files:
+            raise RuntimeError(f"No shapefiles found in archive: {input_path}")
+        return _pick_best_shapefile(shp_files)
+    return input_path
+
+
 def _iter_shapes(input_path: Path) -> list[tuple[dict, int]]:
     try:
         import fiona
@@ -47,10 +135,7 @@ def _iter_shapes(input_path: Path) -> list[tuple[dict, int]]:
             "fiona is required to read vector files. Install with: pip install fiona"
         ) from exc
 
-    if input_path.suffix.lower() == ".zip":
-        read_path: Path | str = f"zip://{input_path}"
-    else:
-        read_path = input_path
+    read_path = _resolve_read_path(input_path)
 
     shapes: list[tuple[dict, int]] = []
     with fiona.open(str(read_path), "r") as src:
@@ -70,9 +155,16 @@ def _http_download(
     *,
     timeout: int = 120,
     verify_ssl: bool = True,
-) -> None:
+) -> dict[str, str]:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    with requests.get(url, stream=True, timeout=timeout, verify=verify_ssl) as r:
+    with requests.get(
+        url,
+        stream=True,
+        timeout=timeout,
+        verify=verify_ssl,
+        headers=DOWNLOAD_HEADERS,
+        allow_redirects=True,
+    ) as r:
         r.raise_for_status()
         tmp = dest.with_suffix(dest.suffix + ".tmp")
         with tmp.open("wb") as f:
@@ -80,6 +172,11 @@ def _http_download(
                 if chunk:
                     f.write(chunk)
         tmp.replace(dest)
+        return {
+            "content_type": str(r.headers.get("content-type", "")),
+            "content_disposition": str(r.headers.get("content-disposition", "")),
+            "final_url": str(r.url),
+        }
 
 
 def _prepare_input(
@@ -94,11 +191,17 @@ def _prepare_input(
         return input_path
 
     cache_dir.mkdir(parents=True, exist_ok=True)
-    out_name = "reef_polygons_source.zip"
+    if source_url:
+        out_name = f"reef_polygons_{source}_custom_source.zip"
+    else:
+        out_name = f"reef_polygons_{source}_source.zip"
     dest = cache_dir / out_name
     if dest.exists() and dest.stat().st_size > 0:
-        print(f"[cache] using {dest}", file=sys.stderr)
-        return dest
+        if zipfile.is_zipfile(dest):
+            print(f"[cache] using {dest}", file=sys.stderr)
+            return dest
+        print(f"[cache] invalid zip, redownloading: {dest}", file=sys.stderr)
+        dest.unlink()
 
     urls: list[str]
     if source_url:
@@ -114,17 +217,34 @@ def _prepare_input(
     for url in urls:
         try:
             print(f"[download] {url} -> {dest}", file=sys.stderr)
-            _http_download(url, dest, verify_ssl=verify_ssl)
+            meta = _http_download(url, dest, verify_ssl=verify_ssl)
+            if not zipfile.is_zipfile(dest):
+                snippet = ""
+                try:
+                    snippet = dest.read_bytes()[:180].decode("utf-8", errors="replace")
+                except Exception:
+                    snippet = "<unreadable>"
+                raise RuntimeError(
+                    "Downloaded file is not a valid zip archive: "
+                    f"{dest} (url={url}, final_url={meta.get('final_url')}, "
+                    f"content_type={meta.get('content_type')}, "
+                    f"content_disposition={meta.get('content_disposition')}, "
+                    f"head={snippet!r})"
+                )
             return dest
         except Exception as exc:
             last_err = exc
+            try:
+                if dest.exists():
+                    dest.unlink()
+            except Exception:
+                pass
             continue
 
     raise RuntimeError(
         "Failed to download reef polygons from all configured URLs. "
         "You can provide --input /path/to/reef_polygons.{geojson|zip|shp} "
-        "or --source-url <direct-download-url>. "
-        "If failures are TLS-cert related on trusted sources, retry with --insecure."
+        "or --source-url <direct-download-url>."
     ) from last_err
 
 
@@ -201,11 +321,6 @@ def main() -> None:
         help='Download cache directory (default: "data/cache/geojson").',
     )
     ap.add_argument(
-        "--insecure",
-        action="store_true",
-        help="Disable TLS certificate verification for source downloads (last resort).",
-    )
-    ap.add_argument(
         "--output-npz",
         type=Path,
         default=Path("data/masks/reef_global_0p05_mask.npz"),
@@ -237,7 +352,7 @@ def main() -> None:
         source=str(args.source),
         source_url=args.source_url,
         cache_dir=args.cache_dir,
-        verify_ssl=not bool(args.insecure),
+        verify_ssl=True,
     )
     build_reef_mask(
         input_path=input_path,

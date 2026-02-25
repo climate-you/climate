@@ -15,7 +15,7 @@ Where it is used:
 
 ## Input Data Sources
 
-- UNEP-WCMC coral reef polygons (script source option `unep_wcmc`): <https://data.unep-wcmc.org/datasets/1>
+- UNEP-WCMC coral reef polygons (script source option `unep_wcmc`): <https://wcmc.io/WCMC_008>
 - Natural Earth reef polygons (script source option `natural_earth`): <https://www.naturalearthdata.com/>
 - Natural Earth reefs download mirror: <https://naciscdn.org/naturalearth/10m/physical/ne_10m_reefs.zip>
 - NOAA Coral Reef Watch context (DHW product family): <https://coralreefwatch.noaa.gov/>
@@ -51,8 +51,10 @@ python scripts/build/build_reef_mask.py \
 
 Notes:
 
-- Sources are cached under `data/cache/geojson/`.
-- If UNEP TLS fails locally, add `--insecure` for that UNEP command only.
+- Sources are cached under `data/cache/geojson/` with source-specific filenames:
+  - `reef_polygons_unep_wcmc_source.zip`
+  - `reef_polygons_natural_earth_source.zip`
+- UNEP source ZIP contains multiple layers; script auto-selects the polygon layer.
 
 Primary outputs:
 
@@ -64,11 +66,11 @@ Primary outputs:
 Example sampled dates:
 
 ```bash
-python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 1985-06-15 --end-date 1985-06-15 --output data/masks/dhw_available_1985_06_15_global_0p05_mask.npz --cache-dir /Volumes/SDCard/Climate/cache/erddap_masks
-python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2000-06-15 --end-date 2000-06-15 --output data/masks/dhw_available_2000_06_15_global_0p05_mask.npz --cache-dir /Volumes/SDCard/Climate/cache/erddap_masks
-python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2010-06-15 --end-date 2010-06-15 --output data/masks/dhw_available_2010_06_15_global_0p05_mask.npz --cache-dir /Volumes/SDCard/Climate/cache/erddap_masks
-python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2020-06-15 --end-date 2020-06-15 --output data/masks/dhw_available_2020_06_15_global_0p05_mask.npz --cache-dir /Volumes/SDCard/Climate/cache/erddap_masks
-python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2025-06-15 --end-date 2025-06-15 --output data/masks/dhw_available_2025_06_15_global_0p05_mask.npz --cache-dir /Volumes/SDCard/Climate/cache/erddap_masks
+python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 1985-06-15 --end-date 1985-06-15 --output data/masks/dhw_available_1985_06_15_global_0p05_mask.npz
+python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2000-06-15 --end-date 2000-06-15 --output data/masks/dhw_available_2000_06_15_global_0p05_mask.npz
+python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2010-06-15 --end-date 2010-06-15 --output data/masks/dhw_available_2010_06_15_global_0p05_mask.npz
+python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2020-06-15 --end-date 2020-06-15 --output data/masks/dhw_available_2020_06_15_global_0p05_mask.npz
+python scripts/build/build_dataset_mask.py --dataset-id crw_dhw_daily --start-date 2025-06-15 --end-date 2025-06-15 --output data/masks/dhw_available_2025_06_15_global_0p05_mask.npz
 ```
 
 Combine with OR:
