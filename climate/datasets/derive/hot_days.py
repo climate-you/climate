@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import warnings
+
 import pandas as pd
 import xarray as xr
 
@@ -53,7 +55,16 @@ def hot_days_per_year_xr(
     baseline = da.sel({tname: years <= baseline_end})
     q = float(percentile) / 100.0
 
-    p90 = baseline.groupby(f"{tname}.dayofyear").quantile(q, dim=tname, skipna=True)
+    # Fully masked cells (e.g., land in SST fields) can trigger
+    # "All-NaN slice encountered" from NumPy during grouped quantile.
+    # This warning is expected for masked domains and does not change outputs.
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="All-NaN slice encountered",
+            category=RuntimeWarning,
+        )
+        p90 = baseline.groupby(f"{tname}.dayofyear").quantile(q, dim=tname, skipna=True)
     if "quantile" in p90.dims:
         p90 = p90.sel(quantile=q, drop=True)
 

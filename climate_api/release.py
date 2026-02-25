@@ -171,6 +171,15 @@ class ReleaseResolver:
 
         latest_file = self._settings.latest_release_file
         if not latest_file.exists():
+            dev_root = self._settings.releases_root / "dev"
+            if dev_root.exists() and dev_root.is_dir():
+                return "dev"
+            demo_root = self._settings.releases_root / "demo"
+            if demo_root.exists() and demo_root.is_dir():
+                self._logger.info(
+                    "Latest release pointer missing; falling back to 'demo' because no 'dev' release exists."
+                )
+                return "demo"
             return "dev"
         resolved = latest_file.read_text(encoding="utf-8").strip()
         if not resolved:

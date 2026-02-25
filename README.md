@@ -107,7 +107,6 @@ Disk-space note: a single daily variable over ~40 years is often around 20-80 GB
 
 Detailed runbooks:
 
-- [`docs/runbooks/demo-release.md`](docs/runbooks/demo-release.md)
 - [`docs/runbooks/locations-and-ocean-mask.md`](docs/runbooks/locations-and-ocean-mask.md)
 - [`docs/runbooks/reef-mask.md`](docs/runbooks/reef-mask.md)
 - [`docs/runbooks/dataset-cache-and-packaging.md`](docs/runbooks/dataset-cache-and-packaging.md)

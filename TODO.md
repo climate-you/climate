@@ -9,7 +9,6 @@
   - BUGFIX: why for lat=3.740930549248077&lon=8.77532958984375 the monthly mean looks like it's offset ? Use daily mean to create monthly mean.
 - Code:
   - BUGFIX: nearest point with mixed grid still not implemented
-  - Prepare a `demo` release that can be tar-gzed or zipped with correct locations / no zoomout / shorter time range - reef only on great barrier => upload it somewhere and reference it in the docs to have a demo version up and running
   - cloud setup + first VM running
   - Zoomout - do we need defer loading?
 

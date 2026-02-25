@@ -28,6 +28,12 @@ def _settings(releases_root: Path) -> Settings:
         ttl_resolve_s=60,
         ttl_panel_s=60,
         score_map_preload=False,
+        cors_allow_origins=["*"],
+        cors_allow_credentials=False,
+        rate_limit_enabled=True,
+        rate_limit_sustained_rps=5,
+        rate_limit_burst=20,
+        rate_limit_window_s=10,
     )
 
 
@@ -110,6 +116,23 @@ def test_release_alias_validation_and_empty_latest_pointer(tmp_path: Path) -> No
         resolver.resolve_release_alias("  ")
     with pytest.raises(HTTPException, match="Latest release pointer is empty"):
         resolver.resolve_release_alias("latest")
+
+
+def test_latest_alias_falls_back_to_demo_when_latest_missing_and_dev_absent(tmp_path: Path) -> None:
+    releases_root = tmp_path / "releases"
+    (releases_root / "demo").mkdir(parents=True)
+    resolver = ReleaseResolver(settings=_settings(releases_root), logger=Mock(spec=logging.Logger))
+
+    assert resolver.resolve_release_alias("latest") == "demo"
+
+
+def test_latest_alias_prefers_dev_when_latest_missing(tmp_path: Path) -> None:
+    releases_root = tmp_path / "releases"
+    (releases_root / "dev").mkdir(parents=True)
+    (releases_root / "demo").mkdir(parents=True)
+    resolver = ReleaseResolver(settings=_settings(releases_root), logger=Mock(spec=logging.Logger))
+
+    assert resolver.resolve_release_alias("latest") == "dev"
 
 
 def test_release_root_missing_and_escape_blocked(tmp_path: Path) -> None:
