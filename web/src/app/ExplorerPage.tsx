@@ -173,6 +173,51 @@ type ExplorerPageProps = {
   coldOpen?: boolean;
 };
 
+type GlobeLegendSpec = {
+  colors: string[];
+  ticks: string[];
+};
+
+function formatLegendTick(valueC: number, unit: "C" | "F"): string {
+  if (unit === "F") {
+    const valueF = valueC * (9 / 5);
+    const rounded = Math.round(valueF);
+    const sign = rounded > 0 ? "+" : "";
+    return `${sign}${rounded}`;
+  }
+  const sign = valueC > 0 ? "+" : "";
+  return `${sign}${valueC}`;
+}
+
+function warmingLegendForLayer(
+  layerId: string | null,
+  unit: "C" | "F",
+): GlobeLegendSpec | null {
+  if (!layerId) return null;
+  const warmColors = [
+    "#ffffcc",
+    "#ffeda0",
+    "#fed976",
+    "#feb24c",
+    "#fd8d3c",
+    "#fc4e2a",
+    "#e31a1c",
+    "#b10026",
+  ];
+  if (
+    layerId === "warming_air" ||
+    layerId === "warming_vs_preindustrial_air" ||
+    layerId === "warming_sst"
+  ) {
+    const ticksC = [4, 3, 2, 1, 0];
+    return {
+      colors: warmColors,
+      ticks: ticksC.map((v) => formatLegendTick(v, unit)),
+    };
+  }
+  return null;
+}
+
 function mergeSeries(series: Record<string, SeriesPayload>, keys: string[]) {
   // Merge into rows keyed by x (ISO date or year). We assume x values are unique per series.
   const rows = new Map<string, ChartRow>();
@@ -1658,6 +1703,10 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const [activeLayerId, setActiveLayerId] = useState<string>(
     mapLayers[0]?.id ?? "",
   );
+  const warmingLegend = useMemo(
+    () => warmingLegendForLayer(activeLayerId || null, unit),
+    [activeLayerId, unit],
+  );
   const tempHeadline = useMemo(() => {
     if (!resp?.headlines?.length) return null;
     return (
@@ -2528,6 +2577,41 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
           }}
           enablePick={!introVisible}
         />
+        {warmingLegend ? (
+          <aside
+            className={`${styles.globeLegend} maplibregl-ctrl maplibregl-ctrl-group`}
+            aria-label="Map legend"
+          >
+            <div className={styles.globeLegendScale}>
+              <div
+                className={styles.globeLegendBar}
+                style={{
+                  background: `linear-gradient(to top, ${warmingLegend.colors.join(", ")})`,
+                }}
+              />
+              <div className={styles.globeLegendTicks}>
+                {warmingLegend.ticks.map((tick) => (
+                  <div key={tick} className={styles.globeLegendTick}>
+                    {tick}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <button
+              type="button"
+              className={styles.globeLegendUnitSwitch}
+              aria-label={`Switch to ${unit === "C" ? "°F" : "°C"}`}
+              onClick={() => {
+                const nextUnit: "C" | "F" = unit === "C" ? "F" : "C";
+                queueGraphRestoreFromVisible();
+                setUnit(nextUnit);
+                void loadPanel(lat, lon, nextUnit);
+              }}
+            >
+              {unit === "C" ? "°C" : "°F"}
+            </button>
+          </aside>
+        ) : null}
       </div>
 
       {introVisible ? (
