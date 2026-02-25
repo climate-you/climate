@@ -97,6 +97,41 @@
   text-indent: 1.5em;
 }
 
+.aboutKofi {
+  margin-top: 12px;
+}
+
+.aboutKofiButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid #0000ff;
+  border-radius: 999px;
+  background: #0000ff;
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 400;
+}
+
+.aboutKofiButton:hover,
+.aboutKofiButton:focus-visible {
+  background: #001dff;
+  border-color: #001dff;
+}
+
+.aboutKofiIcon {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+  background-image: url("https://storage.ko-fi.com/cdn/cup-border.png");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
 @media (max-width: 900px) {
   .aboutOverlay {
     padding: 10px;

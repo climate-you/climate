@@ -1,15 +1,12 @@
 - UI:
   - Add scale to UI when showing globe textures
-  - Test on mobile (need to run `./scripts/api_backend.sh --lan`):
-    -- hide the close button: swiping down should close the panel (revisit).
   - update Licenses/Copyrights
   - coral reef layer should have blue background ?
   - coral reef map renders all black on mobile
-  - ko-fi account + link (and add to github: see `Display a "Sponsor" button` in settings)
+  - refine ko-fi account when site is up (and add to github: see `Display a "Sponsor" button` in settings)
 - Graphs:
   - why doesn't Palma, Spain have sea temperature information ?
-  - why for lat=3.740930549248077&lon=8.77532958984375 the monthly mean looks like it's offset ? Use daily mean to create monthly mean
-  - hover info on 5 years only shows the year.
+  - why for lat=3.740930549248077&lon=8.77532958984375 the monthly mean looks like it's offset ? Use daily mean to create monthly mean.
 - Code:
   - Prepare a `demo` release that can be tar-gzed or zipped with correct locations / no zoomout / shorter time range - reef only on great barrier => upload it somewhere and reference it in the docs to have a demo version up and running
   - Finalise doc: public URL, latest screenshots, link to `demo` release

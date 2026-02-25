@@ -84,6 +84,17 @@ export default function AboutOverlay({
               linkedin.com/in/fanny-chaleon-11146650
             </a>
           </p>
+          <div className={styles.aboutKofi}>
+            <a
+              className={styles.aboutKofiButton}
+              href="https://ko-fi.com/G2G31UWBDU"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span className={styles.aboutKofiIcon} aria-hidden="true" />
+              Buy us a coffee
+            </a>
+          </div>
           <p className={styles.aboutText}>
             Release version: {releaseLabel ?? "latest"}
           </p>
