@@ -1,0 +1,46 @@
+# Copy to /etc/caddy/Caddyfile and replace example.com with your domain.
+:80 {
+  encode gzip zstd
+
+  # Basic security headers
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+
+  # API route with timeouts.
+  # Request rate limiting is enforced in the backend middleware by default.
+  @api path /api/*
+  handle @api {
+    reverse_proxy 127.0.0.1:8001 {
+      transport http {
+        read_timeout 15s
+        write_timeout 15s
+      }
+      health_uri /healthz
+      health_interval 10s
+      health_timeout 2s
+    }
+  }
+
+  # Frontend route
+  handle {
+    reverse_proxy 127.0.0.1:3000 {
+      transport http {
+        read_timeout 15s
+        write_timeout 15s
+      }
+    }
+  }
+
+  log {
+    output file /var/log/caddy/climate-access.log {
+      roll_size 10MiB
+      roll_keep 10
+      roll_keep_for 720h
+    }
+    format json
+  }
+}

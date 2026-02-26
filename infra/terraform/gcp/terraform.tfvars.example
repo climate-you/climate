@@ -1,0 +1,8 @@
+project_id     = "your-gcp-project-id"
+region         = "us-central1"
+zone           = "us-central1-a"
+name           = "climate-vm"
+machine_type   = "e2-standard-2"
+boot_disk_size_gb = 50
+ssh_user       = "ubuntu"
+ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... your-key"

@@ -26,6 +26,12 @@ def test_load_settings_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert settings.ocean_mask_npz == tmp_path / "data" / "locations" / "ocean_mask.npz"
     assert settings.ocean_names_json == tmp_path / "data" / "locations" / "ocean_names.json"
     assert settings.score_map_preload is False
+    assert settings.cors_allow_origins == ["*"]
+    assert settings.cors_allow_credentials is False
+    assert settings.rate_limit_enabled is True
+    assert settings.rate_limit_sustained_rps == 5
+    assert settings.rate_limit_burst == 20
+    assert settings.rate_limit_window_s == 10
 
 
 def test_load_settings_none_like_env_values(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -33,6 +39,12 @@ def test_load_settings_none_like_env_values(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("OCEAN_MASK_NPZ", "false")
     monkeypatch.setenv("OCEAN_NAMES_JSON", "0")
     monkeypatch.setenv("SCORE_MAP_PRELOAD", "YES")
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "https://a.example.com,https://b.example.com")
+    monkeypatch.setenv("CORS_ALLOW_CREDENTIALS", "true")
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
+    monkeypatch.setenv("RATE_LIMIT_SUSTAINED_RPS", "3")
+    monkeypatch.setenv("RATE_LIMIT_BURST", "11")
+    monkeypatch.setenv("RATE_LIMIT_WINDOW_S", "7")
 
     settings = config_module.load_settings()
 
@@ -40,6 +52,15 @@ def test_load_settings_none_like_env_values(monkeypatch: pytest.MonkeyPatch) -> 
     assert settings.ocean_mask_npz is None
     assert settings.ocean_names_json is None
     assert settings.score_map_preload is True
+    assert settings.cors_allow_origins == [
+        "https://a.example.com",
+        "https://b.example.com",
+    ]
+    assert settings.cors_allow_credentials is True
+    assert settings.rate_limit_enabled is False
+    assert settings.rate_limit_sustained_rps == 3
+    assert settings.rate_limit_burst == 11
+    assert settings.rate_limit_window_s == 7
 
 
 def test_cache_memory_roundtrip_and_expiry(monkeypatch: pytest.MonkeyPatch) -> None:

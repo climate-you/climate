@@ -21,6 +21,12 @@ class Settings:
     ttl_resolve_s: int
     ttl_panel_s: int
     score_map_preload: bool
+    cors_allow_origins: list[str]
+    cors_allow_credentials: bool
+    rate_limit_enabled: bool
+    rate_limit_sustained_rps: int
+    rate_limit_burst: int
+    rate_limit_window_s: int
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -29,6 +35,14 @@ def _env_bool(name: str, default: bool) -> bool:
         return default
     value = raw.strip().lower()
     return value in {"1", "true", "yes", "y", "on"}
+
+
+def _env_list(name: str, default: list[str]) -> list[str]:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    values = [item.strip() for item in raw.split(",")]
+    return [item for item in values if item]
 
 
 def load_settings() -> Settings:
@@ -103,6 +117,15 @@ def load_settings() -> Settings:
     ttl_resolve_s = int(os.environ.get("TTL_RESOLVE_S", "86400"))  # 1 day
     ttl_panel_s = int(os.environ.get("TTL_PANEL_S", "86400"))  # 1 day
     score_map_preload = _env_bool("SCORE_MAP_PRELOAD", False)
+    cors_allow_origins = _env_list("CORS_ALLOW_ORIGINS", ["*"])
+    cors_allow_credentials = _env_bool(
+        "CORS_ALLOW_CREDENTIALS",
+        "*" not in cors_allow_origins,
+    )
+    rate_limit_enabled = _env_bool("RATE_LIMIT_ENABLED", True)
+    rate_limit_sustained_rps = int(os.environ.get("RATE_LIMIT_SUSTAINED_RPS", "5"))
+    rate_limit_burst = int(os.environ.get("RATE_LIMIT_BURST", "20"))
+    rate_limit_window_s = int(os.environ.get("RATE_LIMIT_WINDOW_S", "10"))
 
     return Settings(
         release=release,
@@ -119,4 +142,10 @@ def load_settings() -> Settings:
         ttl_resolve_s=ttl_resolve_s,
         ttl_panel_s=ttl_panel_s,
         score_map_preload=score_map_preload,
+        cors_allow_origins=cors_allow_origins,
+        cors_allow_credentials=cors_allow_credentials,
+        rate_limit_enabled=rate_limit_enabled,
+        rate_limit_sustained_rps=rate_limit_sustained_rps,
+        rate_limit_burst=rate_limit_burst,
+        rate_limit_window_s=rate_limit_window_s,
     )

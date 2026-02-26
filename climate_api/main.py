@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import defaultdict, deque
+from threading import Lock
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from uvicorn.logging import AccessFormatter
 
 from .cache import Cache, make_redis_client
@@ -97,6 +99,8 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="Climate API", version="0.1")
     access_logger = configure_access_logger()
+    ip_windows: dict[str, deque[float]] = defaultdict(deque)
+    ip_windows_lock = Lock()
     release_resolver = ReleaseResolver(settings=settings, logger=uvicorn_logger)
     if settings.score_map_preload:
         try:
@@ -113,6 +117,28 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def access_log_with_timing(request: Request, call_next):
+        if settings.rate_limit_enabled and request.url.path.startswith("/api/"):
+            now = time.time()
+            client_host = request.client.host if request.client else "unknown"
+            max_events = max(
+                settings.rate_limit_burst,
+                settings.rate_limit_sustained_rps * settings.rate_limit_window_s,
+            )
+            window_s = max(1, settings.rate_limit_window_s)
+            with ip_windows_lock:
+                ip_window = ip_windows[client_host]
+                while ip_window and (now - ip_window[0]) > window_s:
+                    ip_window.popleft()
+                if len(ip_window) >= max_events:
+                    return JSONResponse(
+                        status_code=429,
+                        content={
+                            "detail": "Rate limit exceeded. Please retry shortly."
+                        },
+                        headers={"Retry-After": "1"},
+                    )
+                ip_window.append(now)
+
         t0 = time.perf_counter()
         response = await call_next(request)
         dt_ms = (time.perf_counter() - t0) * 1000.0
@@ -136,11 +162,15 @@ def create_app() -> FastAPI:
     # CORS for local dev; tighten for prod
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
+        allow_origins=settings.cors_allow_origins,
+        allow_credentials=settings.cors_allow_credentials,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.get("/healthz")
+    def healthz():
+        return {"status": "ok"}
 
     @app.get("/api/v/{release}/release", response_model=ReleaseResolveResponse)
     def resolve_release(release: str):

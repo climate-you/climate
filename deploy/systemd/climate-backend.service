@@ -1,0 +1,25 @@
+[Unit]
+Description=Climate API backend (FastAPI/Uvicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=climate
+Group=climate
+WorkingDirectory=/opt/climate/source
+EnvironmentFile=/etc/climate/backend.env
+ExecStart=/opt/climate/venv/bin/uvicorn climate_api.main:app --host 127.0.0.1 --port 8001 --workers 2
+Restart=always
+RestartSec=3
+TimeoutStartSec=30
+TimeoutStopSec=30
+KillSignal=SIGINT
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/climate/source/data
+
+[Install]
+WantedBy=multi-user.target

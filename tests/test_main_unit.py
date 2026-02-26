@@ -103,6 +103,12 @@ def test_create_app_routes_with_mocked_dependencies(
         ttl_resolve_s=60,
         ttl_panel_s=60,
         score_map_preload=False,
+        cors_allow_origins=["*"],
+        cors_allow_credentials=False,
+        rate_limit_enabled=True,
+        rate_limit_sustained_rps=5,
+        rate_limit_burst=20,
+        rate_limit_window_s=10,
     )
 
     monkeypatch.setattr("climate_api.main.load_settings", lambda: settings)
@@ -263,6 +269,10 @@ def test_create_app_routes_with_mocked_dependencies(
     assert status == 200
     assert headers["cache-control"] == "no-store"
 
+    status, data, _ = asyncio.run(_asgi_get(app, "/healthz"))
+    assert status == 200
+    assert data["status"] == "ok"
+
 
 def test_configure_uvicorn_like_access_logger_is_idempotent() -> None:
     _configure_uvicorn_like_access_logger()
@@ -293,6 +303,12 @@ def test_asset_route_cache_variants_and_invalid_paths(
         ttl_resolve_s=60,
         ttl_panel_s=60,
         score_map_preload=True,
+        cors_allow_origins=["*"],
+        cors_allow_credentials=False,
+        rate_limit_enabled=True,
+        rate_limit_sustained_rps=5,
+        rate_limit_burst=20,
+        rate_limit_window_s=10,
     )
     monkeypatch.setattr("climate_api.main.load_settings", lambda: settings)
     monkeypatch.setattr("climate_api.main.LocationIndex", lambda _path: SimpleNamespace(
@@ -344,3 +360,93 @@ def test_asset_route_cache_variants_and_invalid_paths(
     status, data, _ = asyncio.run(_asgi_get(app, "/assets/v/dev/../../outside.txt"))
     assert status == 400
     assert "Invalid asset path" in data["detail"]
+
+
+def test_rate_limit_returns_429_when_window_is_exceeded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = Settings(
+        release="latest",
+        releases_root=tmp_path / "releases",
+        latest_release_file=tmp_path / "releases" / "LATEST",
+        locations_csv=tmp_path / "locations.csv",
+        kdtree_path=None,
+        locations_index_csv=tmp_path / "locations.index.csv",
+        ocean_mask_npz=None,
+        ocean_names_json=None,
+        ocean_off_city_max_km=80.0,
+        ocean_city_override_max_km=2.0,
+        redis_url=None,
+        ttl_resolve_s=60,
+        ttl_panel_s=60,
+        score_map_preload=False,
+        cors_allow_origins=["*"],
+        cors_allow_credentials=False,
+        rate_limit_enabled=True,
+        rate_limit_sustained_rps=0,
+        rate_limit_burst=2,
+        rate_limit_window_s=10,
+    )
+
+    monkeypatch.setattr("climate_api.main.load_settings", lambda: settings)
+    monkeypatch.setattr(
+        "climate_api.main.LocationIndex",
+        lambda _path: SimpleNamespace(
+            autocomplete=lambda q, limit=10: [],
+            resolve_by_id=lambda geonameid: None,
+            resolve_by_label=lambda label: None,
+        ),
+    )
+    monkeypatch.setattr(
+        "climate_api.main.PlaceResolver",
+        lambda **kwargs: SimpleNamespace(
+            resolve_place=lambda lat, lon: SimpleNamespace(
+                geonameid=1,
+                label="A",
+                lat=lat,
+                lon=lon,
+                distance_km=0.0,
+                country_code="US",
+                population=1,
+            )
+        ),
+    )
+
+    class _ReleaseResolver:
+        def __init__(self, settings: Settings, logger: Any):
+            pass
+
+        def resolve_release_context(self, requested_release: str):
+            return SimpleNamespace(
+                release="dev",
+                tile_store=object(),
+                panels_manifest={"panels": {}},
+                maps_manifest={"version": "0.1"},
+                maps_root=tmp_path / "releases" / "dev",
+                layers=[],
+            )
+
+        def resolve_release_alias(self, requested_release: str) -> str:
+            return "dev"
+
+        def release_root(self, canonical_release: str) -> Path:
+            return tmp_path / "releases" / canonical_release
+
+    monkeypatch.setattr("climate_api.main.ReleaseResolver", _ReleaseResolver)
+    app = create_app()
+
+    first_status, _, _ = asyncio.run(
+        _asgi_get(app, "/api/v/dev/locations/autocomplete", {"q": "ab"})
+    )
+    second_status, _, _ = asyncio.run(
+        _asgi_get(app, "/api/v/dev/locations/autocomplete", {"q": "ab"})
+    )
+    third_status, third_data, third_headers = asyncio.run(
+        _asgi_get(app, "/api/v/dev/locations/autocomplete", {"q": "ab"})
+    )
+
+    assert first_status == 200
+    assert second_status == 200
+    assert third_status == 429
+    assert "Rate limit exceeded" in third_data["detail"]
+    assert third_headers["retry-after"] == "1"
