@@ -5,6 +5,8 @@
 __pycache__
 /build/
 /data/*
+/dist
+/docs/plans
 /htmlcov/
 /web/public/data/*
 /web/web/
