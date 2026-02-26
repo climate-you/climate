@@ -16,10 +16,11 @@ Last steps:
 - clean up unused css and methods in code when all features and bugfix are done.
 - update Licenses/Copyrights.
 - test mobile and dark mode.
+- google analytics + map of users and clicks
 - refine ko-fi and stripe account desciption when site is up
 - add link to https://ko-fi.com/climateyou to github when repo is public (see `Display a "Sponsor" button` in settings).
 - Decide/write license for github public repository
-- Finalise doc: public URL, latest screenshots, link to `demo` release
+- Finalise doc: latest screenshots, link to `demo` release
 
 ---
 

@@ -4,25 +4,27 @@ Public app: https://www.climate.you
 
 A registry-driven climate data platform with:
 
-- a data packaging pipeline (`scripts/build/packager.py` + `climate/packager/*`)
-- shared Python package modules (`climate/`)
-- a FastAPI backend (`climate_api/*`)
-- a Next.js web application (`web/*`)
-- utility scripts for build, validation, benchmarking, and operations (`scripts/`)
+- a Python data packaging pipeline for climate datasets (derivation, tiling, and release artifact generation)
+- shared Python modules for registries, data transforms, and reusable domain utilities
+- a FastAPI backend serving packaged climate metrics and map-ready payloads
+- a Next.js web application for interactive climate data exploration
+- operational automation for validation, benchmarking, runtime management, and deployment tasks
 
 ## Screenshots
 
-![Global view](docs/images/globe_default.png)
-![Panel view](docs/images/warming_paris.png)
+<img src="docs/images/globe_default.png" alt="Global view" height="250" />
+<img src="docs/images/warming_paris.png" alt="Panel view" height="250" />
 
 ## Repository Organization
 
 - `climate/`: shared package code for dataset derivation, registries, tiles, packager
 - `climate_api/`: FastAPI app, schemas, endpoint services
 - `data/`: local data artifacts (locations, masks, caches, releases)
+- `deploy/`: deployment assets for runtime environments (service files, reverse-proxy config, env templates)
 - `docs/`: architecture diagrams and runbooks
+- `infra/`: cloud infrastructure definitions (Terraform for provisioning)
 - `registry/`: authoritative manifests (datasets, metrics, maps, layers, panels)
-- `scripts/`: operational build, validation, benchmark, and runtime scripts
+- `scripts/`: operational build, validation, benchmark, runtime, and deployment scripts
 - `tests/`: unit/integration/end-to-end test coverage
 - `web/`: Next.js frontend application
 
@@ -110,6 +112,14 @@ Detailed runbooks:
 - [`docs/runbooks/locations-and-ocean-mask.md`](docs/runbooks/locations-and-ocean-mask.md)
 - [`docs/runbooks/reef-mask.md`](docs/runbooks/reef-mask.md)
 - [`docs/runbooks/dataset-cache-and-packaging.md`](docs/runbooks/dataset-cache-and-packaging.md)
+
+## Cloud Deployment
+
+This repository also includes scripts and configuration to deploy the platform to a cloud-hosted Linux environment.
+
+- Deployment scripts in `scripts/deploy/` automate bootstrap, app rollout, auth toggling, and smoke checks.
+- Runtime deployment assets in `deploy/` provide service templates, proxy configuration, and environment-variable examples.
+- Infrastructure definitions in `infra/terraform/gcp/` support provisioning cloud resources with Terraform.
 
 ## Documentation Index
 
