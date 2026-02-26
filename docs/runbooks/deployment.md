@@ -116,12 +116,11 @@ cd <repo>
 
 ## 6) Bootstrap VM
 
-SSH into VM and run the bootstrap script from a checkout of this repo:
+Run bootstrap from inside that checkout:
 
 ```bash
 sudo ./scripts/deploy/bootstrap_vm.sh \
   --domain <PUBLIC_IP> \
-  --repo-url <git-url> \
   --repo-branch main
 ```
 
@@ -133,6 +132,7 @@ What bootstrap does:
 - installs systemd units, env files, and Caddy config
 - enables firewall rules (22,80,443)
 - starts services and runs smoke checks
+- by default, it reuses/copies the current repo checkout; `--repo-url` is optional fallback only
 
 Bootstrap env behavior:
 
@@ -140,6 +140,12 @@ Bootstrap env behavior:
   - `deploy/env/backend.env.example` -> `/etc/climate/backend.env`
   - `deploy/env/web.env.example` -> `/etc/climate/web.env`
 - then it replaces `https://example.com` with the provided `--domain` (or `http://<ip>` for IP input)
+
+Important note about `sudo` + GitHub SSH:
+
+- if bootstrap needs to run `git clone`/`git pull` as `root`, it uses root's SSH config/keys
+- if root has no GitHub SSH key, `Permission denied (publickey)` is expected
+- default recommended path avoids this by cloning manually first as your normal user, then running bootstrap from that checkout
 
 ## 7) Configure Environment Values
 

@@ -8,7 +8,7 @@ Usage:
 
 Options:
   --domain <domain>       Public DNS name (required).
-  --repo-url <url>        Git repository URL (default: current origin if available).
+  --repo-url <url>        Git repository URL (optional fallback when cloning is required).
   --repo-branch <branch>  Git branch/tag to deploy (default: main).
   --app-root <path>       Install root (default: /opt/climate/source).
   --user <name>           Service user (default: climate).
@@ -25,6 +25,12 @@ REPO_URL=""
 REPO_BRANCH="main"
 APP_ROOT="/opt/climate/source"
 SERVICE_USER="climate"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+if [[ ! -d "$SCRIPT_REPO_ROOT/.git" ]]; then
+  SCRIPT_REPO_ROOT=""
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -71,15 +77,6 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-if [[ -z "$REPO_URL" ]]; then
-  REPO_URL="$(git config --get remote.origin.url || true)"
-fi
-
-if [[ -z "$REPO_URL" ]]; then
-  echo "error: --repo-url is required when remote.origin.url is unavailable" >&2
-  exit 2
-fi
-
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y \
@@ -106,11 +103,26 @@ mkdir -p /opt/climate /etc/climate
 if [[ ! -d "$APP_ROOT/.git" ]]; then
   rm -rf "$APP_ROOT"
   mkdir -p "$(dirname "$APP_ROOT")"
-  git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$APP_ROOT"
+  if [[ -n "$SCRIPT_REPO_ROOT" && "$SCRIPT_REPO_ROOT" != "$APP_ROOT" ]]; then
+    cp -a "$SCRIPT_REPO_ROOT" "$APP_ROOT"
+  else
+    if [[ -z "$REPO_URL" ]]; then
+      REPO_URL="$(git config --get remote.origin.url || true)"
+    fi
+    if [[ -z "$REPO_URL" ]]; then
+      echo "error: --repo-url is required when source repo cannot be copied locally" >&2
+      exit 2
+    fi
+    git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$APP_ROOT"
+  fi
 else
-  git -C "$APP_ROOT" fetch --all --tags
-  git -C "$APP_ROOT" checkout "$REPO_BRANCH"
-  git -C "$APP_ROOT" pull --ff-only
+  if [[ -n "$SCRIPT_REPO_ROOT" && "$SCRIPT_REPO_ROOT" == "$APP_ROOT" && -z "$REPO_URL" ]]; then
+    echo "Using existing checkout at $APP_ROOT without remote fetch."
+  else
+    git -C "$APP_ROOT" fetch --all --tags
+    git -C "$APP_ROOT" checkout "$REPO_BRANCH"
+    git -C "$APP_ROOT" pull --ff-only
+  fi
 fi
 
 python3 -m venv /opt/climate/venv
