@@ -23,6 +23,11 @@ export PYTHONPATH="$(pwd)"
    - `dist/climate-demo-YYYY_MM_DD.tar.gz`
    - `dist/climate-demo-YYYY_MM_DD.tar.gz.sha256`
 
+Packaging can run in two modes:
+
+- compute mode (default): generate series/maps from cache (and download if cache is missing)
+- copy mode (`--source-release <name>`): copy required demo assets from `data/releases/<name>` without recomputing tiles
+
 The archive layout is rooted under `data/` (`data/locations`, `data/masks`, `data/releases/demo`), so users can extract directly at repository root.
 
 ## Dry Run (No Packaging, No Archive)
@@ -39,9 +44,27 @@ PYTHONPATH=. python scripts/build/build_demo_release.py --skip-package --skip-ar
 PYTHONPATH=. python scripts/build/build_demo_release.py --release demo
 ```
 
+## Fast Build For Testing (No Tile Recompute)
+
+Use this when you only need a quick demo bundle (for example, cloud VM install testing) and already have a populated source release like `dev`.
+
+```bash
+PYTHONPATH=. python scripts/build/build_demo_release.py \
+  --release demo \
+  --source-release dev \
+  --resume
+```
+
+Notes:
+
+- In copy mode, the script copies only metrics/maps selected by the demo registries.
+- `--skip-dhw-metrics` is respected in copy mode (DHW assets are not copied).
+- If a required selected asset is missing in the source release, the script fails fast with an error.
+
 Useful flags:
 
 - `--resume` to continue interrupted packager runs
+- `--source-release <release>` to reuse packaged assets from `data/releases/<release>` (copy selected demo assets only)
 - `--cache-dir /path/to/cache` to reuse an external cache root
 - `--skip-dhw-metrics` to exclude coral/DHW metrics for faster non-DHW testing
 - `--pipeline --workers N` to use packager pipeline mode

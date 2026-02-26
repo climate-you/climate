@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import copy
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -512,6 +512,136 @@ def _validate_packaged_release(*, release_root: Path) -> None:
         raise FileNotFoundError(f"Packaged release is missing required files:\n{lines}")
 
 
+def _copy_tree_with_resume(*, src: Path, dst: Path, resume: bool) -> int:
+    if not src.exists():
+        raise FileNotFoundError(f"Source path does not exist: {src}")
+    if not src.is_dir():
+        raise ValueError(f"Source path is not a directory: {src}")
+
+    copied = 0
+    for path in src.rglob("*"):
+        rel = path.relative_to(src)
+        out = dst / rel
+        if path.is_dir():
+            out.mkdir(parents=True, exist_ok=True)
+            continue
+        out.parent.mkdir(parents=True, exist_ok=True)
+        if resume and out.exists():
+            continue
+        shutil.copy2(path, out)
+        copied += 1
+    return copied
+
+
+def _copy_selected_series_from_release(
+    *,
+    source_root: Path,
+    release_root: Path,
+    selected_metrics: dict[str, Any],
+    resume: bool,
+) -> tuple[int, int]:
+    source_series_root = source_root / "series"
+    if not source_series_root.exists():
+        raise FileNotFoundError(f"Source release missing series folder: {source_series_root}")
+
+    copied_files = 0
+    copied_metrics = 0
+    for metric_id, spec in sorted(selected_metrics.items()):
+        if metric_id == "version" or not isinstance(spec, dict):
+            continue
+        source = spec.get("source", {})
+        if isinstance(source, dict) and source.get("type") == "derived":
+            continue
+
+        metric_dirs = sorted(p for p in source_series_root.glob(f"*/{metric_id}") if p.is_dir())
+        if not metric_dirs:
+            raise FileNotFoundError(
+                f"Missing metric series in source release for '{metric_id}' under {source_series_root}"
+            )
+        copied_metrics += 1
+        for src_dir in metric_dirs:
+            rel = src_dir.relative_to(source_series_root)
+            dst_dir = release_root / "series" / rel
+            copied_files += _copy_tree_with_resume(src=src_dir, dst=dst_dir, resume=resume)
+
+    return copied_files, copied_metrics
+
+
+def _copy_selected_maps_from_release(
+    *,
+    source_root: Path,
+    release_root: Path,
+    selected_maps: dict[str, Any],
+    resume: bool,
+) -> tuple[int, int]:
+    source_maps_root = source_root / "maps"
+    if not source_maps_root.exists():
+        raise FileNotFoundError(f"Source release missing maps folder: {source_maps_root}")
+
+    copied_files = 0
+    copied_maps = 0
+    for map_id, spec in sorted(selected_maps.items()):
+        if map_id == "version" or not isinstance(spec, dict):
+            continue
+        map_dirs = sorted(p for p in source_maps_root.glob(f"*/{map_id}") if p.is_dir())
+        if not map_dirs:
+            raise FileNotFoundError(
+                f"Missing map assets in source release for '{map_id}' under {source_maps_root}"
+            )
+        copied_maps += 1
+        for src_dir in map_dirs:
+            rel = src_dir.relative_to(source_maps_root)
+            dst_dir = release_root / "maps" / rel
+            copied_files += _copy_tree_with_resume(src=src_dir, dst=dst_dir, resume=resume)
+
+    return copied_files, copied_maps
+
+
+def _snapshot_registry_to_release(
+    *,
+    release_root: Path,
+    selected_datasets: dict[str, Any],
+    selected_metrics: dict[str, Any],
+    selected_maps: dict[str, Any],
+    selected_layers: dict[str, Any],
+    selected_panels: dict[str, Any],
+) -> dict[str, str]:
+    registry_dir = release_root / "registry"
+    _write_json(registry_dir / "datasets.json", selected_datasets)
+    _write_json(registry_dir / "metrics.json", selected_metrics)
+    _write_json(registry_dir / "maps.json", selected_maps)
+    _write_json(registry_dir / "layers.json", selected_layers)
+    _write_json(registry_dir / "panels.json", selected_panels)
+    return {
+        "datasets.json": "registry/datasets.json",
+        "metrics.json": "registry/metrics.json",
+        "maps.json": "registry/maps.json",
+        "layers.json": "registry/layers.json",
+        "panels.json": "registry/panels.json",
+    }
+
+
+def _write_release_manifest(
+    *,
+    release_root: Path,
+    release: str,
+    series_root: Path,
+    maps_root: Path,
+    registry_snapshot: dict[str, str],
+) -> Path:
+    payload = {
+        "release": release,
+        "created_at_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "series_root": str(series_root.relative_to(release_root)),
+        "maps_root": str(maps_root.relative_to(release_root)),
+        "registry": registry_snapshot,
+    }
+    manifest_path = release_root / "manifest.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+    return manifest_path
+
+
 def _resolve_archive_path(
     *,
     archive_output: Path | None,
@@ -567,6 +697,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-package", action="store_true")
     parser.add_argument("--skip-archive", action="store_true")
     parser.add_argument(
+        "--source-release",
+        type=str,
+        default=None,
+        help=(
+            "Reuse already packaged assets from data/releases/<source-release> "
+            "(copies series/maps instead of recomputing tiles)."
+        ),
+    )
+    parser.add_argument(
         "--skip-dhw-metrics",
         action="store_true",
         help="Exclude coral-reef DHW panel/layers/metrics and skip GBR demo-mask generation.",
@@ -586,6 +725,8 @@ def main() -> None:
     args = _build_parser().parse_args()
     if args.clean and args.resume:
         raise ValueError("Do not combine --clean with --resume. --clean removes prior release outputs.")
+    if args.skip_package and args.source_release:
+        raise ValueError("Do not combine --skip-package with --source-release.")
     profile = _default_profile(skip_dhw_metrics=bool(args.skip_dhw_metrics))
     bbox = _parse_bbox(args.gbr_bbox)
 
@@ -644,30 +785,75 @@ def main() -> None:
     )
 
     if not args.skip_package:
-        from climate.packager.registry import package_registry
+        if args.source_release:
+            source_release = str(args.source_release).strip()
+            if not source_release:
+                raise ValueError("--source-release cannot be empty.")
+            if source_release == args.release:
+                raise ValueError("--source-release must be different from --release.")
 
-        package_registry(
-            out_root=release_root / "series",
-            release=args.release,
-            metrics_path=registry_out / "metrics.json",
-            datasets_path=registry_out / "datasets.json",
-            maps_path=registry_out / "maps.json",
-            layers_path=registry_out / "layers.json",
-            panels_path=registry_out / "panels.json",
-            maps_out_root=release_root / "maps",
-            cache_dir=Path(args.cache_dir),
-            metric_ids=selected_metric_ids,
-            start_year=args.start_year,
-            end_year=args.end_year,
-            pipeline=bool(args.pipeline),
-            workers=args.workers,
-            dask_enabled=bool(args.dask),
-            dask_chunk_lat=int(args.dask_chunk_lat),
-            dask_chunk_lon=int(args.dask_chunk_lon),
-            all_maps=True,
-            resume=bool(args.resume),
-            debug=bool(args.debug),
-        )
+            source_root = releases_root / source_release
+            if not source_root.exists():
+                raise FileNotFoundError(f"Source release does not exist: {source_root}")
+
+            copied_series_files, copied_metrics = _copy_selected_series_from_release(
+                source_root=source_root,
+                release_root=release_root,
+                selected_metrics=selected_metrics,
+                resume=bool(args.resume),
+            )
+            copied_maps_files, copied_maps = _copy_selected_maps_from_release(
+                source_root=source_root,
+                release_root=release_root,
+                selected_maps=selected_maps,
+                resume=bool(args.resume),
+            )
+            print(
+                f"[release] copied assets from {source_root} -> {release_root} "
+                f"(metrics={copied_metrics}, maps={copied_maps}, "
+                f"series files={copied_series_files}, maps files={copied_maps_files})"
+            )
+
+            registry_snapshot = _snapshot_registry_to_release(
+                release_root=release_root,
+                selected_datasets=selected_datasets,
+                selected_metrics=selected_metrics,
+                selected_maps=selected_maps,
+                selected_layers=selected_layers,
+                selected_panels=selected_panels,
+            )
+            _write_release_manifest(
+                release_root=release_root,
+                release=args.release,
+                series_root=release_root / "series",
+                maps_root=release_root / "maps",
+                registry_snapshot=registry_snapshot,
+            )
+        else:
+            from climate.packager.registry import package_registry
+
+            package_registry(
+                out_root=release_root / "series",
+                release=args.release,
+                metrics_path=registry_out / "metrics.json",
+                datasets_path=registry_out / "datasets.json",
+                maps_path=registry_out / "maps.json",
+                layers_path=registry_out / "layers.json",
+                panels_path=registry_out / "panels.json",
+                maps_out_root=release_root / "maps",
+                cache_dir=Path(args.cache_dir),
+                metric_ids=selected_metric_ids,
+                start_year=args.start_year,
+                end_year=args.end_year,
+                pipeline=bool(args.pipeline),
+                workers=args.workers,
+                dask_enabled=bool(args.dask),
+                dask_chunk_lat=int(args.dask_chunk_lat),
+                dask_chunk_lon=int(args.dask_chunk_lon),
+                all_maps=True,
+                resume=bool(args.resume),
+                debug=bool(args.debug),
+            )
         _validate_packaged_release(release_root=release_root)
         print(f"[release] packaged and validated {release_root}")
     else:
