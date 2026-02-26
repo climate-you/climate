@@ -1,5 +1,5 @@
 # Copy to /etc/caddy/Caddyfile and replace example.com with your domain.
-:80 {
+example.com {
   encode gzip zstd
 
   # Optional local snippets (e.g. beta auth gate).

@@ -69,7 +69,8 @@ Before `terraform apply`, edit these local files:
 
 At first, test using public IP over HTTP (no TLS yet):
 
-- in `deploy/proxy/Caddyfile`, use `:80 { ... }` as the site label
+- keep `deploy/proxy/Caddyfile` site label as placeholder (`example.com`)
+- run bootstrap with `--domain <PUBLIC_IP>` so the Caddy site label is rendered to that IP
 - set web/backend public URLs to `http://<PUBLIC_IP>`
 
 This avoids domain/certificate setup while validating deployment.

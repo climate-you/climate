@@ -73,7 +73,7 @@ AUTH_HASH="$(caddy hash-password --plaintext "$AUTH_PASSWORD")"
 install -d -o root -g root -m 0755 /etc/caddy/conf.d
 cat > /etc/caddy/conf.d/10-beta-auth.caddy <<CONFIG
 # Managed by scripts/deploy/enable_beta_auth.sh
-basic_auth * {
+basicauth * {
   ${AUTH_USER} ${AUTH_HASH}
 }
 
@@ -84,6 +84,8 @@ header {
 CONFIG
 
 chmod 0640 /etc/caddy/conf.d/10-beta-auth.caddy
+chgrp caddy /etc/caddy/conf.d/10-beta-auth.caddy || true
+chmod 0644 /etc/caddy/conf.d/10-beta-auth.caddy
 
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 systemctl reload caddy
