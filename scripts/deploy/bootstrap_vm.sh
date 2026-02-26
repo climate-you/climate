@@ -10,6 +10,7 @@ Options:
   --domain <domain>       Public DNS name (required).
   --repo-url <url>        Git repository URL (optional fallback when cloning is required).
   --repo-branch <branch>  Git branch/tag to deploy (default: main).
+  --sync-repo             Fetch/checkout/pull APP_ROOT before build (default: disabled).
   --app-root <path>       Install root (default: /opt/climate/source).
   --user <name>           Service user (default: climate).
   --help                  Show this help.
@@ -23,6 +24,7 @@ USAGE
 DOMAIN=""
 REPO_URL=""
 REPO_BRANCH="main"
+SYNC_REPO=0
 APP_ROOT="/opt/climate/source"
 SERVICE_USER="climate"
 
@@ -46,6 +48,10 @@ while [[ $# -gt 0 ]]; do
       REPO_BRANCH="$2"
       shift 2
       ;;
+    --sync-repo)
+      SYNC_REPO=1
+      shift
+      ;;
     --app-root)
       APP_ROOT="$2"
       shift 2
@@ -65,6 +71,16 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+run_as_user() {
+  local target_user="$1"
+  shift
+  if [[ "$(id -un)" == "$target_user" ]]; then
+    "$@"
+  else
+    sudo -u "$target_user" "$@"
+  fi
+}
 
 if [[ -z "$DOMAIN" ]]; then
   echo "error: --domain is required" >&2
@@ -113,15 +129,18 @@ if [[ ! -d "$APP_ROOT/.git" ]]; then
       echo "error: --repo-url is required when source repo cannot be copied locally" >&2
       exit 2
     fi
-    git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$APP_ROOT"
+    CLONE_USER="${SUDO_USER:-$SERVICE_USER}"
+    install -d -o "$CLONE_USER" -g "$CLONE_USER" -m 0755 "$APP_ROOT"
+    run_as_user "$CLONE_USER" git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$APP_ROOT"
   fi
 else
-  if [[ -n "$SCRIPT_REPO_ROOT" && "$SCRIPT_REPO_ROOT" == "$APP_ROOT" && -z "$REPO_URL" ]]; then
-    echo "Using existing checkout at $APP_ROOT without remote fetch."
+  if [[ $SYNC_REPO -eq 1 ]]; then
+    REPO_SYNC_USER="$(stat -c '%U' "$APP_ROOT")"
+    run_as_user "$REPO_SYNC_USER" git -C "$APP_ROOT" fetch --all --tags
+    run_as_user "$REPO_SYNC_USER" git -C "$APP_ROOT" checkout "$REPO_BRANCH"
+    run_as_user "$REPO_SYNC_USER" git -C "$APP_ROOT" pull --ff-only
   else
-    git -C "$APP_ROOT" fetch --all --tags
-    git -C "$APP_ROOT" checkout "$REPO_BRANCH"
-    git -C "$APP_ROOT" pull --ff-only
+    echo "Using existing checkout at $APP_ROOT without remote fetch (pass --sync-repo to update)."
   fi
 fi
 

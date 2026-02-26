@@ -132,7 +132,9 @@ What bootstrap does:
 - installs systemd units, env files, and Caddy config
 - enables firewall rules (22,80,443)
 - starts services and runs smoke checks
-- by default, it reuses/copies the current repo checkout; `--repo-url` is optional fallback only
+- by default, it reuses/copies the current repo checkout and does not fetch/pull remotes
+- pass `--sync-repo` if you explicitly want bootstrap to run `git fetch/checkout/pull`
+- `--repo-url` is an optional fallback only when cloning is required
 
 Bootstrap env behavior:
 
@@ -143,9 +145,9 @@ Bootstrap env behavior:
 
 Important note about `sudo` + GitHub SSH:
 
-- if bootstrap needs to run `git clone`/`git pull` as `root`, it uses root's SSH config/keys
-- if root has no GitHub SSH key, `Permission denied (publickey)` is expected
-- default recommended path avoids this by cloning manually first as your normal user, then running bootstrap from that checkout
+- root GitHub SSH key requirements are avoided in the default flow
+- recommended path is: clone manually as your normal user, then run bootstrap from that checkout
+- only use remote sync during bootstrap when needed (`--sync-repo`)
 
 ## 7) Configure Environment Values
 
