@@ -209,6 +209,12 @@ sudo ./scripts/deploy/deploy_app.sh --ref main
 
 Both workflows rebuild backend/web assets, restart services, and run smoke checks.
 
+Important:
+
+- Next.js reads `NEXT_PUBLIC_*` at build time.
+- `deploy_app.sh` now loads `/etc/climate/web.env` before `npm run build`.
+- after changing `NEXT_PUBLIC_*`, run a new web build (through deploy script or manually) for changes to take effect.
+
 ## 10) Verify Services (VM-local)
 
 ```bash

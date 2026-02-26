@@ -86,6 +86,13 @@ if [[ $SKIP_BACKEND_INSTALL -eq 0 ]]; then
 fi
 
 if [[ $SKIP_WEB_BUILD -eq 0 ]]; then
+  if [[ -f /etc/climate/web.env ]]; then
+    # NEXT_PUBLIC_* must be present at build time for Next.js.
+    set -a
+    # shellcheck disable=SC1091
+    source /etc/climate/web.env
+    set +a
+  fi
   npm --prefix "$APP_ROOT/web" ci
   npm --prefix "$APP_ROOT/web" run build
 fi

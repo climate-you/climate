@@ -152,7 +152,6 @@ python3 -m venv /opt/climate/venv
 /opt/climate/venv/bin/pip install -e "$APP_ROOT[api]"
 
 npm --prefix "$APP_ROOT/web" ci
-npm --prefix "$APP_ROOT/web" run build
 
 install -d -o root -g root -m 0755 /etc/climate
 install -m 0640 "$APP_ROOT/deploy/env/backend.env.example" /etc/climate/backend.env
@@ -163,6 +162,13 @@ if [[ "$DOMAIN" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
   URL_SCHEME="http"
 fi
 sed -i "s|https://example.com|$URL_SCHEME://$DOMAIN|g" /etc/climate/backend.env /etc/climate/web.env
+
+# NEXT_PUBLIC_* must be present at build time for Next.js.
+set -a
+# shellcheck disable=SC1091
+source /etc/climate/web.env
+set +a
+npm --prefix "$APP_ROOT/web" run build
 
 install -m 0644 "$APP_ROOT/deploy/systemd/climate-backend.service" /etc/systemd/system/climate-backend.service
 install -m 0644 "$APP_ROOT/deploy/systemd/climate-web.service" /etc/systemd/system/climate-web.service
