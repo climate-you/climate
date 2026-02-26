@@ -93,7 +93,7 @@ if [[ $SKIP_WEB_BUILD -eq 0 ]]; then
     source /etc/climate/web.env
     set +a
   fi
-  npm --prefix "$APP_ROOT/web" ci
+  npm --prefix "$APP_ROOT/web" ci --include=dev
   npm --prefix "$APP_ROOT/web" run build
 fi
 

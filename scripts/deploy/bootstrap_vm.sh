@@ -151,7 +151,7 @@ python3 -m venv /opt/climate/venv
 /opt/climate/venv/bin/pip install --upgrade pip
 /opt/climate/venv/bin/pip install -e "$APP_ROOT[api]"
 
-npm --prefix "$APP_ROOT/web" ci
+npm --prefix "$APP_ROOT/web" ci --include=dev
 
 install -d -o root -g root -m 0755 /etc/climate
 install -m 0640 "$APP_ROOT/deploy/env/backend.env.example" /etc/climate/backend.env
