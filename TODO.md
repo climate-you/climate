@@ -1,7 +1,6 @@
 - UI:
   - BUGFIX: fix scale getting harcoded color for gradient scale for warming layers.
   - BUGFIX: coral reef map renders all black on mobile.
-  - update Licenses/Copyrights.
   - update help bubbles: calculation of pre-industrial warming
   - check UI for coral reef graph
 - Graphs:
@@ -9,12 +8,13 @@
   - BUGFIX: why for lat=3.740930549248077&lon=8.77532958984375 the monthly mean looks like it's offset ? Use daily mean to create monthly mean.
 - Code:
   - BUGFIX: nearest point with mixed grid still not implemented
-  - [WIP] cloud setup + first VM running
+  - Tag git repo with releases, then use tags on cloud vm, and use it when naming a release, eg. `v0.2-2026_02_12`
   - Zoomout - do we need defer loading?
 
 Last steps:
 
 - clean up unused css and methods in code when all features and bugfix are done.
+- update Licenses/Copyrights.
 - test mobile and dark mode.
 - refine ko-fi and stripe account desciption when site is up
 - add link to https://ko-fi.com/climateyou to github when repo is public (see `Display a "Sponsor" button` in settings).
