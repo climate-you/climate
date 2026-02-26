@@ -114,6 +114,8 @@ git clone git@github.com:<org-or-user>/<repo>.git
 cd <repo>
 ```
 
+Recommended: use `/opt/climate/source` as the single deployment checkout to avoid drift between multiple copies.
+
 ## 6) Bootstrap VM
 
 Run bootstrap from inside that checkout:

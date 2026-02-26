@@ -167,7 +167,10 @@ install -m 0644 "$APP_ROOT/deploy/systemd/climate-web.service" /etc/systemd/syst
 install -m 0644 "$APP_ROOT/deploy/proxy/Caddyfile" /etc/caddy/Caddyfile
 sed -i "s|example.com|$DOMAIN|g" /etc/caddy/Caddyfile
 
-chown -R "$SERVICE_USER:$SERVICE_USER" /opt/climate
+# Keep repository ownership stable for operator git workflows.
+# Only grant service-user ownership where runtime writes are expected.
+install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0755 "$APP_ROOT/data" "$APP_ROOT/web/.next"
+chown -R "$SERVICE_USER:$SERVICE_USER" /opt/climate/venv "$APP_ROOT/data" "$APP_ROOT/web/.next"
 chmod 0640 /etc/climate/backend.env /etc/climate/web.env
 
 ufw default deny incoming

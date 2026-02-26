@@ -55,7 +55,7 @@ if [[ -n "$DOMAIN" ]]; then
   if [[ "$DOMAIN" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
     DOMAIN_SCHEME="http"
   fi
-  curl --fail --silent --show-error "${DOMAIN_SCHEME}://${DOMAIN}/healthz" >/dev/null
+  curl --fail --silent --show-error "${DOMAIN_SCHEME}://${DOMAIN}/" >/dev/null
   curl --fail --silent --show-error "${DOMAIN_SCHEME}://${DOMAIN}/api/v/${RELEASE}/release" >/dev/null
 fi
 
