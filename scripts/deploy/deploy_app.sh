@@ -79,7 +79,7 @@ if [[ $SKIP_PULL -eq 0 ]]; then
 fi
 
 if [[ $SKIP_BACKEND_INSTALL -eq 0 ]]; then
-  /opt/climate/venv/bin/pip install -e "$APP_ROOT"
+  /opt/climate/venv/bin/pip install -e "$APP_ROOT[api]"
 fi
 
 if [[ $SKIP_WEB_BUILD -eq 0 ]]; then

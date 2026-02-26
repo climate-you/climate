@@ -8,7 +8,7 @@ Usage:
 
 Options:
   --local                Check localhost endpoints (default true)
-  --domain <domain>      Check HTTPS endpoint for this domain
+  --domain <domain>      Check public endpoint for this domain/IP
   --release <name>       API release id (default: latest)
   --help                 Show this help
 USAGE
@@ -51,8 +51,12 @@ if [[ $CHECK_LOCAL -eq 1 ]]; then
 fi
 
 if [[ -n "$DOMAIN" ]]; then
-  curl --fail --silent --show-error "https://${DOMAIN}/healthz" >/dev/null
-  curl --fail --silent --show-error "https://${DOMAIN}/api/v/${RELEASE}/release" >/dev/null
+  DOMAIN_SCHEME="https"
+  if [[ "$DOMAIN" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+    DOMAIN_SCHEME="http"
+  fi
+  curl --fail --silent --show-error "${DOMAIN_SCHEME}://${DOMAIN}/healthz" >/dev/null
+  curl --fail --silent --show-error "${DOMAIN_SCHEME}://${DOMAIN}/api/v/${RELEASE}/release" >/dev/null
 fi
 
 echo "Smoke checks passed."

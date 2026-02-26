@@ -127,6 +127,7 @@ sudo ./scripts/deploy/bootstrap_vm.sh \
 What bootstrap does:
 
 - installs OS dependencies (Python, Node, Caddy, fail2ban, ufw)
+- installs Python package with API extras (`.[api]`) so `uvicorn` and FastAPI runtime deps are present
 - creates service user and directories
 - installs backend dependencies and frontend production build
 - installs systemd units, env files, and Caddy config

@@ -146,7 +146,7 @@ fi
 
 python3 -m venv /opt/climate/venv
 /opt/climate/venv/bin/pip install --upgrade pip
-/opt/climate/venv/bin/pip install -e "$APP_ROOT"
+/opt/climate/venv/bin/pip install -e "$APP_ROOT[api]"
 
 npm --prefix "$APP_ROOT/web" ci
 npm --prefix "$APP_ROOT/web" run build
