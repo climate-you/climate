@@ -25,6 +25,9 @@ GIT_REF=""
 SKIP_PULL=0
 SKIP_BACKEND_INSTALL=0
 SKIP_WEB_BUILD=0
+SMOKE_INITIAL_WAIT_S="${SMOKE_INITIAL_WAIT_S:-8}"
+SMOKE_RETRIES="${SMOKE_RETRIES:-3}"
+SMOKE_RETRY_DELAY_S="${SMOKE_RETRY_DELAY_S:-30}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -90,6 +93,17 @@ fi
 systemctl daemon-reload
 systemctl restart climate-backend climate-web
 
-"$APP_ROOT/scripts/deploy/smoke_check.sh" --local
+sleep "$SMOKE_INITIAL_WAIT_S"
+for attempt in $(seq 1 "$SMOKE_RETRIES"); do
+  if "$APP_ROOT/scripts/deploy/smoke_check.sh" --local; then
+    echo "Deploy complete."
+    exit 0
+  fi
+  if [[ "$attempt" -lt "$SMOKE_RETRIES" ]]; then
+    echo "Smoke check attempt $attempt/$SMOKE_RETRIES failed; retrying in ${SMOKE_RETRY_DELAY_S}s..."
+    sleep "$SMOKE_RETRY_DELAY_S"
+  fi
+done
 
-echo "Deploy complete."
+echo "error: smoke checks failed after $SMOKE_RETRIES attempts" >&2
+exit 1

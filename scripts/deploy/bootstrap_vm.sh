@@ -27,6 +27,9 @@ REPO_BRANCH="main"
 SYNC_REPO=0
 APP_ROOT="/opt/climate/source"
 SERVICE_USER="climate"
+SMOKE_INITIAL_WAIT_S="${SMOKE_INITIAL_WAIT_S:-8}"
+SMOKE_RETRIES="${SMOKE_RETRIES:-3}"
+SMOKE_RETRY_DELAY_S="${SMOKE_RETRY_DELAY_S:-30}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -184,6 +187,17 @@ systemctl daemon-reload
 systemctl enable caddy climate-backend climate-web
 systemctl restart caddy climate-backend climate-web
 
-"$APP_ROOT/scripts/deploy/smoke_check.sh" --domain "$DOMAIN" --local
+sleep "$SMOKE_INITIAL_WAIT_S"
+for attempt in $(seq 1 "$SMOKE_RETRIES"); do
+  if "$APP_ROOT/scripts/deploy/smoke_check.sh" --domain "$DOMAIN" --local; then
+    echo "Bootstrap complete."
+    exit 0
+  fi
+  if [[ "$attempt" -lt "$SMOKE_RETRIES" ]]; then
+    echo "Smoke check attempt $attempt/$SMOKE_RETRIES failed; retrying in ${SMOKE_RETRY_DELAY_S}s..."
+    sleep "$SMOKE_RETRY_DELAY_S"
+  fi
+done
 
-echo "Bootstrap complete."
+echo "error: smoke checks failed after $SMOKE_RETRIES attempts" >&2
+exit 1
