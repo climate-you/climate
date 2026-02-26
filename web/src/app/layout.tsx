@@ -3,8 +3,8 @@ import "./globals.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 export const metadata: Metadata = {
-  title: "Climate API Demo",
-  description: "Interactive front-end demo for climate API endpoints.",
+  title: "Your Climate",
+  description: "Interactive climate map for exploring local climate trends.",
 };
 
 export default function RootLayout({
