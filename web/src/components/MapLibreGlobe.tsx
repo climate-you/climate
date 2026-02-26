@@ -211,9 +211,11 @@ export default function MapLibreGlobe({
   const activeLayerIdRef = useRef(activeLayerId);
   const showControlsRef = useRef(showControls);
   const enablePickRef = useRef(enablePick);
+  const textureBackdropRef = useRef<string>(BACKDROP_WHITE);
+  const styleReadyRef = useRef(false);
   const [prefersDarkMode, setPrefersDarkMode] = useState(false);
 
-const textureBackdrop =
+  const textureBackdrop =
     prefersDarkMode && warmingLayerVisible
       ? BACKDROP_DARK_MODE
       : BACKDROP_WHITE;
@@ -259,6 +261,10 @@ const textureBackdrop =
   }, [enablePick]);
 
   useEffect(() => {
+    textureBackdropRef.current = textureBackdrop;
+  }, [textureBackdrop]);
+
+  useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const sync = () => setPrefersDarkMode(media.matches);
     sync();
@@ -302,7 +308,7 @@ const textureBackdrop =
         }
         return;
       }
-      setBackdropColor(map, textureBackdrop);
+      setBackdropColor(map, textureBackdropRef.current);
 
       const coordinates = textureCoordinates();
       const existingSource = map.getSource(TEXTURE_SOURCE_ID) as
@@ -673,6 +679,11 @@ const textureBackdrop =
       };
     }
 
+    const onStyleLoad = () => {
+      styleReadyRef.current = true;
+    };
+
+    map.on("style.load", onStyleLoad);
     map.on("style.load", applyMapSettings);
     map.on("style.load", applyTextureLayer);
     map.on("style.load", ensureHillshadeLayer);
@@ -740,6 +751,7 @@ const textureBackdrop =
       markerRef.current?.remove();
       markerRef.current = null;
       layerControlRef.current = null;
+      styleReadyRef.current = false;
       map.remove();
       mapRef.current = null;
     };
@@ -817,8 +829,20 @@ const textureBackdrop =
       layerControlRef.current?.refresh();
     };
 
-    if (map.isStyleLoaded()) apply();
-    else map.once("load", apply);
+    if (styleReadyRef.current || map.isStyleLoaded()) {
+      styleReadyRef.current = true;
+      apply();
+      return;
+    }
+
+    const applyAfterStyleReady = () => {
+      styleReadyRef.current = true;
+      apply();
+    };
+    map.once("style.load", applyAfterStyleReady);
+    return () => {
+      map.off("style.load", applyAfterStyleReady);
+    };
   }, [activeLayerId, layerOptions, textureBackdrop]);
 
   useEffect(() => {
