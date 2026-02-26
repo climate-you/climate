@@ -175,6 +175,8 @@ install -m 0644 "$APP_ROOT/deploy/systemd/climate-web.service" /etc/systemd/syst
 
 install -m 0644 "$APP_ROOT/deploy/proxy/Caddyfile" /etc/caddy/Caddyfile
 sed -i "s|example.com|$DOMAIN|g" /etc/caddy/Caddyfile
+install -d -o root -g root -m 0755 /etc/caddy/conf.d
+install -m 0644 "$APP_ROOT/deploy/proxy/conf.d/00-base.caddy" /etc/caddy/conf.d/00-base.caddy
 
 # Keep repository ownership stable for operator git workflows.
 # Only grant service-user ownership where runtime writes are expected.

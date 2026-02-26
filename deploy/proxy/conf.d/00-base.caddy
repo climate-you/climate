@@ -1,0 +1,2 @@
+# Optional Caddy snippets loaded from /etc/caddy/conf.d/*.caddy.
+# Keep this file present so wildcard imports always resolve.
