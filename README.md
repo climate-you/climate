@@ -1,6 +1,6 @@
 # Climate Data Pipeline + API + Web App
 
-Public app: https://www.placeholder.com
+Public app: https://www.climate.you
 
 A registry-driven climate data platform with:
 

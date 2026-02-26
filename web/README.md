@@ -1,6 +1,6 @@
 # Web app
 
-This is the Next.js front-end for the climate API demo.
+This is the Next.js front-end for the climate API.
 
 ## Run locally
 
