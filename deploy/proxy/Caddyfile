@@ -10,10 +10,10 @@
     Referrer-Policy "strict-origin-when-cross-origin"
   }
 
-  # API route with timeouts.
+  # API and map assets routes with timeouts.
   # Request rate limiting is enforced in the backend middleware by default.
-  @api path /api/*
-  handle @api {
+  @backend path /api/* /assets/*
+  handle @backend {
     reverse_proxy 127.0.0.1:8001 {
       transport http {
         read_timeout 15s
