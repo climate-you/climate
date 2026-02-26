@@ -193,13 +193,21 @@ If both pass, open `http://<PUBLIC_IP>` in browser and validate web + API integr
 
 ## 9) Deploy Updates
 
-On the VM:
+Recommended workflow on the VM:
+
+```bash
+cd /opt/climate/source
+git pull
+sudo ./scripts/deploy/deploy_app.sh --skip-pull
+```
+
+Optional workflow (script-managed git sync):
 
 ```bash
 sudo ./scripts/deploy/deploy_app.sh --ref main
 ```
 
-This script updates source, rebuilds backend/web assets, restarts services, and runs smoke checks.
+Both workflows rebuild backend/web assets, restart services, and run smoke checks.
 
 ## 10) Verify Services (VM-local)
 
