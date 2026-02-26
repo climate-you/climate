@@ -151,11 +151,11 @@ sed -i "s|example.com|$DOMAIN|g" /etc/caddy/Caddyfile
 chown -R "$SERVICE_USER:$SERVICE_USER" /opt/climate
 chmod 0640 /etc/climate/backend.env /etc/climate/web.env
 
-ufw --force default deny incoming
-ufw --force default allow outgoing
-ufw --force allow OpenSSH
-ufw --force allow 80/tcp
-ufw --force allow 443/tcp
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow OpenSSH
+ufw allow 80/tcp
+ufw allow 443/tcp
 ufw --force enable
 
 systemctl daemon-reload
