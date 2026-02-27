@@ -1907,9 +1907,12 @@ def _download_batch_erddap_daily(
         raise ValueError(f"ERDDAP dataset missing bases list: {dataset_key}")
 
     last_err: Exception | None = None
-    max_cycles = 50
+    max_cycles = int(os.getenv("CLIMATE_ERDDAP_MAX_CYCLES", "50"))
     backoff_base = 5.0
     backoff_max = 600.0
+    max_consecutive_413_cycles = int(
+        os.getenv("CLIMATE_ERDDAP_MAX_CONSECUTIVE_413_CYCLES", "24")
+    )
     for la0, la1 in lat_variants:
         for lo0, lo1 in lon_variants:
             consecutive_413_cycles = 0
@@ -1970,11 +1973,12 @@ def _download_batch_erddap_daily(
                     # 413 can be transient on some ERDDAP hosts/rate windows; allow
                     # multiple cycles before treating request shape as unusable.
                     consecutive_413_cycles += 1
-                    if consecutive_413_cycles >= 8:
+                    if consecutive_413_cycles >= max_consecutive_413_cycles:
                         raise RuntimeError(
                             f"ERDDAP download failed for {dataset_key}: "
                             f"{consecutive_413_cycles} consecutive cycles returned 413 "
-                            f"(payload too large). Reduce batch_tiles and/or block_years. "
+                            f"(payload too large). Reduce batch_tiles and/or block_years, "
+                            f"or increase CLIMATE_ERDDAP_MAX_CONSECUTIVE_413_CYCLES. "
                             f"Last error: {cycle_errors[-1]}"
                         )
                 else:
