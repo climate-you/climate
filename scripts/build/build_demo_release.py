@@ -31,6 +31,7 @@ DEFAULT_RELEASES_ROOT = DEFAULT_DATA_ROOT / "releases"
 DEFAULT_DIST_ROOT = Path("dist")
 DEFAULT_BASE_REEF_MASK = Path("data/masks/crw_dhw_daily_global_0p05_mask.npz")
 DEFAULT_DEMO_REEF_MASK = Path("data/masks/crw_dhw_daily_gbr_demo_global_0p05_mask.npz")
+DEFAULT_DEMO_SPARSE_RISK_MASK = Path("data/masks/sparse_risk_gbr_demo_global_0p25_mask.npz")
 # Approximate Great Barrier Reef bounds: lat_min, lat_max, lon_min, lon_max.
 DEFAULT_GBR_BBOX = (-24.5, -10.0, 142.0, 155.5)
 DEFAULT_REQUIRED_LOCATION_FILES = (
@@ -166,6 +167,62 @@ def _build_gbr_demo_mask(
 
     valid = int(np.count_nonzero(demo_mask))
     total = int(demo_mask.size)
+    print(
+        f"[mask] wrote {output_path} valid={valid}/{total} "
+        f"({(100.0 * valid / max(1, total)):.5f}%)"
+    )
+    return output_path
+
+
+def _build_sparse_risk_mask_from_fine_mask(
+    *,
+    fine_mask_path: Path,
+    output_path: Path,
+    target_deg: float = 0.25,
+) -> Path:
+    with np.load(fine_mask_path, allow_pickle=False) as npz:
+        if "data" not in npz:
+            raise ValueError(f"Invalid fine mask file {fine_mask_path}: missing 'data' key.")
+        data = np.asarray(npz["data"])
+        if data.ndim != 2:
+            raise ValueError(
+                f"Invalid fine mask file {fine_mask_path}: expected 2D data, got {data.shape}."
+            )
+        deg = float(np.asarray(npz["deg"]).reshape(()))
+        lat_max = float(np.asarray(npz["lat_max"]).reshape(()))
+        lon_min = float(np.asarray(npz["lon_min"]).reshape(()))
+
+    ratio = target_deg / deg
+    factor = int(round(ratio))
+    if factor <= 0 or abs(ratio - factor) > 1e-9:
+        raise ValueError(
+            f"Invalid sparse-risk ratio target_deg/source_deg={target_deg}/{deg}={ratio}."
+        )
+    fine_mask = _to_mask_bool(data)
+    nlat, nlon = fine_mask.shape
+    coarse_rows = np.floor((np.arange(nlat, dtype=np.float64) + 0.5) / factor).astype(
+        np.int64
+    )
+    coarse_cols = np.floor((np.arange(nlon, dtype=np.float64) + 0.5) / factor).astype(
+        np.int64
+    )
+    nlat_coarse = int(coarse_rows.max()) + 1
+    nlon_coarse = int(coarse_cols.max()) + 1
+    coarse = np.zeros((nlat_coarse, nlon_coarse), dtype=bool)
+    true_i, true_j = np.nonzero(fine_mask)
+    if true_i.size:
+        coarse[coarse_rows[true_i], coarse_cols[true_j]] = True
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        output_path,
+        data=coarse.astype(np.uint8, copy=False),
+        deg=np.float64(target_deg),
+        lat_max=np.float64(lat_max),
+        lon_min=np.float64(lon_min),
+    )
+    valid = int(np.count_nonzero(coarse))
+    total = int(coarse.size)
     print(
         f"[mask] wrote {output_path} valid={valid}/{total} "
         f"({(100.0 * valid / max(1, total)):.5f}%)"
@@ -511,6 +568,16 @@ def _validate_packaged_release(*, release_root: Path) -> None:
         lines = "\n".join(str(path) for path in missing)
         raise FileNotFoundError(f"Packaged release is missing required files:\n{lines}")
 
+    datasets_path = release_root / "registry" / "datasets.json"
+    datasets_manifest = _load_json(datasets_path)
+    if isinstance(datasets_manifest.get("crw_dhw_daily"), dict):
+        sparse_mask = release_root / "aux" / "sparse_risk_global_0p25_mask.npz"
+        if not sparse_mask.exists():
+            raise FileNotFoundError(
+                "Packaged release includes crw_dhw_daily but is missing sparse-risk mask: "
+                f"{sparse_mask}"
+            )
+
 
 def _copy_tree_with_resume(*, src: Path, dst: Path, resume: bool) -> int:
     if not src.exists():
@@ -669,6 +736,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--base-reef-mask", type=Path, default=DEFAULT_BASE_REEF_MASK)
     parser.add_argument("--demo-reef-mask", type=Path, default=DEFAULT_DEMO_REEF_MASK)
+    parser.add_argument(
+        "--demo-sparse-risk-mask",
+        type=Path,
+        default=DEFAULT_DEMO_SPARSE_RISK_MASK,
+        help="Output sparse-risk mask path derived from demo reef mask.",
+    )
 
     parser.add_argument("--datasets-path", type=Path, default=Path("registry/datasets.json"))
     parser.add_argument("--metrics-path", type=Path, default=Path("registry/metrics.json"))
@@ -742,11 +815,17 @@ def main() -> None:
             shutil.rmtree(release_root)
 
     demo_mask_path: Path | None = None
+    demo_sparse_risk_mask_path: Path | None = None
     if not args.skip_dhw_metrics:
         demo_mask_path = _build_gbr_demo_mask(
             base_mask_path=Path(args.base_reef_mask),
             output_path=Path(args.demo_reef_mask),
             bbox=bbox,
+        )
+        demo_sparse_risk_mask_path = _build_sparse_risk_mask_from_fine_mask(
+            fine_mask_path=Path(demo_mask_path),
+            output_path=Path(args.demo_sparse_risk_mask),
+            target_deg=0.25,
         )
     else:
         print("[mask] skip-dhw-metrics enabled; skipping GBR demo reef mask generation.")
@@ -854,6 +933,11 @@ def main() -> None:
                 resume=bool(args.resume),
                 debug=bool(args.debug),
             )
+        if demo_sparse_risk_mask_path is not None:
+            aux_mask = release_root / "aux" / "sparse_risk_global_0p25_mask.npz"
+            aux_mask.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(demo_sparse_risk_mask_path, aux_mask)
+            print(f"[release] wrote sparse-risk aux mask: {aux_mask}")
         _validate_packaged_release(release_root=release_root)
         print(f"[release] packaged and validated {release_root}")
     else:

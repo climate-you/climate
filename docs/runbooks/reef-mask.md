@@ -12,6 +12,7 @@ Where it is used:
 - during DHW metric computation, to filter grid cells to reef-relevant regions
 - as a publishable layer that can be visualized directly in the web application
 - as an explicit domain boundary for downstream packaging/validation work
+- as the source for a coarse `0.25°` sparse-risk mask used by API panel bbox optimization in mixed-grid click handling
 
 ## Input Data Sources
 
@@ -119,3 +120,25 @@ reef_seed = UNEP_all_touched OR NE_all_touched
 dil = reef_seed OR (dilate(reef_seed) AND water_mask)
 mask = dil AND dhw_available_union
 ```
+
+## 4) Build sparse-risk mask for mixed-grid panel click optimization
+
+Build a coarse (`0.25°`) binary sparse-risk mask from the final DHW domain mask:
+
+```bash
+python scripts/build/build_sparse_risk_mask.py \
+  --source-mask data/masks/crw_dhw_daily_global_0p05_mask.npz \
+  --target-deg 0.25 \
+  --output data/masks/sparse_risk_global_0p25_mask.npz
+```
+
+To make it available to a specific release at runtime:
+
+```bash
+mkdir -p data/releases/<release>/aux
+cp data/masks/sparse_risk_global_0p25_mask.npz data/releases/<release>/aux/sparse_risk_global_0p25_mask.npz
+```
+
+Runtime note:
+
+- API panel responses use this mask to choose `panel_valid_bbox` resolution (`global_0p25` vs `global_0p05`).

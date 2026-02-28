@@ -85,6 +85,7 @@ type PanelResponse = {
       lon_min: number;
       lon_max: number;
     } | null;
+    panel_bbox_grid_id?: string | null;
   };
   panels: Array<{
     score: number;
@@ -1640,7 +1641,17 @@ const COLD_OPEN_PRIMARY_REVEAL_DELAY_MS = 80;
 const COLD_OPEN_WHEEL_GESTURE_IDLE_MS = 55;
 const COLD_OPEN_WHEEL_ACTIVE_DELTA_MIN = 0.35;
 
-export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
+function parseDebugQuery(search: string): boolean {
+  const raw = (new URLSearchParams(search).get("debug") ?? "")
+    .trim()
+    .toLowerCase();
+  return raw === "on" || raw === "1" || raw === "true";
+}
+
+export default function ExplorerPage({
+  coldOpen = false,
+}: ExplorerPageProps) {
+  const debugAllowed = process.env.NODE_ENV !== "production";
   const envDefaultReleaseRaw = process.env.NEXT_PUBLIC_RELEASE;
   const envDefaultRelease = envDefaultReleaseRaw
     ? envDefaultReleaseRaw.trim()
@@ -1711,6 +1722,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       : "latest",
   );
   const [sessionRelease, setSessionRelease] = useState<string | null>(null);
+  const [debugMode, setDebugMode] = useState<boolean>(false);
   const [releaseLayers, setReleaseLayers] = useState<
     ReleaseResolveResponse["layers"]
   >([]);
@@ -1780,6 +1792,15 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     const normalized = trimmed.toLowerCase() === "latest" ? "latest" : trimmed;
     setRequestedRelease(normalized);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sync = () =>
+      setDebugMode(debugAllowed && parseDebugQuery(window.location.search));
+    sync();
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, [debugAllowed]);
 
   const setAboutOpenWithUrl = useCallback((open: boolean) => {
     setAboutOpen(open);
@@ -2607,6 +2628,8 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const coldOpenWarmingText =
     defaultTemperatureUnitForLocale() === "F" ? "+1.9°F" : "+1.1°C";
   const showIntroMap = !introVisible || introPromptVisible;
+  const debugBbox = resp?.location?.panel_valid_bbox ?? null;
+  const debugInBbox = inBbox(lat, lon, debugBbox);
   return (
     <main
       className={`${styles.app} ${introVisible ? styles.appIntro : styles.appReady}`}
@@ -2621,6 +2644,11 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
         <MapLibreGlobe
           panelOpen={panelOpen}
           focusLocation={picked}
+          showDebugOverlay={debugMode}
+          debugBbox={debugMode ? (resp?.location.panel_valid_bbox ?? null) : null}
+          debugBboxGridId={
+            debugMode ? (resp?.location.panel_bbox_grid_id ?? null) : null
+          }
           layerOptions={mapLayers}
           activeLayerId={activeLayerId || null}
           warmingLayerVisible={darkBackdropLayerActive}
@@ -2668,6 +2696,24 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
             >
               {unit === "C" ? "°C" : "°F"}
             </button>
+          </aside>
+        ) : null}
+        {debugMode ? (
+          <aside className={styles.debugHud} aria-label="Debug panel bbox info">
+            <div>debug=on</div>
+            <div>
+              query: lat={lat.toFixed(5)} lon={lon.toFixed(5)}
+            </div>
+            <div>
+              bbox_grid: {resp?.location?.panel_bbox_grid_id ?? "null"}
+            </div>
+            <div>in_bbox: {debugInBbox ? "true" : "false"}</div>
+            <div>
+              bbox:
+              {debugBbox
+                ? ` [${debugBbox.lat_min.toFixed(5)}, ${debugBbox.lat_max.toFixed(5)}] x [${debugBbox.lon_min.toFixed(5)}, ${debugBbox.lon_max.toFixed(5)}]`
+                : " null"}
+            </div>
           </aside>
         ) : null}
       </div>

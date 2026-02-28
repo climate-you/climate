@@ -159,6 +159,7 @@ def test_create_app_routes_with_mocked_dependencies(
 
     context = SimpleNamespace(
         release="dev",
+        release_root=tmp_path / "releases" / "dev",
         tile_store=object(),
         panels_manifest={"panels": {}},
         maps_manifest={"version": "0.1"},

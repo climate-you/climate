@@ -158,6 +158,16 @@ def main() -> int:
                 str(args.releases_root),
             ]
         )
+        steps.append(
+            [
+                sys.executable,
+                "scripts/validate/sparse_risk_mask.py",
+                "--release",
+                effective_manifest_release,
+                "--releases-root",
+                str(args.releases_root),
+            ]
+        )
 
     if not args.skip_registry:
         registry_cmd = [sys.executable, "scripts/validate/all.py"]

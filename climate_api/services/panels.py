@@ -33,8 +33,11 @@ from climate.tiles.layout import GridSpec, locate_tile, cell_center_latlon
 
 _SCORE_MAP_VALUES_CACHE: dict[str, np.ndarray] = {}
 _SCORE_MAP_VALUES_CACHE_LOCK = Lock()
+_SPARSE_RISK_MASKS_CACHE: dict[str, np.ndarray | None] = {}
+_SPARSE_RISK_MASKS_CACHE_LOCK = Lock()
 _HEADLINE_RECENT_YEARS = 5
 _CMIP_OFFSET_METRIC = "t2m_cmip_offset_1979_2000_vs_1850_1900_mean_5models_c"
+_SPARSE_RISK_MASK_FILENAME = "sparse_risk_global_0p25_mask.npz"
 
 
 def preload_score_maps_cache(
@@ -70,6 +73,94 @@ def preload_score_maps_cache(
         _load_score_map_values_cached(bin_path=bin_path, expected=expected)
         loaded += 1
     return loaded, skipped_constant
+
+
+def _bbox_from_cell(*, grid: GridSpec, i_lat: int, i_lon: int) -> PanelValidBBox:
+    latc, lonc = cell_center_latlon(i_lat, i_lon, grid)
+    half = float(grid.deg) / 2.0
+    return PanelValidBBox(
+        lat_min=float(latc - half),
+        lat_max=float(latc + half),
+        lon_min=float(lonc - half),
+        lon_max=float(lonc + half),
+    )
+
+
+def _load_sparse_risk_mask(mask_path: Path) -> np.ndarray | None:
+    cache_key = str(mask_path.resolve())
+    with _SPARSE_RISK_MASKS_CACHE_LOCK:
+        if cache_key in _SPARSE_RISK_MASKS_CACHE:
+            return _SPARSE_RISK_MASKS_CACHE[cache_key]
+
+    arr_out: np.ndarray | None = None
+    if mask_path.exists():
+        with np.load(mask_path, allow_pickle=False) as npz:
+            if "data" in npz:
+                raw = np.asarray(npz["data"])
+            elif npz.files:
+                raw = np.asarray(npz[npz.files[0]])
+            else:
+                raw = np.asarray([])
+        if raw.ndim == 2 and raw.size > 0:
+            arr_out = raw != 0
+
+    with _SPARSE_RISK_MASKS_CACHE_LOCK:
+        _SPARSE_RISK_MASKS_CACHE[cache_key] = arr_out
+    return arr_out
+
+
+def _resolve_sparse_risk_mask(
+    *,
+    release_root: Path | None,
+) -> np.ndarray | None:
+    candidate_paths: list[Path] = []
+    if release_root is not None:
+        candidate_paths.append(release_root / "aux" / _SPARSE_RISK_MASK_FILENAME)
+    candidate_paths.append(Path("data/masks") / _SPARSE_RISK_MASK_FILENAME)
+
+    for p in candidate_paths:
+        arr = _load_sparse_risk_mask(p)
+        if arr is not None:
+            return arr
+    return None
+
+
+def _resolve_panel_bbox_policy(
+    *,
+    lat: float,
+    lon: float,
+    release_root: Path | None,
+) -> tuple[PanelValidBBox, str, int, int]:
+    grid_0p25 = GridSpec.global_0p25(tile_size=64)
+    cell_0p25, _ = locate_tile(lat, lon, grid_0p25)
+
+    sparse_risk = False
+    sparse_mask = _resolve_sparse_risk_mask(release_root=release_root)
+    if sparse_mask is not None:
+        if (
+            sparse_mask.shape[0] == grid_0p25.nlat
+            and sparse_mask.shape[1] == grid_0p25.nlon
+            and 0 <= int(cell_0p25.i_lat) < sparse_mask.shape[0]
+            and 0 <= int(cell_0p25.i_lon) < sparse_mask.shape[1]
+        ):
+            sparse_risk = bool(sparse_mask[int(cell_0p25.i_lat), int(cell_0p25.i_lon)])
+
+    if sparse_risk:
+        grid_0p05 = GridSpec.global_0p05(tile_size=64)
+        cell_0p05, _ = locate_tile(lat, lon, grid_0p05)
+        return (
+            _bbox_from_cell(grid=grid_0p05, i_lat=int(cell_0p05.i_lat), i_lon=int(cell_0p05.i_lon)),
+            grid_0p05.grid_id,
+            int(cell_0p05.i_lat),
+            int(cell_0p05.i_lon),
+        )
+
+    return (
+        _bbox_from_cell(grid=grid_0p25, i_lat=int(cell_0p25.i_lat), i_lon=int(cell_0p25.i_lon)),
+        grid_0p25.grid_id,
+        int(cell_0p25.i_lat),
+        int(cell_0p25.i_lon),
+    )
 
 
 def _caption_from_spec(
@@ -441,6 +532,7 @@ def build_panel_tiles_registry(
     panel_id: str,
     panels_manifest: dict[str, Any] | None = None,
     selected_place: PlaceInfo | None = None,
+    release_root: Path | None = None,
 ) -> PanelResponse:
     unit = unit.upper()
 
@@ -468,6 +560,12 @@ def build_panel_tiles_registry(
         cell, t = locate_tile(lat, lon, grid)
         grid_cells[grid.grid_id] = (grid, cell, t)
 
+    panel_bbox, panel_bbox_grid_id, panel_bbox_i_lat, panel_bbox_i_lon = _resolve_panel_bbox_policy(
+        lat=lat,
+        lon=lon,
+        release_root=release_root,
+    )
+
     cache_key_parts = [
         f"panel:{release}:registry:{panel_id}:{unit}",
         "cells",
@@ -477,6 +575,9 @@ def build_panel_tiles_registry(
         cache_key_parts.append(f"{grid_id}:{cell.i_lat}:{cell.i_lon}")
     if selected_place is not None:
         cache_key_parts.append(f"selected:{int(selected_place.geonameid)}")
+    cache_key_parts.append(
+        f"bbox:{panel_bbox_grid_id}:{panel_bbox_i_lat}:{panel_bbox_i_lon}"
+    )
     cache_key = ":".join(cache_key_parts)
 
     if cache is not None:
@@ -631,19 +732,6 @@ def build_panel_tiles_registry(
         text_md=None,
     )
 
-    panel_bbox = None
-    if data_cells_map:
-        lat_min = max(c.lat_min for c in data_cells_map.values())
-        lat_max = min(c.lat_max for c in data_cells_map.values())
-        lon_min = max(c.lon_min for c in data_cells_map.values())
-        lon_max = min(c.lon_max for c in data_cells_map.values())
-        panel_bbox = PanelValidBBox(
-            lat_min=float(lat_min),
-            lat_max=float(lat_max),
-            lon_min=float(lon_min),
-            lon_max=float(lon_max),
-        )
-
     panel_cell_indices = None
     if grid_cells:
         panel_cell_indices = [
@@ -668,6 +756,7 @@ def build_panel_tiles_registry(
         ),
         data_cells=list(data_cells_map.values()),
         panel_valid_bbox=panel_bbox,
+        panel_bbox_grid_id=panel_bbox_grid_id,
         panel_cell_indices=panel_cell_indices,
     )
 
@@ -709,6 +798,7 @@ def build_scored_panels_tiles_registry(
     maps_manifest: dict[str, Any],
     maps_root: Path,
     selected_place: PlaceInfo | None = None,
+    release_root: Path | None = None,
 ) -> PanelListResponse:
     panels = panels_manifest.get("panels", {})
     if not isinstance(panels, dict):
@@ -761,6 +851,7 @@ def build_scored_panels_tiles_registry(
             panel_id=panel_id,
             panels_manifest=panels_manifest,
             selected_place=selected_place,
+            release_root=release_root,
         )
         if location is None:
             location = panel_resp.location
@@ -787,6 +878,7 @@ def build_scored_panels_tiles_registry(
             ),
             data_cells=[],
             panel_valid_bbox=None,
+            panel_bbox_grid_id=None,
             panel_cell_indices=None,
         )
     headlines = [

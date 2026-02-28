@@ -53,6 +53,7 @@ class LocationInfo(BaseModel):
     place: PlaceInfo
     data_cells: list[DataCell]
     panel_valid_bbox: Optional["PanelValidBBox"] = None
+    panel_bbox_grid_id: Optional[str] = None
     panel_cell_indices: Optional[list["PanelCellIndex"]] = None
 
 

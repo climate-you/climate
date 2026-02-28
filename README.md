@@ -101,6 +101,7 @@ Before running the API/UI against local data, prepare:
 
 - location search artifacts and ocean naming masks
 - optional reef-domain masks for DHW workflows
+- optional sparse-risk mask (`0.25°`) for mixed-grid panel bbox optimization
 - packaged release artifacts (metrics/maps) from dataset caches
 
 Practical note: full global metric production across 40+ years can take days with CDS/ERDDAP sources, especially for daily-variable aggregation workflows (for example air/sea hot-day indicators and coral reef stress indicators).

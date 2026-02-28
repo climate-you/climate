@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
+import type { FeatureCollection, Polygon } from "geojson";
 
 type LngLat = { lat: number; lon: number };
 export type MapLayerOption = {
@@ -24,6 +25,14 @@ type Props = {
   showControls?: boolean;
   enablePick?: boolean;
   warmingLayerVisible?: boolean;
+  showDebugOverlay?: boolean;
+  debugBbox?: {
+    lat_min: number;
+    lat_max: number;
+    lon_min: number;
+    lon_max: number;
+  } | null;
+  debugBboxGridId?: string | null;
 };
 
 const initialView = {
@@ -44,6 +53,9 @@ const MERCATOR_MAX_LAT = 85.05112878;
 const DATELINE_OVERDRAW_DEG = 0.05;
 const TEXTURE_SOURCE_ID = "climateTextureSource";
 const TEXTURE_LAYER_ID = "climateTextureLayer";
+const DEBUG_BBOX_SOURCE_ID = "debugPanelBboxSource";
+const DEBUG_BBOX_FILL_LAYER_ID = "debugPanelBboxFillLayer";
+const DEBUG_BBOX_LAYER_ID = "debugPanelBboxLayer";
 const BACKDROP_BLUE = "#0000ff";
 const BACKDROP_WHITE = "#ffffff";
 const BACKDROP_DARK_MODE = "#181818";
@@ -196,6 +208,9 @@ export default function MapLibreGlobe({
   showControls = true,
   enablePick = true,
   warmingLayerVisible = false,
+  showDebugOverlay = false,
+  debugBbox = null,
+  debugBboxGridId = null,
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -211,6 +226,9 @@ export default function MapLibreGlobe({
   const activeLayerIdRef = useRef(activeLayerId);
   const showControlsRef = useRef(showControls);
   const enablePickRef = useRef(enablePick);
+  const showDebugOverlayRef = useRef(showDebugOverlay);
+  const debugBboxRef = useRef(debugBbox);
+  const debugBboxGridIdRef = useRef(debugBboxGridId);
   const textureBackdropRef = useRef<string>(BACKDROP_WHITE);
   const styleReadyRef = useRef(false);
   const [prefersDarkMode, setPrefersDarkMode] = useState(false);
@@ -259,6 +277,18 @@ export default function MapLibreGlobe({
   useEffect(() => {
     enablePickRef.current = enablePick;
   }, [enablePick]);
+
+  useEffect(() => {
+    showDebugOverlayRef.current = showDebugOverlay;
+  }, [showDebugOverlay]);
+
+  useEffect(() => {
+    debugBboxRef.current = debugBbox;
+  }, [debugBbox]);
+
+  useEffect(() => {
+    debugBboxGridIdRef.current = debugBboxGridId;
+  }, [debugBboxGridId]);
 
   useEffect(() => {
     textureBackdropRef.current = textureBackdrop;
@@ -401,6 +431,83 @@ export default function MapLibreGlobe({
         },
         beforeId,
       );
+    }
+
+    function applyDebugBboxLayer() {
+      const showOverlay = showDebugOverlayRef.current;
+      const bbox = debugBboxRef.current;
+
+      if (!showOverlay || !bbox) {
+        if (map.getLayer(DEBUG_BBOX_LAYER_ID)) map.removeLayer(DEBUG_BBOX_LAYER_ID);
+        if (map.getLayer(DEBUG_BBOX_FILL_LAYER_ID)) map.removeLayer(DEBUG_BBOX_FILL_LAYER_ID);
+        if (map.getSource(DEBUG_BBOX_SOURCE_ID)) map.removeSource(DEBUG_BBOX_SOURCE_ID);
+        return;
+      }
+
+      const coordinates = [
+        [bbox.lon_min, bbox.lat_min],
+        [bbox.lon_max, bbox.lat_min],
+        [bbox.lon_max, bbox.lat_max],
+        [bbox.lon_min, bbox.lat_max],
+        [bbox.lon_min, bbox.lat_min],
+      ];
+      const data: FeatureCollection<Polygon> = {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "Polygon", coordinates: [coordinates] },
+          },
+        ],
+      };
+
+      const source = map.getSource(DEBUG_BBOX_SOURCE_ID) as
+        | (maplibregl.GeoJSONSource & { setData?: (d: unknown) => void })
+        | undefined;
+      if (source && typeof source.setData === "function") {
+        source.setData(data);
+      } else {
+        if (map.getLayer(DEBUG_BBOX_LAYER_ID)) map.removeLayer(DEBUG_BBOX_LAYER_ID);
+        if (map.getLayer(DEBUG_BBOX_FILL_LAYER_ID)) map.removeLayer(DEBUG_BBOX_FILL_LAYER_ID);
+        if (map.getSource(DEBUG_BBOX_SOURCE_ID)) map.removeSource(DEBUG_BBOX_SOURCE_ID);
+        map.addSource(DEBUG_BBOX_SOURCE_ID, {
+          type: "geojson",
+          data,
+        });
+      }
+
+      const lineColor = debugBboxGridIdRef.current === "global_0p05" ? "#00c2ff" : "#ff3b30";
+      if (!map.getLayer(DEBUG_BBOX_FILL_LAYER_ID)) {
+        map.addLayer({
+          id: DEBUG_BBOX_FILL_LAYER_ID,
+          type: "fill",
+          source: DEBUG_BBOX_SOURCE_ID,
+          paint: {
+            "fill-color": "#fff200",
+            "fill-opacity": 0.18,
+          },
+        });
+      }
+      if (!map.getLayer(DEBUG_BBOX_LAYER_ID)) {
+        map.addLayer(
+          {
+            id: DEBUG_BBOX_LAYER_ID,
+            type: "line",
+            source: DEBUG_BBOX_SOURCE_ID,
+            paint: {
+              "line-color": lineColor,
+              "line-width": 4,
+              "line-dasharray": [1, 1.5],
+            },
+          },
+        );
+      } else {
+        map.setPaintProperty(DEBUG_BBOX_LAYER_ID, "line-color", lineColor);
+      }
+      // Keep debug bbox visible above texture and style layers.
+      map.moveLayer(DEBUG_BBOX_FILL_LAYER_ID);
+      map.moveLayer(DEBUG_BBOX_LAYER_ID);
     }
 
     function getPanelPadding() {
@@ -687,8 +794,10 @@ export default function MapLibreGlobe({
     map.on("style.load", applyMapSettings);
     map.on("style.load", applyTextureLayer);
     map.on("style.load", ensureHillshadeLayer);
+    map.on("style.load", applyDebugBboxLayer);
     map.on("load", applyMapSettings);
     map.on("load", applyTextureLayer);
+    map.on("load", applyDebugBboxLayer);
     if (showControlsRef.current) {
       map.addControl(createHomeControl(), "top-left");
       map.addControl(new maplibregl.NavigationControl(), "top-left");
@@ -844,6 +953,97 @@ export default function MapLibreGlobe({
       map.off("style.load", applyAfterStyleReady);
     };
   }, [activeLayerId, layerOptions, textureBackdrop]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const apply = () => {
+      if (!showDebugOverlay || !debugBbox) {
+        if (map.getLayer(DEBUG_BBOX_LAYER_ID)) map.removeLayer(DEBUG_BBOX_LAYER_ID);
+        if (map.getLayer(DEBUG_BBOX_FILL_LAYER_ID)) map.removeLayer(DEBUG_BBOX_FILL_LAYER_ID);
+        if (map.getSource(DEBUG_BBOX_SOURCE_ID)) map.removeSource(DEBUG_BBOX_SOURCE_ID);
+        return;
+      }
+
+      const coordinates = [
+        [debugBbox.lon_min, debugBbox.lat_min],
+        [debugBbox.lon_max, debugBbox.lat_min],
+        [debugBbox.lon_max, debugBbox.lat_max],
+        [debugBbox.lon_min, debugBbox.lat_max],
+        [debugBbox.lon_min, debugBbox.lat_min],
+      ];
+      const data: FeatureCollection<Polygon> = {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "Polygon", coordinates: [coordinates] },
+          },
+        ],
+      };
+
+      const source = map.getSource(DEBUG_BBOX_SOURCE_ID) as
+        | (maplibregl.GeoJSONSource & { setData?: (d: unknown) => void })
+        | undefined;
+      if (source && typeof source.setData === "function") {
+        source.setData(data);
+      } else {
+        if (map.getLayer(DEBUG_BBOX_LAYER_ID)) map.removeLayer(DEBUG_BBOX_LAYER_ID);
+        if (map.getLayer(DEBUG_BBOX_FILL_LAYER_ID)) map.removeLayer(DEBUG_BBOX_FILL_LAYER_ID);
+        if (map.getSource(DEBUG_BBOX_SOURCE_ID)) map.removeSource(DEBUG_BBOX_SOURCE_ID);
+        map.addSource(DEBUG_BBOX_SOURCE_ID, { type: "geojson", data });
+      }
+
+      const lineColor = debugBboxGridId === "global_0p05" ? "#00c2ff" : "#ff3b30";
+      if (!map.getLayer(DEBUG_BBOX_FILL_LAYER_ID)) {
+        map.addLayer({
+          id: DEBUG_BBOX_FILL_LAYER_ID,
+          type: "fill",
+          source: DEBUG_BBOX_SOURCE_ID,
+          paint: {
+            "fill-color": "#fff200",
+            "fill-opacity": 0.18,
+          },
+        });
+      }
+      if (!map.getLayer(DEBUG_BBOX_LAYER_ID)) {
+        map.addLayer(
+          {
+            id: DEBUG_BBOX_LAYER_ID,
+            type: "line",
+            source: DEBUG_BBOX_SOURCE_ID,
+            paint: {
+              "line-color": lineColor,
+              "line-width": 4,
+              "line-dasharray": [1, 1.5],
+            },
+          },
+        );
+      } else {
+        map.setPaintProperty(DEBUG_BBOX_LAYER_ID, "line-color", lineColor);
+      }
+      // Keep debug bbox visible above texture and style layers.
+      map.moveLayer(DEBUG_BBOX_FILL_LAYER_ID);
+      map.moveLayer(DEBUG_BBOX_LAYER_ID);
+    };
+
+    if (styleReadyRef.current || map.isStyleLoaded()) {
+      styleReadyRef.current = true;
+      apply();
+      return;
+    }
+
+    const applyAfterStyleReady = () => {
+      styleReadyRef.current = true;
+      apply();
+    };
+    map.once("style.load", applyAfterStyleReady);
+    return () => {
+      map.off("style.load", applyAfterStyleReady);
+    };
+  }, [showDebugOverlay, debugBbox, debugBboxGridId]);
 
   useEffect(() => {
     const map = mapRef.current;

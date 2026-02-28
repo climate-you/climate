@@ -159,6 +159,24 @@
   text-decoration: none;
 }
 
+.debugHud {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 6;
+  max-width: min(52vw, 560px);
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  pointer-events: none;
+  word-break: break-word;
+}
+
 @media (prefers-color-scheme: dark) {
   .map :global(.maplibregl-ctrl-top-left .maplibregl-ctrl-group) {
     background: var(--map-ui-dark-control-bg);
@@ -212,6 +230,14 @@
     background: var(--map-ui-dark-control-bg);
     border: 0;
     color: var(--map-ui-dark-text);
+  }
+
+  .debugHud {
+    right: var(--top-ui-space);
+    left: var(--top-ui-space);
+    bottom: var(--top-ui-space);
+    max-width: none;
+    font-size: 10px;
   }
 
   .globeLegendBar {

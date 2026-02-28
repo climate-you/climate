@@ -112,6 +112,7 @@ def test_build_panel_tiles_registry_happy_path_and_cache_hit() -> None:
     assert len(resp.panel.graphs[0].annotations) == 2
     assert resp.panel.graphs[0].series_keys == ["m_temp"]
     assert resp.location.panel_valid_bbox is not None
+    assert resp.location.panel_bbox_grid_id == "global_0p25"
     assert resp.location.panel_cell_indices is not None
     assert cache.ttl == 77
 
@@ -374,6 +375,83 @@ def test_build_panel_tiles_registry_misc_internal_branches(monkeypatch: pytest.M
     assert "selected:999" in str(capture.last_key)
     assert resp.location.place.geonameid == 999
     assert resp.panel.graphs[0].error is not None
+
+
+def test_build_panel_tiles_registry_uses_0p05_bbox_in_sparse_risk_zone(
+    tmp_path: Path,
+) -> None:
+    sparse_mask_path = tmp_path / "aux" / "sparse_risk_global_0p25_mask.npz"
+    sparse_mask_path.parent.mkdir(parents=True, exist_ok=True)
+    mask = np.zeros((721, 1440), dtype=np.uint8)
+    # Query point (0, 0) maps to i_lat=360, i_lon=720 on global_0p25.
+    mask[360, 720] = 1
+    np.savez_compressed(
+        sparse_mask_path,
+        data=mask,
+        deg=np.float64(0.25),
+        lat_max=np.float64(90.0),
+        lon_min=np.float64(-180.0),
+    )
+
+    class _MixedGridStore:
+        def __init__(self) -> None:
+            self.start_year_fallback = 1979
+
+        def _metric_grid(self, metric: str) -> GridSpec:
+            if metric == "m_reef":
+                return GridSpec.global_0p05(tile_size=64)
+            return GridSpec.global_0p25(tile_size=64)
+
+        def axis(self, metric: str):
+            return [2000, 2001, 2002]
+
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            if metric == "m_temp":
+                return np.array([1.0, 2.0, 3.0], dtype=np.float32)
+            if metric == "m_reef":
+                return None
+            if metric == "t2m_yearly_mean_c":
+                return np.linspace(10.0, 12.2, num=45, dtype=np.float32)
+            if metric == "t2m_cmip_offset_1979_2000_vs_1850_1900_mean_5models_c":
+                return np.array([0.5], dtype=np.float32)
+            return None
+
+    manifest = {
+        "panels": {
+            "p_sparse": {
+                "title": "Sparse Panel",
+                "graphs": [
+                    {
+                        "id": "g_sparse",
+                        "title": "Sparse Graph",
+                        "series": [
+                            {"metric": "m_temp", "unit": "C"},
+                            {"metric": "m_reef", "unit": "C"},
+                        ],
+                    }
+                ],
+            }
+        }
+    }
+
+    resp = panels_module.build_panel_tiles_registry(
+        place_resolver=_place_resolver(),
+        tile_store=_MixedGridStore(),
+        cache=None,
+        ttl_panel_s=60,
+        release="dev",
+        lat=0.0,
+        lon=0.0,
+        unit="C",
+        panel_id="p_sparse",
+        panels_manifest=manifest,
+        release_root=tmp_path,
+    )
+    assert resp.location.panel_valid_bbox is not None
+    assert resp.location.panel_bbox_grid_id == "global_0p05"
+    bbox = resp.location.panel_valid_bbox
+    assert (bbox.lat_max - bbox.lat_min) == pytest.approx(0.05)
+    assert (bbox.lon_max - bbox.lon_min) == pytest.approx(0.05)
 
 
 def test_build_panel_tiles_registry_loads_default_manifest(monkeypatch: pytest.MonkeyPatch) -> None:

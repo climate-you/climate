@@ -217,6 +217,7 @@ def create_app() -> FastAPI:
             maps_manifest=context.maps_manifest,
             maps_root=context.maps_root,
             selected_place=selected_place,
+            release_root=context.release_root,
         )
 
     @app.get(
@@ -323,6 +324,7 @@ def create_app() -> FastAPI:
             unit=unit,
             panel_id=panel_id,
             panels_manifest=context.panels_manifest,
+            release_root=context.release_root,
         )
         return GraphListResponse(
             release=resp.release,

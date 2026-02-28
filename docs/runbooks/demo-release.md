@@ -15,11 +15,13 @@ export PYTHONPATH="$(pwd)"
 
 1. GBR-truncated reef mask creation:
    - `data/masks/crw_dhw_daily_gbr_demo_global_0p05_mask.npz`
-2. Demo registry filtering:
+2. Sparse-risk mask derivation from the demo-truncated `0.05°` mask:
+   - `data/masks/sparse_risk_gbr_demo_global_0p25_mask.npz`
+3. Demo registry filtering:
    - `data/releases/demo_build/registry/{datasets,metrics,maps,layers,panels}.json`
-3. Release packaging into:
-   - `data/releases/demo/{series,maps,registry,manifest.json}`
-4. Archive + checksum generation:
+4. Release packaging into:
+   - `data/releases/demo/{series,maps,registry,manifest.json,aux/sparse_risk_global_0p25_mask.npz}`
+5. Archive + checksum generation:
    - `dist/climate-demo-YYYY_MM_DD.tar.gz`
    - `dist/climate-demo-YYYY_MM_DD.tar.gz.sha256`
 
@@ -71,6 +73,7 @@ Useful flags:
 - `--dask --dask-chunk-lat 64 --dask-chunk-lon 64` for dask-backed processing
 - `--start-year <int> --end-year <int>` to cap packaged years
 - `--gbr-bbox "lat_min,lat_max,lon_min,lon_max"` to override defaults
+- `--demo-sparse-risk-mask <path>` to override generated demo sparse-risk mask output path
 - `--clean` to remove prior `data/releases/demo` and `data/releases/demo_build`
 - `--keep-local-release` to keep `data/releases/demo` and `data/releases/demo_build` after archive creation (default is cleanup)
 - `--archive-output dist/custom-name.tar.gz` to set archive filename
