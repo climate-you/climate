@@ -140,6 +140,12 @@ type ResolveLocationResponse = {
 type ReleaseResolveResponse = {
   requested_release: string;
   release: string;
+  version?: {
+    app_version: string;
+    app_tag?: string | null;
+    app_commit?: string | null;
+    assets_release: string;
+  } | null;
   layers: Array<{
     id: string;
     label: string;
@@ -1722,6 +1728,8 @@ export default function ExplorerPage({
       : "latest",
   );
   const [sessionRelease, setSessionRelease] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [assetsRelease, setAssetsRelease] = useState<string | null>(null);
   const [debugMode, setDebugMode] = useState<boolean>(false);
   const [releaseLayers, setReleaseLayers] = useState<
     ReleaseResolveResponse["layers"]
@@ -1858,10 +1866,14 @@ export default function ExplorerPage({
         const data = (await r.json()) as ReleaseResolveResponse;
         if (cancelled) return;
         setSessionRelease(data.release);
+        setAppVersion(data.version?.app_version ?? null);
+        setAssetsRelease(data.version?.assets_release ?? data.release ?? null);
         setReleaseLayers(Array.isArray(data.layers) ? data.layers : []);
       } catch {
         if (cancelled) return;
         setSessionRelease(requestedRelease);
+        setAppVersion(null);
+        setAssetsRelease(requestedRelease);
         setReleaseLayers([]);
       }
     }
@@ -2850,7 +2862,8 @@ export default function ExplorerPage({
       {aboutOpen ? (
         <AboutOverlay
           onClose={() => setAboutOpenWithUrl(false)}
-          releaseLabel={sessionRelease ?? requestedRelease}
+          appVersion={appVersion}
+          assetsRelease={assetsRelease ?? sessionRelease ?? requestedRelease}
         />
       ) : null}
 

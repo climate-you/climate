@@ -9,6 +9,7 @@ Usage:
 Options:
   --app-root <path>       Application root (default: /opt/climate/source)
   --ref <git-ref>         Branch/tag/SHA to deploy (default: current branch)
+  --tag <tag>             Deploy an exact git tag (recommended for releases)
   --skip-pull             Skip git fetch/pull
   --skip-backend-install  Skip Python dependency install
   --skip-web-build        Skip frontend build
@@ -22,6 +23,7 @@ USAGE
 
 APP_ROOT="/opt/climate/source"
 GIT_REF=""
+GIT_TAG=""
 SKIP_PULL=0
 SKIP_BACKEND_INSTALL=0
 SKIP_WEB_BUILD=0
@@ -37,6 +39,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --ref)
       GIT_REF="$2"
+      shift 2
+      ;;
+    --tag)
+      GIT_TAG="$2"
       shift 2
       ;;
     --skip-pull)
@@ -63,6 +69,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -n "$GIT_REF" && -n "$GIT_TAG" ]]; then
+  echo "error: --ref and --tag are mutually exclusive" >&2
+  exit 2
+fi
+
 if [[ $EUID -ne 0 ]]; then
   echo "error: run this script as root" >&2
   exit 1
@@ -75,10 +86,18 @@ fi
 
 if [[ $SKIP_PULL -eq 0 ]]; then
   git -C "$APP_ROOT" fetch --all --tags
-  if [[ -n "$GIT_REF" ]]; then
+  if [[ -n "$GIT_TAG" ]]; then
+    if ! git -C "$APP_ROOT" rev-parse -q --verify "refs/tags/$GIT_TAG" >/dev/null; then
+      echo "error: unknown tag: $GIT_TAG" >&2
+      exit 2
+    fi
+    git -C "$APP_ROOT" checkout --detach "refs/tags/$GIT_TAG"
+  elif [[ -n "$GIT_REF" ]]; then
     git -C "$APP_ROOT" checkout "$GIT_REF"
+    git -C "$APP_ROOT" pull --ff-only || true
+  else
+    git -C "$APP_ROOT" pull --ff-only || true
   fi
-  git -C "$APP_ROOT" pull --ff-only || true
 fi
 
 if [[ $SKIP_BACKEND_INSTALL -eq 0 ]]; then

@@ -27,6 +27,7 @@ class Settings:
     rate_limit_sustained_rps: int
     rate_limit_burst: int
     rate_limit_window_s: int
+    repo_root: Path = Path(".")
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -148,4 +149,5 @@ def load_settings() -> Settings:
         rate_limit_sustained_rps=rate_limit_sustained_rps,
         rate_limit_burst=rate_limit_burst,
         rate_limit_window_s=rate_limit_window_s,
+        repo_root=repo_root,
     )

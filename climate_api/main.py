@@ -32,6 +32,7 @@ from .services.panels import (
 from .store.location_index import LocationIndex
 from .store.ocean_classifier import OceanClassifier
 from .store.place_resolver import PlaceResolver
+from .versioning import resolve_app_version
 
 logging.getLogger("uvicorn.access").disabled = True
 
@@ -59,6 +60,7 @@ def _configure_uvicorn_like_access_logger() -> None:
 
 def create_app() -> FastAPI:
     settings = load_settings()
+    app_version_info = resolve_app_version(repo_root=settings.repo_root)
 
     cache = Cache(prefix="climate_api")
     uvicorn_logger = logging.getLogger("uvicorn.error")
@@ -102,9 +104,11 @@ def create_app() -> FastAPI:
     ip_windows: dict[str, deque[float]] = defaultdict(deque)
     ip_windows_lock = Lock()
     release_resolver = ReleaseResolver(settings=settings, logger=uvicorn_logger)
+    warm_release: str | None = None
     if settings.score_map_preload:
         try:
             warm_context = release_resolver.resolve_release_context("latest")
+            warm_release = warm_context.release
             uvicorn_logger.info(
                 "Startup score-map warmup completed for release '%s'.",
                 warm_context.release,
@@ -114,6 +118,14 @@ def create_app() -> FastAPI:
                 "Startup score-map warmup skipped (latest/dev): %s",
                 exc,
             )
+    uvicorn_logger.info(
+        "Startup version info: app_version=%s app_tag=%s app_commit=%s configured_release=%s warm_release=%s",
+        app_version_info.app_version,
+        app_version_info.app_tag,
+        app_version_info.app_commit,
+        settings.release,
+        warm_release,
+    )
 
     @app.middleware("http")
     async def access_log_with_timing(request: Request, call_next):
@@ -179,6 +191,12 @@ def create_app() -> FastAPI:
             requested_release=release,
             release=context.release,
             layers=context.layers,
+            version={
+                "app_version": app_version_info.app_version,
+                "app_tag": app_version_info.app_tag,
+                "app_commit": app_version_info.app_commit,
+                "assets_release": context.release,
+            },
         )
 
     @app.get("/api/v/{release}/panel", response_model=PanelListResponse)

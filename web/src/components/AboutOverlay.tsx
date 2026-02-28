@@ -5,12 +5,14 @@ import styles from "./AboutOverlay.module.css";
 
 type AboutOverlayProps = {
   onClose: () => void;
-  releaseLabel?: string | null;
+  appVersion?: string | null;
+  assetsRelease?: string | null;
 };
 
 export default function AboutOverlay({
   onClose,
-  releaseLabel = null,
+  appVersion = null,
+  assetsRelease = null,
 }: AboutOverlayProps) {
   const defaultUnit = defaultTemperatureUnitForLocale();
   const observedWarmingText =
@@ -96,7 +98,8 @@ export default function AboutOverlay({
             </a>
           </div>
           <p className={styles.aboutText}>
-            Release version: {releaseLabel ?? "latest"}
+            App version: {appVersion ?? "unknown"} | Assets release:{" "}
+            {assetsRelease ?? "latest"}
           </p>
         </section>
       </div>

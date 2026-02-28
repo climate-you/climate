@@ -198,11 +198,11 @@ Recommended workflow on the VM:
 
 ```bash
 cd /opt/climate/source
-git pull
-sudo ./scripts/deploy/deploy_app.sh --skip-pull
+git fetch --tags
+sudo ./scripts/deploy/deploy_app.sh --tag v1.0.0
 ```
 
-Optional workflow (script-managed git sync):
+Optional workflow (branch/ref deploy):
 
 ```bash
 sudo ./scripts/deploy/deploy_app.sh --ref main

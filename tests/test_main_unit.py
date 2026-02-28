@@ -231,6 +231,11 @@ def test_create_app_routes_with_mocked_dependencies(
     assert status == 200
     assert data["requested_release"] == "latest"
     assert data["release"] == "dev"
+    assert isinstance(data.get("version"), dict)
+    assert data["version"]["assets_release"] == "dev"
+    assert isinstance(data["version"]["app_version"], str) and bool(
+        data["version"]["app_version"]
+    )
 
     status, data, _ = asyncio.run(
         _asgi_get(app, "/api/v/dev/locations/autocomplete", {"q": "ab"})

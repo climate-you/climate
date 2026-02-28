@@ -187,6 +187,11 @@ def test_release_endpoint_resolves_requested_and_latest_alias() -> None:
     assert resolved.get("requested_release") == release
     assert isinstance(resolved.get("release"), str) and bool(resolved["release"])
     assert "layers" in resolved
+    assert isinstance(resolved.get("version"), dict)
+    assert resolved["version"].get("assets_release") == resolved["release"]
+    assert isinstance(resolved["version"].get("app_version"), str) and bool(
+        resolved["version"]["app_version"]
+    )
 
     status, latest = asyncio.run(
         _asgi_get_json(
@@ -198,3 +203,4 @@ def test_release_endpoint_resolves_requested_and_latest_alias() -> None:
     assert latest.get("requested_release") == "latest"
     assert isinstance(latest.get("release"), str) and bool(latest["release"])
     assert "layers" in latest
+    assert isinstance(latest.get("version"), dict)

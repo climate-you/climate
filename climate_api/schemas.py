@@ -100,10 +100,18 @@ class LayerDescriptor(BaseModel):
     legend: Optional[Dict[str, Any]] = None
 
 
+class VersionInfo(BaseModel):
+    app_version: str
+    app_tag: str | None = None
+    app_commit: str | None = None
+    assets_release: str
+
+
 class ReleaseResolveResponse(BaseModel):
     requested_release: str
     release: str
     layers: List[LayerDescriptor] = []
+    version: VersionInfo
 
 
 class QueryPoint(BaseModel):
