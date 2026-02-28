@@ -178,6 +178,40 @@ type GlobeLegendSpec = {
   ticks: string[];
 };
 
+function parseLegendColors(
+  legend: Record<string, unknown> | null | undefined,
+): string[] | null {
+  const colors = legend?.colors;
+  if (!Array.isArray(colors)) return null;
+  const normalized = colors.filter(
+    (c): c is string => typeof c === "string" && c.trim().length > 0,
+  );
+  return normalized.length > 0 ? normalized : null;
+}
+
+function parseLegendScaleBounds(
+  legend: Record<string, unknown> | null | undefined,
+): { vmin: number; vmax: number } | null {
+  const vmin = legend?.vmin;
+  const vmax = legend?.vmax;
+  if (typeof vmin !== "number" || !Number.isFinite(vmin)) return null;
+  if (typeof vmax !== "number" || !Number.isFinite(vmax)) return null;
+  if (vmax <= vmin) return null;
+  return { vmin, vmax };
+}
+
+function buildTicksFromBounds(
+  bounds: { vmin: number; vmax: number } | null,
+): number[] | null {
+  if (!bounds) return null;
+  const { vmin, vmax } = bounds;
+  const step = (vmax - vmin) / 4;
+  if (!Number.isFinite(step) || step <= 0) return null;
+  return Array.from({ length: 5 }, (_, idx) =>
+    Number((vmax - idx * step).toFixed(2)),
+  );
+}
+
 function formatLegendTick(valueC: number, unit: "C" | "F"): string {
   if (unit === "F") {
     const valueF = valueC * (9 / 5);
@@ -190,35 +224,41 @@ function formatLegendTick(valueC: number, unit: "C" | "F"): string {
 }
 
 function warmingLegendForLayer(
-  layerId: string | null,
+  layer:
+    | {
+        id: string;
+        legend?: Record<string, unknown> | null;
+      }
+    | null,
   unit: "C" | "F",
 ): GlobeLegendSpec | null {
-  if (!layerId) return null;
-  const warmColors = [
-    "#ffffcc",
-    "#ffeda0",
-    "#fed976",
-    "#feb24c",
-    "#fd8d3c",
-    "#fc4e2a",
-    "#e31a1c",
-    "#b10026",
-  ];
+  if (!layer) return null;
+  const layerId = layer.id;
   if (
     layerId === "warming_air" ||
     layerId === "warming_vs_preindustrial_air" ||
     layerId === "warming_sst"
   ) {
-    const ticksC = [4, 3, 2, 1, 0];
+    const ticksC =
+      buildTicksFromBounds(parseLegendScaleBounds(layer.legend)) ?? [4, 3, 2, 1, 0];
     return {
-      colors: warmColors,
+      colors: parseLegendColors(layer.legend) ?? [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026",
+      ],
       ticks: ticksC.map((v) => formatLegendTick(v, unit)),
     };
   }
   return null;
 }
 
-function useDarkTextureBackdropForLayer(layerId: string | null): boolean {
+function darkTextureBackdropForLayer(layerId: string | null): boolean {
   return (
     layerId === "warming_air" ||
     layerId === "warming_vs_preindustrial_air" ||
@@ -1712,12 +1752,16 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const [activeLayerId, setActiveLayerId] = useState<string>(
     mapLayers[0]?.id ?? "",
   );
+  const activeLayer = useMemo(
+    () => releaseLayers.find((layer) => layer.id === (activeLayerId || "")) ?? null,
+    [activeLayerId, releaseLayers],
+  );
   const warmingLegend = useMemo(
-    () => warmingLegendForLayer(activeLayerId || null, unit),
-    [activeLayerId, unit],
+    () => warmingLegendForLayer(activeLayer, unit),
+    [activeLayer, unit],
   );
   const darkBackdropLayerActive = useMemo(
-    () => useDarkTextureBackdropForLayer(activeLayerId || null),
+    () => darkTextureBackdropForLayer(activeLayerId || null),
     [activeLayerId],
   );
   const tempHeadline = useMemo(() => {

@@ -87,6 +87,29 @@ def _resolve_texture_filename(*, map_id: str, map_spec: dict[str, Any]) -> str:
     return f"{map_id}.{file_format}"
 
 
+def _derive_legend_from_map_spec(map_spec: dict[str, Any]) -> dict[str, Any] | None:
+    legend: dict[str, Any] = {}
+    palette = map_spec.get("palette")
+    if isinstance(palette, dict):
+        colors = palette.get("colors")
+        if isinstance(colors, list):
+            normalized_colors = [c for c in colors if isinstance(c, str) and c.strip()]
+            if normalized_colors:
+                legend["colors"] = normalized_colors
+        nan_color = palette.get("nan_color")
+        if isinstance(nan_color, str) and nan_color.strip():
+            legend["nan_color"] = nan_color
+    scale = map_spec.get("scale")
+    if isinstance(scale, dict):
+        vmin = scale.get("vmin")
+        vmax = scale.get("vmax")
+        if isinstance(vmin, (int, float)):
+            legend["vmin"] = float(vmin)
+        if isinstance(vmax, (int, float)):
+            legend["vmax"] = float(vmax)
+    return legend or None
+
+
 def _build_release_layers(
     *,
     layers_manifest: dict[str, Any],
@@ -141,6 +164,10 @@ def _build_release_layers(
             descriptor["resampling"] = layer_spec.get("resampling")
         if "legend" in layer_spec:
             descriptor["legend"] = layer_spec.get("legend")
+        else:
+            derived_legend = _derive_legend_from_map_spec(map_spec)
+            if derived_legend is not None:
+                descriptor["legend"] = derived_legend
         out.append(descriptor)
     return out
 

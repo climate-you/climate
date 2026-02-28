@@ -1,5 +1,4 @@
 - UI:
-  - BUGFIX: fix scale getting harcoded color for gradient scale for warming layers.
   - BUGFIX: coral reef map renders all black on mobile.
   - update help bubbles: calculation of pre-industrial warming
   - check UI for coral reef graph
