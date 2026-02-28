@@ -199,16 +199,25 @@ Recommended workflow on the VM:
 ```bash
 cd /opt/climate/source
 git fetch --tags
+git checkout v1.0.0
+sudo ./scripts/deploy/deploy_app.sh --skip-pull
+```
+
+Why this is recommended:
+
+- `deploy_app.sh` runs as `root` when invoked with `sudo`.
+- Git operations done by root use `/root/.ssh`, which usually does not have GitHub deploy keys configured.
+- Doing `git fetch/checkout` as your normal VM user avoids root SSH key issues.
+
+Optional workflow (only if root GitHub SSH auth is configured):
+
+```bash
+sudo ./scripts/deploy/deploy_app.sh --ref v1.0.0
+# or
 sudo ./scripts/deploy/deploy_app.sh --tag v1.0.0
 ```
 
-Optional workflow (branch/ref deploy):
-
-```bash
-sudo ./scripts/deploy/deploy_app.sh --ref main
-```
-
-Both workflows rebuild backend/web assets, restart services, and run smoke checks.
+All workflows rebuild backend/web assets, restart services, and run smoke checks.
 
 Important:
 
