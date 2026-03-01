@@ -2070,14 +2070,19 @@ def _copy_sparse_risk_aux_mask_if_needed(
     datasets_path: Path,
 ) -> None:
     datasets = json.loads(datasets_path.read_text(encoding="utf-8"))
-    if not isinstance(datasets.get("crw_dhw_daily"), dict):
+    has_005_grid_metric = any(
+        isinstance(spec, dict) and spec.get("grid_id") == "global_0p05"
+        for spec in datasets.values()
+    )
+    if not has_005_grid_metric:
         return
 
     src = REPO_ROOT / "data" / "masks" / _SPARSE_RISK_MASK_FILENAME
     if not src.exists():
         raise FileNotFoundError(
-            "Packager requires sparse-risk mask for releases containing "
-            f"'crw_dhw_daily', but source file is missing: {src}. "
+            "Packager requires sparse-risk mask for releases containing at least "
+            "one metric on the global_0p05 grid, but source file is missing: "
+            f"{src}. "
             "Generate it with scripts/build/build_sparse_risk_mask.py."
         )
 
