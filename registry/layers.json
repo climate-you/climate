@@ -24,12 +24,12 @@
     "opacity": 0.72,
     "resampling": "nearest"
   },
-  "reef_domain": {
-    "id": "reef_domain",
-    "label": "Coral reef mask",
-    "description": "Final coral reef domain mask used by DHW packaging",
-    "map_id": "reef_domain_mercator_texture",
-    "opacity": 1.0,
+  "reef_stress": {
+    "id": "reef_stress",
+    "label": "Coral reef stress",
+    "description": "Increases in degree heating weeks since 1985",
+    "map_id": "dhw_risk_score_trend_1985_2025_mercator_texture",
+    "opacity": 0.9,
     "resampling": "nearest"
   }
 }

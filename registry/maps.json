@@ -276,7 +276,7 @@
     "scale": {
       "mode": "linear",
       "vmin": 0.0,
-      "vmax": 10.0
+      "vmax": 1.0
     },
     "output": {
       "filename": "dhw_risk_score_trend_1985_2025_mercator.webp"
@@ -296,10 +296,7 @@
       "end_year": 2025
     },
     "palette": {
-      "colors": [
-        "#ff0000",
-        "#ff0000"
-      ],
+      "colors": ["#ff0000", "#ff0000"],
       "nan_color": "#000000",
       "nan_alpha": 0.0
     },
