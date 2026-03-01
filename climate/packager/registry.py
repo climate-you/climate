@@ -124,6 +124,7 @@ def _data_var_aliases(name: str) -> list[str]:
     aliases = {
         "near_surface_air_temperature": ["tas"],
         "2m_temperature": ["t2m"],
+        "total_precipitation": ["tp"],
     }
     return aliases.get(name, [])
 

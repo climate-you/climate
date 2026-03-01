@@ -8,6 +8,7 @@ from .time_agg import (
     annual_mean_from_monthly,
     monthly_mean_from_daily,
     annual_mean_from_daily,
+    annual_sum_from_daily,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "annual_mean_from_monthly",
     "monthly_mean_from_daily",
     "annual_mean_from_daily",
+    "annual_sum_from_daily",
 ]

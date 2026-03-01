@@ -54,6 +54,22 @@
       }
     }
   },
+  "era5_daily_tp": {
+    "id": "era5_daily_tp",
+    "title": "ERA5 daily total precipitation",
+    "grid_id": "global_0p25",
+    "tile_size": 64,
+    "source": {
+      "type": "cds",
+      "dataset": "derived-era5-single-levels-daily-statistics",
+      "variable": "total_precipitation",
+      "postprocess": [{ "fn": "m_to_mm" }],
+      "time_range": { "start_year": 1979, "end_year": 2025 },
+      "block_years": 1,
+      "block_months": 1,
+      "batch_tiles": 24
+    }
+  },
   "era5_monthly_t2m": {
     "id": "era5_monthly_t2m",
     "title": "ERA5 monthly 2m temperature",
