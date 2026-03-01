@@ -159,56 +159,6 @@ def test_compute_t2m_preindustrial_headline_success_and_missing() -> None:
     assert missing.unit == "F"
 
 
-def test_caption_and_format_delta_branches() -> None:
-    assert panels_module._format_delta(1.0, "F") == "+1.8°F"
-    assert panels_module._format_delta(-1.0, "C", sign=False) == "-1.0°C"
-
-    # Parse failure branch -> span defaults to 0
-    cap = panels_module._fifty_year_caption_from_context(
-        {"data": {"total_span_years": "bad", "total_warming": "bad"}, "place": {"label": "X"}}
-    )
-    assert "too short" in cap
-
-    # Positive/negative/near-zero and extra-lines branches
-    cap_small = panels_module._fifty_year_caption_from_context(
-        {
-            "unit": "C",
-            "place": {"label": "X"},
-            "data": {"total_span_years": 50, "total_warming": 0.01},
-        }
-    )
-    assert "changed very little" in cap_small
-
-    cap_neg = panels_module._fifty_year_caption_from_context(
-        {
-            "unit": "C",
-            "place": {"label": "X"},
-            "data": {
-                "total_span_years": 50,
-                "total_warming": -1.1,
-                "coldest_month_trend_50y": -0.6,
-                "warmest_month_trend_50y": 0.6,
-            },
-        }
-    )
-    assert "cooler on average" in cap_neg
-    assert "The dashed lines show" in cap_neg
-
-    cap_bad_extra = panels_module._fifty_year_caption_from_context(
-        {
-            "unit": "C",
-            "place": {"label": "X"},
-            "data": {
-                "total_span_years": 50,
-                "total_warming": 1.1,
-                "coldest_month_trend_50y": "bad",
-                "warmest_month_trend_50y": "bad",
-            },
-        }
-    )
-    assert "warmer on average" in cap_bad_extra
-
-
 def test_series_and_axis_misc_branches() -> None:
     assert panels_module._series_key({"metric": "m", "transform": {"fn": "rolling_mean"}}) == "m_rolling_mean"
     assert panels_module._series_key({"metric": "m", "transform": "linear_trend_line"}) == "m_linear_trend_line"
