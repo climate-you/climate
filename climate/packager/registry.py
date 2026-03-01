@@ -3192,22 +3192,25 @@ def package_registry(
             release_root=release_root,
             datasets_path=datasets_path,
         )
-        registry_snapshot = _snapshot_release_registry(
-            release_root=release_root,
-            metrics_path=metrics_path,
-            datasets_path=datasets_path,
-            maps_path=maps_path_eff,
-            layers_path=layers_path_eff,
-            panels_path=panels_path_eff,
-        )
-        _write_release_manifest(
-            release_root=release_root,
-            release=release,
-            out_root=out_root,
-            maps_out_root=maps_out_root_eff,
-            registry_snapshot=registry_snapshot,
-        )
-        print(f"DONE: wrote release manifest: {release_root / 'manifest.json'}")
+        if str(release).strip().lower() != "dev":
+            registry_snapshot = _snapshot_release_registry(
+                release_root=release_root,
+                metrics_path=metrics_path,
+                datasets_path=datasets_path,
+                maps_path=maps_path_eff,
+                layers_path=layers_path_eff,
+                panels_path=panels_path_eff,
+            )
+            _write_release_manifest(
+                release_root=release_root,
+                release=release,
+                out_root=out_root,
+                maps_out_root=maps_out_root_eff,
+                registry_snapshot=registry_snapshot,
+            )
+            print(f"DONE: wrote release manifest: {release_root / 'manifest.json'}")
+        else:
+            print("[release] skipping registry snapshot and manifest write for dev release")
 
     return 0
 
