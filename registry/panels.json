@@ -266,6 +266,7 @@
               "key": "dhw_no_risk_days",
               "metric": "dhw_no_risk_days_per_year",
               "label": "No risk (DHW < 4)",
+              "shortLabel": "No risk",
               "ui": { "role": "category" },
               "unit": "days",
               "style": {
@@ -278,6 +279,7 @@
               "key": "dhw_moderate_risk_days",
               "metric": "dhw_moderate_risk_days_per_year",
               "label": "Moderate risk (4 <= DHW < 8)",
+              "shortLabel": "Moderate risk",
               "ui": { "role": "category" },
               "unit": "days",
               "style": {
@@ -290,6 +292,7 @@
               "key": "dhw_severe_risk_days",
               "metric": "dhw_severe_risk_days_per_year",
               "label": "Severe risk (DHW >= 8)",
+              "shortLabel": "Severe risk",
               "ui": { "role": "category" },
               "unit": "days",
               "style": {

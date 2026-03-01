@@ -8,6 +8,7 @@ class SeriesPayload(BaseModel):
     y: List[float | None]
     unit: Optional[str] = None
     label: Optional[str] = None
+    shortLabel: Optional[str] = None
     ui: Optional[Dict[str, Any]] = None
     style: Optional[Dict[str, Any]] = None
 

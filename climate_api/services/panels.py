@@ -653,6 +653,7 @@ def build_panel_tiles_registry(
                 y=_series_to_list(y),
                 unit=unit,
                 label=series_spec.get("label"),
+                shortLabel=series_spec.get("shortLabel"),
                 ui=series_spec.get("ui"),
                 style=series_spec.get("style"),
             )

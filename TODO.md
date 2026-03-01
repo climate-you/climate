@@ -1,6 +1,5 @@
 - UI:
   - BUGFIX: coral reef map renders all black on mobile.
-  - BUGIX: remove hard-coded text conversions for DHW graph legends (use new `short_label` field)
 - Graphs:
   - BUGFIX: why doesn't sea off Palma, Spain lat=39.50297210372494&lon=2.6395117761082076 have sea temperature information ? Afficher la grid for debug purposes.
 - Code:

@@ -45,6 +45,7 @@ type SeriesPayload = {
   y: (number | null)[];
   unit?: string | null;
   label?: string | null;
+  shortLabel?: string | null;
   ui?: { role?: "raw" | "mean" | "trend" | "category" } | null;
   style?: { type?: "line" | "bar"; color?: string; stack?: string } | null;
 };
@@ -433,7 +434,19 @@ function fallbackKeyLabel(key: string): string {
   return key.replaceAll("_", " ");
 }
 
-function seriesLabel(series: Record<string, SeriesPayload>, key: string): string {
+function seriesLabel(
+  series: Record<string, SeriesPayload>,
+  key: string,
+  options?: { preferShort?: boolean },
+): string {
+  const configuredShort = series[key]?.shortLabel;
+  if (
+    options?.preferShort &&
+    typeof configuredShort === "string" &&
+    configuredShort.trim().length > 0
+  ) {
+    return configuredShort;
+  }
   const configured = series[key]?.label;
   if (typeof configured === "string" && configured.trim().length > 0) {
     return configured;
@@ -846,6 +859,7 @@ function trendLegendLabel(
   trendKey: string,
   series: Record<string, SeriesPayload>,
   unit: "C" | "F",
+  preferShort = false,
 ): string {
   const samples = data
     .map((row) => ({ t: toChartTimestamp(row.x), y: row[trendKey] }))
@@ -864,10 +878,10 @@ function trendLegendLabel(
   const perDecade = ((last.y - first.y) / years) * 10;
   const sign = perDecade >= 0 ? "+" : "";
   if (graph.ui?.chart_mode === "hot_days_combo") {
-    return `${seriesLabel(series, trendKey)}: ${sign}${perDecade.toFixed(1)} days/decade`;
+    return `${seriesLabel(series, trendKey, { preferShort })}: ${sign}${perDecade.toFixed(1)} days/decade`;
   }
   const suffix = `${unit === "F" ? "ºF" : "ºC"}/decade`;
-  return `${seriesLabel(series, trendKey)}: ${sign}${perDecade.toFixed(1)}${suffix}`;
+  return `${seriesLabel(series, trendKey, { preferShort })}: ${sign}${perDecade.toFixed(1)}${suffix}`;
 }
 
 function rollingMeanCentered(
@@ -1005,10 +1019,14 @@ function buildHotDaysOption({
   );
   const isVisible = (key: string | undefined) =>
     Boolean(key && visibleKeys.includes(key));
-  const barLabel = barKey ? seriesLabel(series, barKey) : "Value";
-  const meanLabel = meanKey ? seriesLabel(series, meanKey) : "Mean";
+  const barLabel = barKey
+    ? seriesLabel(series, barKey, { preferShort: isMobile })
+    : "Value";
+  const meanLabel = meanKey
+    ? seriesLabel(series, meanKey, { preferShort: isMobile })
+    : "Mean";
   const trendLabel = trendKey
-    ? trendLegendLabel(graph, data, trendKey, series, unit)
+    ? trendLegendLabel(graph, data, trendKey, series, unit, isMobile)
     : "Trend";
   const barBaseColor = seriesColor(series, barKey, theme.barBase);
   const barAccentColor = theme.barAccent;
@@ -1188,8 +1206,8 @@ function buildStackedBarOption({
   transitionMs: number;
   unit: "C" | "F";
 }): EChartsOption {
-  const isMobile = isMobileViewport();
   const theme = chartThemeTokens();
+  const isMobile = isMobileViewport();
   const xValues = data.map((row) => row.x);
   const barKeys = visibleKeys.filter(
     (key) => series[key]?.style?.type === "bar",
@@ -1197,7 +1215,6 @@ function buildStackedBarOption({
   const isDaysStackedBar =
     barKeys.some((key) => String(series[key]?.unit ?? "").toLowerCase() === "days") ||
     /day/i.test(String(graph.y_axis_label ?? ""));
-  const useCompactMobileDhwLegend = isMobile && graph.id === "dhw_risk_days";
   const defaultStack = "stacked-bars";
   const chartSeries: NonNullable<EChartsOption["series"]> = barKeys.map(
     (key, idx) => {
@@ -1207,7 +1224,7 @@ function buildStackedBarOption({
           ? s.style.stack
           : defaultStack;
       return {
-        name: seriesLabel(series, key),
+        name: seriesLabel(series, key, { preferShort: isMobile }),
         type: "bar",
         stack: stackName,
         data: data.map((row) => (row[key] as number | null) ?? null),
@@ -1225,12 +1242,7 @@ function buildStackedBarOption({
     animationDurationUpdate: transitionMs,
     animationEasing: "cubicOut",
     ...chartScaffold,
-    legend: useCompactMobileDhwLegend
-      ? {
-          ...(chartScaffold.legend ?? {}),
-          formatter: (name: string) => name.replace(/\s*\([^)]*\)\s*$/, ""),
-        }
-      : chartScaffold.legend,
+    legend: chartScaffold.legend,
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "shadow" },
@@ -1251,13 +1263,8 @@ function buildStackedBarOption({
           )
           .map((r) => {
             const rawLabel = String(r.seriesName ?? "");
-            const compact = rawLabel.replace(/\s*\([^)]*\)\s*$/, "");
-            let label = compact;
+            const label = rawLabel;
             const suffix = isDaysStackedBar ? " days" : "";
-            if (/^no risk/i.test(compact)) label = "No Risk";
-            else if (/^moderate risk/i.test(compact)) label = "Moderate Risk";
-            else if (/^severe risk/i.test(compact)) label = "Severe Risk";
-
             return `${r.marker ?? ""}${label}: ${Math.round(Number(r.value))}${suffix}`;
           });
         return [title, ...lines].join("<br/>");
@@ -1331,8 +1338,8 @@ function buildTemperatureOption({
         )
         .map((p) => [toChartTimestamp(p.x), p.value]);
       const displayName = isTrend
-        ? trendLegendLabel(graph, data, key, series, unit)
-        : seriesLabel(series, key);
+        ? trendLegendLabel(graph, data, key, series, unit, isMobile)
+        : seriesLabel(series, key, { preferShort: isMobile });
       if (isTrend) trendSeriesNames.add(displayName);
       return {
         id: key,
@@ -1435,7 +1442,9 @@ function buildTemperatureOption({
           });
         const lines = values.map((r) => {
           const key = typeof r.seriesId === "string" ? r.seriesId : "";
-          const label = key ? seriesLabel(series, key) : String(r.seriesName ?? "");
+          const label = key
+            ? seriesLabel(series, key, { preferShort: isMobile })
+            : String(r.seriesName ?? "");
           return `${label}: ${Number((r.value as unknown[])[1]).toFixed(1)}${unit === "F" ? "°F" : "°C"}`;
         });
         return [title, ...lines].join("<br/>");
