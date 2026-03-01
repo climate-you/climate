@@ -3019,7 +3019,7 @@ export default function ExplorerPage({
                   {!panelLoadError ? (
                     <InfoBubble
                       label="Panel title information"
-                      text="Local warming since pre-industrial is estimated as: observed local warming since 1979-2000, plus a model-based offset from 1850-1900 to 1979-2000."
+                      text="Local warming since pre-industrial (1850-1900 baseline) is estimated by combining observed local warming from ERA5 (1979-2025) with a CMIP6-based offset for 1850-1979, computed from 5 models. Source: CDS."
                     />
                   ) : null}
                 </h2>
