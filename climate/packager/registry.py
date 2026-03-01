@@ -84,6 +84,7 @@ class TileRange:
 _REGRID_DEBUG_SEEN: set[str] = set()
 _REGRID_DEBUG_SEEN_LOCK = threading.Lock()
 REPO_ROOT = Path(__file__).resolve().parents[2]
+_SPARSE_RISK_MASK_FILENAME = "sparse_risk_global_0p25_mask.npz"
 
 
 def _grid_from_id(grid_id: str, *, tile_size: int) -> GridSpec:
@@ -2063,6 +2064,29 @@ def _write_release_manifest(
     manifest_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def _copy_sparse_risk_aux_mask_if_needed(
+    *,
+    release_root: Path,
+    datasets_path: Path,
+) -> None:
+    datasets = json.loads(datasets_path.read_text(encoding="utf-8"))
+    if not isinstance(datasets.get("crw_dhw_daily"), dict):
+        return
+
+    src = REPO_ROOT / "data" / "masks" / _SPARSE_RISK_MASK_FILENAME
+    if not src.exists():
+        raise FileNotFoundError(
+            "Packager requires sparse-risk mask for releases containing "
+            f"'crw_dhw_daily', but source file is missing: {src}. "
+            "Generate it with scripts/build/build_sparse_risk_mask.py."
+        )
+
+    dst = release_root / "aux" / _SPARSE_RISK_MASK_FILENAME
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+    print(f"DONE: wrote sparse-risk aux mask: {dst}")
+
+
 def package_registry(
     *,
     out_root: Path,
@@ -3159,6 +3183,10 @@ def package_registry(
 
     if not download_only:
         release_root = out_root.parent
+        _copy_sparse_risk_aux_mask_if_needed(
+            release_root=release_root,
+            datasets_path=datasets_path,
+        )
         registry_snapshot = _snapshot_release_registry(
             release_root=release_root,
             metrics_path=metrics_path,
