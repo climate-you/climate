@@ -3,7 +3,6 @@
   - update help bubbles: calculation of pre-industrial warming
 - Graphs:
   - BUGFIX: why doesn't sea off Palma, Spain lat=39.50297210372494&lon=2.6395117761082076 have sea temperature information ? Afficher la grid for debug purposes.
-  - BUGFIX: why for lat=3.740930549248077&lon=8.77532958984375 the monthly mean looks like it's offset ? Use daily mean to create monthly mean.
 - Code:
   - Zoomout - do we need defer loading?
 

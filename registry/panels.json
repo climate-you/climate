@@ -15,7 +15,7 @@
           },
           "x_axis_label": "Year",
           "y_axis_label": "Temperature ({unit})",
-          "source": "CDS ERA5 daily and monthly 2m temperature means (1979-2025)",
+          "source": "CDS ERA5 2m temperature daily means (1979-2025), aggregated to monthly and yearly means",
           "animation": {
             "autoplay": false,
             "loop": false,
