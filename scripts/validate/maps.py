@@ -10,6 +10,13 @@ from climate.registry.maps import (
     MapsSchemaError,
     load_maps,
     validate_maps_against_metrics,
+    validate_maps_mobile_output_requirements,
+)
+from climate.registry.layers import (
+    DEFAULT_LAYERS_PATH,
+    DEFAULT_LAYERS_SCHEMA_PATH,
+    LayersSchemaError,
+    load_layers,
 )
 from climate.registry.metrics import (
     DEFAULT_DATASETS_PATH,
@@ -29,6 +36,8 @@ def main() -> int:
     parser.add_argument("--metrics-schema", default=str(DEFAULT_SCHEMA_PATH))
     parser.add_argument("--datasets", default=str(DEFAULT_DATASETS_PATH))
     parser.add_argument("--datasets-schema", default=str(DEFAULT_DATASETS_SCHEMA_PATH))
+    parser.add_argument("--layers", default=str(DEFAULT_LAYERS_PATH))
+    parser.add_argument("--layers-schema", default=str(DEFAULT_LAYERS_SCHEMA_PATH))
     args = parser.parse_args()
 
     try:
@@ -40,8 +49,21 @@ def main() -> int:
             datasets_schema_path=Path(args.datasets_schema),
             validate=True,
         )
+        layers = load_layers(
+            Path(args.layers),
+            schema_path=Path(args.layers_schema),
+            validate=True,
+        )
         validate_maps_against_metrics(maps, metrics)
+        validate_maps_mobile_output_requirements(
+            maps_manifest=maps,
+            metrics_manifest=metrics,
+            layers_manifest=layers,
+        )
     except MapsSchemaError as exc:
+        print(str(exc))
+        return 1
+    except LayersSchemaError as exc:
         print(str(exc))
         return 1
     except MetricsSchemaError as exc:

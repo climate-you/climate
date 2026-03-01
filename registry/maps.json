@@ -279,7 +279,8 @@
       "vmax": 1.0
     },
     "output": {
-      "filename": "dhw_risk_score_trend_1985_2025_mercator.webp"
+      "filename": "dhw_risk_score_trend_1985_2025_mercator.webp",
+      "mobile_filename": "dhw_risk_score_trend_1985_2025_mercator.mobile.webp"
     }
   },
   "reef_domain_mercator_texture": {

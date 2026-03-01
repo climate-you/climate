@@ -320,11 +320,15 @@ def _write_texture_map(
     output = spec.get("output", {}) or {}
     file_format = _resolve_texture_file_format(spec)
     texture_path = _texture_output_path(map_id=map_id, out_dir=out_dir, spec=spec)
+    mobile_texture_path = _mobile_texture_output_path(map_id=map_id, out_dir=out_dir, spec=spec)
     manifest_path = out_dir / "manifest.json"
     if resume and texture_path.exists() and manifest_path.exists():
-        if debug:
-            print(f"[maps] Skip existing texture map: {texture_path}")
-        return False
+        if mobile_texture_path is not None and not mobile_texture_path.exists():
+            pass
+        else:
+            if debug:
+                print(f"[maps] Skip existing texture map: {texture_path}")
+            return False
 
     scale = spec.get("scale", {})
     vmin, vmax = _resolve_scale(values, scale)
@@ -353,6 +357,14 @@ def _write_texture_map(
         height=output.get("height"),
     )
     _save_texture(texture_path, image, file_format=file_format)
+    mobile_image: np.ndarray | None = None
+    if mobile_texture_path is not None:
+        mobile_width, mobile_height = _resolve_mobile_size(image=image, output=output)
+        if _is_default_half_size(image, width=mobile_width, height=mobile_height):
+            mobile_image = _downsample_half_preserve_alpha(image)
+        else:
+            mobile_image = _resize_if_needed(image, width=mobile_width, height=mobile_height)
+        _save_texture(mobile_texture_path, mobile_image, file_format=file_format)
 
     finite = projected_values[np.isfinite(projected_values)]
     manifest = {
@@ -364,7 +376,12 @@ def _write_texture_map(
         "source_metric": source_metric,
         "source_axis_years": axis,
         "output_texture": str(texture_path),
+        "output_mobile_texture": str(mobile_texture_path) if mobile_texture_path else None,
         "shape": [int(projected_values.shape[0]), int(projected_values.shape[1])],
+        "output_shape": [int(image.shape[0]), int(image.shape[1])],
+        "output_mobile_shape": [int(mobile_image.shape[0]), int(mobile_image.shape[1])]
+        if mobile_image is not None
+        else None,
         "scale": {
             "mode": "linear",
             "vmin": float(vmin),
@@ -385,8 +402,13 @@ def _write_texture_map(
     }
     if file_format == "png":
         manifest["output_png"] = str(texture_path)
+        if mobile_texture_path is not None:
+            manifest["output_mobile_png"] = str(mobile_texture_path)
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    print(f"[maps] Wrote texture map: {texture_path}")
+    if mobile_texture_path is not None:
+        print(f"[maps] Wrote texture map: {texture_path} (mobile: {mobile_texture_path})")
+    else:
+        print(f"[maps] Wrote texture map: {texture_path}")
     return True
 
 
@@ -506,6 +528,74 @@ def _texture_output_path(*, map_id: str, out_dir: Path, spec: dict[str, Any]) ->
             return out_dir / filename_str
         return out_dir / f"{filename_str}.{file_format}"
     return out_dir / f"{map_id}.{file_format}"
+
+
+def _mobile_texture_output_path(
+    *,
+    map_id: str,
+    out_dir: Path,
+    spec: dict[str, Any],
+) -> Path | None:
+    output = spec.get("output", {}) or {}
+    mobile_filename = output.get("mobile_filename")
+    if not isinstance(mobile_filename, str) or not mobile_filename.strip():
+        return None
+    file_format = _resolve_texture_file_format(spec)
+    filename_str = str(mobile_filename)
+    suffix = Path(filename_str).suffix.lower()
+    if suffix:
+        if suffix[1:] != file_format:
+            raise ValueError(
+                f"Texture mobile output extension '.{suffix[1:]}' does not match "
+                f"file_format '{file_format}'."
+            )
+        return out_dir / filename_str
+    return out_dir / f"{filename_str}.{file_format}"
+
+
+def _resolve_mobile_size(*, image: np.ndarray, output: dict[str, Any]) -> tuple[int, int]:
+    mobile_width_raw = output.get("mobile_width")
+    mobile_height_raw = output.get("mobile_height")
+    if mobile_width_raw is None and mobile_height_raw is None:
+        return max(1, int(round(image.shape[1] / 2.0))), max(1, int(round(image.shape[0] / 2.0)))
+    if mobile_width_raw is None or mobile_height_raw is None:
+        raise ValueError("Both output.mobile_width and output.mobile_height must be set together.")
+    return int(mobile_width_raw), int(mobile_height_raw)
+
+
+def _is_default_half_size(image: np.ndarray, *, width: int, height: int) -> bool:
+    return width == (image.shape[1] + 1) // 2 and height == (image.shape[0] + 1) // 2
+
+
+def _downsample_half_preserve_alpha(image: np.ndarray) -> np.ndarray:
+    """Downsample by ~2x by choosing, per 2x2 block, the pixel with max alpha.
+
+    This preserves sparse opaque features better than bilinear averaging.
+    """
+    arr = np.asarray(image, dtype=np.uint8)
+    if arr.ndim != 3 or arr.shape[2] not in (3, 4):
+        raise ValueError(f"Expected RGB/RGBA image, got shape={arr.shape}")
+
+    h, w, c = arr.shape
+    h2 = (h + 1) // 2
+    w2 = (w + 1) // 2
+    pad_h = h2 * 2 - h
+    pad_w = w2 * 2 - w
+    if pad_h or pad_w:
+        arr = np.pad(arr, ((0, pad_h), (0, pad_w), (0, 0)), mode="edge")
+
+    # (h2, w2, 4, c): flatten each 2x2 neighborhood to 4 candidates.
+    blocks = arr.reshape(h2, 2, w2, 2, c).transpose(0, 2, 1, 3, 4).reshape(h2, w2, 4, c)
+    if c == 4:
+        alpha = blocks[..., 3]
+    else:
+        alpha = np.full((h2, w2, 4), 255, dtype=np.uint8)
+
+    pick = np.argmax(alpha, axis=2)
+    rr = np.arange(h2)[:, None]
+    cc = np.arange(w2)[None, :]
+    out = blocks[rr, cc, pick, :]
+    return np.asarray(out, dtype=np.uint8)
 
 
 def _score_to_rgb(score: np.ndarray) -> np.ndarray:

@@ -195,8 +195,11 @@
       "type": "object",
       "properties": {
         "filename": { "type": "string" },
+        "mobile_filename": { "type": "string" },
         "width": { "type": "integer", "minimum": 1 },
-        "height": { "type": "integer", "minimum": 1 }
+        "height": { "type": "integer", "minimum": 1 },
+        "mobile_width": { "type": "integer", "minimum": 1 },
+        "mobile_height": { "type": "integer", "minimum": 1 }
       },
       "additionalProperties": false
     },

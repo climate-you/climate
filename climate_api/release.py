@@ -18,6 +18,7 @@ from climate.registry.maps import (
     DEFAULT_MAPS_PATH,
     load_maps,
     validate_maps_against_metrics,
+    validate_maps_mobile_output_requirements,
 )
 from climate.registry.metrics import (
     DEFAULT_DATASETS_PATH,
@@ -77,8 +78,21 @@ def _resolve_texture_file_format(map_spec: dict[str, Any]) -> str:
 
 
 def _resolve_texture_filename(*, map_id: str, map_spec: dict[str, Any]) -> str:
+    return _resolve_texture_filename_for_output_key(
+        map_id=map_id,
+        map_spec=map_spec,
+        filename_key="filename",
+    )
+
+
+def _resolve_texture_filename_for_output_key(
+    *,
+    map_id: str,
+    map_spec: dict[str, Any],
+    filename_key: str,
+) -> str:
     output = map_spec.get("output", {}) or {}
-    filename = output.get("filename")
+    filename = output.get(filename_key)
     file_format = _resolve_texture_file_format(map_spec)
     if isinstance(filename, str) and filename:
         if Path(filename).suffix:
@@ -148,12 +162,28 @@ def _build_release_layers(
         if not grid_id:
             raise ValueError(f"Map '{map_id}' does not define a grid_id.")
         filename = _resolve_texture_filename(map_id=map_id, map_spec=map_spec)
+        mobile_filename = _resolve_texture_filename_for_output_key(
+            map_id=map_id,
+            map_spec=map_spec,
+            filename_key="mobile_filename",
+        )
+        output = map_spec.get("output", {}) or {}
         descriptor: dict[str, Any] = {
             "id": str(layer_spec["id"]),
             "label": str(layer_spec["label"]),
             "map_id": map_id,
             "asset_path": f"maps/{grid_id}/{map_id}/{filename}",
         }
+        if isinstance(output.get("mobile_filename"), str) and output.get("mobile_filename"):
+            descriptor["mobile_asset_path"] = f"maps/{grid_id}/{map_id}/{mobile_filename}"
+        if isinstance(output.get("width"), int):
+            descriptor["asset_width"] = int(output["width"])
+        if isinstance(output.get("height"), int):
+            descriptor["asset_height"] = int(output["height"])
+        if isinstance(output.get("mobile_width"), int):
+            descriptor["mobile_asset_width"] = int(output["mobile_width"])
+        if isinstance(output.get("mobile_height"), int):
+            descriptor["mobile_asset_height"] = int(output["mobile_height"])
         if "description" in layer_spec:
             descriptor["description"] = layer_spec.get("description")
         if "icon" in layer_spec:
@@ -287,6 +317,11 @@ class ReleaseResolver:
         if layers_path.exists():
             layers_manifest = load_layers(path=layers_path, validate=True)
             validate_layers_against_maps(layers_manifest, maps_manifest)
+            validate_maps_mobile_output_requirements(
+                maps_manifest=maps_manifest,
+                metrics_manifest=metrics_manifest,
+                layers_manifest=layers_manifest,
+            )
             layers = _build_release_layers(
                 layers_manifest=layers_manifest,
                 maps_manifest=maps_manifest,

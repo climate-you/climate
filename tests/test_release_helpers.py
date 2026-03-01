@@ -43,7 +43,14 @@ def test_build_release_layers_success() -> None:
                 "type": "texture",
                 "source_metric": "t2m_yearly_mean_c",
                 "grid_id": "global_0p25",
-                "output": {"filename": "air-temp"},
+                "output": {
+                    "filename": "air-temp",
+                    "mobile_filename": "air-temp-mobile",
+                    "width": 1440,
+                    "height": 681,
+                    "mobile_width": 720,
+                    "mobile_height": 341,
+                },
             },
         },
         metrics_manifest={
@@ -52,6 +59,11 @@ def test_build_release_layers_success() -> None:
         },
     )
     assert layers[0]["asset_path"] == "maps/global_0p25/t2m_texture/air-temp.png"
+    assert layers[0]["mobile_asset_path"] == "maps/global_0p25/t2m_texture/air-temp-mobile.png"
+    assert layers[0]["asset_width"] == 1440
+    assert layers[0]["asset_height"] == 681
+    assert layers[0]["mobile_asset_width"] == 720
+    assert layers[0]["mobile_asset_height"] == 341
     assert layers[0]["description"] == "desc"
     assert layers[0]["opacity"] == 0.8
 

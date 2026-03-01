@@ -94,6 +94,11 @@ class LayerDescriptor(BaseModel):
     label: str
     map_id: str
     asset_path: str
+    mobile_asset_path: Optional[str] = None
+    asset_width: Optional[int] = None
+    asset_height: Optional[int] = None
+    mobile_asset_width: Optional[int] = None
+    mobile_asset_height: Optional[int] = None
     description: Optional[str] = None
     icon: Optional[str] = None
     opacity: Optional[float] = None

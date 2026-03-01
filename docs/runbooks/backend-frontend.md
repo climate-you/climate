@@ -76,6 +76,27 @@ Preview a specific release:
 http://localhost:3000/?release=dev
 ```
 
+## Dev-only URL query options
+
+The web app supports development-only query options (disabled in production builds):
+
+- `debug`: enables the debug HUD and panel-bbox overlay
+- `texture`: forces texture variant selection for QA (`auto`, `mobile`, `full`)
+
+Examples:
+
+```text
+http://localhost:3000/?release=dev&debug=on
+http://localhost:3000/?release=dev&debug=on&texture=mobile
+http://localhost:3000/?release=dev&debug=on&texture=full
+```
+
+Notes:
+
+- In production (`NODE_ENV=production`), `texture` override is ignored and selection stays capability-based.
+- Valid values for `debug`: `on`, `1`, `true`.
+- Valid values for `texture`: `auto`, `mobile`, `full`.
+
 ## Optional Redis cache
 
 If Redis is running locally (example URL: `redis://localhost:6379/0`), launch backend with Redis caching:

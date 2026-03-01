@@ -135,3 +135,5 @@ This repository also includes scripts and configuration to deploy the platform t
 | Understand concepts, grids, and acronyms           | [`docs/concepts-and-glossary.md`](docs/concepts-and-glossary.md)                               |
 
 For day-to-day development, keep this README as orientation and use runbooks for operational details.
+
+Note: dev-only web query options (`?debug=on`, `?texture=mobile|full|auto`) are documented in the backend+frontend runbook.

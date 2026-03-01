@@ -1,8 +1,16 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
-from climate.packager.maps import _apply_palette, _stitch_longitude_edges, _warp_lat_to_mercator
+from climate.packager.maps import (
+    _apply_palette,
+    _downsample_half_preserve_alpha,
+    _mobile_texture_output_path,
+    _resolve_mobile_size,
+    _stitch_longitude_edges,
+    _warp_lat_to_mercator,
+)
 
 
 def test_stitch_longitude_edges_averages_finite_edges() -> None:
@@ -71,3 +79,28 @@ def test_apply_palette_supports_transparent_nan() -> None:
     assert int(out[0, 0, 3]) == 255
     assert int(out[1, 0, 3]) == 255
     assert int(out[1, 1, 3]) == 255
+
+
+def test_resolve_mobile_size_defaults_to_half_resolution() -> None:
+    image = np.zeros((3403, 7200, 4), dtype=np.uint8)
+    width, height = _resolve_mobile_size(image=image, output={})
+    assert width == 3600
+    assert height == 1702
+
+
+def test_mobile_texture_output_path_requires_matching_format(tmp_path) -> None:
+    spec = {
+        "file_format": "webp",
+        "output": {"filename": "a.webp", "mobile_filename": "a.mobile.png"},
+    }
+    with pytest.raises(ValueError, match="does not match"):
+        _mobile_texture_output_path(map_id="m", out_dir=tmp_path, spec=spec)
+
+
+def test_downsample_half_preserve_alpha_keeps_sparse_opaque_pixel() -> None:
+    img = np.zeros((2, 2, 4), dtype=np.uint8)
+    # Exactly one opaque pixel in the 2x2 block.
+    img[1, 0] = np.array([200, 10, 10, 255], dtype=np.uint8)
+    out = _downsample_half_preserve_alpha(img)
+    assert out.shape == (1, 1, 4)
+    np.testing.assert_array_equal(out[0, 0], img[1, 0])

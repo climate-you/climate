@@ -96,6 +96,70 @@ def validate_maps_against_metrics(
         )
 
 
+def validate_maps_mobile_output_requirements(
+    maps_manifest: dict[str, Any],
+    metrics_manifest: dict[str, Any],
+    layers_manifest: dict[str, Any],
+) -> None:
+    """Enforce mobile texture contract for web-exposed 0.05° Mercator layers."""
+    maps = {
+        key: spec
+        for key, spec in maps_manifest.items()
+        if key != "version" and isinstance(spec, dict)
+    }
+    metrics = {
+        key: spec
+        for key, spec in metrics_manifest.items()
+        if key != "version" and isinstance(spec, dict)
+    }
+    layers = {
+        key: spec
+        for key, spec in layers_manifest.items()
+        if key != "version" and isinstance(spec, dict)
+    }
+
+    referenced_map_ids = {
+        str(layer_spec.get("map_id", ""))
+        for layer_spec in layers.values()
+        if isinstance(layer_spec.get("map_id"), str) and layer_spec.get("map_id")
+    }
+
+    errors: list[str] = []
+    for map_id in sorted(referenced_map_ids):
+        map_spec = maps.get(map_id)
+        if not isinstance(map_spec, dict):
+            continue
+        if map_spec.get("type") != "texture":
+            continue
+        if str(map_spec.get("projection") or "equirectangular") != "mercator":
+            continue
+        source_metric = map_spec.get("source_metric")
+        if not isinstance(source_metric, str) or not source_metric:
+            continue
+        metric_spec = metrics.get(source_metric)
+        if not isinstance(metric_spec, dict):
+            continue
+        grid_id = str(map_spec.get("grid_id") or metric_spec.get("grid_id") or "")
+        if grid_id != "global_0p05":
+            continue
+        output = map_spec.get("output")
+        if not isinstance(output, dict):
+            errors.append(
+                f"{map_id}: missing output.mobile_filename for web-exposed 0.05° Mercator texture"
+            )
+            continue
+        mobile_filename = output.get("mobile_filename")
+        if not isinstance(mobile_filename, str) or not mobile_filename.strip():
+            errors.append(
+                f"{map_id}: missing output.mobile_filename for web-exposed 0.05° Mercator texture"
+            )
+
+    if errors:
+        raise MapsSchemaError(
+            "maps.json failed mobile texture validation:\n- " + "\n- ".join(errors)
+        )
+
+
 def _validate_ids_match_keys(manifest: dict[str, Any], *, manifest_name: str) -> None:
     mismatches: list[str] = []
     for key, spec in manifest.items():

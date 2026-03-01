@@ -9,9 +9,24 @@ export type MapLayerOption = {
   id: string;
   label: string;
   imageUrl?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+  mobileImageUrl?: string;
+  mobileImageWidth?: number;
+  mobileImageHeight?: number;
   opacity?: number;
   resampling?: "linear" | "nearest";
 };
+
+export type TextureDebugInfo = {
+  filename: string;
+  width: number | null;
+  height: number | null;
+  variant: "full" | "mobile";
+  maxTextureSize: number | null;
+};
+
+export type TextureVariantOverride = "auto" | "mobile" | "full";
 
 type Props = {
   panelOpen: boolean;
@@ -33,6 +48,8 @@ type Props = {
     lon_max: number;
   } | null;
   debugBboxGridId?: string | null;
+  textureVariantOverride?: TextureVariantOverride;
+  onTextureDebugInfoChange?: (info: TextureDebugInfo | null) => void;
 };
 
 const initialView = {
@@ -64,6 +81,7 @@ const CITY_SNAP_RADIUS_PX = 28;
 const CITY_SNAP_LAYER_IDS = ["label_city_capital", "label_city"] as const;
 const LAYER_MENU_AUTO_CLOSE_MS = 800;
 const LAYER_MENU_FADE_MS = 500;
+const MOBILE_TEXTURE_FALLBACK_LIMIT = 4096;
 
 function baseZoomForViewportWidth(width: number) {
   if (width <= 480) return 1.0;
@@ -148,6 +166,95 @@ function focusZoomTarget(map: maplibregl.Map): number {
   return Math.max(map.getZoom(), FOCUS_LOCATION_ZOOM);
 }
 
+function getMaxTextureSize(): number | null {
+  try {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl");
+    if (!gl) return null;
+    const max = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+    return typeof max === "number" && Number.isFinite(max) && max > 0 ? max : null;
+  } catch {
+    return null;
+  }
+}
+
+function textureFilenameFromUrl(url: string): string {
+  const parts = url.split("/");
+  const raw = parts[parts.length - 1] ?? "";
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function selectTextureVariant(
+  layer: MapLayerOption,
+  maxTextureSize: number | null,
+  variantOverride: TextureVariantOverride,
+): {
+  imageUrl: string;
+  width: number | null;
+  height: number | null;
+  variant: "full" | "mobile";
+} | null {
+  const fullUrl = layer.imageUrl;
+  if (!fullUrl) return null;
+  const fullWidth = layer.imageWidth ?? null;
+  const fullHeight = layer.imageHeight ?? null;
+  const mobileUrl = layer.mobileImageUrl;
+  if (variantOverride === "full") {
+    return {
+      imageUrl: fullUrl,
+      width: fullWidth,
+      height: fullHeight,
+      variant: "full",
+    };
+  }
+  if (variantOverride === "mobile" && mobileUrl) {
+    return {
+      imageUrl: mobileUrl,
+      width: layer.mobileImageWidth ?? null,
+      height: layer.mobileImageHeight ?? null,
+      variant: "mobile",
+    };
+  }
+  if (!mobileUrl) {
+    return {
+      imageUrl: fullUrl,
+      width: fullWidth,
+      height: fullHeight,
+      variant: "full",
+    };
+  }
+  if (maxTextureSize === null) {
+    return {
+      imageUrl: mobileUrl,
+      width: layer.mobileImageWidth ?? null,
+      height: layer.mobileImageHeight ?? null,
+      variant: "mobile",
+    };
+  }
+  if (
+    (fullWidth !== null && fullWidth > maxTextureSize) ||
+    (fullHeight !== null && fullHeight > maxTextureSize) ||
+    (fullWidth === null && fullHeight === null && maxTextureSize <= MOBILE_TEXTURE_FALLBACK_LIMIT)
+  ) {
+    return {
+      imageUrl: mobileUrl,
+      width: layer.mobileImageWidth ?? null,
+      height: layer.mobileImageHeight ?? null,
+      variant: "mobile",
+    };
+  }
+  return {
+    imageUrl: fullUrl,
+    width: fullWidth,
+    height: fullHeight,
+    variant: "full",
+  };
+}
+
 function cityFeatureCoordinates(
   feature: maplibregl.MapGeoJSONFeature,
 ): [number, number] | null {
@@ -211,6 +318,8 @@ export default function MapLibreGlobe({
   showDebugOverlay = false,
   debugBbox = null,
   debugBboxGridId = null,
+  textureVariantOverride = "auto",
+  onTextureDebugInfoChange,
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -229,6 +338,9 @@ export default function MapLibreGlobe({
   const showDebugOverlayRef = useRef(showDebugOverlay);
   const debugBboxRef = useRef(debugBbox);
   const debugBboxGridIdRef = useRef(debugBboxGridId);
+  const textureVariantOverrideRef = useRef(textureVariantOverride);
+  const onTextureDebugInfoChangeRef = useRef(onTextureDebugInfoChange);
+  const maxTextureSizeRef = useRef<number | null>(null);
   const textureBackdropRef = useRef<string>(BACKDROP_WHITE);
   const styleReadyRef = useRef(false);
   const [prefersDarkMode, setPrefersDarkMode] = useState(false);
@@ -291,6 +403,14 @@ export default function MapLibreGlobe({
   }, [debugBboxGridId]);
 
   useEffect(() => {
+    textureVariantOverrideRef.current = textureVariantOverride;
+  }, [textureVariantOverride]);
+
+  useEffect(() => {
+    onTextureDebugInfoChangeRef.current = onTextureDebugInfoChange;
+  }, [onTextureDebugInfoChange]);
+
+  useEffect(() => {
     textureBackdropRef.current = textureBackdrop;
   }, [textureBackdrop]);
 
@@ -304,6 +424,7 @@ export default function MapLibreGlobe({
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
+    maxTextureSizeRef.current = getMaxTextureSize();
 
     const baseZoom = responsiveBaseZoom();
     const map = new maplibregl.Map({
@@ -328,7 +449,7 @@ export default function MapLibreGlobe({
       const selected = layerOptionsRef.current.find(
         (layer) => layer.id === activeLayerIdRef.current,
       );
-      if (!selected || !selected.imageUrl) {
+      if (!selected) {
         setBackdropColor(map, BACKDROP_BLUE);
         if (map.getLayer(TEXTURE_LAYER_ID)) {
           map.removeLayer(TEXTURE_LAYER_ID);
@@ -336,9 +457,33 @@ export default function MapLibreGlobe({
         if (map.getSource(TEXTURE_SOURCE_ID)) {
           map.removeSource(TEXTURE_SOURCE_ID);
         }
+        onTextureDebugInfoChangeRef.current?.(null);
+        return;
+      }
+      const selectedTexture = selectTextureVariant(
+        selected,
+        maxTextureSizeRef.current,
+        textureVariantOverrideRef.current,
+      );
+      if (!selectedTexture) {
+        setBackdropColor(map, BACKDROP_BLUE);
+        if (map.getLayer(TEXTURE_LAYER_ID)) {
+          map.removeLayer(TEXTURE_LAYER_ID);
+        }
+        if (map.getSource(TEXTURE_SOURCE_ID)) {
+          map.removeSource(TEXTURE_SOURCE_ID);
+        }
+        onTextureDebugInfoChangeRef.current?.(null);
         return;
       }
       setBackdropColor(map, textureBackdropRef.current);
+      onTextureDebugInfoChangeRef.current?.({
+        filename: textureFilenameFromUrl(selectedTexture.imageUrl),
+        width: selectedTexture.width,
+        height: selectedTexture.height,
+        variant: selectedTexture.variant,
+        maxTextureSize: maxTextureSizeRef.current,
+      });
 
       const coordinates = textureCoordinates();
       const existingSource = map.getSource(TEXTURE_SOURCE_ID) as
@@ -357,7 +502,7 @@ export default function MapLibreGlobe({
 
       if (existingSource && typeof existingSource.updateImage === "function") {
         existingSource.updateImage({
-          url: selected.imageUrl,
+          url: selectedTexture.imageUrl,
           coordinates,
         });
       } else {
@@ -369,7 +514,7 @@ export default function MapLibreGlobe({
         }
         map.addSource(TEXTURE_SOURCE_ID, {
           type: "image",
-          url: selected.imageUrl,
+          url: selectedTexture.imageUrl,
           coordinates,
         });
       }
@@ -861,6 +1006,7 @@ export default function MapLibreGlobe({
       markerRef.current = null;
       layerControlRef.current = null;
       styleReadyRef.current = false;
+      onTextureDebugInfoChangeRef.current?.(null);
       map.remove();
       mapRef.current = null;
     };
@@ -872,7 +1018,7 @@ export default function MapLibreGlobe({
 
     const apply = () => {
       const selected = layerOptions.find((layer) => layer.id === activeLayerId);
-      if (!selected || !selected.imageUrl) {
+      if (!selected) {
         setBackdropColor(map, BACKDROP_BLUE);
         if (map.getLayer(TEXTURE_LAYER_ID)) {
           map.removeLayer(TEXTURE_LAYER_ID);
@@ -880,10 +1026,35 @@ export default function MapLibreGlobe({
         if (map.getSource(TEXTURE_SOURCE_ID)) {
           map.removeSource(TEXTURE_SOURCE_ID);
         }
+        onTextureDebugInfoChangeRef.current?.(null);
+        layerControlRef.current?.refresh();
+        return;
+      }
+      const selectedTexture = selectTextureVariant(
+        selected,
+        maxTextureSizeRef.current,
+        textureVariantOverrideRef.current,
+      );
+      if (!selectedTexture) {
+        setBackdropColor(map, BACKDROP_BLUE);
+        if (map.getLayer(TEXTURE_LAYER_ID)) {
+          map.removeLayer(TEXTURE_LAYER_ID);
+        }
+        if (map.getSource(TEXTURE_SOURCE_ID)) {
+          map.removeSource(TEXTURE_SOURCE_ID);
+        }
+        onTextureDebugInfoChangeRef.current?.(null);
         layerControlRef.current?.refresh();
         return;
       }
       setBackdropColor(map, textureBackdrop);
+      onTextureDebugInfoChangeRef.current?.({
+        filename: textureFilenameFromUrl(selectedTexture.imageUrl),
+        width: selectedTexture.width,
+        height: selectedTexture.height,
+        variant: selectedTexture.variant,
+        maxTextureSize: maxTextureSizeRef.current,
+      });
       const source = map.getSource(TEXTURE_SOURCE_ID) as
         | (maplibregl.ImageSource & {
             updateImage?: (args: {
@@ -899,7 +1070,7 @@ export default function MapLibreGlobe({
         | undefined;
       const coordinates = textureCoordinates();
       if (source && typeof source.updateImage === "function") {
-        source.updateImage({ url: selected.imageUrl, coordinates });
+        source.updateImage({ url: selectedTexture.imageUrl, coordinates });
       } else {
         if (map.getLayer(TEXTURE_LAYER_ID)) {
           map.removeLayer(TEXTURE_LAYER_ID);
@@ -909,7 +1080,7 @@ export default function MapLibreGlobe({
         }
         map.addSource(TEXTURE_SOURCE_ID, {
           type: "image",
-          url: selected.imageUrl,
+          url: selectedTexture.imageUrl,
           coordinates,
         });
       }
@@ -952,7 +1123,7 @@ export default function MapLibreGlobe({
     return () => {
       map.off("style.load", applyAfterStyleReady);
     };
-  }, [activeLayerId, layerOptions, textureBackdrop]);
+  }, [activeLayerId, layerOptions, textureBackdrop, textureVariantOverride]);
 
   useEffect(() => {
     const map = mapRef.current;

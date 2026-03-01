@@ -11,7 +11,11 @@ import { createPortal } from "react-dom";
 import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
 import MapLibreGlobe from "@/components/MapLibreGlobe";
-import type { MapLayerOption } from "@/components/MapLibreGlobe";
+import type {
+  MapLayerOption,
+  TextureDebugInfo,
+  TextureVariantOverride,
+} from "@/components/MapLibreGlobe";
 import AboutOverlay from "@/components/AboutOverlay";
 import SourcesOverlay from "@/components/SourcesOverlay";
 import { defaultTemperatureUnitForLocale } from "@/lib/temperatureUnit";
@@ -152,6 +156,11 @@ type ReleaseResolveResponse = {
     label: string;
     map_id: string;
     asset_path: string;
+    mobile_asset_path?: string | null;
+    asset_width?: number | null;
+    asset_height?: number | null;
+    mobile_asset_width?: number | null;
+    mobile_asset_height?: number | null;
     description?: string | null;
     icon?: string | null;
     opacity?: number | null;
@@ -1687,6 +1696,15 @@ function parseDebugQuery(search: string): boolean {
   return raw === "on" || raw === "1" || raw === "true";
 }
 
+function parseTextureVariantQuery(search: string): TextureVariantOverride {
+  const raw = (new URLSearchParams(search).get("texture") ?? "")
+    .trim()
+    .toLowerCase();
+  if (raw === "mobile") return "mobile";
+  if (raw === "full") return "full";
+  return "auto";
+}
+
 export default function ExplorerPage({
   coldOpen = false,
 }: ExplorerPageProps) {
@@ -1764,6 +1782,9 @@ export default function ExplorerPage({
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [assetsRelease, setAssetsRelease] = useState<string | null>(null);
   const [debugMode, setDebugMode] = useState<boolean>(false);
+  const [textureVariantOverride, setTextureVariantOverride] =
+    useState<TextureVariantOverride>("auto");
+  const [textureDebugInfo, setTextureDebugInfo] = useState<TextureDebugInfo | null>(null);
   const [releaseLayers, setReleaseLayers] = useState<
     ReleaseResolveResponse["layers"]
   >([]);
@@ -1794,6 +1815,22 @@ export default function ExplorerPage({
       id: layer.id,
       label: layer.label,
       imageUrl: `${mapAssetBase}/assets/v/${encodedRelease}/${layer.asset_path}`,
+      imageWidth:
+        typeof layer.asset_width === "number" ? layer.asset_width : undefined,
+      imageHeight:
+        typeof layer.asset_height === "number" ? layer.asset_height : undefined,
+      mobileImageUrl:
+        typeof layer.mobile_asset_path === "string" && layer.mobile_asset_path
+          ? `${mapAssetBase}/assets/v/${encodedRelease}/${layer.mobile_asset_path}`
+          : undefined,
+      mobileImageWidth:
+        typeof layer.mobile_asset_width === "number"
+          ? layer.mobile_asset_width
+          : undefined,
+      mobileImageHeight:
+        typeof layer.mobile_asset_height === "number"
+          ? layer.mobile_asset_height
+          : undefined,
       opacity: typeof layer.opacity === "number" ? layer.opacity : 0.72,
       resampling:
         layer.resampling === "linear" || layer.resampling === "nearest"
@@ -1833,6 +1870,17 @@ export default function ExplorerPage({
     const normalized = trimmed.toLowerCase() === "latest" ? "latest" : trimmed;
     setRequestedRelease(normalized);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sync = () =>
+      setTextureVariantOverride(
+        debugAllowed ? parseTextureVariantQuery(window.location.search) : "auto",
+      );
+    sync();
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, [debugAllowed]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2694,6 +2742,8 @@ export default function ExplorerPage({
           debugBboxGridId={
             debugMode ? (resp?.location.panel_bbox_grid_id ?? null) : null
           }
+          textureVariantOverride={textureVariantOverride}
+          onTextureDebugInfoChange={setTextureDebugInfo}
           layerOptions={mapLayers}
           activeLayerId={activeLayerId || null}
           warmingLayerVisible={darkBackdropLayerActive}
@@ -2758,6 +2808,12 @@ export default function ExplorerPage({
               {debugBbox
                 ? ` [${debugBbox.lat_min.toFixed(5)}, ${debugBbox.lat_max.toFixed(5)}] x [${debugBbox.lon_min.toFixed(5)}, ${debugBbox.lon_max.toFixed(5)}]`
                 : " null"}
+            </div>
+            <div>
+              map:
+              {textureDebugInfo
+                ? ` ${textureDebugInfo.filename} (${textureDebugInfo.width ?? "?"}x${textureDebugInfo.height ?? "?"}) variant=${textureDebugInfo.variant} max_texture=${textureDebugInfo.maxTextureSize ?? "unknown"} override=${textureVariantOverride}`
+                : " none"}
             </div>
           </aside>
         ) : null}

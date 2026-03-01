@@ -1,5 +1,3 @@
-- UI:
-  - BUGFIX: coral reef map renders all black on mobile.
 - Code:
   - Zoomout - do we need defer loading?
 

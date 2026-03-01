@@ -67,6 +67,8 @@ def main() -> int:
             str(metrics),
             "--datasets",
             str(datasets),
+            "--layers",
+            str(layers),
         ],
         [
             "python",
