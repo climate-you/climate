@@ -1014,6 +1014,11 @@ function buildHotDaysOption({
   const barAccentColor = theme.barAccent;
   const meanColor = seriesColor(series, meanKey, theme.meanLine);
   const trendColor = seriesColor(series, trendKey, theme.trendArea);
+  const valueSuffix =
+    String(series[barKey ?? ""]?.unit ?? "").toLowerCase() === "days" ||
+    /day/i.test(String(graph.y_axis_label ?? ""))
+      ? " days"
+      : "";
 
   const barValues = barKey
     ? data.map((row) => (row[barKey] as number | null) ?? null)
@@ -1115,7 +1120,7 @@ function buildHotDaysOption({
         if (Number.isInteger(idx) && idx >= 0 && idx < barValues.length) {
           const v = barValues[idx];
           if (typeof v === "number" && Number.isFinite(v)) {
-            lines.push(`${barLabel}: ${Math.round(v)}`);
+            lines.push(`${barLabel}: ${Math.round(v)}${valueSuffix}`);
           }
         }
         const extra = new Map<string, number>();
@@ -1131,7 +1136,7 @@ function buildHotDaysOption({
           });
         lines.push(
           ...Array.from(extra.entries()).map(
-            ([label, value]) => `${label}: ${Math.round(value)}`,
+            ([label, value]) => `${label}: ${Math.round(value)}${valueSuffix}`,
           ),
         );
         return [title, ...lines].join("<br/>");
@@ -1183,11 +1188,16 @@ function buildStackedBarOption({
   transitionMs: number;
   unit: "C" | "F";
 }): EChartsOption {
+  const isMobile = isMobileViewport();
   const theme = chartThemeTokens();
   const xValues = data.map((row) => row.x);
   const barKeys = visibleKeys.filter(
     (key) => series[key]?.style?.type === "bar",
   );
+  const isDaysStackedBar =
+    barKeys.some((key) => String(series[key]?.unit ?? "").toLowerCase() === "days") ||
+    /day/i.test(String(graph.y_axis_label ?? ""));
+  const useCompactMobileDhwLegend = isMobile && graph.id === "dhw_risk_days";
   const defaultStack = "stacked-bars";
   const chartSeries: NonNullable<EChartsOption["series"]> = barKeys.map(
     (key, idx) => {
@@ -1208,12 +1218,19 @@ function buildStackedBarOption({
       };
     },
   );
+  const chartScaffold = sharedChartScaffold();
 
   return {
     animationDuration: 700,
     animationDurationUpdate: transitionMs,
     animationEasing: "cubicOut",
-    ...sharedChartScaffold(),
+    ...chartScaffold,
+    legend: useCompactMobileDhwLegend
+      ? {
+          ...(chartScaffold.legend ?? {}),
+          formatter: (name: string) => name.replace(/\s*\([^)]*\)\s*$/, ""),
+        }
+      : chartScaffold.legend,
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "shadow" },
@@ -1232,10 +1249,17 @@ function buildStackedBarOption({
           .filter(
             (r) => typeof r.value === "number" && Number.isFinite(r.value),
           )
-          .map(
-            (r) =>
-              `${r.marker ?? ""}${r.seriesName ?? ""}: ${Math.round(Number(r.value))}`,
-          );
+          .map((r) => {
+            const rawLabel = String(r.seriesName ?? "");
+            const compact = rawLabel.replace(/\s*\([^)]*\)\s*$/, "");
+            let label = compact;
+            const suffix = isDaysStackedBar ? " days" : "";
+            if (/^no risk/i.test(compact)) label = "No Risk";
+            else if (/^moderate risk/i.test(compact)) label = "Moderate Risk";
+            else if (/^severe risk/i.test(compact)) label = "Severe Risk";
+
+            return `${r.marker ?? ""}${label}: ${Math.round(Number(r.value))}${suffix}`;
+          });
         return [title, ...lines].join("<br/>");
       },
     },
