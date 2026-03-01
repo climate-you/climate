@@ -75,6 +75,7 @@ from climate.datasets.derive.time_agg import (
     find_time_dim,
     annual_mean_from_monthly,
     annual_mean_from_daily,
+    annual_sum_from_daily,
     monthly_mean_from_daily,
     climatology_mean_from_monthly,
 )
@@ -114,6 +115,7 @@ def _data_var_aliases(name: str) -> list[str]:
     aliases = {
         "near_surface_air_temperature": ["tas"],
         "2m_temperature": ["t2m"],
+        "total_precipitation": ["tp"],
     }
     return aliases.get(name, [])
 
@@ -784,6 +786,8 @@ def _apply_postprocess(da: xr.DataArray, steps: list[object] | None) -> xr.DataA
 
         if fn == "k_to_c":
             da = da - 273.15
+        elif fn == "m_to_mm":
+            da = da * 1000.0
         else:
             raise ValueError(f"Unsupported postprocess fn: {fn} params={params}")
 
@@ -1004,6 +1008,7 @@ def _agg_map() -> dict[str, callable]:
         "annual_mean_from_monthly": lambda da, _params: annual_mean_from_monthly(da),
         "monthly_mean_from_daily": lambda da, _params: monthly_mean_from_daily(da),
         "annual_mean_from_daily": lambda da, _params: annual_mean_from_daily(da),
+        "annual_sum_from_daily": lambda da, _params: annual_sum_from_daily(da),
         "cmip_multi_model_offset_from_monthly": lambda da, params: _cmip_multi_model_offset_from_monthly(
             da,
             params,

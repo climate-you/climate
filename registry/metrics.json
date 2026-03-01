@@ -130,6 +130,24 @@
       "compression": { "codec": "zstd", "level": 10 }
     }
   },
+  "tp_annual_total_mm": {
+    "id": "tp_annual_total_mm",
+    "title": "Total precipitation yearly sum",
+    "unit": "mm",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "source": {
+      "type": "cds",
+      "dataset_ref": "era5_daily_tp",
+      "agg": "annual_sum_from_daily"
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
   "sst_yearly_mean_c": {
     "id": "sst_yearly_mean_c",
     "title": "SST yearly mean",

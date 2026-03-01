@@ -57,6 +57,16 @@ def annual_mean_from_daily(da: xr.DataArray) -> xr.DataArray:
     return monthly.groupby(f"{tname}.year").mean(tname, keep_attrs=False)
 
 
+def annual_sum_from_daily(da: xr.DataArray) -> xr.DataArray:
+    tname = find_time_dim(da)
+    if not np.issubdtype(da[tname].dtype, np.datetime64):
+        da = xr.decode_cf(da.to_dataset(name="v"))["v"]
+
+    annual_sum = da.groupby(f"{tname}.year").sum(tname, skipna=True, keep_attrs=False)
+    has_obs = da.notnull().groupby(f"{tname}.year").any(dim=tname)
+    return annual_sum.where(has_obs).astype("float32")
+
+
 def climatology_mean_from_monthly(
     da: xr.DataArray,
     *,
