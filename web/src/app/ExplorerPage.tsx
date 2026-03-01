@@ -241,12 +241,10 @@ function formatLegendTick(valueC: number, unit: "C" | "F"): string {
 }
 
 function warmingLegendForLayer(
-  layer:
-    | {
-        id: string;
-        legend?: Record<string, unknown> | null;
-      }
-    | null,
+  layer: {
+    id: string;
+    legend?: Record<string, unknown> | null;
+  } | null,
   unit: "C" | "F",
 ): GlobeLegendSpec | null {
   if (!layer) return null;
@@ -256,8 +254,9 @@ function warmingLegendForLayer(
     layerId === "warming_vs_preindustrial_air" ||
     layerId === "warming_sst"
   ) {
-    const ticksC =
-      buildTicksFromBounds(parseLegendScaleBounds(layer.legend)) ?? [4, 3, 2, 1, 0];
+    const ticksC = buildTicksFromBounds(
+      parseLegendScaleBounds(layer.legend),
+    ) ?? [4, 3, 2, 1, 0];
     return {
       colors: parseLegendColors(layer.legend) ?? [
         "#ffffcc",
@@ -280,7 +279,7 @@ function darkTextureBackdropForLayer(layerId: string | null): boolean {
     layerId === "warming_air" ||
     layerId === "warming_vs_preindustrial_air" ||
     layerId === "warming_sst" ||
-    layerId === "reef_domain"
+    layerId === "reef_stress"
   );
 }
 
@@ -1022,7 +1021,9 @@ function buildHotDaysOption({
         seriesRole(series, k) !== "trend" &&
         seriesRole(series, k) !== "mean",
     ) ?? graph.series_keys.find((k) => series[k]?.style?.type === "bar");
-  const meanKey = graph.series_keys.find((k) => seriesRole(series, k) === "mean");
+  const meanKey = graph.series_keys.find(
+    (k) => seriesRole(series, k) === "mean",
+  );
   const trendKey = graph.series_keys.find(
     (k) => seriesRole(series, k) === "trend",
   );
@@ -1155,8 +1156,7 @@ function buildHotDaysOption({
           .map((item) => item as { value?: unknown; seriesName?: string })
           .forEach((r) => {
             const label = String(r.seriesName ?? "").trim();
-            if (!label || label === trendLabel || label === barLabel)
-              return;
+            if (!label || label === trendLabel || label === barLabel) return;
             if (typeof r.value === "number" && Number.isFinite(r.value)) {
               extra.set(label, Number(r.value));
             }
@@ -1222,8 +1222,9 @@ function buildStackedBarOption({
     (key) => series[key]?.style?.type === "bar",
   );
   const isDaysStackedBar =
-    barKeys.some((key) => String(series[key]?.unit ?? "").toLowerCase() === "days") ||
-    /day/i.test(String(graph.y_axis_label ?? ""));
+    barKeys.some(
+      (key) => String(series[key]?.unit ?? "").toLowerCase() === "days",
+    ) || /day/i.test(String(graph.y_axis_label ?? ""));
   const defaultStack = "stacked-bars";
   const chartSeries: NonNullable<EChartsOption["series"]> = barKeys.map(
     (key, idx) => {
@@ -1319,7 +1320,9 @@ function buildTemperatureOption({
 }): EChartsOption {
   const theme = chartThemeTokens();
   const isMobile = isMobileViewport();
-  const trendKeys = visibleKeys.filter((key) => seriesRole(series, key) === "trend");
+  const trendKeys = visibleKeys.filter(
+    (key) => seriesRole(series, key) === "trend",
+  );
   const isAnnualTemperatureSeasonsView =
     graph.id === "t2m_annual" &&
     visibleKeys.includes("t2m_daily_mean") &&
@@ -1551,9 +1554,7 @@ function GraphCard({
     steps.length,
   ]);
 
-  const activeStep = hasAnimation
-    ? steps[safeStepIndex]
-    : null;
+  const activeStep = hasAnimation ? steps[safeStepIndex] : null;
   const visibleKeys = activeStep?.series_keys?.length
     ? activeStep.series_keys
     : graph.series_keys;
@@ -1705,9 +1706,7 @@ function parseTextureVariantQuery(search: string): TextureVariantOverride {
   return "auto";
 }
 
-export default function ExplorerPage({
-  coldOpen = false,
-}: ExplorerPageProps) {
+export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const debugAllowed = process.env.NODE_ENV !== "production";
   const envDefaultReleaseRaw = process.env.NEXT_PUBLIC_RELEASE;
   const envDefaultRelease = envDefaultReleaseRaw
@@ -1757,7 +1756,9 @@ export default function ExplorerPage({
   const [graphsPerPage, setGraphsPerPage] = useState(2);
   const prevGraphsPerPageRef = useRef(2);
   const [graphPage, setGraphPage] = useState(0);
-  const [graphStepById, setGraphStepById] = useState<Record<string, number>>({});
+  const [graphStepById, setGraphStepById] = useState<Record<string, number>>(
+    {},
+  );
   const [introVisible, setIntroVisible] = useState(coldOpen);
   const [introFading, setIntroFading] = useState(false);
   const [introPromptVisible, setIntroPromptVisible] = useState(!coldOpen);
@@ -1784,7 +1785,8 @@ export default function ExplorerPage({
   const [debugMode, setDebugMode] = useState<boolean>(false);
   const [textureVariantOverride, setTextureVariantOverride] =
     useState<TextureVariantOverride>("auto");
-  const [textureDebugInfo, setTextureDebugInfo] = useState<TextureDebugInfo | null>(null);
+  const [textureDebugInfo, setTextureDebugInfo] =
+    useState<TextureDebugInfo | null>(null);
   const [releaseLayers, setReleaseLayers] = useState<
     ReleaseResolveResponse["layers"]
   >([]);
@@ -1843,7 +1845,8 @@ export default function ExplorerPage({
     mapLayers[0]?.id ?? "",
   );
   const activeLayer = useMemo(
-    () => releaseLayers.find((layer) => layer.id === (activeLayerId || "")) ?? null,
+    () =>
+      releaseLayers.find((layer) => layer.id === (activeLayerId || "")) ?? null,
     [activeLayerId, releaseLayers],
   );
   const warmingLegend = useMemo(
@@ -1875,7 +1878,9 @@ export default function ExplorerPage({
     if (typeof window === "undefined") return;
     const sync = () =>
       setTextureVariantOverride(
-        debugAllowed ? parseTextureVariantQuery(window.location.search) : "auto",
+        debugAllowed
+          ? parseTextureVariantQuery(window.location.search)
+          : "auto",
       );
     sync();
     window.addEventListener("popstate", sync);
@@ -2013,7 +2018,8 @@ export default function ExplorerPage({
     const visibleIds = visibleGraphs
       .map((entry) => entry?.graph.id)
       .filter((id): id is string => typeof id === "string" && id.length > 0);
-    pendingGraphRestoreIdsRef.current = visibleIds.length > 0 ? visibleIds : null;
+    pendingGraphRestoreIdsRef.current =
+      visibleIds.length > 0 ? visibleIds : null;
   }, [visibleGraphs]);
 
   useEffect(() => {
@@ -2738,7 +2744,9 @@ export default function ExplorerPage({
           panelOpen={panelOpen}
           focusLocation={picked}
           showDebugOverlay={debugMode}
-          debugBbox={debugMode ? (resp?.location.panel_valid_bbox ?? null) : null}
+          debugBbox={
+            debugMode ? (resp?.location.panel_valid_bbox ?? null) : null
+          }
           debugBboxGridId={
             debugMode ? (resp?.location.panel_bbox_grid_id ?? null) : null
           }
@@ -2799,9 +2807,7 @@ export default function ExplorerPage({
             <div>
               query: lat={lat.toFixed(5)} lon={lon.toFixed(5)}
             </div>
-            <div>
-              bbox_grid: {resp?.location?.panel_bbox_grid_id ?? "null"}
-            </div>
+            <div>bbox_grid: {resp?.location?.panel_bbox_grid_id ?? "null"}</div>
             <div>in_bbox: {debugInBbox ? "true" : "false"}</div>
             <div>
               bbox:
