@@ -1,7 +1,5 @@
 - UI:
   - BUGFIX: coral reef map renders all black on mobile.
-- Graphs:
-  - BUGFIX: why doesn't sea off Palma, Spain lat=39.50297210372494&lon=2.6395117761082076 have sea temperature information ? Afficher la grid for debug purposes.
 - Code:
   - Zoomout - do we need defer loading?
 
