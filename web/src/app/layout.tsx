@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import "./globals.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -14,7 +15,21 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Script id="goatcounter-host-guard" strategy="beforeInteractive">
+          {`
+            if (window.location.host !== "climate.you") {
+              window.goatcounter = { no_onload: true };
+            }
+          `}
+        </Script>
+        <Script
+          data-goatcounter="https://climate.goatcounter.com/count"
+          src="//gc.zgo.at/count.js"
+          strategy="afterInteractive"
+        />
+        {children}
+      </body>
     </html>
   );
 }
