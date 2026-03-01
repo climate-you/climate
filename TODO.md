@@ -1,12 +1,9 @@
-- Code:
-  - Zoomout - do we need defer loading?
-
 Last steps:
 
 - clean up unused css and methods in code when all features and bugfix are done.
 - update Licenses/Copyrights.
 - test mobile and dark mode.
-- google analytics + map of users and clicks
+- [WIP] google analytics + map of users and clicks
 - refine ko-fi and stripe account desciption when site is up
 - add link to https://ko-fi.com/climateyou to github when repo is public (see `Display a "Sponsor" button` in settings).
 - Decide/write license for github public repository
@@ -16,6 +13,7 @@ Last steps:
 
 For later:
 
+- Seasons graph: do we need defer of daily metrics?
 - [WIP] Revisit dual-repository setup (public core + private) - `docs/public-open-source-repository-strategy-plan.md`
 - [Codex] Packager optimization for sparse domains: build mask-aware rectangular download batches (cluster occupied tiles, split oversized boxes on 413) to reduce ERDDAP overfetch for reef-like datasets.
 - precipitations graph (?)
