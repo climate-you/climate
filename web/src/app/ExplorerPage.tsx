@@ -180,6 +180,10 @@ type ExplorerPageProps = {
   coldOpen?: boolean;
 };
 
+type GoatcounterApi = {
+  count?: (payload: { path: string; title: string; event: true }) => void;
+};
+
 type GlobeLegendSpec = {
   colors: string[];
   ticks: string[];
@@ -2108,6 +2112,31 @@ export default function ExplorerPage({
     return data.result;
   }
 
+  function trackLocationClick(
+    nextLat: number,
+    nextLon: number,
+    source: string,
+    geonameid?: number | null,
+    label?: string | null,
+  ) {
+    const goatcounter = (
+      window as Window & { goatcounter?: GoatcounterApi }
+    ).goatcounter;
+    const lat = Number(nextLat.toFixed(2));
+    const lon = Number(nextLon.toFixed(2));
+    const hasGeonameid =
+      typeof geonameid === "number" && Number.isFinite(geonameid);
+    goatcounter?.count?.({
+      path: hasGeonameid
+        ? `/click/${source}/geonameid/${geonameid}`
+        : `/click/${source}/${lat}/${lon}`,
+      title: hasGeonameid
+        ? `Location click (${source}): ${label?.trim() || geonameid}`
+        : `Location click (${source}): ${lat}, ${lon}`,
+      event: true,
+    });
+  }
+
   function applyLocation(item: AutocompleteItem) {
     queueGraphRestoreFromVisible();
     setSearch("");
@@ -2121,6 +2150,7 @@ export default function ExplorerPage({
       countryCode: item.country_code,
       population: item.population,
     });
+    trackLocationClick(item.lat, item.lon, "search", item.geonameid, item.label);
     setPanelOpen(true);
     void loadPanel(item.lat, item.lon, unit, item.geonameid);
   }
@@ -2132,11 +2162,11 @@ export default function ExplorerPage({
     setPicked({ lat: la, lon: lo });
     setSelectedGeonameidForPanel(null);
     setPanelOpen(true);
-
     try {
       const bbox = resp?.location?.panel_valid_bbox;
       if (inBbox(la, lo, bbox)) {
         const place = await fetchNearestLocation(la, lo);
+        trackLocationClick(la, lo, "map", place.geonameid, place.label ?? null);
         setSelectedLocation({
           geonameid: place.geonameid,
           label: place.label ?? "",
@@ -2170,7 +2200,15 @@ export default function ExplorerPage({
         setPanelLoadError(null);
         return;
       }
-      await loadPanel(la, lo, unit, null);
+      const panel = await loadPanel(la, lo, unit, null);
+      const place = panel?.location.place;
+      trackLocationClick(
+        la,
+        lo,
+        "map",
+        place?.geonameid ?? null,
+        place?.label ?? null,
+      );
     } catch (err) {
       setResp(null);
       setSelectedLocation((prev) =>
