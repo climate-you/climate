@@ -36,5 +36,21 @@
     "map_id": "dhw_risk_score_trend_1985_2025_mercator_texture",
     "opacity": 0.9,
     "resampling": "nearest"
+  },
+  "precipitation_trend": {
+    "id": "precipitation_trend",
+    "label": "Precipitation trend",
+    "description": "Trend in annual precipitation totals (mm/year)",
+    "map_id": "tp_annual_trend_mercator_texture",
+    "opacity": 0.8,
+    "resampling": "nearest"
+  },
+  "dry_spell_trend": {
+    "id": "dry_spell_trend",
+    "label": "Dry-spell trend",
+    "description": "Trend in maximum summer dry-spell length (days/year)",
+    "map_id": "tp_dry_spell_trend_mercator_texture",
+    "opacity": 0.8,
+    "resampling": "nearest"
   }
 }

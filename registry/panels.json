@@ -303,6 +303,98 @@
         }
       ]
     },
+    "precipitation": {
+      "title": "Precipitation",
+      "score_map_id": "tp_dry_spell_trend_score",
+      "graphs": [
+        {
+          "id": "tp_annual",
+          "title": "Annual precipitation",
+          "ui": {
+            "info_text": "Annual precipitation is derived from ERA5 daily total precipitation. Values are yearly totals in millimeters, with 5-year mean and trend lines for long-term context.",
+            "chart_mode": "temperature_line",
+            "axis_title_mode": "year"
+          },
+          "x_axis_label": "Year",
+          "y_axis_label": "Precipitation ({unit})",
+          "source": "CDS ERA5 daily total precipitation (currently available locally: 1979-1994)",
+          "series": [
+            {
+              "key": "tp_annual_total",
+              "metric": "tp_annual_total_mm",
+              "label": "Annual total",
+              "ui": { "role": "raw" },
+              "unit": "mm",
+              "style": { "type": "line", "color": "#1f77b4" }
+            },
+            {
+              "key": "tp_annual_total_5y",
+              "metric": "tp_annual_total_mm",
+              "label": "5-year mean",
+              "ui": { "role": "mean" },
+              "unit": "mm",
+              "style": { "type": "line", "color": "#1736ff" },
+              "transform": {
+                "fn": "rolling_mean",
+                "params": { "window": 5, "centered": true }
+              }
+            },
+            {
+              "key": "tp_annual_total_trend",
+              "metric": "tp_annual_total_mm",
+              "label": "Trend",
+              "ui": { "role": "trend" },
+              "unit": "mm",
+              "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
+              "transform": { "fn": "linear_trend_line" }
+            }
+          ]
+        },
+        {
+          "id": "tp_dry_spells",
+          "title": "Summer dry-spell length",
+          "ui": {
+            "info_text": "Dry spell length is the maximum number of consecutive dry days in local summer each year. A dry day is defined as daily precipitation below 1 mm.",
+            "chart_mode": "hot_days_combo",
+            "axis_title_mode": "year"
+          },
+          "x_axis_label": "Year",
+          "y_axis_label": "Days/year",
+          "source": "CDS ERA5 daily total precipitation (currently available locally: 1979-1994)",
+          "series": [
+            {
+              "key": "tp_dry_spell_days",
+              "metric": "tp_max_dry_spell_summer_days_per_year",
+              "label": "Max summer dry spell",
+              "ui": { "role": "raw" },
+              "unit": "days",
+              "style": { "type": "bar", "color": "#ccccff" }
+            },
+            {
+              "key": "tp_dry_spell_days_5y",
+              "metric": "tp_max_dry_spell_summer_days_per_year",
+              "label": "5-year mean",
+              "ui": { "role": "mean" },
+              "unit": "days",
+              "style": { "type": "line", "color": "#1736ff" },
+              "transform": {
+                "fn": "rolling_mean",
+                "params": { "window": 5, "centered": true }
+              }
+            },
+            {
+              "key": "tp_dry_spell_days_trend",
+              "metric": "tp_max_dry_spell_summer_days_per_year",
+              "label": "Trend",
+              "ui": { "role": "trend" },
+              "unit": "days",
+              "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
+              "transform": { "fn": "linear_trend_line" }
+            }
+          ]
+        }
+      ]
+    },
     "coral_reef_dhw": {
       "title": "Coral Reef Heat Stress",
       "score_map_id": "reef_domain_presence_score",

@@ -353,6 +353,76 @@
       "dtype": "int16"
     }
   },
+  "tp_annual_trend_mercator_texture": {
+    "id": "tp_annual_trend_mercator_texture",
+    "title": "Annual precipitation trend (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "web_write": true,
+    "source_metric": "tp_annual_total_mm",
+    "reducer": {
+      "op": "trend_slope"
+    },
+    "palette": {
+      "colors": ["#5e3c99", "#b2abd2", "#f7f7f7", "#fdb863", "#e66101"],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": -20.0,
+      "vmax": 20.0
+    },
+    "output": {
+      "filename": "tp_annual_trend_mercator.webp"
+    }
+  },
+  "tp_dry_spell_trend_mercator_texture": {
+    "id": "tp_dry_spell_trend_mercator_texture",
+    "title": "Summer dry-spell trend (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "web_write": true,
+    "source_metric": "tp_max_dry_spell_summer_days_per_year",
+    "reducer": {
+      "op": "trend_slope"
+    },
+    "palette": {
+      "colors": ["#2166ac", "#67a9cf", "#f7f7f7", "#f4a582", "#b2182b"],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": -0.4,
+      "vmax": 0.4
+    },
+    "output": {
+      "filename": "tp_dry_spell_trend_mercator.webp"
+    }
+  },
+  "tp_dry_spell_trend_score": {
+    "id": "tp_dry_spell_trend_score",
+    "title": "Summer dry-spell trend score",
+    "type": "score",
+    "source_metric": "tp_max_dry_spell_summer_days_per_year",
+    "reducer": {
+      "op": "trend_slope"
+    },
+    "default_score": 1,
+    "score_rules": [
+      { "score": 4, "predicate": { "op": "gt", "threshold": 0.2 } },
+      { "score": 3, "predicate": { "op": "gt", "threshold": 0.12 } },
+      { "score": 2, "predicate": { "op": "gt", "threshold": 0.06 } }
+    ],
+    "output": {
+      "png_filename": "tp_dry_spell_trend_score.png",
+      "binary_filename": "tp_dry_spell_trend_score.i16.bin",
+      "dtype": "int16"
+    }
+  },
   "score_0_map": {
     "id": "score_0_map",
     "title": "Score 0 everywhere",

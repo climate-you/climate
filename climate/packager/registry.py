@@ -76,6 +76,7 @@ from climate.datasets.derive.time_agg import (
     annual_mean_from_monthly,
     annual_mean_from_daily,
     annual_sum_from_daily,
+    max_dry_spell_summer_per_year,
     monthly_mean_from_daily,
     climatology_mean_from_monthly,
 )
@@ -1009,6 +1010,12 @@ def _agg_map() -> dict[str, callable]:
         "monthly_mean_from_daily": lambda da, _params: monthly_mean_from_daily(da),
         "annual_mean_from_daily": lambda da, _params: annual_mean_from_daily(da),
         "annual_sum_from_daily": lambda da, _params: annual_sum_from_daily(da),
+        "max_dry_spell_summer_per_year": lambda da, params: max_dry_spell_summer_per_year(
+            da,
+            dry_day_threshold_mm=float((params or {}).get("dry_day_threshold_mm", 1.0)),
+            north_summer_months=tuple((params or {}).get("north_summer_months", [6, 7, 8])),
+            south_summer_months=tuple((params or {}).get("south_summer_months", [12, 1, 2])),
+        ),
         "cmip_multi_model_offset_from_monthly": lambda da, params: _cmip_multi_model_offset_from_monthly(
             da,
             params,

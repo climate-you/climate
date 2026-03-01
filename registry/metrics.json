@@ -141,7 +141,33 @@
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_tp",
-      "agg": "annual_sum_from_daily"
+      "agg": "annual_sum_from_daily",
+      "time_range": { "start_year": 1979, "end_year": 1994 }
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
+  "tp_max_dry_spell_summer_days_per_year": {
+    "id": "tp_max_dry_spell_summer_days_per_year",
+    "title": "Maximum summer dry-spell length per year",
+    "unit": "days",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "source": {
+      "type": "cds",
+      "dataset_ref": "era5_daily_tp",
+      "batch_tiles_override": 4,
+      "agg": "max_dry_spell_summer_per_year",
+      "params": {
+        "dry_day_threshold_mm": 1.0,
+        "north_summer_months": [6, 7, 8],
+        "south_summer_months": [12, 1, 2]
+      },
+      "time_range": { "start_year": 1979, "end_year": 1994 }
     },
     "storage": {
       "tiled": true,

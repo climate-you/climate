@@ -9,6 +9,7 @@ from .time_agg import (
     monthly_mean_from_daily,
     annual_mean_from_daily,
     annual_sum_from_daily,
+    max_dry_spell_summer_per_year,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "monthly_mean_from_daily",
     "annual_mean_from_daily",
     "annual_sum_from_daily",
+    "max_dry_spell_summer_per_year",
 ]
