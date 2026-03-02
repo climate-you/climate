@@ -95,11 +95,11 @@ export default function AboutOverlay({
             </a>
             <br />
             <a
-              href="https://www.linkedin.com/in/fanny-chaleon-11146650/"
+              href="https://www.linkedin.com/in/fannychaleon/"
               target="_blank"
               rel="noreferrer"
             >
-              linkedin.com/in/fanny-chaleon-11146650
+              linkedin.com/in/fannychaleon
             </a>
           </p>
           <div className={styles.aboutKofi}>
