@@ -220,9 +220,15 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
             aria-labelledby="licenses-tab"
           >
             <section className={styles.sourcesSection}>
+              <p className={styles.sourcesNotice}>
+                Some published layers and metrics are derived products built
+                from multiple upstream datasets. Original data providers and
+                map/tile services used by this project are credited below.
+              </p>
               <ul className={styles.sourcesList}>
                 <li>
-                  OpenFreeMap © OpenMapTiles Data from OpenStreetMap (
+                  Basemap and labels: OpenFreeMap, based on OpenMapTiles data
+                  and OpenStreetMap contributors (
                   <a
                     href="https://openfreemap.org/"
                     target="_blank"
@@ -249,34 +255,119 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
                   ).
                 </li>
                 <li>
-                  ERA5 data are provided via the Copernicus Climate Data Store
-                  (C3S), operated by ECMWF on behalf of the European Union, and
-                  are distributed under the Creative Commons Attribution 4.0
-                  International license (CC BY 4.0). Attribution to Copernicus
-                  Climate Change Service (C3S) and ECMWF is required, together
-                  with the relevant dataset citation.
+                  Terrain hillshade source in the web map: Amazon Terrain Tiles
+                  (Terrarium format) (
+                  <a
+                    href="https://registry.opendata.aws/terrain-tiles/"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    elevation-tiles-prod
+                  </a>
+                  ).
                 </li>
                 <li>
-                  ECMWF website materials are subject to ECMWF terms of use;
-                  unless otherwise stated on specific pages or assets, ECMWF web
-                  content is generally available under CC BY 4.0 with
-                  appropriate attribution.
+                  ERA5 daily statistics, accessed via the Copernicus Climate
+                  Data Store (C3S), implemented by ECMWF (
+                  <a
+                    href="https://cds.climate.copernicus.eu/datasets/derived-era5-single-levels-daily-statistics"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    ERA5 daily statistics
+                  </a>
+                  ).
                 </li>
                 <li>
-                  CMIP6 data accessed through ESGF are governed by the CMIP6
-                  Terms of Use and associated data licenses. CMIP6 model output
-                  is generally distributed under CC BY 4.0, with model-specific
-                  licensing details defined in the CMIP6 controlled
-                  vocabularies, and users should include the required CMIP6/ESGF
-                  acknowledgements and citations.
+                  CMIP6 historical projections, accessed via CDS projections
+                  dataset (
+                  <a
+                    href="https://cds.climate.copernicus.eu/datasets/projections-cmip6"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    projections-cmip6
+                  </a>
+                  ), with usage subject to CMIP6 terms (
+                  <a
+                    href="https://cds.climate.copernicus.eu/licences/cmip6-wps"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    CMIP6 terms of use
+                  </a>
+                  ).
                 </li>
                 <li>
-                  NOAA OISST (via NOAA ERDDAP) is publicly available for use and
-                  redistribution at no cost. NOAA data are provided without
-                  warranty and are not intended for legal use; users should
-                  include NOAA attribution and follow dataset-specific notices.
+                  NOAA ERDDAP datasets: OISST v2.1 sea-surface temperature and
+                  NOAA Coral Reef Watch Degree Heating Week (DHW) (
+                  <a
+                    href="https://coastwatch.pfeg.noaa.gov/erddap/info/ncdcOisst21Agg_LonPM180/index.html"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    OISST v2.1
+                  </a>{" "}
+                  |{" "}
+                  <a
+                    href="https://coastwatch.noaa.gov/erddap/info/noaacrwdhwDaily/index.html"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    CRW DHW
+                  </a>
+                  ).
+                </li>
+                <li>
+                  Reef-domain preprocessing uses reef polygon sources from UNEP
+                  World Conservation Monitoring Centre (WCMC) and Natural Earth
+                  (
+                  <a
+                    href="https://wcmc.io/WCMC_008"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    UNEP-WCMC coral reefs
+                  </a>{" "}
+                  |{" "}
+                  <a
+                    href="https://www.naturalearthdata.com/"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Natural Earth
+                  </a>
+                  ).
+                </li>
+                <li>
+                  Ocean/land mask preprocessing also uses Natural Earth
+                  geography datasets (
+                  <a
+                    href="https://www.naturalearthdata.com/"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Natural Earth marine and land layers
+                  </a>
+                  ).
+                </li>
+                <li>
+                  Location search preprocessing uses GeoNames (
+                  <a
+                    href="https://www.geonames.org/"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    GeoNames
+                  </a>
+                  ).
                 </li>
               </ul>
+              <p className={styles.sourcesNotice}>
+                <a href="/THIRD_PARTY_NOTICES.md" target="_blank" rel="noreferrer">
+                  Open-source notices
+                </a>
+              </p>
             </section>
           </div>
         )}

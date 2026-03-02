@@ -130,6 +130,17 @@
   text-underline-offset: 2px;
 }
 
+.sourcesNotice {
+  margin: 14px 0 0;
+  font-size: 0.9rem;
+  opacity: 0.88;
+}
+
+.sourcesNotice a {
+  color: var(--link);
+  text-underline-offset: 2px;
+}
+
 @media (max-width: 900px) {
   .sourcesOverlay {
     padding: 10px;
