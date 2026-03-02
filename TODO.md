@@ -2,7 +2,6 @@ Last steps:
 
 - ExplorerPage has several places with layer names hardcoded (eg. `warming_air`): legend, dark mode
 - clean up unused css and methods in code when all features and bugfix are done.
-- update Licenses/Copyrights.
 - test mobile and dark mode.
 - [WIP] google analytics + map of users and clicks
 - refine ko-fi and stripe account desciption when site is up

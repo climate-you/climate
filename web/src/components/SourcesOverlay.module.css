@@ -89,9 +89,9 @@
   border-radius: 999px;
   background: transparent;
   color: var(--text-primary);
-  font-size: 0.95rem;
+  font-size: 1.06rem;
   font-weight: 400;
-  padding: 7px 13px;
+  padding: 9px 16px;
   cursor: pointer;
 }
 

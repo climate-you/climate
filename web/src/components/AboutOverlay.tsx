@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { defaultTemperatureUnitForLocale } from "@/lib/temperatureUnit";
 import styles from "./AboutOverlay.module.css";
 
@@ -14,6 +15,14 @@ export default function AboutOverlay({
   appVersion = null,
   assetsRelease = null,
 }: AboutOverlayProps) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   const defaultUnit = defaultTemperatureUnitForLocale();
   const observedWarmingText =
     defaultUnit === "F" ? "approximately 1.9°F" : "approximately 1.1°C";
@@ -21,7 +30,14 @@ export default function AboutOverlay({
     defaultUnit === "F" ? "well below 3.6°F" : "well below 2°C";
 
   return (
-    <section className={styles.aboutOverlay} role="dialog" aria-modal="true">
+    <section
+      className={styles.aboutOverlay}
+      role="dialog"
+      aria-modal="true"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <div className={styles.aboutCard}>
         <div className={styles.aboutHeader}>
           <h2 className={styles.aboutTitle}>About</h2>

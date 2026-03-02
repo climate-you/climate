@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import styles from "./SourcesOverlay.module.css";
 
 type SourcesOverlayProps = {
@@ -10,12 +10,23 @@ type SourcesOverlayProps = {
 export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
   const [activeTab, setActiveTab] = useState<"sources" | "licenses">("sources");
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   return (
     <section
       className={styles.sourcesOverlay}
       role="dialog"
       aria-modal="true"
       aria-label="Sources and licenses"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
     >
       <div className={styles.sourcesCard}>
         <div className={styles.sourcesHeader}>
@@ -71,7 +82,9 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
         {activeTab === "sources" ? (
           <div role="tabpanel" id="sources-panel" aria-labelledby="sources-tab">
             <section className={styles.sourcesSection}>
-              <h3 className={styles.sourcesSectionTitle}>Data Sources</h3>
+              <h3 className={styles.sourcesSectionTitle}>
+                Climate Data Sources
+              </h3>
               <ul className={styles.sourcesList}>
                 <li>
                   Copernicus Climate Data Store (CDS):{" "}
@@ -256,13 +269,21 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
                 </li>
                 <li>
                   Terrain hillshade source in the web map: Amazon Terrain Tiles
-                  (Terrarium format) (
+                  (Terrarium format, elevation-tiles-prod) (
                   <a
                     href="https://registry.opendata.aws/terrain-tiles/"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    elevation-tiles-prod
+                    dataset page
+                  </a>{" "}
+                  |{" "}
+                  <a
+                    href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    attribution and license
                   </a>
                   ).
                 </li>
@@ -274,33 +295,53 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    ERA5 daily statistics
+                    dataset page
                   </a>
-                  ).
+                  ), licensed under a{" "}
+                  <a
+                    href="https://creativecommons.org/licenses/by/4.0/"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Creative Commons Attribution 4.0 License
+                  </a>
+                  .
                 </li>
                 <li>
-                  CMIP6 historical projections, accessed via CDS projections
-                  dataset (
+                  CMIP6 historical projections are sourced from CDS
+                  projections-cmip6 using the following models: access_cm2,
+                  canesm5, mpi_esm1_2_lr, ipsl_cm6a_lr, ukesm1_0_ll (
                   <a
                     href="https://cds.climate.copernicus.eu/datasets/projections-cmip6"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    projections-cmip6
-                  </a>
-                  ), with usage subject to CMIP6 terms (
+                    dataset page
+                  </a>{" "}
+                  |{" "}
                   <a
                     href="https://cds.climate.copernicus.eu/licences/cmip6-wps"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    CMIP6 terms of use
+                    CDS CMIP6 terms
+                  </a>{" "}
+                  |{" "}
+                  <a
+                    href="https://pcmdi.llnl.gov/CMIP6/TermsOfUse"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    CMIP6 terms and citation guidance
                   </a>
                   ).
                 </li>
                 <li>
-                  NOAA ERDDAP datasets: OISST v2.1 sea-surface temperature and
-                  NOAA Coral Reef Watch Degree Heating Week (DHW) (
+                  NOAA ERDDAP datasets used here include OISST v2.1 and NOAA
+                  Coral Reef Watch DHW. OISST data may be used and redistributed
+                  free of charge, with no warranty and not for legal use. CRW
+                  DHW data are available without restriction; please credit NOAA
+                  Coral Reef Watch and include the dataset DOI in citations (
                   <a
                     href="https://coastwatch.pfeg.noaa.gov/erddap/info/ncdcOisst21Agg_LonPM180/index.html"
                     target="_blank"
@@ -315,56 +356,82 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
                     rel="noreferrer"
                   >
                     CRW DHW
+                  </a>{" "}
+                  |{" "}
+                  <a
+                    href="https://coralreefwatch.noaa.gov/satellite/docs/recommendations_crw_citation.php"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    CRW citation guidance
                   </a>
                   ).
                 </li>
                 <li>
-                  Reef-domain preprocessing uses reef polygon sources from UNEP
-                  World Conservation Monitoring Centre (WCMC) and Natural Earth
-                  (
+                  UNEP-WCMC Global Distribution of Coral Reefs data are used in
+                  preprocessing to build reef-domain masks (
                   <a
-                    href="https://wcmc.io/WCMC_008"
+                    href="https://data-gis.unep-wcmc.org/portal/home/item.html?id=0613604367334836863f5c0c10e452bf"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    UNEP-WCMC coral reefs
+                    dataset page
                   </a>{" "}
                   |{" "}
+                  <a
+                    href="https://www.unep-wcmc.org/en/general-data-license"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    UNEP-WCMC General Data License
+                  </a>
+                  ).
+                </li>
+                <li>
+                  Reef-domain and ocean/land mask preprocessing also uses{" "}
                   <a
                     href="https://www.naturalearthdata.com/"
                     target="_blank"
                     rel="noreferrer"
                   >
                     Natural Earth
-                  </a>
-                  ).
-                </li>
-                <li>
-                  Ocean/land mask preprocessing also uses Natural Earth
-                  geography datasets (
+                  </a>{" "}
+                  marine and land layers (public domain; see{" "}
                   <a
-                    href="https://www.naturalearthdata.com/"
+                    href="https://naturalearthdata.com/about/terms-of-use/"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Natural Earth marine and land layers
+                    terms of use
                   </a>
                   ).
                 </li>
                 <li>
-                  Location search preprocessing uses GeoNames (
+                  Location search preprocessing uses{" "}
                   <a
                     href="https://www.geonames.org/"
                     target="_blank"
                     rel="noreferrer"
                   >
                     GeoNames
+                  </a>{" "}
+                  (licensed under a{" "}
+                  <a
+                    href="https://creativecommons.org/licenses/by/4.0/"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Creative Commons Attribution 4.0 License
                   </a>
                   ).
                 </li>
               </ul>
               <p className={styles.sourcesNotice}>
-                <a href="/THIRD_PARTY_NOTICES.md" target="_blank" rel="noreferrer">
+                <a
+                  href="/THIRD_PARTY_NOTICES.md"
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   Open-source notices
                 </a>
               </p>
