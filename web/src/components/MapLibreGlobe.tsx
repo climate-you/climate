@@ -67,7 +67,9 @@ const FOCUS_RECENTER_DURATION_MS = 650;
 const PANEL_TRANSITION_MS = 300;
 const DEFAULT_BASE_ZOOM = 2.5;
 const MERCATOR_MAX_LAT = 85.05112878;
-const DATELINE_OVERDRAW_DEG = 0.05;
+// Tiny dateline overdraw hides wrap seams from compressed textures while
+// keeping grid alignment error far below a 0.05° cell.
+const DATELINE_OVERDRAW_DEG = 1e-4;
 const TEXTURE_SOURCE_ID = "climateTextureSource";
 const TEXTURE_LAYER_ID = "climateTextureLayer";
 const DEBUG_BBOX_SOURCE_ID = "debugPanelBboxSource";

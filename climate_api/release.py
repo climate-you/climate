@@ -124,11 +124,61 @@ def _derive_legend_from_map_spec(map_spec: dict[str, Any]) -> dict[str, Any] | N
     return legend or None
 
 
+def _read_image_dimensions(path: Path) -> tuple[int, int] | None:
+    if not path.exists() or not path.is_file():
+        return None
+    try:
+        with path.open("rb") as handle:
+            header = handle.read(64)
+    except Exception:
+        return None
+    if len(header) < 24:
+        return None
+
+    # PNG: width/height are 4-byte big-endian integers in IHDR.
+    if header.startswith(b"\x89PNG\r\n\x1a\n") and header[12:16] == b"IHDR":
+        width = int.from_bytes(header[16:20], byteorder="big", signed=False)
+        height = int.from_bytes(header[20:24], byteorder="big", signed=False)
+        if width > 0 and height > 0:
+            return width, height
+        return None
+
+    # WebP container: RIFF + WEBP with VP8X, VP8, or VP8L payloads.
+    if header[0:4] != b"RIFF" or header[8:12] != b"WEBP":
+        return None
+    chunk_type = header[12:16]
+
+    if chunk_type == b"VP8X" and len(header) >= 30:
+        width = int.from_bytes(header[24:27], byteorder="little", signed=False) + 1
+        height = int.from_bytes(header[27:30], byteorder="little", signed=False) + 1
+        if width > 0 and height > 0:
+            return width, height
+        return None
+
+    if chunk_type == b"VP8 " and len(header) >= 30 and header[23:26] == b"\x9d\x01\x2a":
+        width = int.from_bytes(header[26:28], byteorder="little", signed=False) & 0x3FFF
+        height = int.from_bytes(header[28:30], byteorder="little", signed=False) & 0x3FFF
+        if width > 0 and height > 0:
+            return width, height
+        return None
+
+    if chunk_type == b"VP8L" and len(header) >= 25 and header[20] == 0x2F:
+        bits = int.from_bytes(header[21:25], byteorder="little", signed=False)
+        width = (bits & 0x3FFF) + 1
+        height = ((bits >> 14) & 0x3FFF) + 1
+        if width > 0 and height > 0:
+            return width, height
+        return None
+
+    return None
+
+
 def _build_release_layers(
     *,
     layers_manifest: dict[str, Any],
     maps_manifest: dict[str, Any],
     metrics_manifest: dict[str, Any],
+    maps_root: Path | None = None,
 ) -> list[dict[str, Any]]:
     maps = {
         key: spec
@@ -184,6 +234,24 @@ def _build_release_layers(
             descriptor["mobile_asset_width"] = int(output["mobile_width"])
         if isinstance(output.get("mobile_height"), int):
             descriptor["mobile_asset_height"] = int(output["mobile_height"])
+        if maps_root is not None and (
+            "asset_width" not in descriptor or "asset_height" not in descriptor
+        ):
+            dims = _read_image_dimensions(maps_root / grid_id / map_id / filename)
+            if dims is not None:
+                descriptor.setdefault("asset_width", dims[0])
+                descriptor.setdefault("asset_height", dims[1])
+        if (
+            maps_root is not None
+            and "mobile_asset_path" in descriptor
+            and ("mobile_asset_width" not in descriptor or "mobile_asset_height" not in descriptor)
+        ):
+            mobile_dims = _read_image_dimensions(
+                maps_root / grid_id / map_id / mobile_filename
+            )
+            if mobile_dims is not None:
+                descriptor.setdefault("mobile_asset_width", mobile_dims[0])
+                descriptor.setdefault("mobile_asset_height", mobile_dims[1])
         if "description" in layer_spec:
             descriptor["description"] = layer_spec.get("description")
         if "icon" in layer_spec:
@@ -326,6 +394,7 @@ class ReleaseResolver:
                 layers_manifest=layers_manifest,
                 maps_manifest=maps_manifest,
                 metrics_manifest=metrics_manifest,
+                maps_root=release_root / "maps",
             )
         else:
             self._logger.warning(

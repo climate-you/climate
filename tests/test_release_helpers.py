@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from climate_api.release import (
@@ -97,3 +99,50 @@ def test_build_release_layers_validates_inputs() -> None:
             maps_manifest={"m1": {"type": "texture", "source_metric": "x"}},
             metrics_manifest={"x": {}},
         )
+
+
+def test_build_release_layers_falls_back_to_asset_dimensions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fake_read_image_dimensions(path: Path) -> tuple[int, int] | None:
+        name = path.name
+        if name == "air-temp.webp":
+            return (4096, 1935)
+        if name == "air-temp-mobile.webp":
+            return (2048, 968)
+        return None
+
+    monkeypatch.setattr(
+        "climate_api.release._read_image_dimensions",
+        _fake_read_image_dimensions,
+    )
+
+    layers = _build_release_layers(
+        layers_manifest={
+            "air": {
+                "id": "air",
+                "label": "Air Temperature",
+                "map_id": "t2m_texture",
+            },
+        },
+        maps_manifest={
+            "t2m_texture": {
+                "type": "texture",
+                "source_metric": "t2m_yearly_mean_c",
+                "grid_id": "global_0p25",
+                "output": {
+                    "filename": "air-temp.webp",
+                    "mobile_filename": "air-temp-mobile.webp",
+                },
+            },
+        },
+        metrics_manifest={
+            "t2m_yearly_mean_c": {"grid_id": "global_0p25"},
+        },
+        maps_root=Path("/tmp/release/maps"),
+    )
+
+    assert layers[0]["asset_width"] == 4096
+    assert layers[0]["asset_height"] == 1935
+    assert layers[0]["mobile_asset_width"] == 2048
+    assert layers[0]["mobile_asset_height"] == 968
