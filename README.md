@@ -120,13 +120,15 @@ This repository also includes scripts and configuration to deploy the platform t
 
 - Deployment scripts in `scripts/deploy/` automate bootstrap, app rollout, auth toggling, and smoke checks.
 - Runtime deployment assets in `deploy/` provide service templates, proxy configuration, and environment-variable examples.
-- Infrastructure definitions in `infra/terraform/gcp/` support provisioning cloud resources with Terraform.
+- Provider-neutral deployment runbook: [`docs/runbooks/deployment.md`](docs/runbooks/deployment.md)
+- Infrastructure examples include GCP Terraform in `infra/terraform/gcp/` (you can provision with other providers as long as VM requirements in the runbook are met).
 
 ## Documentation Index
 
 | Task                                               | Runbook                                                                                        |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | Build self-contained demo release package          | [`docs/runbooks/demo-release.md`](docs/runbooks/demo-release.md)                               |
+| Deploy on a public VM (provider-neutral)           | [`docs/runbooks/deployment.md`](docs/runbooks/deployment.md)                                   |
 | Prepare locations + ocean masks                    | [`docs/runbooks/locations-and-ocean-mask.md`](docs/runbooks/locations-and-ocean-mask.md)       |
 | Rebuild reef-domain masks                          | [`docs/runbooks/reef-mask.md`](docs/runbooks/reef-mask.md)                                     |
 | Build dataset caches, package metrics/maps         | [`docs/runbooks/dataset-cache-and-packaging.md`](docs/runbooks/dataset-cache-and-packaging.md) |
