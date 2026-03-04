@@ -104,6 +104,7 @@
 }
 
 .globeLegend {
+  --legend-bar-width: 20px;
   position: absolute;
   left: var(--top-ui-space);
   top: 50%;
@@ -126,7 +127,7 @@
 }
 
 .globeLegendBar {
-  width: 20px;
+  width: var(--legend-bar-width);
   height: 180px;
   border-radius: 6px;
   border: 1px solid rgba(0, 0, 0, 1);
@@ -166,8 +167,29 @@
 }
 
 .globeLegendInfoBubble {
-  margin-left: 0;
   align-self: flex-start;
+}
+
+.globeLegendInfoBubble .infoBubbleButton,
+.globeLegendInfoBubble .infoBubbleButton:hover,
+.globeLegendInfoBubble .infoBubbleButton:focus-visible,
+.globeLegendInfoBubble .infoBubbleButton:active {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
+  border: 1px solid var(--surface-border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+  margin-left: 5px;
 }
 
 .debugHud {
@@ -180,8 +202,9 @@
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.72);
   color: #ffffff;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
   font-size: 11px;
   line-height: 1.35;
   pointer-events: none;
@@ -262,7 +285,6 @@
   .globeLegendUnitSwitch {
     color: var(--map-ui-dark-text);
   }
-
 }
 
 .coldOpenOverlay {

@@ -1,7 +1,6 @@
 Bug fixes / Cleanup:
 
 - Make it clear year range for graphs, eg. "Annual temperature (1979-2025)".
-- Add `Source: CDS/ERDDAP/XX` to each info bubble.
 - clean up unused css and methods in code when all features and bugfix are done.
 - (fix or not?) graph step on iphone 12 mini is on top of graphs, toggle temperature also on top of graphs
 

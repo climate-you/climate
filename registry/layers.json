@@ -4,7 +4,7 @@
     "id": "warming_air",
     "label": "Air warming (recent baseline)",
     "unit": "temperature",
-    "description": "Near-surface air temperature anomaly for 2025 relative to the 1979-1988 average.",
+    "description": "Air temperature anomaly recorded at 2 meters above the surface for 2025 relative to the 1979-1988 average.",
     "map_id": "t2m_warming_2025_vs_1979_1988_mercator_texture",
     "opacity": 0.72,
     "resampling": "nearest"
@@ -13,7 +13,7 @@
     "id": "warming_vs_preindustrial_air",
     "label": "Air warming (pre-industrial)",
     "unit": "temperature",
-    "description": "Blended near-surface air temperature anomaly for 2021-2025 relative to the 1850-1900 pre-industrial baseline.",
+    "description": "Air temperature anomaly recorded at 2 meters above the surface for 2021-2025 relative to the 1850-1900 pre-industrial baseline.",
     "map_id": "t2m_blended_preindustrial_anomaly_2021_2025_mercator_texture",
     "opacity": 0.72,
     "resampling": "nearest"
