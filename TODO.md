@@ -1,8 +1,9 @@
 Bug fixes / Cleanup:
 
-- Make it clear year range for graphs, eg. "Annual temperature (1979-2025)".
+- info bubble for legend displays below screen on mobile
 - clean up unused css and methods in code when all features and bugfix are done.
-- (fix or not?) graph step on iphone 12 mini is on top of graphs, toggle temperature also on top of graphs
+- (?) Make it clear year range for graphs, eg. "Annual temperature (1979-2025)" (or maybe just in info bubble)
+- (?) graph step on iphone 12 mini is on top of graphs, toggle temperature also on top of graphs
 
 Before public website+github:
 
