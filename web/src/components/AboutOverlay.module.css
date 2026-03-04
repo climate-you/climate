@@ -102,11 +102,22 @@
   text-indent: 1.5em;
 }
 
-.aboutKofi {
-  margin-top: 12px;
+.aboutFooter {
+  margin-top: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.aboutKofiButton {
+.aboutActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.aboutActionButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -119,29 +130,65 @@
   color: #ffffff;
   text-decoration: none;
   font-weight: 400;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.aboutActionButton:hover,
+.aboutActionButton:focus-visible {
+  background: #001dff;
+  border-color: #001dff;
+}
+
+.aboutActionPngIcon {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  flex: 0 0 auto;
+}
+
+.aboutMailIcon {
+  background-image: url("/icons/mail-envelope-2709.png");
+}
+
+.aboutGithubIcon {
+  background-image: url("/icons/github-invertocat-white.png");
+}
+
+.aboutKofiButton {
+  /* Keep hook for potential button-specific overrides. */
 }
 
 .aboutKofiButton:hover,
 .aboutKofiButton:focus-visible {
-  background: #001dff;
-  border-color: #001dff;
+  /* Inherits hover state from .aboutActionButton. */
 }
 
 .aboutKofiIcon {
   width: 18px;
   height: 18px;
   display: inline-block;
-  background-image: url("https://storage.ko-fi.com/cdn/cup-border.png");
+  background-image: url("/icons/kofi-cup-border.png");
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
 }
 
 .aboutVersion {
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   font-style: italic;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
+  line-height: 1.2;
   opacity: 0.85;
   text-align: right;
+  flex: 0 0 auto;
 }
 
 @media (max-width: 900px) {
@@ -152,5 +199,14 @@
   .aboutCard {
     border-radius: 10px;
     padding: 14px;
+  }
+
+  .aboutFooter {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .aboutVersion {
+    text-align: left;
   }
 }

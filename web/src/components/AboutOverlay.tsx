@@ -79,6 +79,17 @@ export default function AboutOverlay({
             insecurity, biodiversity loss, health impacts, displacement and
             migration, and conflict risks.
           </p>
+          <p className={styles.aboutText}>
+            The code for this website is fully available on{" "}
+            <a
+              href="https://github.com/benoit-leveau/climate"
+              target="_blank"
+              rel="noreferrer"
+            >
+              github.com/benoit-leveau/climate
+            </a>
+            .
+          </p>
           <h3 className={styles.aboutSectionTitle}>Authors</h3>
           <p className={`${styles.aboutText} ${styles.aboutParagraph}`}>
             <b>Benoit Leveau</b> and <b>Fanny Chaleon</b>, two software
@@ -102,21 +113,45 @@ export default function AboutOverlay({
               linkedin.com/in/fannychaleon
             </a>
           </p>
-          <div className={styles.aboutKofi}>
-            <a
-              className={styles.aboutKofiButton}
-              href="https://ko-fi.com/G2G31UWBDU"
-              target="_blank"
-              rel="noreferrer"
-            >
-              <span className={styles.aboutKofiIcon} aria-hidden="true" />
-              Buy us a coffee
-            </a>
+          <div className={styles.aboutFooter}>
+            <div className={styles.aboutActions}>
+              <a
+                className={styles.aboutActionButton}
+                href="mailto:info@climate.you"
+              >
+                <span
+                  className={`${styles.aboutActionPngIcon} ${styles.aboutMailIcon}`}
+                  aria-hidden="true"
+                />
+                Contact us
+              </a>
+              <a
+                className={`${styles.aboutActionButton} ${styles.aboutKofiButton}`}
+                href="https://ko-fi.com/G2G31UWBDU"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span className={styles.aboutKofiIcon} aria-hidden="true" />
+                Buy us a coffee
+              </a>
+              <a
+                className={styles.aboutActionButton}
+                href="https://github.com/benoit-leveau/climate/issues/new"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span
+                  className={`${styles.aboutActionPngIcon} ${styles.aboutGithubIcon}`}
+                  aria-hidden="true"
+                />
+                Report a bug
+              </a>
+            </div>
+            <p className={`${styles.aboutText} ${styles.aboutVersion}`}>
+              <span>App version: {appVersion ?? "unknown"}</span>
+              <span>Assets release: {assetsRelease ?? "latest"}</span>
+            </p>
           </div>
-          <p className={`${styles.aboutText} ${styles.aboutVersion}`}>
-            App version: {appVersion ?? "unknown"} | Assets release:{" "}
-            {assetsRelease ?? "latest"}
-          </p>
         </section>
       </div>
     </section>
