@@ -5,6 +5,29 @@ from pathlib import Path
 from climate_api.versioning import AppVersionInfo, resolve_app_version
 
 
+def test_run_git_marks_repo_root_as_safe(monkeypatch, tmp_path: Path) -> None:
+    calls: list[tuple[list[str], Path]] = []
+
+    class _Result:
+        returncode = 0
+        stdout = "ok\n"
+
+    def _fake_run(cmd, cwd, capture_output, text, check):  # type: ignore[no-untyped-def]
+        calls.append((cmd, cwd))
+        return _Result()
+
+    monkeypatch.setattr("climate_api.versioning.subprocess.run", _fake_run)
+    from climate_api.versioning import _run_git
+
+    out = _run_git(repo_root=tmp_path, args=["rev-parse", "--short", "HEAD"])
+    assert out == "ok"
+    assert len(calls) == 1
+    cmd, cwd = calls[0]
+    assert cmd[:3] == ["git", "-c", f"safe.directory={tmp_path.resolve()}"]
+    assert cmd[3:] == ["rev-parse", "--short", "HEAD"]
+    assert cwd == tmp_path.resolve()
+
+
 def test_resolve_app_version_uses_exact_semver_tag(
     monkeypatch,
 ) -> None:

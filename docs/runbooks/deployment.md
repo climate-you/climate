@@ -342,6 +342,39 @@ If VM-local succeeds but public endpoint fails:
 4. env mismatch (`/etc/climate/*.env`)
 5. firewall/security-group exposure
 
+### 12.6 `app_version=unknown` In `/api/v/latest/release`
+
+Symptom:
+
+- API response contains:
+  - `"version": {"app_version": "unknown", "app_tag": null, "app_commit": null, ...}`
+- backend startup log shows:
+  - `Startup version info: app_version=unknown app_tag=None app_commit=None ...`
+
+Typical cause:
+
+- Git trust check blocks repository access for service context (`dubious ownership`).
+- `climate-backend` runs with `ProtectHome=true`, so user-global Git config (`~/.gitconfig`) may not be visible to the service.
+
+Immediate VM remediation:
+
+```bash
+sudo git config --system --add safe.directory /opt/climate/source
+sudo systemctl restart climate-backend
+```
+
+Verification:
+
+```bash
+sudo journalctl -u climate-backend -n 50 --no-pager | grep "Startup version info"
+curl -s http://127.0.0.1:8001/api/v/latest/release | python3 -m json.tool
+```
+
+Expected result:
+
+- startup log includes a resolved tag or commit (for example `app_version=v0.1.1`)
+- API `version.app_version` matches the deployed tag/commit, not `unknown`
+
 ## 13) Add Domain and TLS Later
 
 Once domain is chosen:

@@ -17,9 +17,10 @@ class AppVersionInfo:
 
 def _run_git(*, repo_root: Path, args: list[str]) -> str | None:
     try:
+        repo_root_abs = repo_root.resolve()
         result = subprocess.run(
-            ["git", *args],
-            cwd=repo_root,
+            ["git", "-c", f"safe.directory={repo_root_abs}", *args],
+            cwd=repo_root_abs,
             capture_output=True,
             text=True,
             check=False,
