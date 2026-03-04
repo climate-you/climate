@@ -148,15 +148,26 @@
 }
 
 .globeLegendUnitSwitch {
-  align-self: flex-start;
-  border: 0;
+  align-self: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
   background: transparent;
   color: #000000;
   padding: 0;
-  font-size: 12px;
-  line-height: 1.2;
+  font-size: 11px;
+  line-height: 1;
   cursor: pointer;
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.globeLegendInfoBubble {
+  margin-left: 0;
+  align-self: flex-start;
 }
 
 .debugHud {

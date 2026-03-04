@@ -154,6 +154,7 @@ type ReleaseResolveResponse = {
   layers: Array<{
     id: string;
     label: string;
+    unit?: "temperature" | "score" | null;
     map_id: string;
     asset_path: string;
     mobile_asset_path?: string | null;
@@ -199,7 +200,10 @@ type ExplorerPageProps = {
 type GlobeLegendSpec = {
   colors: string[];
   ticks: string[];
+  showTemperatureUnitToggle: boolean;
 };
+
+type LayerLegendUnit = "temperature" | "score" | "unknown";
 
 function parseLegendColors(
   legend: Record<string, unknown> | null | undefined,
@@ -235,7 +239,7 @@ function buildTicksFromBounds(
   );
 }
 
-function formatLegendTick(valueC: number, unit: "C" | "F"): string {
+function formatTemperatureLegendTick(valueC: number, unit: "C" | "F"): string {
   if (unit === "F") {
     const valueF = valueC * (9 / 5);
     const rounded = Math.round(valueF);
@@ -246,47 +250,47 @@ function formatLegendTick(valueC: number, unit: "C" | "F"): string {
   return `${sign}${valueC}`;
 }
 
-function warmingLegendForLayer(
-  layer: {
-    id: string;
-    legend?: Record<string, unknown> | null;
-  } | null,
-  unit: "C" | "F",
-): GlobeLegendSpec | null {
-  if (!layer) return null;
-  const layerId = layer.id;
-  if (
-    layerId === "warming_air" ||
-    layerId === "warming_vs_preindustrial_air" ||
-    layerId === "warming_sst"
-  ) {
-    const ticksC = buildTicksFromBounds(
-      parseLegendScaleBounds(layer.legend),
-    ) ?? [4, 3, 2, 1, 0];
-    return {
-      colors: parseLegendColors(layer.legend) ?? [
-        "#ffffcc",
-        "#ffeda0",
-        "#fed976",
-        "#feb24c",
-        "#fd8d3c",
-        "#fc4e2a",
-        "#e31a1c",
-        "#b10026",
-      ],
-      ticks: ticksC.map((v) => formatLegendTick(v, unit)),
-    };
-  }
-  return null;
+function formatScoreLegendTick(value: number): string {
+  if (!Number.isFinite(value)) return "";
+  const rounded = Number(value.toFixed(2));
+  if (Number.isInteger(rounded)) return `${rounded}`;
+  if (Math.abs(rounded) >= 1) return rounded.toFixed(1).replace(/\.0$/, "");
+  return rounded.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-function darkTextureBackdropForLayer(layerId: string | null): boolean {
-  return (
-    layerId === "warming_air" ||
-    layerId === "warming_vs_preindustrial_air" ||
-    layerId === "warming_sst" ||
-    layerId === "reef_stress"
-  );
+function layerLegendUnit(layer: {
+  unit?: string | null;
+} | null): LayerLegendUnit {
+  const raw = String(layer?.unit ?? "").trim().toLowerCase();
+  if (raw === "temperature") return "temperature";
+  if (raw === "score") return "score";
+  return "unknown";
+}
+
+function legendForLayer(
+  layer: {
+    id: string;
+    unit?: string | null;
+    legend?: Record<string, unknown> | null;
+  } | null,
+  temperatureUnit: "C" | "F",
+): GlobeLegendSpec | null {
+  if (!layer) return null;
+  const colors = parseLegendColors(layer.legend);
+  const bounds = parseLegendScaleBounds(layer.legend);
+  const ticks = buildTicksFromBounds(bounds);
+  if (!colors || !ticks) return null;
+  const legendUnit = layerLegendUnit(layer);
+  const showTemperatureUnitToggle = legendUnit === "temperature";
+  return {
+    colors,
+    ticks: ticks.map((value) =>
+      showTemperatureUnitToggle
+        ? formatTemperatureLegendTick(value, temperatureUnit)
+        : formatScoreLegendTick(value),
+    ),
+    showTemperatureUnitToggle,
+  };
 }
 
 function mergeSeries(series: Record<string, SeriesPayload>, keys: string[]) {
@@ -640,7 +644,15 @@ function formatPopulation(value: number | null | undefined): string | null {
   return new Intl.NumberFormat("en-US").format(Math.trunc(value));
 }
 
-function InfoBubble({ text, label }: { text: string; label: string }) {
+function InfoBubble({
+  text,
+  label,
+  className,
+}: {
+  text: string;
+  label: string;
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<{
     left: number;
@@ -696,7 +708,9 @@ function InfoBubble({ text, label }: { text: string; label: string }) {
   }, [open, updateCoords]);
 
   return (
-    <span className={styles.infoBubble}>
+    <span
+      className={[styles.infoBubble, className].filter(Boolean).join(" ")}
+    >
       <button
         ref={buttonRef}
         type="button"
@@ -1863,12 +1877,16 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       releaseLayers.find((layer) => layer.id === (activeLayerId || "")) ?? null,
     [activeLayerId, releaseLayers],
   );
-  const warmingLegend = useMemo(
-    () => warmingLegendForLayer(activeLayer, unit),
+  const activeLayerLegend = useMemo(
+    () => legendForLayer(activeLayer, unit),
     [activeLayer, unit],
   );
+  const activeLayerDescription = useMemo(() => {
+    if (typeof activeLayer?.description !== "string") return "";
+    return activeLayer.description.trim();
+  }, [activeLayer]);
   const darkBackdropLayerActive = useMemo(
-    () => darkTextureBackdropForLayer(activeLayerId || null),
+    () => activeLayerId !== "" && activeLayerId !== "none",
     [activeLayerId],
   );
   const tempHeadline = useMemo(() => {
@@ -2780,7 +2798,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
           }}
           enablePick={!introVisible}
         />
-        {warmingLegend ? (
+        {activeLayerLegend ? (
           <aside
             className={`${styles.globeLegend} maplibregl-ctrl maplibregl-ctrl-group`}
             aria-label="Map legend"
@@ -2789,30 +2807,39 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
               <div
                 className={styles.globeLegendBar}
                 style={{
-                  background: `linear-gradient(to top, ${warmingLegend.colors.join(", ")})`,
+                  background: `linear-gradient(to top, ${activeLayerLegend.colors.join(", ")})`,
                 }}
               />
               <div className={styles.globeLegendTicks}>
-                {warmingLegend.ticks.map((tick) => (
+                {activeLayerLegend.ticks.map((tick) => (
                   <div key={tick} className={styles.globeLegendTick}>
                     {tick}
                   </div>
                 ))}
               </div>
             </div>
-            <button
-              type="button"
-              className={styles.globeLegendUnitSwitch}
-              aria-label={`Switch to ${unit === "C" ? "°F" : "°C"}`}
-              onClick={() => {
-                const nextUnit: "C" | "F" = unit === "C" ? "F" : "C";
-                queueGraphRestoreFromVisible();
-                setUnit(nextUnit);
-                void loadPanel(lat, lon, nextUnit);
-              }}
-            >
-              {unit === "C" ? "°C" : "°F"}
-            </button>
+            {activeLayerLegend.showTemperatureUnitToggle ? (
+              <button
+                type="button"
+                className={styles.globeLegendUnitSwitch}
+                aria-label={`Switch to ${unit === "C" ? "°F" : "°C"}`}
+                onClick={() => {
+                  const nextUnit: "C" | "F" = unit === "C" ? "F" : "C";
+                  queueGraphRestoreFromVisible();
+                  setUnit(nextUnit);
+                  void loadPanel(lat, lon, nextUnit);
+                }}
+              >
+                {unit === "C" ? "°C" : "°F"}
+              </button>
+            ) : null}
+            {activeLayerDescription ? (
+              <InfoBubble
+                className={styles.globeLegendInfoBubble}
+                label={`Layer description for ${activeLayer?.label ?? "active layer"}`}
+                text={activeLayerDescription}
+              />
+            ) : null}
           </aside>
         ) : null}
         {debugMode ? (
