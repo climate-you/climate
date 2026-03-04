@@ -531,6 +531,7 @@
   color: var(--text-primary);
   font-size: 12px;
   line-height: 1.35;
+  text-align: justify;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
   pointer-events: none;
 }
