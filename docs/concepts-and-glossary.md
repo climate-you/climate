@@ -18,6 +18,25 @@ Interpretation:
 - `0.25°` means one cell every quarter degree in latitude and longitude
 - smaller degree size = more cells = higher storage/compute cost
 
+### Grid Geometry Model (Strict Cell Grid)
+
+This repository uses a strict **cell-grid** model end-to-end (packaging, API cell lookup, debug bbox, and map textures).
+
+- Each `(i_lat, i_lon)` index represents one area cell.
+- Cell centers are:
+  - `lat_center = 90 - (i_lat + 0.5) * deg`
+  - `lon_center = -180 + (i_lon + 0.5) * deg`
+- Cell bounds are:
+  - `lat_min = lat_center - deg/2`, `lat_max = lat_center + deg/2`
+  - `lon_min = lon_center - deg/2`, `lon_max = lon_center + deg/2`
+
+Strict global dimensions used here:
+
+- `global_0p25`: `720 x 1440` (centers `89.875..-89.875`)
+- `global_0p05`: `3600 x 7200` (centers `89.975..-89.975`)
+
+This avoids mixed point-grid/cell-grid semantics and keeps debug cell overlays aligned with raster map pixels.
+
 Illustration (monochrome): [`docs/images/grid-concept-0p25.svg`](images/grid-concept-0p25.svg)
 
 #### Grids by Resolution (Cell Count + Storage Impact)

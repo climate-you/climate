@@ -89,6 +89,13 @@ class GraphListResponse(BaseModel):
     graph_ids: List[str]
 
 
+class ProjectionBounds(BaseModel):
+    lat_min: float
+    lat_max: float
+    lon_min: float
+    lon_max: float
+
+
 class LayerDescriptor(BaseModel):
     id: str
     label: str
@@ -104,6 +111,7 @@ class LayerDescriptor(BaseModel):
     opacity: Optional[float] = None
     resampling: Optional[str] = None
     legend: Optional[Dict[str, Any]] = None
+    projection_bounds: Optional["ProjectionBounds"] = None
 
 
 class VersionInfo(BaseModel):

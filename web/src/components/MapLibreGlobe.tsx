@@ -14,6 +14,12 @@ export type MapLayerOption = {
   mobileImageUrl?: string;
   mobileImageWidth?: number;
   mobileImageHeight?: number;
+  projectionBounds?: {
+    lat_min: number;
+    lat_max: number;
+    lon_min: number;
+    lon_max: number;
+  };
   opacity?: number;
   resampling?: "linear" | "nearest";
 };
@@ -129,17 +135,28 @@ function setBackdropColor(map: maplibregl.Map, color: string) {
   map.getCanvas().style.backgroundColor = color;
 }
 
-function textureCoordinates(): [
+function textureCoordinates(
+  layer?: MapLayerOption | null,
+): [
   [number, number],
   [number, number],
   [number, number],
   [number, number],
 ] {
+  const bounds = layer?.projectionBounds;
+  const lonMin =
+    typeof bounds?.lon_min === "number" ? bounds.lon_min : -180;
+  const lonMax =
+    typeof bounds?.lon_max === "number" ? bounds.lon_max : 180;
+  const latMin =
+    typeof bounds?.lat_min === "number" ? bounds.lat_min : -MERCATOR_MAX_LAT;
+  const latMax =
+    typeof bounds?.lat_max === "number" ? bounds.lat_max : MERCATOR_MAX_LAT;
   return [
-    [-180 - DATELINE_OVERDRAW_DEG, MERCATOR_MAX_LAT],
-    [180 + DATELINE_OVERDRAW_DEG, MERCATOR_MAX_LAT],
-    [180 + DATELINE_OVERDRAW_DEG, -MERCATOR_MAX_LAT],
-    [-180 - DATELINE_OVERDRAW_DEG, -MERCATOR_MAX_LAT],
+    [lonMin - DATELINE_OVERDRAW_DEG, latMax],
+    [lonMax + DATELINE_OVERDRAW_DEG, latMax],
+    [lonMax + DATELINE_OVERDRAW_DEG, latMin],
+    [lonMin - DATELINE_OVERDRAW_DEG, latMin],
   ];
 }
 
@@ -487,7 +504,7 @@ export default function MapLibreGlobe({
         maxTextureSize: maxTextureSizeRef.current,
       });
 
-      const coordinates = textureCoordinates();
+      const coordinates = textureCoordinates(selected);
       const existingSource = map.getSource(TEXTURE_SOURCE_ID) as
         | (maplibregl.ImageSource & {
             updateImage?: (args: {
@@ -1070,7 +1087,7 @@ export default function MapLibreGlobe({
             }) => void;
           })
         | undefined;
-      const coordinates = textureCoordinates();
+      const coordinates = textureCoordinates(selected);
       if (source && typeof source.updateImage === "function") {
         source.updateImage({ url: selectedTexture.imageUrl, coordinates });
       } else {

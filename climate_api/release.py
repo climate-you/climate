@@ -31,12 +31,14 @@ from climate.registry.panels import (
     validate_panels_against_maps,
     validate_panels_against_metrics,
 )
+from climate.tiles.layout import GridSpec
 
 from .config import Settings
 from .services.panels import preload_score_maps_cache
 from .store.tile_data_store import TileDataStore
 
 _RELEASE_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+_MERCATOR_MAX_LAT = 85.05112878
 
 
 @dataclass(frozen=True)
@@ -122,6 +124,56 @@ def _derive_legend_from_map_spec(map_spec: dict[str, Any]) -> dict[str, Any] | N
         if isinstance(vmax, (int, float)):
             legend["vmax"] = float(vmax)
     return legend or None
+
+
+def _grid_from_id(grid_id: str) -> GridSpec:
+    if grid_id == "global_0p25":
+        return GridSpec.global_0p25(tile_size=64)
+    if grid_id == "global_0p05":
+        return GridSpec.global_0p05(tile_size=64)
+    raise ValueError(f"Unsupported grid_id for projection bounds: {grid_id}")
+
+
+def _texture_projection_bounds(*, projection: str, grid_id: str) -> dict[str, float]:
+    projection_norm = str(projection).strip().lower() or "equirectangular"
+    if projection_norm == "equirectangular":
+        return {
+            "lat_min": -90.0,
+            "lat_max": 90.0,
+            "lon_min": -180.0,
+            "lon_max": 180.0,
+        }
+    if projection_norm != "mercator":
+        raise ValueError(
+            f"Unsupported texture projection '{projection_norm}' for release layer descriptor."
+        )
+
+    grid = _grid_from_id(grid_id)
+    deg = float(grid.deg)
+    centers = [
+        90.0 - (float(i_lat) + 0.5) * deg
+        for i_lat in range(int(grid.nlat))
+    ]
+    valid = [lat for lat in centers if -_MERCATOR_MAX_LAT <= lat <= _MERCATOR_MAX_LAT]
+    if not valid:
+        return {
+            "lat_min": -_MERCATOR_MAX_LAT,
+            "lat_max": _MERCATOR_MAX_LAT,
+            "lon_min": -180.0,
+            "lon_max": 180.0,
+        }
+
+    lat_max = min(_MERCATOR_MAX_LAT, float(valid[0] + (deg / 2.0)))
+    lat_min = max(-_MERCATOR_MAX_LAT, float(valid[-1] - (deg / 2.0)))
+    # Keep small floating-point noise from leaking into API responses.
+    lat_max = float(round(lat_max, 10))
+    lat_min = float(round(lat_min, 10))
+    return {
+        "lat_min": lat_min,
+        "lat_max": lat_max,
+        "lon_min": -180.0,
+        "lon_max": 180.0,
+    }
 
 
 def _read_image_dimensions(path: Path) -> tuple[int, int] | None:
@@ -224,6 +276,11 @@ def _build_release_layers(
             "map_id": map_id,
             "asset_path": f"maps/{grid_id}/{map_id}/{filename}",
         }
+        projection = str(map_spec.get("projection", "equirectangular"))
+        descriptor["projection_bounds"] = _texture_projection_bounds(
+            projection=projection,
+            grid_id=grid_id,
+        )
         if isinstance(output.get("mobile_filename"), str) and output.get("mobile_filename"):
             descriptor["mobile_asset_path"] = f"maps/{grid_id}/{map_id}/{mobile_filename}"
         if isinstance(output.get("width"), int):

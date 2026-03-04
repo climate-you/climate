@@ -68,6 +68,12 @@ def test_build_release_layers_success() -> None:
     assert layers[0]["mobile_asset_height"] == 341
     assert layers[0]["description"] == "desc"
     assert layers[0]["opacity"] == 0.8
+    assert layers[0]["projection_bounds"] == {
+        "lat_min": -90.0,
+        "lat_max": 90.0,
+        "lon_min": -180.0,
+        "lon_max": 180.0,
+    }
 
 
 def test_build_release_layers_validates_inputs() -> None:
@@ -146,3 +152,32 @@ def test_build_release_layers_falls_back_to_asset_dimensions(
     assert layers[0]["asset_height"] == 1935
     assert layers[0]["mobile_asset_width"] == 2048
     assert layers[0]["mobile_asset_height"] == 968
+
+
+def test_build_release_layers_projection_bounds_for_0p05_mercator() -> None:
+    layers = _build_release_layers(
+        layers_manifest={
+            "reef": {
+                "id": "reef",
+                "label": "Reef",
+                "map_id": "reef_texture",
+            },
+        },
+        maps_manifest={
+            "reef_texture": {
+                "type": "texture",
+                "source_metric": "dhw_risk_score_per_year",
+                "grid_id": "global_0p05",
+                "projection": "mercator",
+            },
+        },
+        metrics_manifest={
+            "dhw_risk_score_per_year": {"grid_id": "global_0p05"},
+        },
+    )
+    assert layers[0]["projection_bounds"] == {
+        "lat_min": -85.05,
+        "lat_max": 85.05,
+        "lon_min": -180.0,
+        "lon_max": 180.0,
+    }

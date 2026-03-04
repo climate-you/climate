@@ -10,6 +10,7 @@ from climate.tiles.layout import GridSpec, tile_counts, tile_path
 from climate.tiles.spec import read_tile_array
 
 MERCATOR_MAX_LAT = 85.05112878
+LONGITUDE_EDGE_STITCH_COLS = 8
 
 
 def package_maps(
@@ -370,6 +371,7 @@ def _write_texture_map(
     manifest = {
         "id": map_id,
         "type": "texture",
+        "grid_model": "cell",
         "file_format": file_format,
         "projection": projection,
         "projection_bounds": bounds,
@@ -456,6 +458,7 @@ def _write_score_map(
 
     bin_manifest = {
         "id": map_id,
+        "grid_model": "cell",
         "format": "int16",
         "endianness": "little",
         "grid_id": grid.grid_id,
@@ -471,6 +474,7 @@ def _write_score_map(
     manifest = {
         "id": map_id,
         "type": "score",
+        "grid_model": "cell",
         "source_metric": source_metric,
         "source_axis_years": axis,
         "output_png": str(png_path),
@@ -721,8 +725,9 @@ def _warp_lat_to_mercator(values: np.ndarray) -> np.ndarray:
     if nlat < 2 or nlon < 1:
         return arr.copy()
 
-    # Row 0 is north, row nlat-1 is south.
-    lat_src = np.linspace(90.0, -90.0, num=nlat, dtype=np.float64)
+    # Row centers on a strict global cell grid.
+    deg = 180.0 / float(nlat)
+    lat_src = 90.0 - (np.arange(nlat, dtype=np.float64) + 0.5) * deg
     valid = (lat_src <= MERCATOR_MAX_LAT) & (lat_src >= -MERCATOR_MAX_LAT)
     if np.count_nonzero(valid) < 2:
         return arr.copy()
@@ -772,24 +777,29 @@ def _stitch_longitude_edges(values: np.ndarray) -> np.ndarray:
         return arr
 
     out = arr.copy()
-    left = out[:, 0]
-    right = out[:, -1]
-    left_finite = np.isfinite(left)
-    right_finite = np.isfinite(right)
+    # Blend a narrow longitude band around the dateline to avoid visible seams
+    # in single-image globe rendering when source fields are not perfectly
+    # periodic at +/-180.
+    w = max(1, min(int(LONGITUDE_EDGE_STITCH_COLS), out.shape[1] // 2))
+    for k in range(w):
+        left = out[:, k]
+        right = out[:, -(k + 1)]
+        left_finite = np.isfinite(left)
+        right_finite = np.isfinite(right)
 
-    both = left_finite & right_finite
-    if np.any(both):
-        avg = (left[both] + right[both]) * 0.5
-        out[both, 0] = avg
-        out[both, -1] = avg
+        both = left_finite & right_finite
+        if np.any(both):
+            avg = (left[both] + right[both]) * 0.5
+            out[both, k] = avg
+            out[both, -(k + 1)] = avg
 
-    left_only = left_finite & ~right_finite
-    if np.any(left_only):
-        out[left_only, -1] = left[left_only]
+        left_only = left_finite & ~right_finite
+        if np.any(left_only):
+            out[left_only, -(k + 1)] = left[left_only]
 
-    right_only = right_finite & ~left_finite
-    if np.any(right_only):
-        out[right_only, 0] = right[right_only]
+        right_only = right_finite & ~left_finite
+        if np.any(right_only):
+            out[right_only, k] = right[right_only]
 
     return out
 

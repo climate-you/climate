@@ -166,6 +166,12 @@ type ReleaseResolveResponse = {
     opacity?: number | null;
     resampling?: "linear" | "nearest" | null;
     legend?: Record<string, unknown> | null;
+    projection_bounds?: {
+      lat_min: number;
+      lat_max: number;
+      lon_min: number;
+      lon_max: number;
+    } | null;
   }>;
 };
 
@@ -1832,6 +1838,14 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       mobileImageHeight:
         typeof layer.mobile_asset_height === "number"
           ? layer.mobile_asset_height
+          : undefined,
+      projectionBounds:
+        layer.projection_bounds &&
+        typeof layer.projection_bounds.lat_min === "number" &&
+        typeof layer.projection_bounds.lat_max === "number" &&
+        typeof layer.projection_bounds.lon_min === "number" &&
+        typeof layer.projection_bounds.lon_max === "number"
+          ? layer.projection_bounds
           : undefined,
       opacity: typeof layer.opacity === "number" ? layer.opacity : 0.72,
       resampling:

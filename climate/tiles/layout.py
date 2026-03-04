@@ -35,26 +35,26 @@ class GridSpec:
 
     @staticmethod
     def global_0p25(tile_size: int = 64) -> "GridSpec":
-        # ERA5-style global grid at 0.25°:
-        # lat: 721 points/bands (-90..90 inclusive -> 721 bands)
-        # lon: 1440 bands (-180..180 exclusive -> 1440 bands)
+        # Strict global cell grid at 0.25°:
+        # lat: 720 cells (centers 89.875..-89.875, edges at +/-90)
+        # lon: 1440 cells (-180..180 exclusive)
         return GridSpec(
             grid_id="global_0p25",
             deg=0.25,
-            nlat=721,
+            nlat=720,
             nlon=1440,
             tile_size=tile_size,
         )
 
     @staticmethod
     def global_0p05(tile_size: int = 64) -> "GridSpec":
-        # 0.05° global grid:
-        # lat: 3601 bands (-90..90 inclusive -> 3601 bands)
-        # lon: 7200 bands (-180..180 exclusive -> 7200 bands)
+        # Strict global cell grid at 0.05°:
+        # lat: 3600 cells (centers 89.975..-89.975, edges at +/-90)
+        # lon: 7200 cells (-180..180 exclusive)
         return GridSpec(
             grid_id="global_0p05",
             deg=0.05,
-            nlat=3601,
+            nlat=3600,
             nlon=7200,
             tile_size=tile_size,
         )

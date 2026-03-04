@@ -1,6 +1,5 @@
 Bug fixes / Cleanup:
 
-- [WIP] Texture alignment with cells (if removing 0.05º => visible seam on one texture)
 - ExplorerPage has several places with layer names hardcoded (eg. `warming_air`): legend, dark mode
 - clean up unused css and methods in code when all features and bugfix are done.
 - add link to github
@@ -22,6 +21,7 @@ Before public website+github:
 
 For later:
 
+- [WIP] Continue investigating offset between texture and cells
 - [WIP] map of users and clicks in GoatCounter (?)
 - Seasons graph: do we need defer loading of daily metrics?
 - [WIP] Revisit dual-repository setup (public core + private) - `docs/public-open-source-repository-strategy-plan.md`

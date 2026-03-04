@@ -50,9 +50,9 @@ def test_stitch_longitude_edges_fills_missing_edge_from_other_side() -> None:
 
 
 def test_warp_lat_to_mercator_has_no_top_bottom_nans_for_finite_input() -> None:
-    nlat = 721
+    nlat = 720
     nlon = 16
-    lat = np.linspace(90.0, -90.0, num=nlat, dtype=np.float64)
+    lat = 90.0 - (np.arange(nlat, dtype=np.float64) + 0.5) * (180.0 / float(nlat))
     values = np.broadcast_to(lat[:, None], (nlat, nlon))
 
     merc = _warp_lat_to_mercator(values)
@@ -82,10 +82,10 @@ def test_apply_palette_supports_transparent_nan() -> None:
 
 
 def test_resolve_mobile_size_defaults_to_half_resolution() -> None:
-    image = np.zeros((3403, 7200, 4), dtype=np.uint8)
+    image = np.zeros((3402, 7200, 4), dtype=np.uint8)
     width, height = _resolve_mobile_size(image=image, output={})
     assert width == 3600
-    assert height == 1702
+    assert height == 1701
 
 
 def test_mobile_texture_output_path_requires_matching_format(tmp_path) -> None:

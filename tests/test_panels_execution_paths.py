@@ -382,7 +382,7 @@ def test_build_panel_tiles_registry_uses_0p05_bbox_in_sparse_risk_zone(
 ) -> None:
     sparse_mask_path = tmp_path / "aux" / "sparse_risk_global_0p25_mask.npz"
     sparse_mask_path.parent.mkdir(parents=True, exist_ok=True)
-    mask = np.zeros((721, 1440), dtype=np.uint8)
+    mask = np.zeros((720, 1440), dtype=np.uint8)
     # Query point (0, 0) maps to i_lat=360, i_lon=720 on global_0p25.
     mask[360, 720] = 1
     np.savez_compressed(
