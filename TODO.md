@@ -1,20 +1,15 @@
 Bug fixes / Cleanup:
 
-- ExplorerPage has several places with layer names hardcoded (eg. `warming_air`): legend, dark mode
+- Make it clear graph is « Annual temperature (1979-2025) »
 - clean up unused css and methods in code when all features and bugfix are done.
-- add link to github
-
-Before beta tests:
-
-- Finish transition from Google Cloud to Hetzner. Check Firewall options, create other user than root.
-- Install ssh certificate.
-- Transfer DNS domain to new static IP.
+- (fix or not?) graph step on iphone 12 mini is on top of graphs, toggle temperature also on top of graphs
 
 Before public website+github:
 
 - refine stripe account desciption when site is up
 - add link to https://ko-fi.com/climateyou to github when repo is public (see `Display a "Sponsor" button` in settings).
 - Decide/write license for github public repository
+- create a new demo release (+ upload to github?)
 - Finalise doc: latest screenshots, link to `demo` release
 
 ---
@@ -36,3 +31,4 @@ For later:
   - case study pages that illustrate recent headlines like "2025 was second hottest year on record", effect of el nino/la nina on temperatures, etc.
 - Spread the word:
   - Terrain tiles say "tell us about your project": https://registry.opendata.aws/terrain-tiles/
+- add compatibility version in `release/manifest.json` (eg. `requires: v1.0`)
