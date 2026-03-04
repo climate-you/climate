@@ -2,36 +2,36 @@
   "version": "0.1",
   "warming_air": {
     "id": "warming_air",
-    "label": "Warming (air)",
+    "label": "Air warming (recent baseline)",
     "unit": "temperature",
-    "description": "Air temperature anomaly in 2025 vs 1979-1988",
+    "description": "Near-surface air temperature anomaly for 2025 relative to the 1979-1988 average.",
     "map_id": "t2m_warming_2025_vs_1979_1988_mercator_texture",
     "opacity": 0.72,
     "resampling": "nearest"
   },
   "warming_vs_preindustrial_air": {
     "id": "warming_vs_preindustrial_air",
-    "label": "Warming vs pre-industrial (air)",
+    "label": "Air warming (pre-industrial)",
     "unit": "temperature",
-    "description": "Blended air temperature anomaly vs pre-industrial baseline",
+    "description": "Blended near-surface air temperature anomaly for 2021-2025 relative to the 1850-1900 pre-industrial baseline.",
     "map_id": "t2m_blended_preindustrial_anomaly_2021_2025_mercator_texture",
     "opacity": 0.72,
     "resampling": "nearest"
   },
   "warming_sst": {
     "id": "warming_sst",
-    "label": "Warming (sea surface)",
+    "label": "Sea-surface warming",
     "unit": "temperature",
-    "description": "Sea surface temperature anomaly in 2025 vs 1982-1991",
+    "description": "Sea-surface temperature anomaly for 2025 relative to the 1982-1991 average.",
     "map_id": "sst_warming_2025_vs_1982_1991_mercator_texture",
     "opacity": 0.72,
     "resampling": "nearest"
   },
   "reef_stress": {
     "id": "reef_stress",
-    "label": "Coral reef stress",
+    "label": "Coral heat-stress trend",
     "unit": "score",
-    "description": "Increases in degree heating weeks since 1985",
+    "description": "Trend in annual coral heat stress (DHW risk score) from 1985 to 2025; higher values indicate faster increases.",
     "map_id": "dhw_risk_score_trend_1985_2025_mercator_texture",
     "opacity": 0.9,
     "resampling": "nearest"
