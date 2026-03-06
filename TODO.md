@@ -1,9 +1,9 @@
 Bug fixes / Cleanup:
 
-- (?) Typying only 2 letters does nothing maybe we should explain that it needs 3 letters...
+- make 3D globe rotate at the intro step of the `Please select a location`.
+- create small video presentation, cold open + fly-to London.
 - clean up unused css and methods in code when all features and bugfix are done.
 - (?) Make it clear year range for graphs, eg. "Annual temperature (1979-2025)" (or maybe just in info bubble)
-- (?) graph step on iphone 12 mini is on top of graphs, toggle temperature also on top of graphs
 
 Before public website+github:
 
@@ -26,7 +26,7 @@ For later:
 - seasons step on `Annual sea temperature`
 - graph with all years on top of each other and last 5 years in bright colours to distinguish them from older years (grey)
 - Place Resolver:
-  - Add a “best match” endpoint for a free‑text query (single request) (replace `autocomplete`->`resolve` by `best-match`)
+  - search bar: add a “best match” endpoint for a free‑text query (single request) (replace `autocomplete`->`resolve` by `best-match`)
   - Add prefix‑length + fuzziness tuning knobs to autocomplete (`Lodnon` -> `London`)
 - UX:
   - case study pages that illustrate recent headlines like "2025 was second hottest year on record", effect of el nino/la nina on temperatures, etc.
