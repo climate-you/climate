@@ -903,6 +903,10 @@
     border-width: 3px;
   }
 
+  .searchInput {
+    font-size: 16px;
+  }
+
   .locationPanel {
     right: 0;
     width: 100%;
