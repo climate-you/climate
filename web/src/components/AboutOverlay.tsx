@@ -80,7 +80,7 @@ export default function AboutOverlay({
             migration, and conflict risks.
           </p>
           <p className={styles.aboutText}>
-            The code for this website is fully available on{" "}
+            The code for this website will soon be available on{" "}
             <a
               href="https://github.com/benoit-leveau/climate"
               target="_blank"
@@ -134,18 +134,18 @@ export default function AboutOverlay({
                 <span className={styles.aboutKofiIcon} aria-hidden="true" />
                 Buy us a coffee
               </a>
-              <a
-                className={styles.aboutActionButton}
-                href="https://github.com/benoit-leveau/climate/issues/new"
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                className={`${styles.aboutActionButton} ${styles.aboutActionButtonDisabled}`}
+                disabled
+                aria-disabled="true"
               >
                 <span
                   className={`${styles.aboutActionPngIcon} ${styles.aboutGithubIcon}`}
                   aria-hidden="true"
                 />
                 Report a bug
-              </a>
+              </button>
             </div>
             <p className={`${styles.aboutText} ${styles.aboutVersion}`}>
               <span>App version: {appVersion ?? "unknown"}</span>

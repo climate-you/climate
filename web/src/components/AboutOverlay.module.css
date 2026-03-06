@@ -141,6 +141,15 @@
   border-color: #001dff;
 }
 
+.aboutActionButtonDisabled,
+.aboutActionButtonDisabled:hover,
+.aboutActionButtonDisabled:focus-visible {
+  background: #9ca3af;
+  border-color: #9ca3af;
+  color: #f3f4f6;
+  cursor: not-allowed;
+}
+
 .aboutActionPngIcon {
   width: 16px;
   height: 16px;
