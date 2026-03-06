@@ -192,6 +192,18 @@
   margin-left: 5px;
 }
 
+@media (max-width: 900px) {
+  .globeLegendInfoBubble .infoBubbleButton:focus:first-child,
+  .globeLegendInfoBubble .infoBubbleButton:focus:last-child,
+  .globeLegendInfoBubble .infoBubbleButton:focus:only-child,
+  .globeLegendInfoBubble .infoBubbleButton:focus-visible:first-child,
+  .globeLegendInfoBubble .infoBubbleButton:focus-visible:last-child,
+  .globeLegendInfoBubble .infoBubbleButton:focus-visible:only-child {
+    border-radius: 999px !important;
+    box-shadow: none !important;
+  }
+}
+
 .debugHud {
   position: absolute;
   right: 12px;
@@ -575,6 +587,10 @@
 
 .infoBubbleTooltipRight {
   transform: translate(0, 0);
+}
+
+.infoBubbleTooltipRightAbove {
+  transform: translate(20px, -60%);
 }
 
 .panelPopulation {

@@ -1,6 +1,6 @@
 Bug fixes / Cleanup:
 
-- info bubble for legend displays below screen on mobile
+- (?) Typying only 2 letters does nothing maybe we should explain that it needs 3 letters...
 - clean up unused css and methods in code when all features and bugfix are done.
 - (?) Make it clear year range for graphs, eg. "Annual temperature (1979-2025)" (or maybe just in info bubble)
 - (?) graph step on iphone 12 mini is on top of graphs, toggle temperature also on top of graphs

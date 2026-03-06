@@ -648,16 +648,18 @@ function InfoBubble({
   text,
   label,
   className,
+  preferAboveOnMobile = false,
 }: {
   text: string;
   label: string;
   className?: string;
+  preferAboveOnMobile?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<{
     left: number;
     top: number;
-    placement: "below" | "left" | "right";
+    placement: "below" | "left" | "right" | "rightAbove";
   } | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -669,12 +671,13 @@ function InfoBubble({
     const tooltipMinWidth = 170;
     const spaceRight = viewportWidth - rect.right;
     const spaceLeft = rect.left;
+    const useAbovePlacement = preferAboveOnMobile && viewportWidth <= 900;
     if (spaceRight >= tooltipMinWidth || spaceLeft >= tooltipMinWidth) {
       if (spaceRight >= spaceLeft) {
         setCoords({
           left: Math.round(rect.right),
-          top: Math.round(rect.bottom + 8),
-          placement: "right",
+          top: Math.round(useAbovePlacement ? rect.top - 8 : rect.bottom + 8),
+          placement: useAbovePlacement ? "rightAbove" : "right",
         });
         return;
       }
@@ -694,7 +697,7 @@ function InfoBubble({
       top: Math.round(rect.bottom),
       placement: "below",
     });
-  }, []);
+  }, [preferAboveOnMobile]);
 
   useEffect(() => {
     if (!open) return;
@@ -731,6 +734,10 @@ function InfoBubble({
               } ${
                 coords.placement === "right"
                   ? styles.infoBubbleTooltipRight
+                  : ""
+              } ${
+                coords.placement === "rightAbove"
+                  ? styles.infoBubbleTooltipRightAbove
                   : ""
               }`}
               style={{ left: `${coords.left}px`, top: `${coords.top}px` }}
@@ -2838,6 +2845,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
                 className={styles.globeLegendInfoBubble}
                 label={`Layer description for ${activeLayer?.label ?? "active layer"}`}
                 text={activeLayerDescription}
+                preferAboveOnMobile
               />
             ) : null}
           </aside>
