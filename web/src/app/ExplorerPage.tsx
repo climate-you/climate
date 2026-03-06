@@ -2765,6 +2765,8 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const populationText = formatPopulation(selectedLocation?.population);
   const coldOpenWarmingText =
     defaultTemperatureUnitForLocale() === "F" ? "+1.9°F" : "+1.1°C";
+  const coldOpenGlobeRotate =
+    introVisible && introPromptVisible && !introFading;
   const showIntroMap = !introVisible || introPromptVisible;
   const debugBbox = resp?.location?.panel_valid_bbox ?? null;
   const debugInBbox = inBbox(lat, lon, debugBbox);
@@ -2804,6 +2806,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
             setPicked(null);
           }}
           enablePick={!introVisible}
+          autoRotate={coldOpenGlobeRotate}
         />
         {activeLayerLegend ? (
           <aside

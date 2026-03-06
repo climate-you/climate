@@ -1,6 +1,5 @@
 Bug fixes / Cleanup:
 
-- make 3D globe rotate at the intro step of the `Please select a location`.
 - create small video presentation, cold open + fly-to London.
 - (?) Make it clear year range for graphs, eg. "Annual temperature (1979-2025)" (or maybe just in info bubble)
 - clean up unused css and methods in code when all features and bugfix are done.

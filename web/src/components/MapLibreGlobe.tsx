@@ -56,6 +56,7 @@ type Props = {
   debugBboxGridId?: string | null;
   textureVariantOverride?: TextureVariantOverride;
   onTextureDebugInfoChange?: (info: TextureDebugInfo | null) => void;
+  autoRotate?: boolean;
 };
 
 const initialView = {
@@ -90,6 +91,7 @@ const CITY_SNAP_LAYER_IDS = ["label_city_capital", "label_city"] as const;
 const LAYER_MENU_AUTO_CLOSE_MS = 800;
 const LAYER_MENU_FADE_MS = 500;
 const MOBILE_TEXTURE_FALLBACK_LIMIT = 4096;
+const AUTO_ROTATE_DEG_PER_SEC = 3;
 
 function baseZoomForViewportWidth(width: number) {
   if (width <= 480) return 1.0;
@@ -339,6 +341,7 @@ export default function MapLibreGlobe({
   debugBboxGridId = null,
   textureVariantOverride = "auto",
   onTextureDebugInfoChange,
+  autoRotate = false,
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -359,6 +362,7 @@ export default function MapLibreGlobe({
   const debugBboxGridIdRef = useRef(debugBboxGridId);
   const textureVariantOverrideRef = useRef(textureVariantOverride);
   const onTextureDebugInfoChangeRef = useRef(onTextureDebugInfoChange);
+  const autoRotateRef = useRef(autoRotate);
   const maxTextureSizeRef = useRef<number | null>(null);
   const textureBackdropRef = useRef<string>(BACKDROP_WHITE);
   const styleReadyRef = useRef(false);
@@ -428,6 +432,10 @@ export default function MapLibreGlobe({
   useEffect(() => {
     onTextureDebugInfoChangeRef.current = onTextureDebugInfoChange;
   }, [onTextureDebugInfoChange]);
+
+  useEffect(() => {
+    autoRotateRef.current = autoRotate;
+  }, [autoRotate]);
 
   useEffect(() => {
     textureBackdropRef.current = textureBackdrop;
@@ -1308,6 +1316,39 @@ export default function MapLibreGlobe({
       essential: true,
     });
   }, [panelOpen, focusLocation]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !autoRotate) return;
+    if (focusLocation) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    let rafId: number | null = null;
+    let previousTimestamp: number | null = null;
+
+    const tick = (timestamp: number) => {
+      if (!autoRotateRef.current) return;
+      if (focusLocationRef.current) return;
+
+      if (previousTimestamp === null) {
+        previousTimestamp = timestamp;
+        rafId = window.requestAnimationFrame(tick);
+        return;
+      }
+
+      const elapsedSeconds = Math.min((timestamp - previousTimestamp) / 1000, 0.05);
+      previousTimestamp = timestamp;
+      const center = map.getCenter();
+      const nextLon = ((((center.lng + elapsedSeconds * AUTO_ROTATE_DEG_PER_SEC) + 180) % 360) + 360) % 360 - 180;
+      map.jumpTo({ center: [nextLon, center.lat], bearing: 0 });
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    rafId = window.requestAnimationFrame(tick);
+    return () => {
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+    };
+  }, [autoRotate, focusLocation]);
 
   return (
     <div ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
