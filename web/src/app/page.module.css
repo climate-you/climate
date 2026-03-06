@@ -992,6 +992,10 @@
     padding-right: 0;
   }
 
+  .graphTitle {
+    margin: 0;
+  }
+
   .graphCaption {
     margin-right: 0;
   }
