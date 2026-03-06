@@ -2,34 +2,38 @@ Bug fixes / Cleanup:
 
 - make 3D globe rotate at the intro step of the `Please select a location`.
 - create small video presentation, cold open + fly-to London.
-- clean up unused css and methods in code when all features and bugfix are done.
 - (?) Make it clear year range for graphs, eg. "Annual temperature (1979-2025)" (or maybe just in info bubble)
+- clean up unused css and methods in code when all features and bugfix are done.
 
 Before public website+github:
 
+- Sitemap/robots.txt for google?
 - refine stripe account desciption when site is up
 - add link to https://ko-fi.com/climateyou to github when repo is public (see `Display a "Sponsor" button` in settings).
 - Decide/write license for github public repository
-- create a new demo release (+ upload to github?)
-- Finalise doc: latest screenshots, link to `demo` release
+- create a new demo release (+ upload somewhere, github?)
+- Finalise doc: latest screenshots (or video?), link to `demo` release
 
 ---
 
 For later:
 
-- [WIP] Continue investigating offset between texture and cells
-- [WIP] map of users and clicks in GoatCounter (?)
-- Seasons graph: do we need defer loading of daily metrics?
-- [WIP] Revisit dual-repository setup (public core + private) - `docs/public-open-source-repository-strategy-plan.md`
+- [WIP] Continue investigating offset between texture and cells (display a specific lat/lon area in texture and check in debug)
+- [WIP] map of users and clicks (in GoatCounter ? or in a lightweight file/db sqlite, etc.)
+- [WIP] precipitations graph (annual temperature, dry spells, maybe check patterns?)
+- Seasons graph: do we need defer loading of daily metrics? (check performance)
+- [Plan] Revisit dual-repository setup (public core + private) - `docs/public-open-source-repository-strategy-plan.md`
 - [Codex] Packager optimization for sparse domains: build mask-aware rectangular download batches (cluster occupied tiles, split oversized boxes on 413) to reduce ERDDAP overfetch for reef-like datasets.
-- precipitations graph (?)
 - seasons step on `Annual sea temperature`
 - graph with all years on top of each other and last 5 years in bright colours to distinguish them from older years (grey)
-- Place Resolver:
-  - search bar: add a “best match” endpoint for a free‑text query (single request) (replace `autocomplete`->`resolve` by `best-match`)
+- Place Resolver / Search bar:
+  - add a “best match” endpoint for a free‑text query (single request) (replace `autocomplete`->`resolve` by `best-match`)
   - Add prefix‑length + fuzziness tuning knobs to autocomplete (`Lodnon` -> `London`)
-- UX:
-  - case study pages that illustrate recent headlines like "2025 was second hottest year on record", effect of el nino/la nina on temperatures, etc.
+  - should we start autocomplete at 1/2 characters?
+- case study pages that illustrate recent headlines like "2025 was second hottest year on record", effect of el nino/la nina on temperatures, etc.
 - Spread the word:
   - Terrain tiles say "tell us about your project": https://registry.opendata.aws/terrain-tiles/
-- add compatibility version in `release/manifest.json` (eg. `requires: v1.0`)
+  - contact CDS
+- revamp releases:
+  - add compatibility version in `release/manifest.json` (eg. `requires: v1.0`)
+  - metrics should be versioned, and a release should be a list of `metric->version` (so a new release with 95% of metrics same as before won't take up much more space on disk)
