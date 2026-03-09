@@ -258,8 +258,7 @@ class PlaceResolver:
             distance_km=float(dist),
             country_code=(
                 str(self._country_codes[i]).strip().upper()
-                if i < len(self._country_codes)
-                and str(self._country_codes[i]).strip()
+                if i < len(self._country_codes) and str(self._country_codes[i]).strip()
                 else None
             ),
             population=population,

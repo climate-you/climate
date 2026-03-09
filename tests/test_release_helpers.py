@@ -16,8 +16,16 @@ def test_resolve_texture_format_and_filename() -> None:
     assert _resolve_texture_file_format({"file_format": "WEBP"}) == "webp"
     assert _resolve_texture_file_format({"output": {"filename": "my-map.png"}}) == "png"
     assert _resolve_texture_filename(map_id="a", map_spec={}) == "a.png"
-    assert _resolve_texture_filename(map_id="a", map_spec={"output": {"filename": "name"}}) == "name.png"
-    assert _resolve_texture_filename(map_id="a", map_spec={"output": {"filename": "name.webp"}}) == "name.webp"
+    assert (
+        _resolve_texture_filename(map_id="a", map_spec={"output": {"filename": "name"}})
+        == "name.png"
+    )
+    assert (
+        _resolve_texture_filename(
+            map_id="a", map_spec={"output": {"filename": "name.webp"}}
+        )
+        == "name.webp"
+    )
 
     with pytest.raises(ValueError, match="Unsupported texture file_format"):
         _resolve_texture_file_format({"file_format": "gif"})
@@ -61,7 +69,10 @@ def test_build_release_layers_success() -> None:
         },
     )
     assert layers[0]["asset_path"] == "maps/global_0p25/t2m_texture/air-temp.png"
-    assert layers[0]["mobile_asset_path"] == "maps/global_0p25/t2m_texture/air-temp-mobile.png"
+    assert (
+        layers[0]["mobile_asset_path"]
+        == "maps/global_0p25/t2m_texture/air-temp-mobile.png"
+    )
     assert layers[0]["asset_width"] == 1440
     assert layers[0]["asset_height"] == 681
     assert layers[0]["mobile_asset_width"] == 720

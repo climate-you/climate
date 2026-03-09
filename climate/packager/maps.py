@@ -183,7 +183,9 @@ def _load_scalar_grid_from_metric(
     ext = _compression_ext(compression)
     tile_size = int(storage.get("tile_size", 64))
     grid = _grid_from_id(str(metric_spec["grid_id"]), tile_size=tile_size)
-    axis = _load_metric_axis(series_root, grid, metric_id, str(metric_spec.get("time_axis", "yearly")))
+    axis = _load_metric_axis(
+        series_root, grid, metric_id, str(metric_spec.get("time_axis", "yearly"))
+    )
 
     ntr, ntc = tile_counts(grid)
     out = np.full((grid.nlat, grid.nlon), np.nan, dtype=np.float64)
@@ -203,18 +205,20 @@ def _load_scalar_grid_from_metric(
                 ext=ext,
             )
             if not p.exists():
-                raise FileNotFoundError(
-                    f"Missing source tile for map generation: {p}"
-                )
+                raise FileNotFoundError(f"Missing source tile for map generation: {p}")
             hdr, arr = read_tile_array(p)
             if hdr.nyears == 0:
                 tile_scalar = np.asarray(arr, dtype=np.float64)
                 if tile_scalar.ndim != 2:
-                    raise ValueError(f"Unexpected scalar tile shape for {p}: {tile_scalar.shape}")
+                    raise ValueError(
+                        f"Unexpected scalar tile shape for {p}: {tile_scalar.shape}"
+                    )
             else:
                 tile_series = np.asarray(arr, dtype=np.float64)
                 if tile_series.ndim != 3:
-                    raise ValueError(f"Unexpected series tile shape for {p}: {tile_series.shape}")
+                    raise ValueError(
+                        f"Unexpected series tile shape for {p}: {tile_series.shape}"
+                    )
                 tile_scalar = _reduce_series(tile_series, axis, reducer)
 
             out[
@@ -276,7 +280,9 @@ def _slope_per_cell(x: np.ndarray, y: np.ndarray) -> np.ndarray:
     if x.ndim != 1:
         raise ValueError(f"Expected 1D x axis, got shape {x.shape}")
     if y.ndim != 3 or y.shape[-1] != x.shape[0]:
-        raise ValueError(f"Expected y shape (h, w, n) with n={x.shape[0]}, got {y.shape}")
+        raise ValueError(
+            f"Expected y shape (h, w, n) with n={x.shape[0]}, got {y.shape}"
+        )
 
     mask = np.isfinite(y)
     n = np.sum(mask, axis=-1)
@@ -293,7 +299,9 @@ def _slope_per_cell(x: np.ndarray, y: np.ndarray) -> np.ndarray:
     dy = y - y_mean[..., None]
     num = np.sum(np.where(mask, dx * dy, 0.0), axis=-1)
     den = np.sum(np.where(mask, dx * dx, 0.0), axis=-1)
-    slope = np.divide(num, den, out=np.full_like(num, np.nan), where=(n >= 2) & (den > 0.0))
+    slope = np.divide(
+        num, den, out=np.full_like(num, np.nan), where=(n >= 2) & (den > 0.0)
+    )
     return slope
 
 
@@ -321,7 +329,9 @@ def _write_texture_map(
     output = spec.get("output", {}) or {}
     file_format = _resolve_texture_file_format(spec)
     texture_path = _texture_output_path(map_id=map_id, out_dir=out_dir, spec=spec)
-    mobile_texture_path = _mobile_texture_output_path(map_id=map_id, out_dir=out_dir, spec=spec)
+    mobile_texture_path = _mobile_texture_output_path(
+        map_id=map_id, out_dir=out_dir, spec=spec
+    )
     manifest_path = out_dir / "manifest.json"
     if resume and texture_path.exists() and manifest_path.exists():
         if mobile_texture_path is not None and not mobile_texture_path.exists():
@@ -334,12 +344,16 @@ def _write_texture_map(
     scale = spec.get("scale", {})
     vmin, vmax = _resolve_scale(values, scale)
     palette = spec.get("palette", {}) or {}
-    colors = palette.get("colors", ["#313695", "#74add1", "#f7f7f7", "#f46d43", "#a50026"])
+    colors = palette.get(
+        "colors", ["#313695", "#74add1", "#f7f7f7", "#f46d43", "#a50026"]
+    )
     nan_color = str(palette.get("nan_color", "#000000"))
     nan_alpha_raw = palette.get("nan_alpha")
     nan_alpha = float(nan_alpha_raw) if nan_alpha_raw is not None else None
     if nan_alpha is not None and not (0.0 <= nan_alpha <= 1.0):
-        raise ValueError(f"Invalid palette.nan_alpha for {map_id}: {nan_alpha}. Expected 0..1.")
+        raise ValueError(
+            f"Invalid palette.nan_alpha for {map_id}: {nan_alpha}. Expected 0..1."
+        )
     projection = _resolve_projection(spec)
     projected_values, bounds = _project_texture_values(values, projection=projection)
     projected_values = _stitch_longitude_edges(projected_values)
@@ -364,7 +378,9 @@ def _write_texture_map(
         if _is_default_half_size(image, width=mobile_width, height=mobile_height):
             mobile_image = _downsample_half_preserve_alpha(image)
         else:
-            mobile_image = _resize_if_needed(image, width=mobile_width, height=mobile_height)
+            mobile_image = _resize_if_needed(
+                image, width=mobile_width, height=mobile_height
+            )
         _save_texture(mobile_texture_path, mobile_image, file_format=file_format)
 
     finite = projected_values[np.isfinite(projected_values)]
@@ -378,12 +394,16 @@ def _write_texture_map(
         "source_metric": source_metric,
         "source_axis_years": axis,
         "output_texture": str(texture_path),
-        "output_mobile_texture": str(mobile_texture_path) if mobile_texture_path else None,
+        "output_mobile_texture": (
+            str(mobile_texture_path) if mobile_texture_path else None
+        ),
         "shape": [int(projected_values.shape[0]), int(projected_values.shape[1])],
         "output_shape": [int(image.shape[0]), int(image.shape[1])],
-        "output_mobile_shape": [int(mobile_image.shape[0]), int(mobile_image.shape[1])]
-        if mobile_image is not None
-        else None,
+        "output_mobile_shape": (
+            [int(mobile_image.shape[0]), int(mobile_image.shape[1])]
+            if mobile_image is not None
+            else None
+        ),
         "scale": {
             "mode": "linear",
             "vmin": float(vmin),
@@ -408,7 +428,9 @@ def _write_texture_map(
             manifest["output_mobile_png"] = str(mobile_texture_path)
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     if mobile_texture_path is not None:
-        print(f"[maps] Wrote texture map: {texture_path} (mobile: {mobile_texture_path})")
+        print(
+            f"[maps] Wrote texture map: {texture_path} (mobile: {mobile_texture_path})"
+        )
     else:
         print(f"[maps] Wrote texture map: {texture_path}")
     return True
@@ -433,7 +455,13 @@ def _write_score_map(
     bin_path = out_dir / binary_name
     meta_path = out_dir / "binary_manifest.json"
     manifest_path = out_dir / "manifest.json"
-    if resume and png_path.exists() and bin_path.exists() and meta_path.exists() and manifest_path.exists():
+    if (
+        resume
+        and png_path.exists()
+        and bin_path.exists()
+        and meta_path.exists()
+        and manifest_path.exists()
+    ):
         if debug:
             print(f"[maps] Skip existing score map: {out_dir}")
         return False
@@ -557,13 +585,19 @@ def _mobile_texture_output_path(
     return out_dir / f"{filename_str}.{file_format}"
 
 
-def _resolve_mobile_size(*, image: np.ndarray, output: dict[str, Any]) -> tuple[int, int]:
+def _resolve_mobile_size(
+    *, image: np.ndarray, output: dict[str, Any]
+) -> tuple[int, int]:
     mobile_width_raw = output.get("mobile_width")
     mobile_height_raw = output.get("mobile_height")
     if mobile_width_raw is None and mobile_height_raw is None:
-        return max(1, int(round(image.shape[1] / 2.0))), max(1, int(round(image.shape[0] / 2.0)))
+        return max(1, int(round(image.shape[1] / 2.0))), max(
+            1, int(round(image.shape[0] / 2.0))
+        )
     if mobile_width_raw is None or mobile_height_raw is None:
-        raise ValueError("Both output.mobile_width and output.mobile_height must be set together.")
+        raise ValueError(
+            "Both output.mobile_width and output.mobile_height must be set together."
+        )
     return int(mobile_width_raw), int(mobile_height_raw)
 
 
@@ -606,11 +640,11 @@ def _score_to_rgb(score: np.ndarray) -> np.ndarray:
     score = np.asarray(score, dtype=np.int16)
     palette = np.asarray(
         [
-            [0, 0, 0],        # 0 invalid
-            [255, 230, 0],    # 1
-            [255, 170, 0],    # 2
-            [255, 90, 0],     # 3
-            [215, 25, 28],    # 4
+            [0, 0, 0],  # 0 invalid
+            [255, 230, 0],  # 1
+            [255, 170, 0],  # 2
+            [255, 90, 0],  # 3
+            [215, 25, 28],  # 4
         ],
         dtype=np.uint8,
     )
@@ -720,7 +754,9 @@ def _project_texture_values(
 def _warp_lat_to_mercator(values: np.ndarray) -> np.ndarray:
     arr = np.asarray(values, dtype=np.float64)
     if arr.ndim != 2:
-        raise ValueError(f"Expected 2D scalar grid for texture map, got shape: {arr.shape}")
+        raise ValueError(
+            f"Expected 2D scalar grid for texture map, got shape: {arr.shape}"
+        )
     nlat, nlon = arr.shape
     if nlat < 2 or nlon < 1:
         return arr.copy()
@@ -908,7 +944,9 @@ def _save_texture(path: Path, image: np.ndarray, *, file_format: str) -> None:
             ) from exc
         path.parent.mkdir(parents=True, exist_ok=True)
         mode = _texture_image_mode(image)
-        Image.fromarray(image, mode=mode).save(path, format="WEBP", quality=85, method=6)
+        Image.fromarray(image, mode=mode).save(
+            path, format="WEBP", quality=85, method=6
+        )
         return
 
     raise ValueError(f"Unsupported texture file format: {file_format}")
@@ -950,7 +988,9 @@ def _year_index(axis: list[int], year: int) -> int:
     try:
         return axis.index(year)
     except ValueError as exc:
-        raise ValueError(f"Year {year} not found in metric axis {axis[0]}..{axis[-1]}") from exc
+        raise ValueError(
+            f"Year {year} not found in metric axis {axis[0]}..{axis[-1]}"
+        ) from exc
 
 
 def _year_slice(axis: list[int], start_year: int, end_year: int) -> tuple[int, int]:

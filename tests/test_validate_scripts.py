@@ -63,7 +63,10 @@ def test_validate_suite_returns_nonzero_on_failure(tmp_path: Path) -> None:
     locations_csv = tmp_path / "locations.csv"
     index_csv = tmp_path / "locations.index.csv"
     locations_csv.write_text("geonameid,lat,lon\n1,48.85,2.35\n", encoding="utf-8")
-    index_csv.write_text("geonameid,label,lat,lon,country_code\n1,Paris,48.85,2.35,FR\n", encoding="utf-8")
+    index_csv.write_text(
+        "geonameid,label,lat,lon,country_code\n1,Paris,48.85,2.35,FR\n",
+        encoding="utf-8",
+    )
 
     result = subprocess.run(
         [
@@ -150,12 +153,12 @@ def test_validate_sparse_risk_mask_checks_accuracy(tmp_path: Path) -> None:
 
     (release_root / "registry" / "datasets.json").write_text(
         (
-            '{\n'
+            "{\n"
             '  "version":"0.1",\n'
             '  "crw_dhw_daily":{"id":"crw_dhw_daily","source":{"mask_file":"'
             + str(fine_mask_path)
             + '"}}\n'
-            '}\n'
+            "}\n"
         ),
         encoding="utf-8",
     )

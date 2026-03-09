@@ -9,7 +9,9 @@ from climate.tiles import spec
 
 
 def test_tile_header_pack_unpack_and_dtype() -> None:
-    hdr = spec.TileHeader(version=1, dtype_code=spec.DT_F32, nyears=2, tile_h=2, tile_w=3)
+    hdr = spec.TileHeader(
+        version=1, dtype_code=spec.DT_F32, nyears=2, tile_h=2, tile_w=3
+    )
     packed = hdr.pack()
     parsed = spec.TileHeader.unpack(packed)
     assert parsed.dtype == np.dtype("<f4")

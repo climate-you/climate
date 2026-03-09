@@ -249,7 +249,10 @@ def _compute_tiles_from_cds_downloads(
             print(f"[cds] Aggregating {time_axis} (daily source, agg={agg})")
         da_parts.append(agg_fn(da_daily, params))
     else:
-        if _is_cds_monthly_dataset(dataset, params) and agg == "cmip_multi_model_offset_from_monthly":
+        if (
+            _is_cds_monthly_dataset(dataset, params)
+            and agg == "cmip_multi_model_offset_from_monthly"
+        ):
             monthly_parts_all: list[xr.DataArray] = []
             for _years_part, paths in downloads:
                 dl_path = paths[0]
@@ -278,7 +281,9 @@ def _compute_tiles_from_cds_downloads(
                 finally:
                     ds.close()
             if debug:
-                print("[cds] Concatenating monthly parts for cmip_multi_model_offset_from_monthly")
+                print(
+                    "[cds] Concatenating monthly parts for cmip_multi_model_offset_from_monthly"
+                )
             da_monthly = xr.concat(
                 monthly_parts_all,
                 dim=find_time_dim(monthly_parts_all[0]),
@@ -682,7 +687,9 @@ def _batch_has_any_valid_cells(
 ) -> bool:
     if dataset_mask is None:
         return True
-    view = _batch_mask_slice(dataset_mask=dataset_mask, grid=grid, tile_range=tile_range)
+    view = _batch_mask_slice(
+        dataset_mask=dataset_mask, grid=grid, tile_range=tile_range
+    )
     return bool(np.any(view))
 
 
@@ -784,7 +791,9 @@ def _apply_postprocess(da: xr.DataArray, steps: list[object] | None) -> xr.DataA
     return da
 
 
-def _batch_target_lat_lon(grid: GridSpec, tile_range: TileRange) -> tuple[np.ndarray, np.ndarray]:
+def _batch_target_lat_lon(
+    grid: GridSpec, tile_range: TileRange
+) -> tuple[np.ndarray, np.ndarray]:
     ts = grid.tile_size
     i_lat0 = tile_range.tile_r0 * ts
     i_lon0 = tile_range.tile_c0 * ts
@@ -910,7 +919,9 @@ def _append_yearly_part(
     years_parts.extend(years_part)
 
 
-def _select_years_if_present(da_out: xr.DataArray, years_part: list[int]) -> xr.DataArray:
+def _select_years_if_present(
+    da_out: xr.DataArray, years_part: list[int]
+) -> xr.DataArray:
     if "year" not in da_out.dims:
         return da_out
     if not years_part:
@@ -1037,12 +1048,18 @@ def _agg_map() -> dict[str, callable]:
             percentile=float((params or {}).get("percentile", 90)),
             debug=bool((params or {}).get("_debug", False)),
         ),
-        "dhw_no_risk_days_per_year": lambda da, _params: dhw_no_risk_days_per_year_xr(da),
-        "dhw_moderate_risk_days_per_year": lambda da, _params: dhw_moderate_risk_days_per_year_xr(da),
-        "dhw_severe_risk_days_per_year": lambda da, _params: dhw_severe_risk_days_per_year_xr(da),
+        "dhw_no_risk_days_per_year": lambda da, _params: dhw_no_risk_days_per_year_xr(
+            da
+        ),
+        "dhw_moderate_risk_days_per_year": lambda da, _params: dhw_moderate_risk_days_per_year_xr(
+            da
+        ),
+        "dhw_severe_risk_days_per_year": lambda da, _params: dhw_severe_risk_days_per_year_xr(
+            da
+        ),
         "dhw_risk_score_per_year": lambda da, _params: dhw_risk_score_per_year_xr(da),
         "dhw_max_per_year": lambda da, _params: dhw_max_per_year_xr(da),
-}
+    }
 
 
 def _cmip_multi_model_offset_from_monthly(
@@ -1209,7 +1226,9 @@ def _resolve_year_ranges(
         _parse_year_range(source.get("_analysis_time_range")) or download_range
     )
 
-    analysis_start = int(cli_start_year) if cli_start_year is not None else analysis_range[0]
+    analysis_start = (
+        int(cli_start_year) if cli_start_year is not None else analysis_range[0]
+    )
     analysis_end = int(cli_end_year) if cli_end_year is not None else analysis_range[1]
     if analysis_start > analysis_end:
         raise ValueError(
@@ -1963,14 +1982,18 @@ def _download_batch_erddap_daily(
                         last_err = exc
                         cycle_errors.append(exc)
                         continue
-                if cycle_errors and all(_looks_like_http_404(err) for err in cycle_errors):
+                if cycle_errors and all(
+                    _looks_like_http_404(err) for err in cycle_errors
+                ):
                     # All configured bases reject this dataset id/query as 404.
                     # Retrying 50 cycles will not help and just burns time.
                     raise RuntimeError(
                         f"ERDDAP download failed for {dataset_key}: all bases returned 404 "
                         f"for dataset_id={dataset_id}. Last error: {cycle_errors[-1]}"
                     )
-                if cycle_errors and all(_looks_like_http_413(err) for err in cycle_errors):
+                if cycle_errors and all(
+                    _looks_like_http_413(err) for err in cycle_errors
+                ):
                     # 413 can be transient on some ERDDAP hosts/rate windows; allow
                     # multiple cycles before treating request shape as unusable.
                     consecutive_413_cycles += 1
@@ -1985,7 +2008,9 @@ def _download_batch_erddap_daily(
                 else:
                     consecutive_413_cycles = 0
                 wait_s = min(backoff_max, backoff_base * (2**cycle))
-                print(f"[ERDDAP {dataset_key}] All bases failed (cycle {cycle+1}/{max_cycles}); sleeping {wait_s:.0f}s")
+                print(
+                    f"[ERDDAP {dataset_key}] All bases failed (cycle {cycle+1}/{max_cycles}); sleeping {wait_s:.0f}s"
+                )
                 time.sleep(wait_s)
 
     raise RuntimeError(f"ERDDAP download failed for {dataset_key}: {last_err}")
@@ -2032,7 +2057,9 @@ def _snapshot_release_registry(
     }
     for filename, src in sources.items():
         if not src.exists():
-            raise FileNotFoundError(f"Missing registry file for release snapshot: {src}")
+            raise FileNotFoundError(
+                f"Missing registry file for release snapshot: {src}"
+            )
         dst = registry_root / filename
         shutil.copy2(src, dst)
         copied[filename] = str(dst.relative_to(release_root))
@@ -2134,9 +2161,7 @@ def package_registry(
     )
     schema_path = Path(schema_path) if schema_path is not None else DEFAULT_SCHEMA_PATH
     datasets_path = (
-        Path(datasets_path)
-        if datasets_path is not None
-        else DEFAULT_DATASETS_PATH
+        Path(datasets_path) if datasets_path is not None else DEFAULT_DATASETS_PATH
     )
     manifest = load_metrics(
         path=metrics_path,
@@ -2146,7 +2171,9 @@ def package_registry(
     )
     if metric_ids:
         known_metric_ids = {
-            key for key in manifest.keys() if key != "version" and isinstance(manifest[key], dict)
+            key
+            for key in manifest.keys()
+            if key != "version" and isinstance(manifest[key], dict)
         }
         unknown_metric_ids = sorted(set(metric_ids) - known_metric_ids)
         if unknown_metric_ids:
@@ -2170,7 +2197,9 @@ def package_registry(
         )
         validate_maps_against_metrics(maps_manifest, manifest)
     elif debug:
-        print(f"[maps] No maps registry found at {maps_path_eff}; skipping map packaging.")
+        print(
+            f"[maps] No maps registry found at {maps_path_eff}; skipping map packaging."
+        )
 
     layers_path_eff = (
         Path(layers_path) if layers_path is not None else DEFAULT_LAYERS_PATH
@@ -2213,7 +2242,11 @@ def package_registry(
         validate_panels_against_maps(panels_manifest, maps_manifest)
 
     effective_metric_ids: set[str] | None = set(metric_ids) if metric_ids else None
-    if effective_metric_ids is None and maps_manifest is not None and (map_ids or all_maps):
+    if (
+        effective_metric_ids is None
+        and maps_manifest is not None
+        and (map_ids or all_maps)
+    ):
         maps_specs = {
             key: spec
             for key, spec in maps_manifest.items()
@@ -2278,9 +2311,7 @@ def package_registry(
             )
         agg_fn = _agg_map().get(agg)
         if agg_fn is None:
-            raise ValueError(
-                f"Unsupported aggregator for metric={metric_id}: {agg}"
-            )
+            raise ValueError(f"Unsupported aggregator for metric={metric_id}: {agg}")
 
         time_axis = str(spec.get("time_axis", "yearly"))
         if time_axis not in {"yearly", "monthly", "daily"}:
@@ -2372,12 +2403,11 @@ def package_registry(
                         if not missing_tiles:
                             continue
                     if (
-                        (download_only or time_axis == "yearly")
-                        and not _batch_has_any_valid_cells(
-                            dataset_mask=dataset_mask,
-                            grid=grid,
-                            tile_range=batch,
-                        )
+                        download_only or time_axis == "yearly"
+                    ) and not _batch_has_any_valid_cells(
+                        dataset_mask=dataset_mask,
+                        grid=grid,
+                        tile_range=batch,
                     ):
                         masked_batches_skipped += 1
                         if not download_only and time_axis == "yearly":
@@ -2470,6 +2500,7 @@ def package_registry(
                     futures = []
                     stop_downloads = False
                     future_errors: list[str] = []
+
                     def _on_future_done(fut) -> None:
                         nonlocal batches_completed, total_written
                         try:
@@ -2478,18 +2509,24 @@ def package_registry(
                             written = 0
                             with counters_lock:
                                 future_errors.append(repr(exc))
-                            print(f"[error] Worker failed for metric={metric_id}: {exc!r}")
+                            print(
+                                f"[error] Worker failed for metric={metric_id}: {exc!r}"
+                            )
                         with counters_lock:
                             total_written += written
                             batches_completed += 1
+
                     def _collect_done() -> None:
-                        done, pending = wait(futures, timeout=0, return_when=FIRST_COMPLETED)
+                        done, pending = wait(
+                            futures, timeout=0, return_when=FIRST_COMPLETED
+                        )
                         if not done:
                             return
                         for fut in done:
                             # already accounted for by callback
                             pass
                         futures[:] = list(pending)
+
                     for batch in batches_to_process:
                         if stop_after_current:
                             stop_downloads = True
@@ -2507,8 +2544,13 @@ def package_registry(
                             cache_dir_eff = cache_dir / "cds"
                             dataset = source.get("dataset")
                             params = source.get("params", {}) or {}
-                            is_monthly_cds = _is_cds_monthly_dataset(str(dataset), params)
-                            if not is_monthly_cds and dataset != ERA5_DAILY_STATS_DATASET:
+                            is_monthly_cds = _is_cds_monthly_dataset(
+                                str(dataset), params
+                            )
+                            if (
+                                not is_monthly_cds
+                                and dataset != ERA5_DAILY_STATS_DATASET
+                            ):
                                 raise ValueError(f"Unsupported CDS dataset: {dataset}")
 
                             variable = source.get("variable")
@@ -2682,7 +2724,9 @@ def package_registry(
                             dataset_key = source.get("dataset_key")
                             if not dataset_key:
                                 raise ValueError("ERDDAP source missing dataset_key")
-                            cache_dir_eff = _erddap_cache_dir(cache_dir, str(dataset_key))
+                            cache_dir_eff = _erddap_cache_dir(
+                                cache_dir, str(dataset_key)
+                            )
                             dataset_spec = ERDDAP_DATASETS.get(dataset_key, {})
                             dataset_start = dataset_spec.get("dataset_start")
                             block_years = int(
@@ -2705,9 +2749,8 @@ def package_registry(
                             params = source.get("params", {}) or {}
                             downloads: list[tuple[list[int], list[Path]]] = []
                             for start_date, end_date, years_part in blocks:
-                                if (
-                                    max_requests is not None
-                                    and download_count >= int(max_requests)
+                                if max_requests is not None and download_count >= int(
+                                    max_requests
                                 ):
                                     print(
                                         f"Stopping early due to --max-requests={max_requests}"
@@ -2896,12 +2939,11 @@ def package_registry(
                     break
 
                 if (
-                    (download_only or time_axis == "yearly")
-                    and not _batch_has_any_valid_cells(
-                        dataset_mask=dataset_mask,
-                        grid=grid,
-                        tile_range=batch,
-                    )
+                    download_only or time_axis == "yearly"
+                ) and not _batch_has_any_valid_cells(
+                    dataset_mask=dataset_mask,
+                    grid=grid,
+                    tile_range=batch,
                 ):
                     if not download_only and time_axis == "yearly":
                         total_written += _write_missing_yearly_tiles_for_batch(
@@ -2963,9 +3005,8 @@ def package_registry(
                         if stop_after_current:
                             break
                         if is_monthly_cds:
-                            if (
-                                max_requests is not None
-                                and download_count >= int(max_requests)
+                            if max_requests is not None and download_count >= int(
+                                max_requests
                             ):
                                 print(
                                     f"Stopping early due to --max-requests={max_requests}"
@@ -2992,9 +3033,8 @@ def package_registry(
                             for months in month_blocks:
                                 if stop_after_current:
                                     break
-                                if (
-                                    max_requests is not None
-                                    and download_count >= int(max_requests)
+                                if max_requests is not None and download_count >= int(
+                                    max_requests
                                 ):
                                     print(
                                         f"Stopping early due to --max-requests={max_requests}"
@@ -3089,9 +3129,8 @@ def package_registry(
                     for start_date, end_date, years_part in blocks:
                         if stop_after_current:
                             break
-                        if (
-                            max_requests is not None
-                            and download_count >= int(max_requests)
+                        if max_requests is not None and download_count >= int(
+                            max_requests
                         ):
                             print(
                                 f"Stopping early due to --max-requests={max_requests}"
@@ -3169,9 +3208,7 @@ def package_registry(
             signal.signal(signal.SIGINT, prev_handler)
 
     maps_out_root_eff = (
-        Path(maps_out_root)
-        if maps_out_root is not None
-        else out_root.parent / "maps"
+        Path(maps_out_root) if maps_out_root is not None else out_root.parent / "maps"
     )
     if not download_only and not skip_maps and maps_manifest is not None:
         maps_written = package_maps(
@@ -3210,7 +3247,9 @@ def package_registry(
             )
             print(f"DONE: wrote release manifest: {release_root / 'manifest.json'}")
         else:
-            print("[release] skipping registry snapshot and manifest write for dev release")
+            print(
+                "[release] skipping registry snapshot and manifest write for dev release"
+            )
 
     return 0
 

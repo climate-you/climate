@@ -14,7 +14,12 @@ from climate_api.main import create_app
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 API_E2E_RELEASE = os.environ.get("API_E2E_RELEASE", "dev")
-RUN_API_E2E = os.environ.get("RUN_API_E2E", "").strip().lower() in {"1", "true", "yes", "on"}
+RUN_API_E2E = os.environ.get("RUN_API_E2E", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 
 def _missing_data_reason() -> str | None:
@@ -25,19 +30,28 @@ def _missing_data_reason() -> str | None:
         REPO_ROOT / "data" / "releases" / API_E2E_RELEASE / "maps",
         REPO_ROOT / "data" / "releases" / API_E2E_RELEASE / "registry" / "metrics.json",
     ]
-    missing = [str(path.relative_to(REPO_ROOT)) for path in required_paths if not path.exists()]
+    missing = [
+        str(path.relative_to(REPO_ROOT)) for path in required_paths if not path.exists()
+    ]
     if missing:
         return f"Missing API e2e runtime data for release '{API_E2E_RELEASE}': {', '.join(missing)}"
     return None
 
 
-_skip_reason = None if RUN_API_E2E else "API e2e tests are opt-in; set RUN_API_E2E=1 to run."
+_skip_reason = (
+    None if RUN_API_E2E else "API e2e tests are opt-in; set RUN_API_E2E=1 to run."
+)
 if _skip_reason is None:
     _skip_reason = _missing_data_reason()
-pytestmark = [pytest.mark.e2e, pytest.mark.skipif(_skip_reason is not None, reason=_skip_reason or "skip")]
+pytestmark = [
+    pytest.mark.e2e,
+    pytest.mark.skipif(_skip_reason is not None, reason=_skip_reason or "skip"),
+]
 
 
-async def _asgi_get_json(app: Any, path: str, query: dict[str, Any] | None = None) -> tuple[int, dict]:
+async def _asgi_get_json(
+    app: Any, path: str, query: dict[str, Any] | None = None
+) -> tuple[int, dict]:
     status: int | None = None
     body_chunks: list[bytes] = []
     query_string = urllib.parse.urlencode(query or {}).encode("utf-8")
@@ -125,13 +139,17 @@ def test_panel_returns_graphs_and_series_payloads() -> None:
     referenced_series_keys = {
         key for graph in graphs for key in graph.get("series_keys", [])
     }
-    assert referenced_series_keys, "Expected at least one graph with non-empty series_keys."
+    assert (
+        referenced_series_keys
+    ), "Expected at least one graph with non-empty series_keys."
 
     for key in referenced_series_keys:
         assert key in series_payload, f"Graph references missing series key: {key}"
 
     nonempty_series = [
-        s for s in series_payload.values() if len(s.get("x", [])) > 0 and len(s.get("y", [])) > 0
+        s
+        for s in series_payload.values()
+        if len(s.get("x", [])) > 0 and len(s.get("y", [])) > 0
     ]
     assert nonempty_series, "Expected at least one non-empty series in /panel response."
 

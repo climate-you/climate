@@ -22,7 +22,9 @@ from climate_api.schemas import (
 )
 
 
-async def _asgi_get(app: Any, path: str, query: dict[str, Any] | None = None) -> tuple[int, dict, dict]:
+async def _asgi_get(
+    app: Any, path: str, query: dict[str, Any] | None = None
+) -> tuple[int, dict, dict]:
     import urllib.parse
 
     status: int | None = None
@@ -155,7 +157,9 @@ def test_create_app_routes_with_mocked_dependencies(
                 population=123,
             )
 
-    monkeypatch.setattr("climate_api.main.PlaceResolver", lambda **kwargs: _PlaceResolver())
+    monkeypatch.setattr(
+        "climate_api.main.PlaceResolver", lambda **kwargs: _PlaceResolver()
+    )
 
     context = SimpleNamespace(
         release="dev",
@@ -204,7 +208,11 @@ def test_create_app_routes_with_mocked_dependencies(
             release="dev",
             unit="C",
             location=location,
-            panels=[ScoredPanelPayload(score=2, panel=PanelPayload(id="p", title="P", graphs=[]))],
+            panels=[
+                ScoredPanelPayload(
+                    score=2, panel=PanelPayload(id="p", title="P", graphs=[])
+                )
+            ],
             series={},
             headlines=[],
         ),
@@ -269,9 +277,7 @@ def test_create_app_routes_with_mocked_dependencies(
     assert status == 200
     assert data["graph_ids"] == ["g1"]
 
-    status, _, headers = asyncio.run(
-        _asgi_get(app, "/assets/v/latest/maps/sample.txt")
-    )
+    status, _, headers = asyncio.run(_asgi_get(app, "/assets/v/latest/maps/sample.txt"))
     assert status == 200
     assert headers["cache-control"] == "no-store"
 
@@ -317,16 +323,28 @@ def test_asset_route_cache_variants_and_invalid_paths(
         rate_limit_window_s=10,
     )
     monkeypatch.setattr("climate_api.main.load_settings", lambda: settings)
-    monkeypatch.setattr("climate_api.main.LocationIndex", lambda _path: SimpleNamespace(
-        autocomplete=lambda q, limit=10: [],
-        resolve_by_id=lambda geonameid: None,
-        resolve_by_label=lambda label: None,
-    ))
-    monkeypatch.setattr("climate_api.main.PlaceResolver", lambda **kwargs: SimpleNamespace(
-        resolve_place=lambda lat, lon: SimpleNamespace(
-            geonameid=1, label="A", lat=lat, lon=lon, distance_km=0.0, country_code="US", population=1
-        )
-    ))
+    monkeypatch.setattr(
+        "climate_api.main.LocationIndex",
+        lambda _path: SimpleNamespace(
+            autocomplete=lambda q, limit=10: [],
+            resolve_by_id=lambda geonameid: None,
+            resolve_by_label=lambda label: None,
+        ),
+    )
+    monkeypatch.setattr(
+        "climate_api.main.PlaceResolver",
+        lambda **kwargs: SimpleNamespace(
+            resolve_place=lambda lat, lon: SimpleNamespace(
+                geonameid=1,
+                label="A",
+                lat=lat,
+                lon=lon,
+                distance_km=0.0,
+                country_code="US",
+                population=1,
+            )
+        ),
+    )
 
     class _ReleaseResolver:
         def __init__(self, settings: Settings, logger: Any):
@@ -355,7 +373,9 @@ def test_asset_route_cache_variants_and_invalid_paths(
     assert status == 200
     assert headers["cache-control"] == "public, max-age=0, must-revalidate"
 
-    status, _, headers = asyncio.run(_asgi_get(app, "/assets/v/2026-01/maps/sample.txt"))
+    status, _, headers = asyncio.run(
+        _asgi_get(app, "/assets/v/2026-01/maps/sample.txt")
+    )
     assert status == 200
     assert headers["cache-control"] == "public, max-age=31536000, immutable"
 

@@ -87,7 +87,9 @@ def validate_datasets(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
     errors = sorted(validator.iter_errors(manifest), key=_error_sort_key)
     if errors:
         formatted = "\n".join(_format_error(err) for err in errors)
-        raise MetricsSchemaError(f"datasets.json failed schema validation:\n{formatted}")
+        raise MetricsSchemaError(
+            f"datasets.json failed schema validation:\n{formatted}"
+        )
     _validate_ids_match_keys(manifest, manifest_name="datasets.json")
 
 
@@ -101,9 +103,7 @@ def validate_metrics(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
     _validate_ids_match_keys(manifest, manifest_name="metrics.json")
 
 
-def _validate_ids_match_keys(
-    manifest: dict[str, Any], *, manifest_name: str
-) -> None:
+def _validate_ids_match_keys(manifest: dict[str, Any], *, manifest_name: str) -> None:
     mismatches: list[str] = []
     for key, spec in manifest.items():
         if key == "version":
@@ -118,7 +118,9 @@ def _validate_ids_match_keys(
         )
 
 
-def _apply_dataset_refs(metrics: dict[str, Any], datasets: dict[str, Any]) -> dict[str, Any]:
+def _apply_dataset_refs(
+    metrics: dict[str, Any], datasets: dict[str, Any]
+) -> dict[str, Any]:
     out: dict[str, Any] = dict(metrics)
 
     for key, spec in metrics.items():
@@ -146,7 +148,9 @@ def _apply_dataset_refs(metrics: dict[str, Any], datasets: dict[str, Any]) -> di
 
         ds_source = dict(dataset.get("source", {}))
         if not ds_source:
-            raise MetricsSchemaError(f"dataset_ref {dataset_ref} missing source definition")
+            raise MetricsSchemaError(
+                f"dataset_ref {dataset_ref} missing source definition"
+            )
         if ds_source.get("type") != source.get("type"):
             raise MetricsSchemaError(
                 f"dataset_ref {dataset_ref} type mismatch: "
@@ -222,7 +226,9 @@ def _apply_derived_inheritance(metrics: dict[str, Any]) -> dict[str, Any]:
         for input_id in inputs:
             input_spec = out.get(input_id)
             if not isinstance(input_spec, dict):
-                raise MetricsSchemaError(f"Metric {key} references missing input metric: {input_id}")
+                raise MetricsSchemaError(
+                    f"Metric {key} references missing input metric: {input_id}"
+                )
             input_specs.append(input_spec)
 
         base_grid = input_specs[0].get("grid_id")

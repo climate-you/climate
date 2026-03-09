@@ -27,7 +27,11 @@ from ..schemas import (
 )
 from ..store.place_resolver import PlaceResolver
 from ..store.tile_data_store import TileDataStore
-from climate.datasets.derive.series import rolling_mean_centered, linear_trend_line, c_to_f
+from climate.datasets.derive.series import (
+    rolling_mean_centered,
+    linear_trend_line,
+    c_to_f,
+)
 from climate.registry.panels import DEFAULT_PANELS_PATH, load_panels
 from climate.tiles.layout import GridSpec, locate_tile, cell_center_latlon
 
@@ -149,14 +153,18 @@ def _resolve_panel_bbox_policy(
         grid_0p05 = GridSpec.global_0p05(tile_size=64)
         cell_0p05, _ = locate_tile(lat, lon, grid_0p05)
         return (
-            _bbox_from_cell(grid=grid_0p05, i_lat=int(cell_0p05.i_lat), i_lon=int(cell_0p05.i_lon)),
+            _bbox_from_cell(
+                grid=grid_0p05, i_lat=int(cell_0p05.i_lat), i_lon=int(cell_0p05.i_lon)
+            ),
             grid_0p05.grid_id,
             int(cell_0p05.i_lat),
             int(cell_0p05.i_lon),
         )
 
     return (
-        _bbox_from_cell(grid=grid_0p25, i_lat=int(cell_0p25.i_lat), i_lon=int(cell_0p25.i_lon)),
+        _bbox_from_cell(
+            grid=grid_0p25, i_lat=int(cell_0p25.i_lat), i_lon=int(cell_0p25.i_lon)
+        ),
         grid_0p25.grid_id,
         int(cell_0p25.i_lat),
         int(cell_0p25.i_lon),
@@ -285,10 +293,14 @@ def _apply_transform_with_axis(
         extend_to = params.get("extend_to") if isinstance(params, dict) else None
         if extend_to is None:
             return axis_vals, linear_trend_line(x, y)
-        axis_end, x_end = _resolve_trend_extend_value(axis_vals=axis_vals, extend_to=extend_to)
+        axis_end, x_end = _resolve_trend_extend_value(
+            axis_vals=axis_vals, extend_to=extend_to
+        )
         if axis_end is None or x_end is None:
             return axis_vals, linear_trend_line(x, y)
-        x_out = np.concatenate([x.astype(np.float64), np.asarray([x_end], dtype=np.float64)])
+        x_out = np.concatenate(
+            [x.astype(np.float64), np.asarray([x_end], dtype=np.float64)]
+        )
         return [*axis_vals, axis_end], linear_trend_line(x, y, x_out=x_out)
 
     return axis_vals, _apply_transform(x=x, y=y, transform=transform)
@@ -391,7 +403,10 @@ def _series_axis(tile_store: TileDataStore, metric: str, length: int) -> list[An
                 return list(axis[-length:])
             # Axis is shorter and non-numeric; pad deterministically from fallback.
             return list(
-                range(tile_store.start_year_fallback, tile_store.start_year_fallback + length)
+                range(
+                    tile_store.start_year_fallback,
+                    tile_store.start_year_fallback + length,
+                )
             )
         return list(axis)
     return list(
@@ -416,7 +431,9 @@ def _compute_t2m_preindustrial_headline(
     current_metric = "t2m_yearly_mean_c"
     cmip_offset_metric = _CMIP_OFFSET_METRIC
     baseline_label = "1850-1900"
-    method = "ERA5 recent 5y minus ERA5 1979-2000, plus precomputed CMIP 5-model mean offset"
+    method = (
+        "ERA5 recent 5y minus ERA5 1979-2000, plus precomputed CMIP 5-model mean offset"
+    )
     try:
         vec = tile_store.try_get_metric_vector(current_metric, lat, lon)
     except FileNotFoundError:
@@ -649,7 +666,9 @@ def _compute_sst_recent_headline(
     )
 
 
-def _layer_overrides_from_manifest(panels_manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _layer_overrides_from_manifest(
+    panels_manifest: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
     raw = panels_manifest.get("layer_overrides")
     if not isinstance(raw, dict):
         return {}
@@ -702,10 +721,12 @@ def build_panel_tiles_registry(
         cell, t = locate_tile(lat, lon, grid)
         grid_cells[grid.grid_id] = (grid, cell, t)
 
-    panel_bbox, panel_bbox_grid_id, panel_bbox_i_lat, panel_bbox_i_lon = _resolve_panel_bbox_policy(
-        lat=lat,
-        lon=lon,
-        release_root=release_root,
+    panel_bbox, panel_bbox_grid_id, panel_bbox_i_lat, panel_bbox_i_lon = (
+        _resolve_panel_bbox_policy(
+            lat=lat,
+            lon=lon,
+            release_root=release_root,
+        )
     )
 
     cache_key_parts = [
@@ -778,7 +799,9 @@ def build_panel_tiles_registry(
                 x = metric_x_cache[metric]
             else:
                 axis_vals = _series_axis(tile_store, metric, vec.size)
-                x = np.asarray([_axis_to_numeric(v) for v in axis_vals], dtype=np.float64)
+                x = np.asarray(
+                    [_axis_to_numeric(v) for v in axis_vals], dtype=np.float64
+                )
                 metric_axis_cache[metric] = axis_vals
                 metric_x_cache[metric] = x
 
@@ -850,7 +873,9 @@ def build_panel_tiles_registry(
                 place=place,
                 lat=lat,
             )
-            graph_caption = _caption_from_spec(graph.get("caption"), context=caption_ctx)
+            graph_caption = _caption_from_spec(
+                graph.get("caption"), context=caption_ctx
+            )
 
         graphs_out.append(
             GraphPayload(
@@ -973,7 +998,9 @@ def build_scored_panels_tiles_registry(
             raise KeyError(f"Panel '{panel_id}' is missing score_map_id.")
         map_spec = maps_specs.get(score_map_id)
         if map_spec is None:
-            raise KeyError(f"Panel '{panel_id}' references unknown score map: {score_map_id}")
+            raise KeyError(
+                f"Panel '{panel_id}' references unknown score map: {score_map_id}"
+            )
         if map_spec.get("type") != "score":
             raise KeyError(
                 f"Panel '{panel_id}' references map '{score_map_id}' with unsupported type "
@@ -1112,7 +1139,9 @@ def _read_score_value(
         binary_name = str(output.get("binary_filename") or f"{map_id}.i16.bin")
         bin_path = maps_root / grid.grid_id / map_id / binary_name
         expected = grid.nlat * grid.nlon
-        score_values = _load_score_map_values_cached(bin_path=bin_path, expected=expected)
+        score_values = _load_score_map_values_cached(
+            bin_path=bin_path, expected=expected
+        )
 
     cell, _tile = locate_tile(lat, lon, grid)
     idx = cell.i_lat * grid.nlon + cell.i_lon

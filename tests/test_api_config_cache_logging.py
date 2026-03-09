@@ -11,7 +11,9 @@ from climate_api import logging as logging_module
 from climate_api.main import _normalize_lon
 
 
-def test_load_settings_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_load_settings_defaults(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("REPO_ROOT", str(tmp_path))
     monkeypatch.delenv("RELEASE", raising=False)
     monkeypatch.delenv("KDTREE_PATH", raising=False)
@@ -22,9 +24,14 @@ def test_load_settings_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 
     assert settings.release == "latest"
     assert settings.releases_root == tmp_path / "data" / "releases"
-    assert settings.kdtree_path == tmp_path / "data" / "locations" / "locations.kdtree.pkl"
+    assert (
+        settings.kdtree_path == tmp_path / "data" / "locations" / "locations.kdtree.pkl"
+    )
     assert settings.ocean_mask_npz == tmp_path / "data" / "locations" / "ocean_mask.npz"
-    assert settings.ocean_names_json == tmp_path / "data" / "locations" / "ocean_names.json"
+    assert (
+        settings.ocean_names_json
+        == tmp_path / "data" / "locations" / "ocean_names.json"
+    )
     assert settings.score_map_preload is False
     assert settings.cors_allow_origins == ["*"]
     assert settings.cors_allow_credentials is False
@@ -39,7 +46,9 @@ def test_load_settings_none_like_env_values(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("OCEAN_MASK_NPZ", "false")
     monkeypatch.setenv("OCEAN_NAMES_JSON", "0")
     monkeypatch.setenv("SCORE_MAP_PRELOAD", "YES")
-    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "https://a.example.com,https://b.example.com")
+    monkeypatch.setenv(
+        "CORS_ALLOW_ORIGINS", "https://a.example.com,https://b.example.com"
+    )
     monkeypatch.setenv("CORS_ALLOW_CREDENTIALS", "true")
     monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
     monkeypatch.setenv("RATE_LIMIT_SUSTAINED_RPS", "3")
@@ -84,7 +93,9 @@ def test_cache_redis_backend_usage() -> None:
     redis.setex.assert_called_once()
 
 
-def test_make_redis_client_errors_when_redis_package_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_make_redis_client_errors_when_redis_package_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(cache_module, "Redis", None)
     with pytest.raises(RuntimeError, match="redis package not installed"):
         cache_module.make_redis_client("redis://localhost:6379/0")

@@ -38,9 +38,7 @@ def _load_registry_metrics(
         return {}, {}
     schema = Path(schema_path) if schema_path is not None else DEFAULT_SCHEMA_PATH
     datasets = (
-        Path(datasets_path)
-        if datasets_path is not None
-        else DEFAULT_DATASETS_PATH
+        Path(datasets_path) if datasets_path is not None else DEFAULT_DATASETS_PATH
     )
     manifest = load_metrics(
         path=path,

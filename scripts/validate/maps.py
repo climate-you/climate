@@ -29,7 +29,9 @@ from climate.registry.metrics import (
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate registry/maps.json against schema")
+    parser = argparse.ArgumentParser(
+        description="Validate registry/maps.json against schema"
+    )
     parser.add_argument("--maps", default=str(DEFAULT_MAPS_PATH))
     parser.add_argument("--schema", default=str(DEFAULT_MAPS_SCHEMA_PATH))
     parser.add_argument("--metrics", default=str(DEFAULT_METRICS_PATH))

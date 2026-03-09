@@ -29,7 +29,9 @@ def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def test_dataset_grid_and_tile_size_inherited_to_metric_and_derived(tmp_path: Path) -> None:
+def test_dataset_grid_and_tile_size_inherited_to_metric_and_derived(
+    tmp_path: Path,
+) -> None:
     datasets = {
         "version": "0.1",
         "era5_daily_t2m": {
@@ -45,7 +47,7 @@ def test_dataset_grid_and_tile_size_inherited_to_metric_and_derived(tmp_path: Pa
                 "block_months": 1,
                 "batch_tiles": 4,
             },
-        }
+        },
     }
     metrics = {
         "version": "0.1",
@@ -106,7 +108,7 @@ def test_metric_cannot_override_dataset_download_fields(tmp_path: Path) -> None:
                 "batch_tiles": 4,
                 "mask_file": "data/masks/oisst_mask.npz",
             },
-        }
+        },
     }
     metrics = {
         "version": "0.1",
@@ -130,7 +132,9 @@ def test_metric_cannot_override_dataset_download_fields(tmp_path: Path) -> None:
     _write_json(datasets_path, datasets)
     _write_json(metrics_path, metrics)
 
-    manifest = load_metrics(path=metrics_path, datasets_path=datasets_path, validate=True)
+    manifest = load_metrics(
+        path=metrics_path, datasets_path=datasets_path, validate=True
+    )
     src = manifest["sst_hotdays"]["source"]
     assert src["time_range"] == {"start_year": 1982, "end_year": 2025}
     assert src["block_years"] == 4
@@ -272,7 +276,7 @@ def test_derived_domain_inherited_and_mismatch_rejected(tmp_path: Path) -> None:
                 "block_years": 1,
                 "batch_tiles": 4,
             },
-        }
+        },
     }
     metrics = {
         "version": "0.1",
@@ -307,7 +311,9 @@ def test_derived_domain_inherited_and_mismatch_rejected(tmp_path: Path) -> None:
     _write_json(datasets_path, datasets)
     _write_json(metrics_path, metrics)
 
-    manifest = load_metrics(path=metrics_path, datasets_path=datasets_path, validate=True)
+    manifest = load_metrics(
+        path=metrics_path, datasets_path=datasets_path, validate=True
+    )
     assert manifest["sst_yearly_5y_mean_c"]["domain"] == "ocean"
 
     metrics["sst_yearly_5y_mean_c"]["domain"] = "global"

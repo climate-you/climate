@@ -26,7 +26,9 @@ def _fmt_float(v: Any) -> float:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Monitor Redis stats for climate_api cache")
+    ap = argparse.ArgumentParser(
+        description="Monitor Redis stats for climate_api cache"
+    )
     ap.add_argument("--url", default="redis://localhost:6379/0")
     ap.add_argument("--pattern", default="climate_api:*")
     ap.add_argument("--interval", type=float, default=2.0)

@@ -37,7 +37,9 @@ def _yearly_has_obs(da: xr.DataArray, tname: str) -> xr.DataArray:
     return da.notnull().groupby(f"{tname}.year").any(dim=tname)
 
 
-def _yearly_count(mask: xr.DataArray, *, tname: str, has_obs: xr.DataArray, name: str) -> xr.DataArray:
+def _yearly_count(
+    mask: xr.DataArray, *, tname: str, has_obs: xr.DataArray, name: str
+) -> xr.DataArray:
     out = mask.groupby(f"{tname}.year").sum(dim=tname, skipna=True)
     out = out.where(has_obs)
     return out.astype("float32").rename(name)
@@ -47,7 +49,9 @@ def dhw_no_risk_days_per_year_xr(da_daily: xr.DataArray) -> xr.DataArray:
     da, tname = _prepare_daily_dhw(da_daily)
     has_obs = _yearly_has_obs(da, tname)
     mask = (da < 4.0) & da.notnull()
-    return _yearly_count(mask, tname=tname, has_obs=has_obs, name="dhw_no_risk_days_per_year")
+    return _yearly_count(
+        mask, tname=tname, has_obs=has_obs, name="dhw_no_risk_days_per_year"
+    )
 
 
 def dhw_moderate_risk_days_per_year_xr(da_daily: xr.DataArray) -> xr.DataArray:
@@ -66,7 +70,9 @@ def dhw_severe_risk_days_per_year_xr(da_daily: xr.DataArray) -> xr.DataArray:
     da, tname = _prepare_daily_dhw(da_daily)
     has_obs = _yearly_has_obs(da, tname)
     mask = (da >= 8.0) & da.notnull()
-    return _yearly_count(mask, tname=tname, has_obs=has_obs, name="dhw_severe_risk_days_per_year")
+    return _yearly_count(
+        mask, tname=tname, has_obs=has_obs, name="dhw_severe_risk_days_per_year"
+    )
 
 
 def dhw_risk_score_per_year_xr(da_daily: xr.DataArray) -> xr.DataArray:

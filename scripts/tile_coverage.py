@@ -178,7 +178,7 @@ def _metric_summary(
 
     files = _iter_tile_files(zdir)
     if max_tiles and max_tiles > 0:
-        files = files[: max_tiles]
+        files = files[:max_tiles]
 
     if not files:
         print(f"[warn] No tile files found in: {zdir}")
@@ -244,7 +244,9 @@ def _metric_summary(
                 f"{p.name}"
             )
 
-    total_container_cells_expected = total_tiles_expected * grid.tile_size * grid.tile_size
+    total_container_cells_expected = (
+        total_tiles_expected * grid.tile_size * grid.tile_size
+    )
     overall_c = 100.0 * (
         total_container_nonempty / total_container_cells_expected
         if total_container_cells_expected
@@ -381,7 +383,12 @@ def _referenced_registry_metrics(
 
 def _metric_domain(spec: dict) -> str:
     domain = spec.get("domain")
-    if isinstance(domain, str) and domain in {"global", "ocean", "land", "dataset_mask"}:
+    if isinstance(domain, str) and domain in {
+        "global",
+        "ocean",
+        "land",
+        "dataset_mask",
+    }:
         return domain
 
     # Backward-compatible fallback for old release registries without domain.
@@ -531,18 +538,22 @@ def _remap_mask_to_grid(
     ):
         return source_mask
 
-    lat_t = target_grid.lat_max - (np.arange(target_grid.nlat, dtype=np.float64) + 0.5) * float(
-        target_grid.deg
-    )
+    lat_t = target_grid.lat_max - (
+        np.arange(target_grid.nlat, dtype=np.float64) + 0.5
+    ) * float(target_grid.deg)
     lat_t = np.clip(lat_t, -source_grid.lat_max + 1e-12, source_grid.lat_max - 1e-12)
-    src_i_lat = np.floor((source_grid.lat_max - lat_t) / float(source_grid.deg)).astype(np.int64)
+    src_i_lat = np.floor((source_grid.lat_max - lat_t) / float(source_grid.deg)).astype(
+        np.int64
+    )
     src_i_lat = np.clip(src_i_lat, 0, source_grid.nlat - 1)
 
-    lon_t = target_grid.lon_min + (np.arange(target_grid.nlon, dtype=np.float64) + 0.5) * float(
-        target_grid.deg
-    )
+    lon_t = target_grid.lon_min + (
+        np.arange(target_grid.nlon, dtype=np.float64) + 0.5
+    ) * float(target_grid.deg)
     lon_t = ((lon_t + 180.0) % 360.0) - 180.0
-    src_i_lon = np.floor((lon_t - source_grid.lon_min) / float(source_grid.deg)).astype(np.int64)
+    src_i_lon = np.floor((lon_t - source_grid.lon_min) / float(source_grid.deg)).astype(
+        np.int64
+    )
     src_i_lon = np.clip(src_i_lon, 0, source_grid.nlon - 1)
 
     return source_mask[src_i_lat[:, None], src_i_lon[None, :]]
@@ -658,11 +669,13 @@ def main() -> None:
                         args.ocean_mask_metric,
                     )
                     if ocean_source_key not in ocean_mask_cache:
-                        ocean_mask_cache[ocean_source_key] = _build_metric_presence_mask(
-                            root=args.root,
-                            metric_id=args.ocean_mask_metric,
-                            grid_id=ocean_grid_id,
-                            tile_size=ocean_tile_size,
+                        ocean_mask_cache[ocean_source_key] = (
+                            _build_metric_presence_mask(
+                                root=args.root,
+                                metric_id=args.ocean_mask_metric,
+                                grid_id=ocean_grid_id,
+                                tile_size=ocean_tile_size,
+                            )
                         )
                     source_grid = _grid_from_id(ocean_grid_id, ocean_tile_size)
                     target_grid = _grid_from_id(grid_id, tile_size)
@@ -697,7 +710,9 @@ def main() -> None:
             domain_label=domain_label,
         )
         check_pct = (
-            stats["domain_coverage_pct"] if args.domain_aware else stats["real_coverage_pct"]
+            stats["domain_coverage_pct"]
+            if args.domain_aware
+            else stats["real_coverage_pct"]
         )
         check_label = "domain coverage" if args.domain_aware else "real coverage"
         if (

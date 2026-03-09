@@ -46,7 +46,9 @@ def test_copy_sparse_risk_aux_mask_if_needed_skips_when_crw_missing(
     monkeypatch.setattr(registry_module, "REPO_ROOT", fake_repo)
 
     datasets_path = tmp_path / "datasets.json"
-    _write_datasets(datasets_path, {"version": "0.1", "era5_daily_t2m": {"id": "era5_daily_t2m"}})
+    _write_datasets(
+        datasets_path, {"version": "0.1", "era5_daily_t2m": {"id": "era5_daily_t2m"}}
+    )
     release_root = tmp_path / "releases" / "dev"
 
     registry_module._copy_sparse_risk_aux_mask_if_needed(

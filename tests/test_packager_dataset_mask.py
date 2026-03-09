@@ -5,7 +5,11 @@ from pathlib import Path
 import numpy as np
 import xarray as xr
 
-from climate.packager.registry import TileRange, _batch_has_any_valid_cells, _tiles_from_time_da
+from climate.packager.registry import (
+    TileRange,
+    _batch_has_any_valid_cells,
+    _tiles_from_time_da,
+)
 from climate.tiles.layout import GridSpec
 
 

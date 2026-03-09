@@ -101,8 +101,12 @@ def main() -> int:
         action="store_true",
         help="Skip registry validation.",
     )
-    ap.add_argument("--skip-tiles", action="store_true", help="Skip tile coverage check.")
-    ap.add_argument("--skip-pytest", action="store_true", help="Skip Python unit tests.")
+    ap.add_argument(
+        "--skip-tiles", action="store_true", help="Skip tile coverage check."
+    )
+    ap.add_argument(
+        "--skip-pytest", action="store_true", help="Skip Python unit tests."
+    )
     ap.add_argument(
         "--run-api-e2e",
         action="store_true",
@@ -135,11 +139,15 @@ def main() -> int:
 
     root = Path(__file__).resolve().parent.parent
     effective_registry_release = args.registry_release
-    if effective_registry_release is None and (not args.skip_registry or not args.skip_tiles):
+    if effective_registry_release is None and (
+        not args.skip_registry or not args.skip_tiles
+    ):
         effective_registry_release = args.release
 
     effective_manifest_release = args.manifest_release
-    if effective_manifest_release is None and (not args.skip_registry or not args.skip_tiles):
+    if effective_manifest_release is None and (
+        not args.skip_registry or not args.skip_tiles
+    ):
         effective_manifest_release = args.release
 
     tiles_root = args.tiles_root

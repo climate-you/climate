@@ -64,7 +64,9 @@ def test_discover_errors_for_missing_layout_cases(tmp_path: Path) -> None:
         )
 
 
-def test_axis_prefers_metric_spec_values_and_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_axis_prefers_metric_spec_values_and_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     tiles_root = tmp_path / "series"
     grid = GridSpec.global_0p25(tile_size=64)
     axis_file = tmp_path / "axis.json"
@@ -93,7 +95,9 @@ def test_axis_reads_metric_and_legacy_grid_time_files(tmp_path: Path) -> None:
     (metric_time / "yearly.json").write_text(json.dumps([2019, 2020]), encoding="utf-8")
     legacy_time = tiles_root / grid.grid_id / "time"
     legacy_time.mkdir(parents=True)
-    (legacy_time / "monthly.json").write_text(json.dumps(["2020-01", "2020-02"]), encoding="utf-8")
+    (legacy_time / "monthly.json").write_text(
+        json.dumps(["2020-01", "2020-02"]), encoding="utf-8"
+    )
 
     store = TileDataStore(
         tiles_root=tiles_root,
@@ -160,7 +164,10 @@ def test_try_get_metric_vector_handles_missing_and_nan(
 
     monkeypatch.setattr(
         "climate_api.store.tile_data_store.locate_tile",
-        lambda lat, lon, grid: (SimpleNamespace(), SimpleNamespace(tile_r=0, tile_c=0, o_lat=0, o_lon=0)),
+        lambda lat, lon, grid: (
+            SimpleNamespace(),
+            SimpleNamespace(tile_r=0, tile_c=0, o_lat=0, o_lon=0),
+        ),
     )
     monkeypatch.setattr(
         "climate_api.store.tile_data_store.read_cell_series",

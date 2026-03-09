@@ -88,7 +88,9 @@ def main() -> int:
     coarse_cols = np.floor((np.arange(nlon, dtype=np.float64) + 0.5) / factor).astype(
         np.int64
     )
-    expected = np.zeros((int(coarse_rows.max()) + 1, int(coarse_cols.max()) + 1), dtype=bool)
+    expected = np.zeros(
+        (int(coarse_rows.max()) + 1, int(coarse_cols.max()) + 1), dtype=bool
+    )
     true_i, true_j = np.nonzero(fine)
     if true_i.size:
         expected[coarse_rows[true_i], coarse_cols[true_j]] = True

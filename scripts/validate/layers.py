@@ -20,7 +20,9 @@ from climate.registry.maps import (
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate registry/layers.json against schema")
+    parser = argparse.ArgumentParser(
+        description="Validate registry/layers.json against schema"
+    )
     parser.add_argument("--layers", default=str(DEFAULT_LAYERS_PATH))
     parser.add_argument("--schema", default=str(DEFAULT_LAYERS_SCHEMA_PATH))
     parser.add_argument("--maps", default=str(DEFAULT_MAPS_PATH))
@@ -28,8 +30,12 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        layers = load_layers(Path(args.layers), schema_path=Path(args.schema), validate=True)
-        maps = load_maps(Path(args.maps), schema_path=Path(args.maps_schema), validate=True)
+        layers = load_layers(
+            Path(args.layers), schema_path=Path(args.schema), validate=True
+        )
+        maps = load_maps(
+            Path(args.maps), schema_path=Path(args.maps_schema), validate=True
+        )
         validate_layers_against_maps(layers, maps)
     except LayersSchemaError as exc:
         print(str(exc))

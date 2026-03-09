@@ -150,10 +150,7 @@ def _texture_projection_bounds(*, projection: str, grid_id: str) -> dict[str, fl
 
     grid = _grid_from_id(grid_id)
     deg = float(grid.deg)
-    centers = [
-        90.0 - (float(i_lat) + 0.5) * deg
-        for i_lat in range(int(grid.nlat))
-    ]
+    centers = [90.0 - (float(i_lat) + 0.5) * deg for i_lat in range(int(grid.nlat))]
     valid = [lat for lat in centers if -_MERCATOR_MAX_LAT <= lat <= _MERCATOR_MAX_LAT]
     if not valid:
         return {
@@ -209,7 +206,9 @@ def _read_image_dimensions(path: Path) -> tuple[int, int] | None:
 
     if chunk_type == b"VP8 " and len(header) >= 30 and header[23:26] == b"\x9d\x01\x2a":
         width = int.from_bytes(header[26:28], byteorder="little", signed=False) & 0x3FFF
-        height = int.from_bytes(header[28:30], byteorder="little", signed=False) & 0x3FFF
+        height = (
+            int.from_bytes(header[28:30], byteorder="little", signed=False) & 0x3FFF
+        )
         if width > 0 and height > 0:
             return width, height
         return None
@@ -249,7 +248,9 @@ def _build_release_layers(
         map_id = str(layer_spec["map_id"])
         map_spec = maps.get(map_id)
         if map_spec is None:
-            raise ValueError(f"Layer '{layer_id}' references unknown map_id '{map_id}'.")
+            raise ValueError(
+                f"Layer '{layer_id}' references unknown map_id '{map_id}'."
+            )
         if map_spec.get("type") != "texture":
             raise ValueError(
                 f"Layer '{layer_id}' references non-texture map_id '{map_id}'."
@@ -283,8 +284,12 @@ def _build_release_layers(
             projection=projection,
             grid_id=grid_id,
         )
-        if isinstance(output.get("mobile_filename"), str) and output.get("mobile_filename"):
-            descriptor["mobile_asset_path"] = f"maps/{grid_id}/{map_id}/{mobile_filename}"
+        if isinstance(output.get("mobile_filename"), str) and output.get(
+            "mobile_filename"
+        ):
+            descriptor["mobile_asset_path"] = (
+                f"maps/{grid_id}/{map_id}/{mobile_filename}"
+            )
         if isinstance(output.get("width"), int):
             descriptor["asset_width"] = int(output["width"])
         if isinstance(output.get("height"), int):
@@ -303,7 +308,10 @@ def _build_release_layers(
         if (
             maps_root is not None
             and "mobile_asset_path" in descriptor
-            and ("mobile_asset_width" not in descriptor or "mobile_asset_height" not in descriptor)
+            and (
+                "mobile_asset_width" not in descriptor
+                or "mobile_asset_height" not in descriptor
+            )
         ):
             mobile_dims = _read_image_dimensions(
                 maps_root / grid_id / map_id / mobile_filename
@@ -378,7 +386,9 @@ class ReleaseResolver:
         try:
             candidate.relative_to(self._releases_root_resolved)
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail="Invalid release path.") from exc
+            raise HTTPException(
+                status_code=400, detail="Invalid release path."
+            ) from exc
         if not candidate.exists() or not candidate.is_dir():
             raise HTTPException(
                 status_code=404,

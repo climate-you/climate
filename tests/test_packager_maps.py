@@ -74,7 +74,9 @@ def test_apply_palette_supports_transparent_nan() -> None:
 
     assert out.shape == (2, 2, 4)
     # NaN pixel should use configured color + transparent alpha.
-    np.testing.assert_array_equal(out[0, 1], np.array([0x11, 0x22, 0x33, 0], dtype=np.uint8))
+    np.testing.assert_array_equal(
+        out[0, 1], np.array([0x11, 0x22, 0x33, 0], dtype=np.uint8)
+    )
     # Finite pixels should be fully opaque.
     assert int(out[0, 0, 3]) == 255
     assert int(out[1, 0, 3]) == 255

@@ -51,9 +51,16 @@ def test_dev_release_uses_repo_root_registry_and_warns_for_ignored_release_files
     resolver = ReleaseResolver(settings=_settings(releases_root), logger=logger)
 
     with (
-        patch("climate_api.release.load_metrics", return_value={"version": "0.1"}) as load_metrics_mock,
-        patch("climate_api.release.TileDataStore.discover", return_value=Mock()) as discover_mock,
-        patch("climate_api.release.load_panels", return_value={"version": "0.1", "panels": {}}),
+        patch(
+            "climate_api.release.load_metrics", return_value={"version": "0.1"}
+        ) as load_metrics_mock,
+        patch(
+            "climate_api.release.TileDataStore.discover", return_value=Mock()
+        ) as discover_mock,
+        patch(
+            "climate_api.release.load_panels",
+            return_value={"version": "0.1", "panels": {}},
+        ),
         patch("climate_api.release.load_maps", return_value={"version": "0.1"}),
         patch("climate_api.release.load_layers", return_value={"version": "0.1"}),
         patch("climate_api.release.validate_maps_against_metrics"),
@@ -79,16 +86,29 @@ def test_non_dev_release_uses_release_scoped_registry(tmp_path: Path) -> None:
     (release_root / "series").mkdir(parents=True)
     (release_root / "maps").mkdir(parents=True)
     registry_root.mkdir(parents=True)
-    for name in ("metrics.json", "datasets.json", "maps.json", "panels.json", "layers.json"):
+    for name in (
+        "metrics.json",
+        "datasets.json",
+        "maps.json",
+        "panels.json",
+        "layers.json",
+    ):
         (registry_root / name).write_text("{}", encoding="utf-8")
 
     logger = Mock(spec=logging.Logger)
     resolver = ReleaseResolver(settings=_settings(releases_root), logger=logger)
 
     with (
-        patch("climate_api.release.load_metrics", return_value={"version": "0.1"}) as load_metrics_mock,
-        patch("climate_api.release.TileDataStore.discover", return_value=Mock()) as discover_mock,
-        patch("climate_api.release.load_panels", return_value={"version": "0.1", "panels": {}}),
+        patch(
+            "climate_api.release.load_metrics", return_value={"version": "0.1"}
+        ) as load_metrics_mock,
+        patch(
+            "climate_api.release.TileDataStore.discover", return_value=Mock()
+        ) as discover_mock,
+        patch(
+            "climate_api.release.load_panels",
+            return_value={"version": "0.1", "panels": {}},
+        ),
         patch("climate_api.release.load_maps", return_value={"version": "0.1"}),
         patch("climate_api.release.load_layers", return_value={"version": "0.1"}),
         patch("climate_api.release.validate_maps_against_metrics"),
@@ -100,9 +120,17 @@ def test_non_dev_release_uses_release_scoped_registry(tmp_path: Path) -> None:
         resolver.resolve_release_context("2026-01")
 
     assert load_metrics_mock.call_args.kwargs["path"] == registry_root / "metrics.json"
-    assert load_metrics_mock.call_args.kwargs["datasets_path"] == registry_root / "datasets.json"
-    assert discover_mock.call_args.kwargs["metrics_path"] == registry_root / "metrics.json"
-    assert discover_mock.call_args.kwargs["datasets_path"] == registry_root / "datasets.json"
+    assert (
+        load_metrics_mock.call_args.kwargs["datasets_path"]
+        == registry_root / "datasets.json"
+    )
+    assert (
+        discover_mock.call_args.kwargs["metrics_path"] == registry_root / "metrics.json"
+    )
+    assert (
+        discover_mock.call_args.kwargs["datasets_path"]
+        == registry_root / "datasets.json"
+    )
     assert logger.warning.call_count == 0
 
 
@@ -110,7 +138,9 @@ def test_release_alias_validation_and_empty_latest_pointer(tmp_path: Path) -> No
     releases_root = tmp_path / "releases"
     releases_root.mkdir(parents=True)
     (releases_root / "LATEST").write_text(" \n", encoding="utf-8")
-    resolver = ReleaseResolver(settings=_settings(releases_root), logger=Mock(spec=logging.Logger))
+    resolver = ReleaseResolver(
+        settings=_settings(releases_root), logger=Mock(spec=logging.Logger)
+    )
 
     with pytest.raises(HTTPException, match="Invalid release id"):
         resolver.resolve_release_alias("../bad")
@@ -120,10 +150,14 @@ def test_release_alias_validation_and_empty_latest_pointer(tmp_path: Path) -> No
         resolver.resolve_release_alias("latest")
 
 
-def test_latest_alias_falls_back_to_demo_when_latest_missing_and_dev_absent(tmp_path: Path) -> None:
+def test_latest_alias_falls_back_to_demo_when_latest_missing_and_dev_absent(
+    tmp_path: Path,
+) -> None:
     releases_root = tmp_path / "releases"
     (releases_root / "demo").mkdir(parents=True)
-    resolver = ReleaseResolver(settings=_settings(releases_root), logger=Mock(spec=logging.Logger))
+    resolver = ReleaseResolver(
+        settings=_settings(releases_root), logger=Mock(spec=logging.Logger)
+    )
 
     assert resolver.resolve_release_alias("latest") == "demo"
 
@@ -132,7 +166,9 @@ def test_latest_alias_prefers_dev_when_latest_missing(tmp_path: Path) -> None:
     releases_root = tmp_path / "releases"
     (releases_root / "dev").mkdir(parents=True)
     (releases_root / "demo").mkdir(parents=True)
-    resolver = ReleaseResolver(settings=_settings(releases_root), logger=Mock(spec=logging.Logger))
+    resolver = ReleaseResolver(
+        settings=_settings(releases_root), logger=Mock(spec=logging.Logger)
+    )
 
     assert resolver.resolve_release_alias("latest") == "dev"
 
@@ -140,7 +176,9 @@ def test_latest_alias_prefers_dev_when_latest_missing(tmp_path: Path) -> None:
 def test_release_root_missing_and_escape_blocked(tmp_path: Path) -> None:
     releases_root = tmp_path / "releases"
     releases_root.mkdir(parents=True)
-    resolver = ReleaseResolver(settings=_settings(releases_root), logger=Mock(spec=logging.Logger))
+    resolver = ReleaseResolver(
+        settings=_settings(releases_root), logger=Mock(spec=logging.Logger)
+    )
 
     with pytest.raises(HTTPException, match="Unknown release"):
         resolver.release_root("missing")
@@ -151,9 +189,13 @@ def test_release_root_missing_and_escape_blocked(tmp_path: Path) -> None:
 def test_resolve_release_context_maps_errors_to_http(tmp_path: Path) -> None:
     releases_root = tmp_path / "releases"
     releases_root.mkdir(parents=True)
-    resolver = ReleaseResolver(settings=_settings(releases_root), logger=Mock(spec=logging.Logger))
+    resolver = ReleaseResolver(
+        settings=_settings(releases_root), logger=Mock(spec=logging.Logger)
+    )
 
-    with patch.object(resolver, "_load_release_context", side_effect=FileNotFoundError("x")):
+    with patch.object(
+        resolver, "_load_release_context", side_effect=FileNotFoundError("x")
+    ):
         with pytest.raises(HTTPException) as exc:
             resolver.resolve_release_context("dev")
         assert exc.value.status_code == 404
@@ -163,7 +205,9 @@ def test_resolve_release_context_maps_errors_to_http(tmp_path: Path) -> None:
             resolver.resolve_release_context("dev")
         assert exc.value.status_code == 400
 
-    with patch.object(resolver, "_load_release_context", side_effect=RuntimeError("boom")):
+    with patch.object(
+        resolver, "_load_release_context", side_effect=RuntimeError("boom")
+    ):
         with pytest.raises(HTTPException) as exc:
             resolver.resolve_release_context("dev")
         assert exc.value.status_code == 500

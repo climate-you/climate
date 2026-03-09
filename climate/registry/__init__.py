@@ -1,4 +1,10 @@
-from .metrics import DEFAULT_METRICS_PATH, DEFAULT_SCHEMA_PATH, load_metrics, load_schema, validate_metrics
+from .metrics import (
+    DEFAULT_METRICS_PATH,
+    DEFAULT_SCHEMA_PATH,
+    load_metrics,
+    load_schema,
+    validate_metrics,
+)
 from .panels import (
     DEFAULT_PANELS_PATH,
     DEFAULT_PANELS_SCHEMA_PATH,

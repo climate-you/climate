@@ -76,6 +76,7 @@ def hot_days_per_year_xr(
     hotdays = hotdays.astype("float32")
     hotdays = hotdays.rename("hot_days_per_year")
     if debug:
+
         def _scalar(v: xr.DataArray) -> float:
             val = v
             if hasattr(val, "compute"):

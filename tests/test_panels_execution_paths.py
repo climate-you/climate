@@ -85,7 +85,10 @@ def test_build_panel_tiles_registry_happy_path_and_cache_hit() -> None:
                             {
                                 "metric": "m_temp",
                                 "unit": "C",
-                                "annotations": [{"type": "min", "label": "Min"}, {"type": "max"}],
+                                "annotations": [
+                                    {"type": "min", "label": "Min"},
+                                    {"type": "max"},
+                                ],
                             }
                         ],
                         "caption": {"type": "static", "text": "hello"},
@@ -117,7 +120,11 @@ def test_build_panel_tiles_registry_happy_path_and_cache_hit() -> None:
     assert cache.ttl == 77
 
     # Verify model_validate(cache-hit) branch by bypassing resolver execution.
-    exploding_resolver = SimpleNamespace(resolve_place=lambda lat, lon: (_ for _ in ()).throw(AssertionError("should not be called")))
+    exploding_resolver = SimpleNamespace(
+        resolve_place=lambda lat, lon: (_ for _ in ()).throw(
+            AssertionError("should not be called")
+        )
+    )
     resp2 = panels_module.build_panel_tiles_registry(
         place_resolver=exploding_resolver,
         tile_store=store,
@@ -185,7 +192,9 @@ def test_build_panel_tiles_registry_unknown_panel_raises() -> None:
         )
 
 
-def test_build_scored_panels_tiles_registry_success_and_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_scored_panels_tiles_registry_success_and_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     place = PlaceInfo(
         geonameid=10,
         label="Sel",
@@ -216,7 +225,10 @@ def test_build_scored_panels_tiles_registry_success_and_fallback(monkeypatch: py
     monkeypatch.setattr(
         panels_module,
         "_read_score_value",
-        lambda lat, lon, map_id, map_spec, tile_store, maps_root: {"m1": 1, "m2": 3}.get(map_id, 0),
+        lambda lat, lon, map_id, map_spec, tile_store, maps_root: {
+            "m1": 1,
+            "m2": 3,
+        }.get(map_id, 0),
     )
     monkeypatch.setattr(
         panels_module,
@@ -226,7 +238,15 @@ def test_build_scored_panels_tiles_registry_success_and_fallback(monkeypatch: py
     monkeypatch.setattr(
         panels_module,
         "_compute_t2m_preindustrial_headline",
-        lambda tile_store, lat, lon, unit: {"key": "x", "label": "x", "value": None, "unit": unit, "baseline": None, "period": None, "method": None},
+        lambda tile_store, lat, lon, unit: {
+            "key": "x",
+            "label": "x",
+            "value": None,
+            "unit": unit,
+            "baseline": None,
+            "period": None,
+            "method": None,
+        },
     )
 
     scored = panels_module.build_scored_panels_tiles_registry(
@@ -238,7 +258,9 @@ def test_build_scored_panels_tiles_registry_success_and_fallback(monkeypatch: py
         lat=1.0,
         lon=2.0,
         unit="c",
-        panels_manifest={"panels": {"p1": {"score_map_id": "m1"}, "p2": {"score_map_id": "m2"}}},
+        panels_manifest={
+            "panels": {"p1": {"score_map_id": "m1"}, "p2": {"score_map_id": "m2"}}
+        },
         maps_manifest={"m1": {"type": "score"}, "m2": {"type": "score"}},
         maps_root=Path("/tmp"),
     )
@@ -286,7 +308,9 @@ def test_build_scored_panels_tiles_registry_success_and_fallback(monkeypatch: py
     assert empty2.location.place.label == "Test Place"
 
 
-def test_build_panel_tiles_registry_misc_internal_branches(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_panel_tiles_registry_misc_internal_branches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     grid_a = GridSpec.global_0p25(tile_size=64)
     grid_b = GridSpec.global_0p05(tile_size=64)
 
@@ -350,13 +374,26 @@ def test_build_panel_tiles_registry_misc_internal_branches(monkeypatch: pytest.M
     monkeypatch.setattr(
         panels_module,
         "locate_tile",
-        lambda lat, lon, grid: (SimpleNamespace(i_lat=0, i_lon=0), SimpleNamespace(tile_r=0, tile_c=0, o_lat=0, o_lon=0)),
+        lambda lat, lon, grid: (
+            SimpleNamespace(i_lat=0, i_lon=0),
+            SimpleNamespace(tile_r=0, tile_c=0, o_lat=0, o_lon=0),
+        ),
     )
-    monkeypatch.setattr(panels_module, "cell_center_latlon", lambda i_lat, i_lon, grid: (0.0, 0.0))
+    monkeypatch.setattr(
+        panels_module, "cell_center_latlon", lambda i_lat, i_lon, grid: (0.0, 0.0)
+    )
     monkeypatch.setattr(
         panels_module,
         "_compute_t2m_preindustrial_headline",
-        lambda tile_store, lat, lon, unit: {"key": "k", "label": "l", "value": None, "unit": unit, "baseline": None, "period": None, "method": None},
+        lambda tile_store, lat, lon, unit: {
+            "key": "k",
+            "label": "l",
+            "value": None,
+            "unit": unit,
+            "baseline": None,
+            "period": None,
+            "method": None,
+        },
     )
 
     resp = panels_module.build_panel_tiles_registry(
@@ -454,7 +491,9 @@ def test_build_panel_tiles_registry_uses_0p05_bbox_in_sparse_risk_zone(
     assert (bbox.lon_max - bbox.lon_min) == pytest.approx(0.05)
 
 
-def test_build_panel_tiles_registry_loads_default_manifest(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_panel_tiles_registry_loads_default_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     grid = GridSpec.global_0p25(tile_size=64)
     store = _TileStore(grid)
     monkeypatch.setattr(
@@ -463,7 +502,13 @@ def test_build_panel_tiles_registry_loads_default_manifest(monkeypatch: pytest.M
         lambda path, validate=True: {
             "panels": {
                 "p_auto": {
-                    "graphs": [{"id": "g", "title": "G", "series": [{"metric": "m_temp", "unit": "C"}]}]
+                    "graphs": [
+                        {
+                            "id": "g",
+                            "title": "G",
+                            "series": [{"metric": "m_temp", "unit": "C"}],
+                        }
+                    ]
                 }
             }
         },

@@ -57,7 +57,10 @@ def test_validate_maps_against_metrics_missing_metric_fails() -> None:
             "source_metric": "missing_metric",
         },
     }
-    metrics_manifest = {"version": "0.1", "t2m_yearly_mean_c": _base_metric("t2m_yearly_mean_c")}
+    metrics_manifest = {
+        "version": "0.1",
+        "t2m_yearly_mean_c": _base_metric("t2m_yearly_mean_c"),
+    }
     with pytest.raises(MapsSchemaError, match="unknown source_metric"):
         validate_maps_against_metrics(maps_manifest, metrics_manifest)
 
@@ -78,7 +81,9 @@ def test_validate_maps_against_metrics_requires_materialized_source() -> None:
         validate_maps_against_metrics(maps_manifest, metrics_manifest)
 
 
-def test_validate_maps_against_metrics_allows_constant_score_map_without_metric() -> None:
+def test_validate_maps_against_metrics_allows_constant_score_map_without_metric() -> (
+    None
+):
     maps_manifest = {
         "version": "0.1",
         "score_1_map": {

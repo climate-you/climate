@@ -24,7 +24,9 @@ from climate.registry.metrics import (
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate registry/panels.json against schema")
+    parser = argparse.ArgumentParser(
+        description="Validate registry/panels.json against schema"
+    )
     parser.add_argument("--panels", default=str(DEFAULT_PANELS_PATH))
     parser.add_argument("--schema", default=str(DEFAULT_PANELS_SCHEMA_PATH))
     parser.add_argument("--metrics", default=str(DEFAULT_METRICS_PATH))
@@ -36,7 +38,9 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        panels = load_panels(Path(args.panels), schema_path=Path(args.schema), validate=True)
+        panels = load_panels(
+            Path(args.panels), schema_path=Path(args.schema), validate=True
+        )
         metrics = load_metrics(
             Path(args.metrics),
             schema_path=Path(args.metrics_schema),
@@ -45,7 +49,9 @@ def main() -> int:
             validate=True,
         )
         validate_panels_against_metrics(panels, metrics)
-        maps = load_maps(Path(args.maps), schema_path=Path(args.maps_schema), validate=True)
+        maps = load_maps(
+            Path(args.maps), schema_path=Path(args.maps_schema), validate=True
+        )
         validate_panels_against_maps(panels, maps)
     except PanelsSchemaError as exc:
         print(str(exc))

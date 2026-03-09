@@ -101,7 +101,9 @@ def test_place_resolver_kdtree_paths(tmp_path: Path) -> None:
         pickle.dump(_KDTree(index=0), f)
 
     # No ocean classifier: KD-tree path computes accurate distance via pair helper.
-    resolver = PlaceResolver(locations_csv=csv_path, kdtree_path=kdtree_file, cache=None)
+    resolver = PlaceResolver(
+        locations_csv=csv_path, kdtree_path=kdtree_file, cache=None
+    )
     place = resolver.resolve_place(10.1, 20.1)
     assert place.distance_km > 0.0
 
@@ -118,12 +120,16 @@ def test_place_resolver_kdtree_paths(tmp_path: Path) -> None:
     # Broken KD-tree file falls back to linear scan.
     bad_tree = tmp_path / "broken.pkl"
     bad_tree.write_bytes(b"not a pickle")
-    resolver_fallback = PlaceResolver(locations_csv=csv_path, kdtree_path=bad_tree, cache=None)
+    resolver_fallback = PlaceResolver(
+        locations_csv=csv_path, kdtree_path=bad_tree, cache=None
+    )
     place_fallback = resolver_fallback.resolve_place(10.1, 20.1)
     assert place_fallback.geonameid in {1, 2}
 
 
-def test_place_resolver_ocean_open_ocean_label_and_city_fallback(tmp_path: Path) -> None:
+def test_place_resolver_ocean_open_ocean_label_and_city_fallback(
+    tmp_path: Path,
+) -> None:
     csv_path = tmp_path / "locations.csv"
     _write_locations(csv_path)
     resolver = PlaceResolver(

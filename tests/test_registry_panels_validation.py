@@ -21,7 +21,9 @@ def _raw_metric(metric_id: str) -> dict:
     }
 
 
-def _derived_metric(metric_id: str, inputs: list[str], materialize: str = "on_api") -> dict:
+def _derived_metric(
+    metric_id: str, inputs: list[str], materialize: str = "on_api"
+) -> dict:
     return {
         "id": metric_id,
         "dtype": "float32",
@@ -44,7 +46,9 @@ def _panels(metric_id: str) -> dict:
                     {
                         "id": "g1",
                         "title": "Graph 1",
-                        "series": [{"metric": metric_id, "label": "Series 1", "unit": "C"}],
+                        "series": [
+                            {"metric": metric_id, "label": "Series 1", "unit": "C"}
+                        ],
                     }
                 ],
             }

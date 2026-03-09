@@ -77,7 +77,9 @@ def _stats(durations_ms: List[float]) -> tuple[float, float, float]:
     return avg, median, p95
 
 
-def _bench_urls(urls: List[str], timeout_s: float) -> tuple[int, int, float, float, float]:
+def _bench_urls(
+    urls: List[str], timeout_s: float
+) -> tuple[int, int, float, float, float]:
     durations_ms: List[float] = []
     failures = 0
     for url in urls:
@@ -272,7 +274,9 @@ def main() -> None:
         _print("Resolve endpoint:")
         ok, fail, avg, median, resolve_p95 = _bench_urls(resolve_urls, args.timeout_s)
         _print(f"  Requests: {ok} ok, {fail} failed")
-        _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {resolve_p95:.1f} ms")
+        _print(
+            f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {resolve_p95:.1f} ms"
+        )
         results["resolve"] = {
             "ok": ok,
             "failed": fail,
@@ -284,7 +288,9 @@ def main() -> None:
         _print("Nearest endpoint:")
         ok, fail, avg, median, nearest_p95 = _bench_urls(nearest_urls, args.timeout_s)
         _print(f"  Requests: {ok} ok, {fail} failed")
-        _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {nearest_p95:.1f} ms")
+        _print(
+            f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {nearest_p95:.1f} ms"
+        )
         results["nearest"] = {
             "ok": ok,
             "failed": fail,
@@ -296,7 +302,9 @@ def main() -> None:
         _print("Release endpoint:")
         ok, fail, avg, median, release_p95 = _bench_urls(release_urls, args.timeout_s)
         _print(f"  Requests: {ok} ok, {fail} failed")
-        _print(f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {release_p95:.1f} ms")
+        _print(
+            f"  Avg: {avg:.1f} ms  Median: {median:.1f} ms  P95: {release_p95:.1f} ms"
+        )
         results["release"] = {
             "ok": ok,
             "failed": fail,
