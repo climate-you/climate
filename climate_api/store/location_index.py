@@ -33,8 +33,8 @@ class LocationIndex:
         self,
         index_csv: Path,
         *,
-        min_query_len: int = 2,
-        prefix_len: int = 2,
+        min_query_len: int = 3,
+        prefix_len: int = 3,
     ) -> None:
         self.index_csv = Path(index_csv)
         self.min_query_len = int(min_query_len)
@@ -88,10 +88,12 @@ class LocationIndex:
     def _add_prefixes(self, i: int, s: str) -> None:
         if not s:
             return
-        key = s[: self.prefix_len]
-        if len(key) < self.prefix_len:
-            return
-        self._prefix_map.setdefault(key, []).append(i)
+        seen_keys: set[str] = set()
+        for start in range(len(s) - self.prefix_len + 1):
+            key = s[start : start + self.prefix_len]
+            if key not in seen_keys:
+                seen_keys.add(key)
+                self._prefix_map.setdefault(key, []).append(i)
 
     def _hit(self, i: int) -> LocationHit:
         return LocationHit(
@@ -118,7 +120,7 @@ class LocationIndex:
         for i in candidates:
             if i in seen:
                 continue
-            if self._norm_labels[i].startswith(q) or self._norm_cities[i].startswith(q):
+            if q in self._norm_labels[i] or q in self._norm_cities[i]:
                 seen.add(i)
                 hits.append(i)
 
