@@ -119,6 +119,7 @@ type PanelResponse = {
       title_metric_key?: string | null;
       title_suffix?: string | null;
       title_action_text?: string | null;
+      title_action_text_non_positive?: string | null;
     }
   >;
 };
@@ -2008,9 +2009,21 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const effectiveTitleActionText = shouldFallbackToPreindustrial
     ? "human activities have caused"
     : activeLayerOverride?.title_action_text ?? "human activities have caused";
+  const effectiveTitleActionTextNonPositive = shouldFallbackToPreindustrial
+    ? null
+    : activeLayerOverride?.title_action_text_non_positive ?? null;
   const tempHeadline = shouldFallbackToPreindustrial
     ? preindustrialHeadline
     : requestedTitleHeadline;
+  const shouldUseNoWarmingWording =
+    typeof tempHeadline?.value === "number" &&
+    Number.isFinite(tempHeadline.value) &&
+    tempHeadline.value <= 0 &&
+    typeof effectiveTitleActionTextNonPositive === "string" &&
+    effectiveTitleActionTextNonPositive.trim().length > 0;
+  const resolvedTitleActionText = shouldUseNoWarmingWording
+    ? effectiveTitleActionTextNonPositive?.trim() ?? effectiveTitleActionText
+    : effectiveTitleActionText;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -3367,11 +3380,14 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
                       <span className={styles.panelTitleSmall}>In</span>{" "}
                       {titleLocationLabel},{" "}
                       <span className={styles.panelTitleSmall}>
-                        {effectiveTitleActionText}{" "}
+                        {resolvedTitleActionText}
+                        {!shouldUseNoWarmingWording ? " " : ""}
                       </span>
-                      <span className={styles.panelTitleTempAccent}>
-                        {formatHeadlineDelta(tempHeadline.value, unit)}
-                      </span>
+                      {!shouldUseNoWarmingWording ? (
+                        <span className={styles.panelTitleTempAccent}>
+                          {formatHeadlineDelta(tempHeadline.value, unit)}
+                        </span>
+                      ) : null}
                       <span className={styles.panelTitleSmall}>
                         {" "}
                         {effectiveTitleSuffix}

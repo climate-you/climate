@@ -55,6 +55,7 @@ class LayerOverridePayload(BaseModel):
     title_metric_key: Optional[str] = None
     title_suffix: Optional[str] = None
     title_action_text: Optional[str] = None
+    title_action_text_non_positive: Optional[str] = None
 
 
 class LocationInfo(BaseModel):

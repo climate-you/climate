@@ -12,7 +12,8 @@
       "title_mode": "recent_trend",
       "title_metric_key": "t2m_recent_local",
       "title_suffix": "since 1979.",
-      "title_action_text": "the air has warmed by"
+      "title_action_text": "the air has warmed by",
+      "title_action_text_non_positive": "the air has not warmed"
     },
     "warming_vs_preindustrial_air": {
       "default_graph_ids": [
@@ -38,7 +39,8 @@
       "title_mode": "recent_trend",
       "title_metric_key": "sst_recent_local",
       "title_suffix": "since 1982.",
-      "title_action_text": "the sea has warmed by"
+      "title_action_text": "the sea has warmed by",
+      "title_action_text_non_positive": "the sea has not warmed"
     },
     "reef_stress": {
       "default_graph_ids": [
@@ -51,7 +53,8 @@
       "title_mode": "recent_trend",
       "title_metric_key": "sst_recent_local",
       "title_suffix": "since 1982.",
-      "title_action_text": "the sea has warmed by"
+      "title_action_text": "the sea has warmed by",
+      "title_action_text_non_positive": "the sea has not warmed"
     }
   },
   "panels": {

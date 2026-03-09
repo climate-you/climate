@@ -55,7 +55,8 @@
           "pattern": "^[a-z][a-z0-9_]*$"
         },
         "title_suffix": { "type": "string" },
-        "title_action_text": { "type": "string" }
+        "title_action_text": { "type": "string" },
+        "title_action_text_non_positive": { "type": "string" }
       },
       "required": ["default_graph_ids", "title_mode"],
       "additionalProperties": false
