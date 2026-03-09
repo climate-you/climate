@@ -210,6 +210,25 @@
     padding: 14px;
   }
 
+  .aboutTitle {
+    font-size: 1.28rem;
+  }
+
+  .aboutText {
+    font-size: 0.86rem;
+    line-height: 1.25;
+  }
+
+  .aboutActionButton {
+    font-size: 0.9rem;
+    min-height: 34px;
+    padding: 0 12px;
+  }
+
+  .aboutVersion {
+    font-size: 0.75rem;
+  }
+
   .aboutFooter {
     align-items: flex-start;
     flex-direction: column;

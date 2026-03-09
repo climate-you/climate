@@ -2,7 +2,6 @@ Bug fixes / Cleanup:
 
 - double check color scale of warming layers in India.
 - ask Claude to code review. Black format all python code. Check documentation to see if some scripts can be removed.
-- sources overlay is too wide on mobile.
 
 - (?) Make it clear year range for graphs, eg. "Annual temperature (1979-2025)" (or maybe just in info bubble)
 - clean up unused css and methods in code when all features and bugfix are done.

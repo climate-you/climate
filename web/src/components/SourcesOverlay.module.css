@@ -12,8 +12,10 @@
 
 .sourcesCard {
   width: min(860px, 100%);
+  max-width: 100%;
   max-height: min(88vh, 880px);
   overflow: auto;
+  overflow-x: hidden;
   background: var(--surface);
   color: var(--text-primary);
   font-family:
@@ -31,6 +33,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
 }
 
 .sourcesClose {
@@ -78,6 +81,9 @@
 .sourcesTabs {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
   border-radius: 999px;
   background: var(--surface);
   padding: 0;
@@ -93,6 +99,7 @@
   font-weight: 400;
   padding: 9px 16px;
   cursor: pointer;
+  white-space: normal;
 }
 
 .sourcesTab:hover,
@@ -123,17 +130,23 @@
 
 .sourcesList li {
   margin-top: 8px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .sourcesList a {
   color: var(--link);
   text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .sourcesNotice {
   margin: 14px 0 0;
   font-size: 0.9rem;
   opacity: 0.88;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .sourcesNotice a {
@@ -149,5 +162,30 @@
   .sourcesCard {
     border-radius: 10px;
     padding: 14px;
+  }
+
+  .sourcesTab {
+    font-size: 0.95rem;
+    padding: 8px 12px;
+  }
+
+  .sourcesSectionTitle {
+    font-size: 0.96rem;
+  }
+
+  .sourcesList {
+    font-size: 0.85rem;
+  }
+
+  .sourcesNotice {
+    font-size: 0.8rem;
+  }
+
+  .sourcesHeader {
+    align-items: flex-start;
+  }
+
+  .sourcesTabs {
+    flex: 1 1 auto;
   }
 }
