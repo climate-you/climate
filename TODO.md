@@ -1,6 +1,5 @@
 Bug fixes / Cleanup:
 
-- add better system to close/reduce `selected location` panel on mobile. Disable swipe down reloads page.
 - when recent warming layer is selected change the `selected location` title to appropriate warming value. Same for sea layers. Also change visible graph... Link graph cards and title tbd...
 - track with goat counter which graphs and layers are viewed.
 - double check color scale of warming layers in India.

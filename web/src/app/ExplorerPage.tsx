@@ -1794,6 +1794,8 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const wheelRepeatKickThreshold = 55;
   const touchSwipeThresholdPx = 44;
   const touchClosePanelThresholdPx = 72;
+  const touchPanelLiftMaxPx = 24;
+  const touchPanelPullMaxPx = 240;
   const [lat, setLat] = useState<number>(-20.32556);
   const [lon, setLon] = useState<number>(57.37056);
   const [unit, setUnit] = useState<"C" | "F">("C");
@@ -1808,6 +1810,8 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const [panelLoading, setPanelLoading] = useState<boolean>(false);
   const [panelRetrying, setPanelRetrying] = useState<boolean>(false);
   const [panelOpen, setPanelOpen] = useState<boolean>(false);
+  const [panelDragOffsetPx, setPanelDragOffsetPx] = useState(0);
+  const [panelDragActive, setPanelDragActive] = useState(false);
   const [picked, setPicked] = useState<{ lat: number; lon: number } | null>(
     null,
   );
@@ -1825,6 +1829,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const wheelGestureResetTimerRef = useRef<number | null>(null);
   const touchStartYRef = useRef<number | null>(null);
   const touchStartXRef = useRef<number | null>(null);
+  const touchGestureAxisRef = useRef<"x" | "y" | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const panelViewportRef = useRef<HTMLDivElement | null>(null);
   const pendingGraphRestoreIdsRef = useRef<string[] | null>(null);
@@ -2432,6 +2437,13 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     }
   }, [panelOpen]);
 
+  useEffect(() => {
+    if (panelOpen) return;
+    setPanelDragOffsetPx(0);
+    setPanelDragActive(false);
+    touchGestureAxisRef.current = null;
+  }, [panelOpen]);
+
   const keepPanelFocused = useCallback(() => {
     if (!panelOpen || introVisible) return;
     window.requestAnimationFrame(() => {
@@ -2738,10 +2750,14 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       if (e.touches.length !== 1) {
         touchStartYRef.current = null;
         touchStartXRef.current = null;
+        touchGestureAxisRef.current = null;
         return;
       }
       touchStartYRef.current = e.touches[0].clientY;
       touchStartXRef.current = e.touches[0].clientX;
+      touchGestureAxisRef.current = null;
+      setPanelDragActive(false);
+      setPanelDragOffsetPx(0);
     },
     [],
   );
@@ -2760,12 +2776,29 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       }
       const deltaY = e.touches[0].clientY - touchStartYRef.current;
       const deltaX = e.touches[0].clientX - touchStartXRef.current;
-      if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 8) {
+      const absDeltaY = Math.abs(deltaY);
+      const absDeltaX = Math.abs(deltaX);
+      if (touchGestureAxisRef.current === null && (absDeltaY > 6 || absDeltaX > 6)) {
+        touchGestureAxisRef.current = absDeltaY >= absDeltaX ? "y" : "x";
+      }
+      if (touchGestureAxisRef.current === "y") {
+        // Block native pull-to-refresh / page overscroll while panel drag
+        // gestures are active on mobile, and follow the finger.
+        e.preventDefault();
+        setPanelDragActive(true);
+        const nextOffset = Math.max(
+          -touchPanelLiftMaxPx,
+          Math.min(touchPanelPullMaxPx, deltaY),
+        );
+        setPanelDragOffsetPx(nextOffset);
+        return;
+      }
+      if (touchGestureAxisRef.current === "x" && absDeltaX > 8) {
         // Prevent native scrolling while a horizontal swipe gesture is in progress.
         e.preventDefault();
       }
     },
-    [],
+    [touchPanelLiftMaxPx, touchPanelPullMaxPx],
   );
 
   const handlePanelTouchEnd = useCallback(
@@ -2783,18 +2816,23 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       const deltaX = touch.clientX - touchStartXRef.current;
       touchStartYRef.current = null;
       touchStartXRef.current = null;
+      const axis = touchGestureAxisRef.current;
+      touchGestureAxisRef.current = null;
+      setPanelDragActive(false);
+      setPanelDragOffsetPx(0);
       if (
         typeof window !== "undefined" &&
         !window.matchMedia("(max-width: 900px)").matches
       ) {
         return;
       }
-      if (deltaY > 0 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      if (axis === "y" && deltaY > 0 && Math.abs(deltaY) > Math.abs(deltaX)) {
         if (deltaY >= touchClosePanelThresholdPx) {
           setPanelOpen(false);
         }
         return;
       }
+      if (axis === "y") return;
       if (Math.abs(deltaX) < touchSwipeThresholdPx) return;
       if (Math.abs(deltaX) <= Math.abs(deltaY)) return;
       goGraphPage(deltaX < 0 ? 1 : -1);
@@ -2805,6 +2843,9 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const handlePanelTouchCancel = useCallback(() => {
     touchStartYRef.current = null;
     touchStartXRef.current = null;
+    touchGestureAxisRef.current = null;
+    setPanelDragActive(false);
+    setPanelDragOffsetPx(0);
   }, []);
 
   const locationLabel =
@@ -2818,6 +2859,11 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const showIntroMap = !introVisible || introPromptVisible;
   const debugBbox = resp?.location?.panel_valid_bbox ?? null;
   const debugInBbox = inBbox(lat, lon, debugBbox);
+  const isMobile = isMobileViewport();
+  const panelDragTransform =
+    isMobile && panelOpen
+      ? `translateY(${Math.round(panelDragOffsetPx)}px)`
+      : undefined;
   return (
     <main
       className={`${styles.app} ${introVisible ? styles.appIntro : styles.appReady}`}
@@ -3068,9 +3114,10 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
 
       <aside
         ref={panelRef}
-        className={`${styles.locationPanel} ${panelOpen ? styles.locationPanelOpen : ""}`}
+        className={`${styles.locationPanel} ${panelOpen ? styles.locationPanelOpen : ""} ${panelDragActive ? styles.locationPanelDragging : ""}`}
         aria-live="polite"
         tabIndex={0}
+        style={panelDragTransform ? { transform: panelDragTransform } : undefined}
         onWheel={handlePanelWheel}
         onKeyDown={handlePanelKeyDown}
         onTouchStart={handlePanelTouchStart}
