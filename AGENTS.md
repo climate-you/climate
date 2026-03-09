@@ -44,7 +44,7 @@ python scripts/build/packager.py --release dev --all --all-maps
 ## Validation
 
 ```bash
-python scripts/validate_all.py
+python scripts/validate/all.py
 PYTHONPATH=. pytest -q
 cd web && npm run lint && npm run build
 ```
