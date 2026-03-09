@@ -1587,8 +1587,8 @@ function GraphCard({
   const mobileToggleStepIndex =
     showMobileStepToggle && safeStepIndex === 0 ? 1 : 0;
   const mobileToggleStepLabel =
-    showMobileStepToggle && steps[mobileToggleStepIndex]
-      ? steps[mobileToggleStepIndex].title ?? steps[mobileToggleStepIndex].id
+    showMobileStepToggle && steps[safeStepIndex]
+      ? steps[safeStepIndex].title ?? steps[safeStepIndex].id
       : "";
   const visibleKeys = activeStep?.series_keys?.length
     ? activeStep.series_keys
