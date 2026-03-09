@@ -4,7 +4,6 @@ Bug fixes / Cleanup:
 - move steps button to the right just above legend. On mobile reduce it to one button that change label when clicking on it.
 - when recent warming layer is selected change the `selected location` title to appropriate warming value. Same for sea layers. Also change visible graph... Link graph cards and title tbd...
 - `Annual air temperature` instead of `Annual temperature`.
-- search by substring not prefix
 - track with goat counter which graphs and layers are viewed.
 - double check color scale of warming layers in India.
 - ask Claude to code review.
