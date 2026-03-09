@@ -248,7 +248,7 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  github.com/benoit-leveau/climate
+                  github.com/climate-you/climate
                 </a>
                 .
               </p>

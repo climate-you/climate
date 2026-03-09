@@ -82,7 +82,7 @@ export default function AboutOverlay({
           <p className={styles.aboutText}>
             The code for this website will soon be available on{" "}
             <a
-              href="https://github.com/benoit-leveau/climate"
+              href="https://github.com/climate-you/climate"
               target="_blank"
               rel="noreferrer"
             >
@@ -90,7 +90,7 @@ export default function AboutOverlay({
             </a>{" "}
             under the{" "}
             <a
-              href="https://github.com/benoit-leveau/climate/blob/main/LICENSE"
+              href="https://github.com/climate-you/climate/blob/main/LICENSE"
               target="_blank"
               rel="noreferrer"
             >
