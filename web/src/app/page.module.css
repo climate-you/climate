@@ -843,6 +843,15 @@
   z-index: 20;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.graphTitleLead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .stepButtons {
@@ -850,6 +859,13 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.stepButtonsInline {
+  margin-top: 0;
+  justify-content: flex-end;
+  margin-left: auto;
+  margin-right: 24px;
 }
 
 .stepButton {
@@ -864,6 +880,11 @@
 
 .stepButtonActive {
   background: rgba(37, 99, 235, 0.12);
+}
+
+.stepButtonToggle {
+  width: 70px;
+  text-align: center;
 }
 
 .graphError {
@@ -994,6 +1015,10 @@
 
   .graphTitle {
     margin: 0;
+  }
+
+  .stepButtonsInline {
+    margin-right: 8px;
   }
 
   .graphCaption {

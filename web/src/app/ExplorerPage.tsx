@@ -1582,6 +1582,14 @@ function GraphCard({
   ]);
 
   const activeStep = hasAnimation ? steps[safeStepIndex] : null;
+  const showMobileStepToggle =
+    isMobileViewport() && hasAnimation && steps.length === 2;
+  const mobileToggleStepIndex =
+    showMobileStepToggle && safeStepIndex === 0 ? 1 : 0;
+  const mobileToggleStepLabel =
+    showMobileStepToggle && steps[mobileToggleStepIndex]
+      ? steps[mobileToggleStepIndex].title ?? steps[mobileToggleStepIndex].id
+      : "";
   const visibleKeys = activeStep?.series_keys?.length
     ? activeStep.series_keys
     : graph.series_keys;
@@ -1669,28 +1677,68 @@ function GraphCard({
     <div className={styles.graphCard}>
       {showTitle ? (
         <div className={styles.graphTitleRow}>
-          <h3 className={styles.graphTitle}>{graph.title}</h3>
-          {graphInfoText ? (
-            <InfoBubble label="Graph title information" text={graphInfoText} />
+          <div className={styles.graphTitleLead}>
+            <h3 className={styles.graphTitle}>{graph.title}</h3>
+            {graphInfoText ? (
+              <InfoBubble label="Graph title information" text={graphInfoText} />
+            ) : null}
+          </div>
+          {hasAnimation && !hasGraphError ? (
+            <div className={`${styles.stepButtons} ${styles.stepButtonsInline}`}>
+              {showMobileStepToggle ? (
+                <button
+                  onClick={() =>
+                    onStepIndexChange(graph.id, mobileToggleStepIndex)
+                  }
+                  className={`${styles.stepButton} ${styles.stepButtonToggle}`}
+                >
+                  {mobileToggleStepLabel}
+                </button>
+              ) : (
+                steps.map((step, idx) => {
+                  const active = idx === safeStepIndex;
+                  return (
+                    <button
+                      key={`${graph.id}:${step.id}`}
+                      onClick={() => onStepIndexChange(graph.id, idx)}
+                      className={`${styles.stepButton} ${
+                        active ? styles.stepButtonActive : ""
+                      }`}
+                    >
+                      {step.title ?? step.id}
+                    </button>
+                  );
+                })
+              )}
+            </div>
           ) : null}
         </div>
       ) : null}
-      {hasAnimation && !hasGraphError ? (
+      {hasAnimation && !hasGraphError && !showTitle ? (
         <div className={styles.stepButtons}>
-          {steps.map((step, idx) => {
-            const active = idx === safeStepIndex;
-            return (
-              <button
-                key={`${graph.id}:${step.id}`}
-                onClick={() => onStepIndexChange(graph.id, idx)}
-                className={`${styles.stepButton} ${
-                  active ? styles.stepButtonActive : ""
-                }`}
-              >
-                {step.title ?? step.id}
-              </button>
-            );
-          })}
+          {showMobileStepToggle ? (
+            <button
+              onClick={() => onStepIndexChange(graph.id, mobileToggleStepIndex)}
+              className={`${styles.stepButton} ${styles.stepButtonToggle}`}
+            >
+              {mobileToggleStepLabel}
+            </button>
+          ) : (
+            steps.map((step, idx) => {
+              const active = idx === safeStepIndex;
+              return (
+                <button
+                  key={`${graph.id}:${step.id}`}
+                  onClick={() => onStepIndexChange(graph.id, idx)}
+                  className={`${styles.stepButton} ${
+                    active ? styles.stepButtonActive : ""
+                  }`}
+                >
+                  {step.title ?? step.id}
+                </button>
+              );
+            })
+          )}
         </div>
       ) : null}
 

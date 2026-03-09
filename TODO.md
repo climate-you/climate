@@ -1,20 +1,19 @@
 Bug fixes / Cleanup:
 
 - add better system to close/reduce `selected location` panel on mobile. Disable swipe down reloads page.
-- move steps button to the right just above legend. On mobile reduce it to one button that change label when clicking on it.
 - when recent warming layer is selected change the `selected location` title to appropriate warming value. Same for sea layers. Also change visible graph... Link graph cards and title tbd...
 - `Annual air temperature` instead of `Annual temperature`.
 - track with goat counter which graphs and layers are viewed.
 - double check color scale of warming layers in India.
 - ask Claude to code review.
-- create small video presentation, cold open + fly-to London.
+
 - (?) Make it clear year range for graphs, eg. "Annual temperature (1979-2025)" (or maybe just in info bubble)
 - clean up unused css and methods in code when all features and bugfix are done.
 
 Before public website+github:
 
 - Sitemap/robots.txt for google?
-- refine stripe account desciption when site is up
+- create small video presentation, cold open + fly-to London.
 - create a new demo release (+ upload somewhere, github?)
 - Finalise doc: latest screenshots (or video?), link to `demo` release
 
