@@ -8,7 +8,6 @@ Bug fixes / Cleanup:
 - track with goat counter which graphs and layers are viewed.
 - double check color scale of warming layers in India.
 - ask Claude to code review.
-
 - create small video presentation, cold open + fly-to London.
 - (?) Make it clear year range for graphs, eg. "Annual temperature (1979-2025)" (or maybe just in info bubble)
 - clean up unused css and methods in code when all features and bugfix are done.
@@ -18,8 +17,6 @@ Before public website+github:
 - Sitemap/robots.txt for google?
 - refine stripe account desciption when site is up
 - add link to https://ko-fi.com/climateyou to github when repo is public (see `Display a "Sponsor" button` in settings).
-- Decide/write license for github public repository
-- Move repo to organisation climate.you in github
 - create a new demo release (+ upload somewhere, github?)
 - Finalise doc: latest screenshots (or video?), link to `demo` release
 
