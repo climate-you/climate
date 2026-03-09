@@ -7,7 +7,7 @@
       "graphs": [
         {
           "id": "t2m_annual",
-          "title": "Annual temperature",
+          "title": "Annual air temperature",
           "ui": {
             "info_text": "Annual air temperature is derived from daily air temperature at 2 meters above the surface, aggregated into monthly and yearly averages. We show a zoomed-in version of the daily and monthly temperatures over 5 years that reflects seasonal changes. Source: CDS.",
             "chart_mode": "temperature_line",
