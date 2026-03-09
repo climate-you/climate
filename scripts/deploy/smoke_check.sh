@@ -17,6 +17,8 @@ USAGE
 CHECK_LOCAL=1
 DOMAIN=""
 RELEASE="latest"
+API_PORT="${API_PORT:-8001}"
+WEB_PORT="${WEB_PORT:-3000}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -45,9 +47,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ $CHECK_LOCAL -eq 1 ]]; then
-  curl --fail --silent --show-error "http://127.0.0.1:8001/healthz" >/dev/null
-  curl --fail --silent --show-error "http://127.0.0.1:3000" >/dev/null
-  curl --fail --silent --show-error "http://127.0.0.1:8001/api/v/${RELEASE}/release" >/dev/null
+  curl --fail --silent --show-error "http://127.0.0.1:${API_PORT}/healthz" >/dev/null
+  curl --fail --silent --show-error "http://127.0.0.1:${WEB_PORT}" >/dev/null
+  curl --fail --silent --show-error "http://127.0.0.1:${API_PORT}/api/v/${RELEASE}/release" >/dev/null
 fi
 
 if [[ -n "$DOMAIN" ]]; then

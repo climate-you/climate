@@ -43,8 +43,8 @@ def main() -> int:
     )
     ap.add_argument(
         "--base-url",
-        default="http://127.0.0.1:8001",
-        help='API base URL for smoke checks (default: "http://127.0.0.1:8001").',
+        default=f"http://127.0.0.1:{os.environ.get('API_PORT', '8001')}",
+        help='API base URL for smoke checks (default: "http://127.0.0.1:8001", overridden by API_PORT env).',
     )
     ap.add_argument(
         "--locations-csv",

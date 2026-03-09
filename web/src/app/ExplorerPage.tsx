@@ -1890,12 +1890,14 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const [releaseLayers, setReleaseLayers] = useState<
     ReleaseResolveResponse["layers"]
   >([]);
+  const DEFAULT_API_PORT = 8001;
   const apiBase = useMemo(() => {
     if (process.env.NEXT_PUBLIC_CLIMATE_API_BASE) {
       return process.env.NEXT_PUBLIC_CLIMATE_API_BASE.replace(/\/+$/, "");
     }
-    if (typeof window === "undefined") return "http://localhost:8001";
-    return `http://${window.location.hostname}:8001`;
+    if (typeof window === "undefined")
+      return `http://localhost:${DEFAULT_API_PORT}`;
+    return `http://${window.location.hostname}:${DEFAULT_API_PORT}`;
   }, []);
   const mapAssetBase = useMemo(() => {
     if (process.env.NEXT_PUBLIC_MAP_ASSET_BASE) {

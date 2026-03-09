@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import random
 import time
 import urllib.parse
@@ -97,8 +98,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--base-url",
-        default="http://127.0.0.1:8001",
-        help='API base URL (default: "http://127.0.0.1:8001").',
+        default=f"http://127.0.0.1:{os.environ.get('API_PORT', '8001')}",
+        help='API base URL (default: "http://127.0.0.1:8001", overridden by API_PORT env).',
     )
     ap.add_argument(
         "--release",
