@@ -234,6 +234,25 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
           >
             <section className={styles.sourcesSection}>
               <p className={styles.sourcesNotice}>
+                This platform is open source, released under the{" "}
+                <a
+                  href="https://github.com/climate-you/climate/blob/main/LICENSE"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  GNU Affero General Public License v3.0 (AGPL 3.0)
+                </a>
+                . Source code:{" "}
+                <a
+                  href="https://github.com/climate-you/climate"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  github.com/benoit-leveau/climate
+                </a>
+                .
+              </p>
+              <p className={styles.sourcesNotice}>
                 Some published layers and metrics are derived products built
                 from multiple upstream datasets. Original data providers and
                 map/tile services used by this project are credited below.
@@ -432,7 +451,7 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Open-source notices
+                  Third-party open-source notices
                 </a>
               </p>
             </section>

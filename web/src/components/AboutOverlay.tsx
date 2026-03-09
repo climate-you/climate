@@ -86,7 +86,15 @@ export default function AboutOverlay({
               target="_blank"
               rel="noreferrer"
             >
-              github.com/benoit-leveau/climate
+              github.com/climate-you/climate
+            </a>{" "}
+            under the{" "}
+            <a
+              href="https://github.com/benoit-leveau/climate/blob/main/LICENSE"
+              target="_blank"
+              rel="noreferrer"
+            >
+              AGPL 3.0 license
             </a>
             .
           </p>
