@@ -15,7 +15,6 @@ Before public website+github:
 
 - Sitemap/robots.txt for google?
 - refine stripe account desciption when site is up
-- add link to https://ko-fi.com/climateyou to github when repo is public (see `Display a "Sponsor" button` in settings).
 - create a new demo release (+ upload somewhere, github?)
 - Finalise doc: latest screenshots (or video?), link to `demo` release
 
