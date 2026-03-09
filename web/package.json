@@ -11,6 +11,8 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "format": "prettier --write \"src/**/*.{ts,tsx,mjs,js,json}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,mjs,js,json}\"",
     "test:unit": "node --test src/lib/*.test.mjs"
   },
   "dependencies": {
@@ -26,6 +28,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
+    "prettier": "^3.8.1",
     "typescript": "^5"
   }
 }

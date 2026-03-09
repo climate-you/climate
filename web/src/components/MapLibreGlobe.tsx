@@ -139,17 +139,10 @@ function setBackdropColor(map: maplibregl.Map, color: string) {
 
 function textureCoordinates(
   layer?: MapLayerOption | null,
-): [
-  [number, number],
-  [number, number],
-  [number, number],
-  [number, number],
-] {
+): [[number, number], [number, number], [number, number], [number, number]] {
   const bounds = layer?.projectionBounds;
-  const lonMin =
-    typeof bounds?.lon_min === "number" ? bounds.lon_min : -180;
-  const lonMax =
-    typeof bounds?.lon_max === "number" ? bounds.lon_max : 180;
+  const lonMin = typeof bounds?.lon_min === "number" ? bounds.lon_min : -180;
+  const lonMax = typeof bounds?.lon_max === "number" ? bounds.lon_max : 180;
   const latMin =
     typeof bounds?.lat_min === "number" ? bounds.lat_min : -MERCATOR_MAX_LAT;
   const latMax =
@@ -193,7 +186,9 @@ function getMaxTextureSize(): number | null {
     const gl = canvas.getContext("webgl");
     if (!gl) return null;
     const max = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-    return typeof max === "number" && Number.isFinite(max) && max > 0 ? max : null;
+    return typeof max === "number" && Number.isFinite(max) && max > 0
+      ? max
+      : null;
   } catch {
     return null;
   }
@@ -259,7 +254,9 @@ function selectTextureVariant(
   if (
     (fullWidth !== null && fullWidth > maxTextureSize) ||
     (fullHeight !== null && fullHeight > maxTextureSize) ||
-    (fullWidth === null && fullHeight === null && maxTextureSize <= MOBILE_TEXTURE_FALLBACK_LIMIT)
+    (fullWidth === null &&
+      fullHeight === null &&
+      maxTextureSize <= MOBILE_TEXTURE_FALLBACK_LIMIT)
   ) {
     return {
       imageUrl: mobileUrl,
@@ -610,9 +607,12 @@ export default function MapLibreGlobe({
       const bbox = debugBboxRef.current;
 
       if (!showOverlay || !bbox) {
-        if (map.getLayer(DEBUG_BBOX_LAYER_ID)) map.removeLayer(DEBUG_BBOX_LAYER_ID);
-        if (map.getLayer(DEBUG_BBOX_FILL_LAYER_ID)) map.removeLayer(DEBUG_BBOX_FILL_LAYER_ID);
-        if (map.getSource(DEBUG_BBOX_SOURCE_ID)) map.removeSource(DEBUG_BBOX_SOURCE_ID);
+        if (map.getLayer(DEBUG_BBOX_LAYER_ID))
+          map.removeLayer(DEBUG_BBOX_LAYER_ID);
+        if (map.getLayer(DEBUG_BBOX_FILL_LAYER_ID))
+          map.removeLayer(DEBUG_BBOX_FILL_LAYER_ID);
+        if (map.getSource(DEBUG_BBOX_SOURCE_ID))
+          map.removeSource(DEBUG_BBOX_SOURCE_ID);
         return;
       }
 
@@ -640,16 +640,20 @@ export default function MapLibreGlobe({
       if (source && typeof source.setData === "function") {
         source.setData(data);
       } else {
-        if (map.getLayer(DEBUG_BBOX_LAYER_ID)) map.removeLayer(DEBUG_BBOX_LAYER_ID);
-        if (map.getLayer(DEBUG_BBOX_FILL_LAYER_ID)) map.removeLayer(DEBUG_BBOX_FILL_LAYER_ID);
-        if (map.getSource(DEBUG_BBOX_SOURCE_ID)) map.removeSource(DEBUG_BBOX_SOURCE_ID);
+        if (map.getLayer(DEBUG_BBOX_LAYER_ID))
+          map.removeLayer(DEBUG_BBOX_LAYER_ID);
+        if (map.getLayer(DEBUG_BBOX_FILL_LAYER_ID))
+          map.removeLayer(DEBUG_BBOX_FILL_LAYER_ID);
+        if (map.getSource(DEBUG_BBOX_SOURCE_ID))
+          map.removeSource(DEBUG_BBOX_SOURCE_ID);
         map.addSource(DEBUG_BBOX_SOURCE_ID, {
           type: "geojson",
           data,
         });
       }
 
-      const lineColor = debugBboxGridIdRef.current === "global_0p05" ? "#00c2ff" : "#ff3b30";
+      const lineColor =
+        debugBboxGridIdRef.current === "global_0p05" ? "#00c2ff" : "#ff3b30";
       if (!map.getLayer(DEBUG_BBOX_FILL_LAYER_ID)) {
         map.addLayer({
           id: DEBUG_BBOX_FILL_LAYER_ID,
@@ -662,18 +666,16 @@ export default function MapLibreGlobe({
         });
       }
       if (!map.getLayer(DEBUG_BBOX_LAYER_ID)) {
-        map.addLayer(
-          {
-            id: DEBUG_BBOX_LAYER_ID,
-            type: "line",
-            source: DEBUG_BBOX_SOURCE_ID,
-            paint: {
-              "line-color": lineColor,
-              "line-width": 4,
-              "line-dasharray": [1, 1.5],
-            },
+        map.addLayer({
+          id: DEBUG_BBOX_LAYER_ID,
+          type: "line",
+          source: DEBUG_BBOX_SOURCE_ID,
+          paint: {
+            "line-color": lineColor,
+            "line-width": 4,
+            "line-dasharray": [1, 1.5],
           },
-        );
+        });
       } else {
         map.setPaintProperty(DEBUG_BBOX_LAYER_ID, "line-color", lineColor);
       }
@@ -1158,9 +1160,12 @@ export default function MapLibreGlobe({
 
     const apply = () => {
       if (!showDebugOverlay || !debugBbox) {
-        if (map.getLayer(DEBUG_BBOX_LAYER_ID)) map.removeLayer(DEBUG_BBOX_LAYER_ID);
-        if (map.getLayer(DEBUG_BBOX_FILL_LAYER_ID)) map.removeLayer(DEBUG_BBOX_FILL_LAYER_ID);
-        if (map.getSource(DEBUG_BBOX_SOURCE_ID)) map.removeSource(DEBUG_BBOX_SOURCE_ID);
+        if (map.getLayer(DEBUG_BBOX_LAYER_ID))
+          map.removeLayer(DEBUG_BBOX_LAYER_ID);
+        if (map.getLayer(DEBUG_BBOX_FILL_LAYER_ID))
+          map.removeLayer(DEBUG_BBOX_FILL_LAYER_ID);
+        if (map.getSource(DEBUG_BBOX_SOURCE_ID))
+          map.removeSource(DEBUG_BBOX_SOURCE_ID);
         return;
       }
 
@@ -1188,13 +1193,17 @@ export default function MapLibreGlobe({
       if (source && typeof source.setData === "function") {
         source.setData(data);
       } else {
-        if (map.getLayer(DEBUG_BBOX_LAYER_ID)) map.removeLayer(DEBUG_BBOX_LAYER_ID);
-        if (map.getLayer(DEBUG_BBOX_FILL_LAYER_ID)) map.removeLayer(DEBUG_BBOX_FILL_LAYER_ID);
-        if (map.getSource(DEBUG_BBOX_SOURCE_ID)) map.removeSource(DEBUG_BBOX_SOURCE_ID);
+        if (map.getLayer(DEBUG_BBOX_LAYER_ID))
+          map.removeLayer(DEBUG_BBOX_LAYER_ID);
+        if (map.getLayer(DEBUG_BBOX_FILL_LAYER_ID))
+          map.removeLayer(DEBUG_BBOX_FILL_LAYER_ID);
+        if (map.getSource(DEBUG_BBOX_SOURCE_ID))
+          map.removeSource(DEBUG_BBOX_SOURCE_ID);
         map.addSource(DEBUG_BBOX_SOURCE_ID, { type: "geojson", data });
       }
 
-      const lineColor = debugBboxGridId === "global_0p05" ? "#00c2ff" : "#ff3b30";
+      const lineColor =
+        debugBboxGridId === "global_0p05" ? "#00c2ff" : "#ff3b30";
       if (!map.getLayer(DEBUG_BBOX_FILL_LAYER_ID)) {
         map.addLayer({
           id: DEBUG_BBOX_FILL_LAYER_ID,
@@ -1207,18 +1216,16 @@ export default function MapLibreGlobe({
         });
       }
       if (!map.getLayer(DEBUG_BBOX_LAYER_ID)) {
-        map.addLayer(
-          {
-            id: DEBUG_BBOX_LAYER_ID,
-            type: "line",
-            source: DEBUG_BBOX_SOURCE_ID,
-            paint: {
-              "line-color": lineColor,
-              "line-width": 4,
-              "line-dasharray": [1, 1.5],
-            },
+        map.addLayer({
+          id: DEBUG_BBOX_LAYER_ID,
+          type: "line",
+          source: DEBUG_BBOX_SOURCE_ID,
+          paint: {
+            "line-color": lineColor,
+            "line-width": 4,
+            "line-dasharray": [1, 1.5],
           },
-        );
+        });
       } else {
         map.setPaintProperty(DEBUG_BBOX_LAYER_ID, "line-color", lineColor);
       }
@@ -1336,10 +1343,18 @@ export default function MapLibreGlobe({
         return;
       }
 
-      const elapsedSeconds = Math.min((timestamp - previousTimestamp) / 1000, 0.05);
+      const elapsedSeconds = Math.min(
+        (timestamp - previousTimestamp) / 1000,
+        0.05,
+      );
       previousTimestamp = timestamp;
       const center = map.getCenter();
-      const nextLon = ((((center.lng + elapsedSeconds * AUTO_ROTATE_DEG_PER_SEC) + 180) % 360) + 360) % 360 - 180;
+      const nextLon =
+        ((((center.lng + elapsedSeconds * AUTO_ROTATE_DEG_PER_SEC + 180) %
+          360) +
+          360) %
+          360) -
+        180;
       map.jumpTo({ center: [nextLon, center.lat], bearing: 0 });
       rafId = window.requestAnimationFrame(tick);
     };

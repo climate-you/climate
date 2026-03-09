@@ -1978,9 +1978,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const activeTitleMode = activeLayerOverride?.title_mode ?? "preindustrial";
   const activeTitleMetricKey =
     activeLayerOverride?.title_metric_key ??
-    (activeTitleMode === "preindustrial"
-      ? "t2m_vs_preindustrial_local"
-      : null);
+    (activeTitleMode === "preindustrial" ? "t2m_vs_preindustrial_local" : null);
   const activeTitleSuffix =
     activeLayerOverride?.title_suffix ??
     (activeTitleMode === "preindustrial" ? "since 1850-1900." : "");
@@ -2008,10 +2006,11 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     : activeTitleSuffix;
   const effectiveTitleActionText = shouldFallbackToPreindustrial
     ? "human activities have caused"
-    : activeLayerOverride?.title_action_text ?? "human activities have caused";
+    : (activeLayerOverride?.title_action_text ??
+      "human activities have caused");
   const effectiveTitleActionTextNonPositive = shouldFallbackToPreindustrial
     ? null
-    : activeLayerOverride?.title_action_text_non_positive ?? null;
+    : (activeLayerOverride?.title_action_text_non_positive ?? null);
   const tempHeadline = shouldFallbackToPreindustrial
     ? preindustrialHeadline
     : requestedTitleHeadline;
@@ -2022,7 +2021,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     typeof effectiveTitleActionTextNonPositive === "string" &&
     effectiveTitleActionTextNonPositive.trim().length > 0;
   const resolvedTitleActionText = shouldUseNoWarmingWording
-    ? effectiveTitleActionTextNonPositive?.trim() ?? effectiveTitleActionText
+    ? (effectiveTitleActionTextNonPositive?.trim() ?? effectiveTitleActionText)
     : effectiveTitleActionText;
 
   useEffect(() => {
