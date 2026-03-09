@@ -1,7 +1,6 @@
 Bug fixes / Cleanup:
 
 - when recent warming layer is selected change the `selected location` title to appropriate warming value. Same for sea layers. Also change visible graph... Link graph cards and title tbd...
-- track with goat counter which graphs and layers are viewed.
 - double check color scale of warming layers in India.
 - ask Claude to code review.
 

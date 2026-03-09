@@ -258,10 +258,14 @@ function formatScoreLegendTick(value: number): string {
   return rounded.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-function layerLegendUnit(layer: {
-  unit?: string | null;
-} | null): LayerLegendUnit {
-  const raw = String(layer?.unit ?? "").trim().toLowerCase();
+function layerLegendUnit(
+  layer: {
+    unit?: string | null;
+  } | null,
+): LayerLegendUnit {
+  const raw = String(layer?.unit ?? "")
+    .trim()
+    .toLowerCase();
   if (raw === "temperature") return "temperature";
   if (raw === "score") return "score";
   return "unknown";
@@ -711,9 +715,7 @@ function InfoBubble({
   }, [open, updateCoords]);
 
   return (
-    <span
-      className={[styles.infoBubble, className].filter(Boolean).join(" ")}
-    >
+    <span className={[styles.infoBubble, className].filter(Boolean).join(" ")}>
       <button
         ref={buttonRef}
         type="button"
@@ -1588,7 +1590,7 @@ function GraphCard({
     showMobileStepToggle && safeStepIndex === 0 ? 1 : 0;
   const mobileToggleStepLabel =
     showMobileStepToggle && steps[safeStepIndex]
-      ? steps[safeStepIndex].title ?? steps[safeStepIndex].id
+      ? (steps[safeStepIndex].title ?? steps[safeStepIndex].id)
       : "";
   const visibleKeys = activeStep?.series_keys?.length
     ? activeStep.series_keys
@@ -1680,11 +1682,16 @@ function GraphCard({
           <div className={styles.graphTitleLead}>
             <h3 className={styles.graphTitle}>{graph.title}</h3>
             {graphInfoText ? (
-              <InfoBubble label="Graph title information" text={graphInfoText} />
+              <InfoBubble
+                label="Graph title information"
+                text={graphInfoText}
+              />
             ) : null}
           </div>
           {hasAnimation && !hasGraphError ? (
-            <div className={`${styles.stepButtons} ${styles.stepButtonsInline}`}>
+            <div
+              className={`${styles.stepButtons} ${styles.stepButtonsInline}`}
+            >
               {showMobileStepToggle ? (
                 <button
                   onClick={() =>
@@ -1833,6 +1840,8 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const panelRef = useRef<HTMLElement | null>(null);
   const panelViewportRef = useRef<HTMLDivElement | null>(null);
   const pendingGraphRestoreIdsRef = useRef<string[] | null>(null);
+  const lastGraphViewFingerprintRef = useRef<string | null>(null);
+  const lastTrackedLayerIdRef = useRef<string | null>(null);
   const [graphsPerPage, setGraphsPerPage] = useState(2);
   const prevGraphsPerPageRef = useRef(2);
   const [graphPage, setGraphPage] = useState(0);
@@ -2113,6 +2122,63 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     pendingGraphRestoreIdsRef.current =
       visibleIds.length > 0 ? visibleIds : null;
   }, [visibleGraphs]);
+
+  const trackGoatEvent = useCallback((path: string, title: string) => {
+    if (typeof window === "undefined") return;
+    const goatcounter = (
+      window as Window & {
+        goatcounter?: { count?: (payload: Record<string, unknown>) => void };
+      }
+    ).goatcounter;
+    goatcounter?.count?.({
+      path,
+      title,
+      event: true,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!panelOpen) return;
+    const locationKey = String(
+      selectedGeonameidForPanel ??
+        selectedLocation?.geonameid ??
+        resp?.location.place.geonameid ??
+        "unknown",
+    );
+    const visibleIds = visibleGraphs
+      .map((entry) => entry?.graph.id ?? "none")
+      .join("|");
+    const fingerprint = `${locationKey}:${graphPage}:${visibleIds}`;
+    if (lastGraphViewFingerprintRef.current === fingerprint) return;
+    lastGraphViewFingerprintRef.current = fingerprint;
+    visibleGraphs.forEach((entry) => {
+      if (!entry) return;
+      const graphId = entry.graph.id;
+      if (!graphId) return;
+      trackGoatEvent(
+        `/view/graph/${encodeURIComponent(graphId)}`,
+        `Graph viewed: ${entry.graph.title} @${locationKey}`,
+      );
+    });
+  }, [
+    graphPage,
+    panelOpen,
+    resp?.location.place.geonameid,
+    selectedGeonameidForPanel,
+    selectedLocation?.geonameid,
+    trackGoatEvent,
+    visibleGraphs,
+  ]);
+
+  useEffect(() => {
+    if (!activeLayerId || activeLayerId === "none") return;
+    if (lastTrackedLayerIdRef.current === activeLayerId) return;
+    lastTrackedLayerIdRef.current = activeLayerId;
+    trackGoatEvent(
+      `/view/layer/${encodeURIComponent(activeLayerId)}`,
+      `Layer viewed: ${activeLayer?.label ?? activeLayerId}`,
+    );
+  }, [activeLayer?.label, activeLayerId, trackGoatEvent]);
 
   useEffect(() => {
     setGraphPage((prev) => Math.min(prev, maxGraphPage));
@@ -2778,7 +2844,10 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       const deltaX = e.touches[0].clientX - touchStartXRef.current;
       const absDeltaY = Math.abs(deltaY);
       const absDeltaX = Math.abs(deltaX);
-      if (touchGestureAxisRef.current === null && (absDeltaY > 6 || absDeltaX > 6)) {
+      if (
+        touchGestureAxisRef.current === null &&
+        (absDeltaY > 6 || absDeltaX > 6)
+      ) {
         touchGestureAxisRef.current = absDeltaY >= absDeltaX ? "y" : "x";
       }
       if (touchGestureAxisRef.current === "y") {
@@ -3117,7 +3186,9 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
         className={`${styles.locationPanel} ${panelOpen ? styles.locationPanelOpen : ""} ${panelDragActive ? styles.locationPanelDragging : ""}`}
         aria-live="polite"
         tabIndex={0}
-        style={panelDragTransform ? { transform: panelDragTransform } : undefined}
+        style={
+          panelDragTransform ? { transform: panelDragTransform } : undefined
+        }
         onWheel={handlePanelWheel}
         onKeyDown={handlePanelKeyDown}
         onTouchStart={handlePanelTouchStart}
