@@ -49,6 +49,14 @@ class HeadlinePayload(BaseModel):
     method: Optional[str] = None
 
 
+class LayerOverridePayload(BaseModel):
+    default_graph_ids: List[str] = []
+    title_mode: str
+    title_metric_key: Optional[str] = None
+    title_suffix: Optional[str] = None
+    title_action_text: Optional[str] = None
+
+
 class LocationInfo(BaseModel):
     query: QueryPoint
     place: PlaceInfo
@@ -65,6 +73,7 @@ class PanelResponse(BaseModel):
     panel: PanelPayload
     series: Dict[str, SeriesPayload]
     headlines: List[HeadlinePayload] = []
+    layer_overrides: Dict[str, LayerOverridePayload] = {}
 
 
 class ScoredPanelPayload(BaseModel):
@@ -79,6 +88,7 @@ class PanelListResponse(BaseModel):
     panels: List[ScoredPanelPayload]
     series: Dict[str, SeriesPayload]
     headlines: List[HeadlinePayload] = []
+    layer_overrides: Dict[str, LayerOverridePayload] = {}
 
 
 class GraphListResponse(BaseModel):

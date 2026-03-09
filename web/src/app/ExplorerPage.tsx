@@ -111,6 +111,16 @@ type PanelResponse = {
     period?: string | null;
     method?: string | null;
   }>;
+  layer_overrides?: Record<
+    string,
+    {
+      default_graph_ids: string[];
+      title_mode: "preindustrial" | "recent_trend";
+      title_metric_key?: string | null;
+      title_suffix?: string | null;
+      title_action_text?: string | null;
+    }
+  >;
 };
 
 type AutocompleteItem = {
@@ -1958,12 +1968,49 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     () => activeLayerId !== "" && activeLayerId !== "none",
     [activeLayerId],
   );
-  const tempHeadline = useMemo(() => {
+  const activeLayerOverride = useMemo(() => {
+    if (!resp?.layer_overrides) return null;
+    if (!activeLayerId || activeLayerId === "none") return null;
+    const spec = resp.layer_overrides[activeLayerId];
+    return spec ?? null;
+  }, [activeLayerId, resp?.layer_overrides]);
+  const activeTitleMode = activeLayerOverride?.title_mode ?? "preindustrial";
+  const activeTitleMetricKey =
+    activeLayerOverride?.title_metric_key ??
+    (activeTitleMode === "preindustrial"
+      ? "t2m_vs_preindustrial_local"
+      : null);
+  const activeTitleSuffix =
+    activeLayerOverride?.title_suffix ??
+    (activeTitleMode === "preindustrial" ? "since 1850-1900." : "");
+  const requestedTitleHeadline = useMemo(() => {
+    if (!resp?.headlines?.length || !activeTitleMetricKey) return null;
+    return resp.headlines.find((h) => h.key === activeTitleMetricKey) ?? null;
+  }, [activeTitleMetricKey, resp]);
+  const preindustrialHeadline = useMemo(() => {
     if (!resp?.headlines?.length) return null;
     return (
       resp.headlines.find((h) => h.key === "t2m_vs_preindustrial_local") ?? null
     );
   }, [resp]);
+  const shouldFallbackToPreindustrial =
+    activeTitleMetricKey === "sst_recent_local" &&
+    !(
+      typeof requestedTitleHeadline?.value === "number" &&
+      Number.isFinite(requestedTitleHeadline.value)
+    );
+  const effectiveTitleMode = shouldFallbackToPreindustrial
+    ? "preindustrial"
+    : activeTitleMode;
+  const effectiveTitleSuffix = shouldFallbackToPreindustrial
+    ? "since 1850-1900."
+    : activeTitleSuffix;
+  const effectiveTitleActionText = shouldFallbackToPreindustrial
+    ? "human activities have caused"
+    : activeLayerOverride?.title_action_text ?? "human activities have caused";
+  const tempHeadline = shouldFallbackToPreindustrial
+    ? preindustrialHeadline
+    : requestedTitleHeadline;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2093,13 +2140,32 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     }));
   }, [resp]);
 
-  const pagedGraphs = useMemo<PagedGraphItem[]>(
+  const basePagedGraphs = useMemo<PagedGraphItem[]>(
     () =>
       panelData.flatMap(({ panel, graphs }) =>
         graphs.map(({ graph, data }) => ({ panelId: panel.id, graph, data })),
       ),
     [panelData],
   );
+  const pagedGraphs = useMemo<PagedGraphItem[]>(() => {
+    const orderedIds = activeLayerOverride?.default_graph_ids ?? [];
+    if (!orderedIds.length) return basePagedGraphs;
+    const picked = new Set<string>();
+    const out: PagedGraphItem[] = [];
+    orderedIds.forEach((graphId) => {
+      const match = basePagedGraphs.find(
+        (entry) => entry.graph.id === graphId && !picked.has(entry.graph.id),
+      );
+      if (!match) return;
+      out.push(match);
+      picked.add(match.graph.id);
+    });
+    basePagedGraphs.forEach((entry) => {
+      if (picked.has(entry.graph.id)) return;
+      out.push(entry);
+    });
+    return out;
+  }, [activeLayerOverride?.default_graph_ids, basePagedGraphs]);
   const maxGraphPage = Math.max(
     0,
     Math.ceil(pagedGraphs.length / graphsPerPage) - 1,
@@ -2192,6 +2258,11 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     );
     prevGraphsPerPageRef.current = graphsPerPage;
   }, [graphsPerPage]);
+
+  useEffect(() => {
+    if (pendingGraphRestoreIdsRef.current) return;
+    setGraphPage(0);
+  }, [activeLayerId]);
 
   const goGraphPage = useCallback(
     (direction: 1 | -1): boolean => {
@@ -2920,6 +2991,10 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const locationLabel =
     selectedLocation?.label ?? resp?.location.place.label ?? "";
   const titleLocationLabel = locationLabel || "this location";
+  const panelTitleInfoText =
+    effectiveTitleMode === "preindustrial"
+      ? "Local warming since pre-industrial (1850-1900 baseline) is estimated by combining observed local warming from ERA5 (1979-2025) with a CMIP6-based offset for 1850-1979, computed from 5 models. Source: CDS."
+      : "Local warming is computed from recent annual means relative to the configured baseline year for the selected layer.";
   const populationText = formatPopulation(selectedLocation?.population);
   const coldOpenWarmingText =
     defaultTemperatureUnitForLocale() === "F" ? "+1.9°F" : "+1.1°C";
@@ -3284,31 +3359,33 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
                     <span className={styles.panelTitleTempAccent}>
                       Couldn’t load climate data.
                     </span>
+                  ) : panelLoading ? (
+                    <span>Loading climate data...</span>
                   ) : typeof tempHeadline?.value === "number" &&
                     Number.isFinite(tempHeadline.value) ? (
                     <>
                       <span className={styles.panelTitleSmall}>In</span>{" "}
                       {titleLocationLabel},{" "}
                       <span className={styles.panelTitleSmall}>
-                        human activities have caused{" "}
+                        {effectiveTitleActionText}{" "}
                       </span>
                       <span className={styles.panelTitleTempAccent}>
                         {formatHeadlineDelta(tempHeadline.value, unit)}
                       </span>
                       <span className={styles.panelTitleSmall}>
                         {" "}
-                        since 1850-1900.
+                        {effectiveTitleSuffix}
                       </span>
                     </>
-                  ) : panelLoading ? (
-                    <span>Loading climate data...</span>
+                  ) : resp ? (
+                    <span>{titleLocationLabel}</span>
                   ) : (
                     <span>Pick a location to load climate data.</span>
                   )}
                   {!panelLoadError ? (
                     <InfoBubble
                       label="Panel title information"
-                      text="Local warming since pre-industrial (1850-1900 baseline) is estimated by combining observed local warming from ERA5 (1979-2025) with a CMIP6-based offset for 1850-1979, computed from 5 models. Source: CDS."
+                      text={panelTitleInfoText}
                     />
                   ) : null}
                 </h2>

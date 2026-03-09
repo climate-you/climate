@@ -519,6 +519,148 @@ def _compute_t2m_preindustrial_headline(
     )
 
 
+def _compute_recent_headline(
+    *,
+    tile_store: TileDataStore,
+    lat: float,
+    lon: float,
+    unit: str,
+    metric: str,
+    key: str,
+    label: str,
+    baseline_year: int,
+) -> HeadlinePayload:
+    baseline_label = str(baseline_year)
+    method = (
+        f"Latest {_HEADLINE_RECENT_YEARS}-year local annual mean minus local annual mean "
+        f"at baseline year {baseline_year}"
+    )
+    try:
+        vec = tile_store.try_get_metric_vector(metric, lat, lon)
+    except FileNotFoundError:
+        vec = None
+    if vec is None:
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit.upper(),
+            baseline=baseline_label,
+            period=f"latest {_HEADLINE_RECENT_YEARS}-year mean",
+            method=method,
+        )
+
+    y = np.asarray(vec, dtype=np.float64).reshape(-1)
+    axis_vals = _series_axis(tile_store, metric, y.size)
+    year_vals = np.asarray([_axis_to_numeric(v) for v in axis_vals], dtype=np.float64)
+    finite = np.isfinite(y) & np.isfinite(year_vals)
+    years = year_vals.astype(np.int32, copy=False)
+
+    finite_years = years[finite]
+    if finite_years.size == 0:
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit.upper(),
+            baseline=baseline_label,
+            period=f"latest {_HEADLINE_RECENT_YEARS}-year mean",
+            method=method,
+        )
+
+    latest_year = int(np.max(finite_years))
+    recent_start = latest_year - (_HEADLINE_RECENT_YEARS - 1)
+    recent_mask = finite & (years >= recent_start) & (years <= latest_year)
+    if int(np.count_nonzero(recent_mask)) < max(2, _HEADLINE_RECENT_YEARS - 1):
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit.upper(),
+            baseline=baseline_label,
+            period=f"{recent_start}-{latest_year}",
+            method=method,
+        )
+
+    baseline_candidates = y[finite & (years == baseline_year)]
+    baseline_candidates = baseline_candidates[np.isfinite(baseline_candidates)]
+    if baseline_candidates.size == 0:
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit.upper(),
+            baseline=baseline_label,
+            period=f"{recent_start}-{latest_year}",
+            method=method,
+        )
+
+    recent_mean = float(np.mean(y[recent_mask]))
+    baseline_value = float(baseline_candidates[-1])
+    delta_c = recent_mean - baseline_value
+    delta = _to_unit_delta(delta_c, unit)
+
+    return HeadlinePayload(
+        key=key,
+        label=label,
+        value=float(delta),
+        unit=unit.upper(),
+        baseline=baseline_label,
+        period=f"{recent_start}-{latest_year}",
+        method=method,
+    )
+
+
+def _compute_t2m_recent_headline(
+    *,
+    tile_store: TileDataStore,
+    lat: float,
+    lon: float,
+    unit: str,
+) -> HeadlinePayload:
+    return _compute_recent_headline(
+        tile_store=tile_store,
+        lat=lat,
+        lon=lon,
+        unit=unit,
+        metric="t2m_yearly_mean_c",
+        key="t2m_recent_local",
+        label="Air temperature recent change",
+        baseline_year=1979,
+    )
+
+
+def _compute_sst_recent_headline(
+    *,
+    tile_store: TileDataStore,
+    lat: float,
+    lon: float,
+    unit: str,
+) -> HeadlinePayload:
+    return _compute_recent_headline(
+        tile_store=tile_store,
+        lat=lat,
+        lon=lon,
+        unit=unit,
+        metric="sst_yearly_mean_c",
+        key="sst_recent_local",
+        label="Sea surface temperature recent change",
+        baseline_year=1982,
+    )
+
+
+def _layer_overrides_from_manifest(panels_manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    raw = panels_manifest.get("layer_overrides")
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for layer_id, spec in raw.items():
+        if not isinstance(layer_id, str) or not isinstance(spec, dict):
+            continue
+        out[layer_id] = spec
+    return out
+
+
 def build_panel_tiles_registry(
     *,
     place_resolver: PlaceResolver,
@@ -567,7 +709,7 @@ def build_panel_tiles_registry(
     )
 
     cache_key_parts = [
-        f"panel:{release}:registry:{panel_id}:{unit}",
+        f"panel:{release}:registry:{panel_id}:{unit}:v2",
         "cells",
     ]
     for grid_id in sorted(grid_cells.keys()):
@@ -767,8 +909,21 @@ def build_panel_tiles_registry(
             lat=lat,
             lon=lon,
             unit=unit,
-        )
+        ),
+        _compute_t2m_recent_headline(
+            tile_store=tile_store,
+            lat=lat,
+            lon=lon,
+            unit=unit,
+        ),
+        _compute_sst_recent_headline(
+            tile_store=tile_store,
+            lat=lat,
+            lon=lon,
+            unit=unit,
+        ),
     ]
+    layer_overrides = _layer_overrides_from_manifest(panels_manifest)
 
     resp = PanelResponse(
         release=release,
@@ -777,6 +932,7 @@ def build_panel_tiles_registry(
         panel=panel_out,
         series=series_payload,
         headlines=headlines,
+        layer_overrides=layer_overrides,
     )
 
     if cache is not None:
@@ -888,8 +1044,21 @@ def build_scored_panels_tiles_registry(
             lat=lat,
             lon=lon,
             unit=unit,
-        )
+        ),
+        _compute_t2m_recent_headline(
+            tile_store=tile_store,
+            lat=lat,
+            lon=lon,
+            unit=unit,
+        ),
+        _compute_sst_recent_headline(
+            tile_store=tile_store,
+            lat=lat,
+            lon=lon,
+            unit=unit,
+        ),
     ]
+    layer_overrides = _layer_overrides_from_manifest(panels_manifest)
 
     return PanelListResponse(
         release=release,
@@ -898,6 +1067,7 @@ def build_scored_panels_tiles_registry(
         panels=scored_panels,
         series=merged_series,
         headlines=headlines,
+        layer_overrides=layer_overrides,
     )
 
 

@@ -5,6 +5,13 @@
   "type": "object",
   "properties": {
     "version": { "type": "string" },
+    "layer_overrides": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-z][a-z0-9_]*$": { "$ref": "#/$defs/layer_override" }
+      },
+      "additionalProperties": false
+    },
     "panels": {
       "type": "object",
       "patternProperties": {
@@ -29,6 +36,28 @@
         }
       },
       "required": ["title", "score_map_id", "graphs"],
+      "additionalProperties": false
+    },
+    "layer_override": {
+      "type": "object",
+      "properties": {
+        "default_graph_ids": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "minItems": 1
+        },
+        "title_mode": {
+          "type": "string",
+          "enum": ["preindustrial", "recent_trend"]
+        },
+        "title_metric_key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "title_suffix": { "type": "string" },
+        "title_action_text": { "type": "string" }
+      },
+      "required": ["default_graph_ids", "title_mode"],
       "additionalProperties": false
     },
     "graph": {

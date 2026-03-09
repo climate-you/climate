@@ -159,6 +159,41 @@ def test_compute_t2m_preindustrial_headline_success_and_missing() -> None:
     assert missing.unit == "F"
 
 
+def test_t2m_preindustrial_is_not_below_recent_headline() -> None:
+    years = list(range(1979, 2024))
+    current = np.linspace(10.0, 12.2, num=len(years), dtype=np.float32)
+    # Use an offset large enough that preindustrial headline is not below recent.
+    offset = np.array([0.7], dtype=np.float32)
+
+    class _Store:
+        def axis(self, metric: str):
+            return years
+
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            if metric == "t2m_yearly_mean_c":
+                return current
+            if metric == "t2m_cmip_offset_1979_2000_vs_1850_1900_mean_5models_c":
+                return offset
+            return None
+
+    preindustrial = panels_module._compute_t2m_preindustrial_headline(
+        tile_store=_Store(),
+        lat=0.0,
+        lon=0.0,
+        unit="C",
+    )
+    recent = panels_module._compute_t2m_recent_headline(
+        tile_store=_Store(),
+        lat=0.0,
+        lon=0.0,
+        unit="C",
+    )
+
+    assert preindustrial.value is not None
+    assert recent.value is not None
+    assert preindustrial.value + 1e-6 >= recent.value
+
+
 def test_series_and_axis_misc_branches() -> None:
     assert panels_module._series_key({"metric": "m", "transform": {"fn": "rolling_mean"}}) == "m_rolling_mean"
     assert panels_module._series_key({"metric": "m", "transform": "linear_trend_line"}) == "m_linear_trend_line"
