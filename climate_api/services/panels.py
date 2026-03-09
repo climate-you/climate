@@ -372,10 +372,6 @@ def _axis_to_numeric(v: Any) -> float:
     if isinstance(v, (int, float)):
         return float(v)
     try:
-        return float(v)
-    except Exception:
-        pass
-    try:
         dt = np.datetime64(str(v))
         return float(dt.astype("datetime64[s]").astype(np.int64))
     except Exception:

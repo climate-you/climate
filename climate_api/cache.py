@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 try:
@@ -17,11 +17,7 @@ class Cache:
     prefix: str = "climate_api"
 
     # simple in-process fallback
-    _mem: dict[str, tuple[float, bytes]] = None  # type: ignore
-
-    def __post_init__(self) -> None:
-        if self._mem is None:
-            self._mem = {}
+    _mem: dict[str, tuple[float, bytes]] = field(default_factory=dict)
 
     def _k(self, key: str) -> str:
         return f"{self.prefix}:{key}"

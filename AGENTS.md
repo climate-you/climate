@@ -59,5 +59,5 @@ cd web && npm run lint && npm run build
 ## Conventions
 
 - Keep backend imports rooted at `climate_api.*`.
-- Keep bench scripts in `scripts/benchmark/`.
+- Keep bench scripts in `scripts/` with a `bench_` prefix.
 - If changing API routes/contracts, update `web/src/app/page.tsx` accordingly.

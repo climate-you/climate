@@ -53,7 +53,7 @@ class OceanClassifier:
                 for k, v in raw.items():
                     try:
                         self._names[int(k)] = str(v)
-                    except Exception:
+                    except (ValueError, TypeError):
                         continue
 
     def classify(self, lat: float, lon: float) -> OceanHit:
