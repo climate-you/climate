@@ -163,7 +163,7 @@ if [[ "$DOMAIN" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
 fi
 sed -i "s|https://example.com|$URL_SCHEME://$DOMAIN|g" /etc/climate/backend.env /etc/climate/web.env
 
-# NEXT_PUBLIC_* must be present at build time for Next.js.
+# NEXT_PUBLIC_* and SITE_URL must be present at build time for Next.js.
 set -a
 # shellcheck disable=SC1091
 source /etc/climate/web.env

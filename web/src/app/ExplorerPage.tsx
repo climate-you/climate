@@ -206,6 +206,8 @@ type PagedGraphItem = {
 
 type ExplorerPageProps = {
   coldOpen?: boolean;
+  initialOverlay?: "about" | "sources" | null;
+  initialOverlayBasePath?: string;
 };
 
 type GlobeLegendSpec = {
@@ -1782,6 +1784,10 @@ const COLD_OPEN_PROMPT_DELAY_MS = 4000;
 const COLD_OPEN_PRIMARY_REVEAL_DELAY_MS = 80;
 const COLD_OPEN_WHEEL_GESTURE_IDLE_MS = 55;
 const COLD_OPEN_WHEEL_ACTIVE_DELTA_MIN = 0.35;
+const COLD_OPEN_SESSION_SEEN_KEY = "climate.coldOpenSeen";
+const DEFAULT_OVERLAY_BASE_PATH = "/";
+
+type OverlayRoute = "about" | "sources" | null;
 
 function parseDebugQuery(search: string): boolean {
   const raw = (new URLSearchParams(search).get("debug") ?? "")
@@ -1799,7 +1805,46 @@ function parseTextureVariantQuery(search: string): TextureVariantOverride {
   return "auto";
 }
 
-export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
+function parseIntroOverrideQuery(search: string): boolean | null {
+  const raw = (new URLSearchParams(search).get("intro") ?? "")
+    .trim()
+    .toLowerCase();
+  if (!raw) return null;
+  if (raw === "1" || raw === "true" || raw === "on") return true;
+  if (raw === "0" || raw === "false" || raw === "off") return false;
+  return null;
+}
+
+function parseOverlayFromLocationParts(
+  pathname: string,
+  search: string,
+): OverlayRoute {
+  if (pathname === "/about") return "about";
+  if (pathname === "/sources") return "sources";
+  const params = new URLSearchParams(search);
+  if (params.has("about")) return "about";
+  if (params.has("sources")) return "sources";
+  return null;
+}
+
+function stripOverlayPath(pathname: string): string {
+  if (pathname === "/about" || pathname === "/sources") {
+    return DEFAULT_OVERLAY_BASE_PATH;
+  }
+  return pathname || DEFAULT_OVERLAY_BASE_PATH;
+}
+
+function overlayPathForRoute(overlay: OverlayRoute, fallbackPath: string): string {
+  if (overlay === "about") return "/about";
+  if (overlay === "sources") return "/sources";
+  return stripOverlayPath(fallbackPath);
+}
+
+export default function ExplorerPage({
+  coldOpen = false,
+  initialOverlay = null,
+  initialOverlayBasePath = DEFAULT_OVERLAY_BASE_PATH,
+}: ExplorerPageProps) {
   const debugAllowed = process.env.NODE_ENV !== "production";
   const envDefaultReleaseRaw = process.env.NEXT_PUBLIC_RELEASE;
   const envDefaultRelease = envDefaultReleaseRaw
@@ -1864,14 +1909,17 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const [introPromptVisible, setIntroPromptVisible] = useState(!coldOpen);
   const [introPrimaryVisible, setIntroPrimaryVisible] = useState(!coldOpen);
   const [introQuestionVisible, setIntroQuestionVisible] = useState(!coldOpen);
-  const [aboutOpen, setAboutOpen] = useState(false);
-  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(initialOverlay === "about");
+  const [sourcesOpen, setSourcesOpen] = useState(initialOverlay === "sources");
   const introDismissTimerRef = useRef<number | null>(null);
   const introPhaseTimerRef = useRef<number | null>(null);
   const introPrimaryTimerRef = useRef<number | null>(null);
   const introQuestionTimerRef = useRef<number | null>(null);
   const coldOpenWheelGestureActiveRef = useRef(false);
   const coldOpenWheelGestureResetTimerRef = useRef<number | null>(null);
+  const overlayBasePathRef = useRef<string>(
+    stripOverlayPath(initialOverlayBasePath),
+  );
   const [requestedRelease, setRequestedRelease] = useState<string>(
     envDefaultRelease
       ? envDefaultRelease.toLowerCase() === "latest"
@@ -2025,6 +2073,15 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const resolvedTitleActionText = shouldUseNoWarmingWording
     ? (effectiveTitleActionTextNonPositive?.trim() ?? effectiveTitleActionText)
     : effectiveTitleActionText;
+  const introPaused = introVisible && (aboutOpen || sourcesOpen);
+  const markColdOpenSeen = useCallback(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.sessionStorage.setItem(COLD_OPEN_SESSION_SEEN_KEY, "1");
+    } catch {
+      // Ignore storage access issues (private mode, policy restrictions).
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2035,6 +2092,28 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     const normalized = trimmed.toLowerCase() === "latest" ? "latest" : trimmed;
     setRequestedRelease(normalized);
   }, []);
+
+  useEffect(() => {
+    if (!coldOpen || typeof window === "undefined") return;
+    const introOverride = parseIntroOverrideQuery(window.location.search);
+    if (introOverride === true) return;
+    if (introOverride === false) {
+      setIntroVisible(false);
+      setIntroFading(false);
+      setIntroPrimaryVisible(true);
+      setIntroQuestionVisible(true);
+      setIntroPromptVisible(true);
+      markColdOpenSeen();
+      return;
+    }
+    const seen = window.sessionStorage.getItem(COLD_OPEN_SESSION_SEEN_KEY) === "1";
+    if (!seen) return;
+    setIntroVisible(false);
+    setIntroFading(false);
+    setIntroPrimaryVisible(true);
+    setIntroQuestionVisible(true);
+    setIntroPromptVisible(true);
+  }, [coldOpen, markColdOpenSeen]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2058,44 +2137,38 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     return () => window.removeEventListener("popstate", sync);
   }, [debugAllowed]);
 
-  const setAboutOpenWithUrl = useCallback((open: boolean) => {
-    setAboutOpen(open);
-    if (open) setSourcesOpen(false);
+  const setOverlayOpenWithUrl = useCallback((overlay: OverlayRoute) => {
     if (typeof window === "undefined") return;
-    const url = new URL(window.location.href);
-    if (open) {
-      url.searchParams.set("about", "1");
-      url.searchParams.delete("sources");
-    } else {
-      url.searchParams.delete("about");
+    const isOpening = overlay !== null;
+    if (isOpening) {
+      overlayBasePathRef.current = stripOverlayPath(window.location.pathname);
     }
-    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
-  }, []);
-
-  const setSourcesOpenWithUrl = useCallback((open: boolean) => {
-    setSourcesOpen(open);
-    if (open) setAboutOpen(false);
-    if (typeof window === "undefined") return;
-    const url = new URL(window.location.href);
-    if (open) {
-      url.searchParams.set("sources", "1");
-      url.searchParams.delete("about");
-    } else {
-      url.searchParams.delete("sources");
-    }
-    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+    setAboutOpen(overlay === "about");
+    setSourcesOpen(overlay === "sources");
+    const targetPath = overlayPathForRoute(
+      overlay,
+      overlayBasePathRef.current || DEFAULT_OVERLAY_BASE_PATH,
+    );
+    const nextUrl = `${targetPath}${window.location.search}${window.location.hash}`;
+    window.history.replaceState({}, "", nextUrl);
   }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const showAbout = params.has("about");
-    const showSources = params.has("sources");
-    if (showAbout) {
-      setAboutOpen(true);
-      return;
-    }
-    if (showSources) setSourcesOpen(true);
+    const syncFromLocation = () => {
+      const overlay = parseOverlayFromLocationParts(
+        window.location.pathname,
+        window.location.search,
+      );
+      if (overlay === null) {
+        overlayBasePathRef.current = stripOverlayPath(window.location.pathname);
+      }
+      setAboutOpen(overlay === "about");
+      setSourcesOpen(overlay === "sources");
+    };
+    syncFromLocation();
+    window.addEventListener("popstate", syncFromLocation);
+    return () => window.removeEventListener("popstate", syncFromLocation);
   }, []);
 
   useEffect(() => {
@@ -2603,60 +2676,86 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   }, [introVisible, panelOpen]);
 
   const dismissColdOpen = useCallback(() => {
-    if (!introVisible || introFading) return;
+    if (!introVisible || introFading || introPaused) return;
     setIntroFading(true);
     introDismissTimerRef.current = window.setTimeout(() => {
       setIntroVisible(false);
       setIntroFading(false);
+      markColdOpenSeen();
       introDismissTimerRef.current = null;
     }, COLD_OPEN_FADE_MS);
-  }, [introFading, introVisible]);
+  }, [introFading, introPaused, introVisible, markColdOpenSeen]);
 
   const showIntroPrompt = useCallback(() => {
-    if (!introVisible || introPromptVisible) return;
+    if (!introVisible || introPromptVisible || introPaused) return;
     if (introPhaseTimerRef.current) {
       window.clearTimeout(introPhaseTimerRef.current);
       introPhaseTimerRef.current = null;
     }
     setIntroPromptVisible(true);
-  }, [introPromptVisible, introVisible]);
+  }, [introPaused, introPromptVisible, introVisible]);
 
   const showIntroQuestion = useCallback(() => {
-    if (!introVisible || introQuestionVisible) return;
+    if (!introVisible || introQuestionVisible || introPaused) return;
     if (introQuestionTimerRef.current) {
       window.clearTimeout(introQuestionTimerRef.current);
       introQuestionTimerRef.current = null;
     }
     setIntroQuestionVisible(true);
-  }, [introQuestionVisible, introVisible]);
+  }, [introPaused, introQuestionVisible, introVisible]);
 
   useEffect(() => {
-    if (!introVisible || introQuestionVisible) return;
+    if (!introVisible || introQuestionVisible || introPaused) return;
     introPhaseTimerRef.current = window.setTimeout(() => {
       setIntroQuestionVisible(true);
       introPhaseTimerRef.current = null;
     }, COLD_OPEN_QUESTION_DELAY_MS);
-  }, [introQuestionVisible, introVisible]);
+    return () => {
+      if (introPhaseTimerRef.current) {
+        window.clearTimeout(introPhaseTimerRef.current);
+        introPhaseTimerRef.current = null;
+      }
+    };
+  }, [introPaused, introQuestionVisible, introVisible]);
 
   useEffect(() => {
-    if (!introVisible || introPromptVisible || introPrimaryVisible) return;
+    if (!introVisible || introPromptVisible || introPrimaryVisible || introPaused)
+      return;
     introPrimaryTimerRef.current = window.setTimeout(() => {
       setIntroPrimaryVisible(true);
       introPrimaryTimerRef.current = null;
     }, COLD_OPEN_PRIMARY_REVEAL_DELAY_MS);
-  }, [introPrimaryVisible, introPromptVisible, introVisible]);
+    return () => {
+      if (introPrimaryTimerRef.current) {
+        window.clearTimeout(introPrimaryTimerRef.current);
+        introPrimaryTimerRef.current = null;
+      }
+    };
+  }, [introPaused, introPrimaryVisible, introPromptVisible, introVisible]);
 
   useEffect(() => {
-    if (!introVisible || !introQuestionVisible || introPromptVisible) return;
+    if (
+      !introVisible ||
+      !introQuestionVisible ||
+      introPromptVisible ||
+      introPaused
+    )
+      return;
     introQuestionTimerRef.current = window.setTimeout(() => {
       setIntroPromptVisible(true);
       introQuestionTimerRef.current = null;
     }, COLD_OPEN_PROMPT_DELAY_MS);
-  }, [introPromptVisible, introQuestionVisible, introVisible]);
+    return () => {
+      if (introQuestionTimerRef.current) {
+        window.clearTimeout(introQuestionTimerRef.current);
+        introQuestionTimerRef.current = null;
+      }
+    };
+  }, [introPaused, introPromptVisible, introQuestionVisible, introVisible]);
 
   const handleColdOpenInteractionCapture = useCallback(
     (e: React.SyntheticEvent) => {
-      if (!introVisible) return;
+      if (!introVisible || introPaused) return;
       e.preventDefault();
       e.stopPropagation();
       if (!introQuestionVisible) {
@@ -2671,6 +2770,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     },
     [
       dismissColdOpen,
+      introPaused,
       introPromptVisible,
       introQuestionVisible,
       introVisible,
@@ -2681,7 +2781,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
 
   const handleColdOpenPointerDownCapture = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
-      if (!introVisible) return;
+      if (!introVisible || introPaused) return;
       if (e.pointerType === "touch") {
         // Touch interactions are handled in onTouchStartCapture to avoid
         // processing the same tap twice on mobile browsers.
@@ -2691,12 +2791,12 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
       }
       handleColdOpenInteractionCapture(e);
     },
-    [handleColdOpenInteractionCapture, introVisible],
+    [handleColdOpenInteractionCapture, introPaused, introVisible],
   );
 
   const handleColdOpenWheelCapture = useCallback(
     (e: React.WheelEvent<HTMLElement>) => {
-      if (!introVisible) return;
+      if (!introVisible || introPaused) return;
       e.preventDefault();
       e.stopPropagation();
       const gestureDelta = Math.max(Math.abs(e.deltaX), Math.abs(e.deltaY));
@@ -2719,11 +2819,11 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
         coldOpenWheelGestureResetTimerRef.current = null;
       }, COLD_OPEN_WHEEL_GESTURE_IDLE_MS);
     },
-    [handleColdOpenInteractionCapture, introVisible],
+    [handleColdOpenInteractionCapture, introPaused, introVisible],
   );
 
   useEffect(() => {
-    if (!introVisible) return;
+    if (!introVisible || introPaused) return;
     const onWindowKeyDown = (event: KeyboardEvent) => {
       if (event.repeat) return;
       if (
@@ -2762,6 +2862,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
     };
   }, [
     dismissColdOpen,
+    introPaused,
     introPromptVisible,
     introQuestionVisible,
     introVisible,
@@ -3013,7 +3114,7 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
   const coldOpenWarmingText =
     defaultTemperatureUnitForLocale() === "F" ? "+1.9°F" : "+1.1°C";
   const coldOpenGlobeRotate =
-    introVisible && introPromptVisible && !introFading;
+    introVisible && introPromptVisible && !introFading && !introPaused;
   const showIntroMap = !introVisible || introPromptVisible;
   const debugBbox = resp?.location?.panel_valid_bbox ?? null;
   const debugInBbox = inBbox(lat, lon, debugBbox);
@@ -3244,14 +3345,14 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
           <button
             type="button"
             className={styles.searchMetaLink}
-            onClick={() => setAboutOpenWithUrl(true)}
+            onClick={() => setOverlayOpenWithUrl("about")}
           >
             About
           </button>
           <button
             type="button"
             className={styles.searchMetaLink}
-            onClick={() => setSourcesOpenWithUrl(true)}
+            onClick={() => setOverlayOpenWithUrl("sources")}
           >
             Sources
           </button>
@@ -3260,14 +3361,14 @@ export default function ExplorerPage({ coldOpen = false }: ExplorerPageProps) {
 
       {aboutOpen ? (
         <AboutOverlay
-          onClose={() => setAboutOpenWithUrl(false)}
+          onClose={() => setOverlayOpenWithUrl(null)}
           appVersion={appVersion}
           assetsRelease={assetsRelease ?? sessionRelease ?? requestedRelease}
         />
       ) : null}
 
       {sourcesOpen ? (
-        <SourcesOverlay onClose={() => setSourcesOpenWithUrl(false)} />
+        <SourcesOverlay onClose={() => setOverlayOpenWithUrl(null)} />
       ) : null}
 
       <aside

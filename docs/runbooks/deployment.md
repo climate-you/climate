@@ -216,12 +216,14 @@ Run this step on the VM after bootstrap.
 Set production values for:
 
 - `CORS_ALLOW_ORIGINS`
+- `SITE_URL`
 - `NEXT_PUBLIC_CLIMATE_API_BASE`
 - `NEXT_PUBLIC_MAP_ASSET_BASE`
 - release/data paths if custom
 
 For IP-only testing, use:
 
+- `SITE_URL=http://<PUBLIC_IP>`
 - `NEXT_PUBLIC_CLIMATE_API_BASE=http://<PUBLIC_IP>`
 - `NEXT_PUBLIC_MAP_ASSET_BASE=http://<PUBLIC_IP>`
 - `CORS_ALLOW_ORIGINS=http://<PUBLIC_IP>`
@@ -273,8 +275,9 @@ All workflows rebuild backend/web assets, restart services, and run smoke checks
 Important:
 
 - Next.js reads `NEXT_PUBLIC_*` at build time.
+- Next.js metadata routes (`robots.ts`, `sitemap.ts`) and `metadataBase` use `SITE_URL` from `/etc/climate/web.env` at build time.
 - `deploy_app.sh` now loads `/etc/climate/web.env` before `npm run build`.
-- after changing `NEXT_PUBLIC_*`, run a new web build (through deploy script or manually) for changes to take effect.
+- after changing `NEXT_PUBLIC_*` or `SITE_URL`, run a new web build (through deploy script or manually) for changes to take effect.
 
 ## 11) Verify Services (VM-local)
 
@@ -331,8 +334,9 @@ If VM-local succeeds but public endpoint fails:
 ### 12.4 Web Loads but API Calls Fail
 
 - verify `NEXT_PUBLIC_CLIMATE_API_BASE` in `/etc/climate/web.env`
+- verify `SITE_URL` in `/etc/climate/web.env`
 - verify `CORS_ALLOW_ORIGINS` in `/etc/climate/backend.env`
-- rebuild/redeploy web after `NEXT_PUBLIC_*` changes (build-time values)
+- rebuild/redeploy web after `NEXT_PUBLIC_*` or `SITE_URL` changes (build-time values)
 
 ### 12.5 Quick Triage Order
 

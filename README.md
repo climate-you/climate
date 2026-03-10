@@ -1,6 +1,6 @@
 # Climate Data Pipeline + API + Web App
 
-Public app: https://www.climate.you
+Public app: https://climate.you
 
 A registry-driven climate data platform with:
 

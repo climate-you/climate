@@ -26,8 +26,29 @@ Optional map asset base override:
 export NEXT_PUBLIC_MAP_ASSET_BASE="http://localhost:8001"
 ```
 
+Site canonical base URL (used for metadata/sitemap/robots):
+
+```bash
+export SITE_URL="https://example.com"
+```
+
+## Routes
+
+- `/` map experience (cold-open enabled, once per browser session)
+- `/about` map + About overlay opened
+- `/sources` map + Sources overlay opened
+- `/robots.txt` crawl rules
+- `/sitemap.xml` sitemap
+
+## Query options
+
 Preview a specific release:
 
 ```text
 http://localhost:3000/?release=2022-02-17
 ```
+
+Force intro behavior:
+
+- `?intro=1` force cold-open even if already seen in this session
+- `?intro=0` skip cold-open
