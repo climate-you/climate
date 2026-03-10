@@ -13,7 +13,7 @@ def _write_datasets(path: Path, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
 
 
-def test_copy_sparse_risk_aux_mask_if_needed_copies_when_crw_present(
+def test_copy_sparse_risk_aux_mask_if_needed_copies_when_global_0p05_metric_present(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_repo = tmp_path / "repo"
@@ -25,7 +25,7 @@ def test_copy_sparse_risk_aux_mask_if_needed_copies_when_crw_present(
     datasets_path = tmp_path / "datasets.json"
     _write_datasets(
         datasets_path,
-        {"version": "0.1", "crw_dhw_daily": {"id": "crw_dhw_daily"}},
+        {"version": "0.1", "any_metric": {"id": "any_metric", "grid_id": "global_0p05"}},
     )
     release_root = tmp_path / "releases" / "dev"
 
@@ -39,7 +39,7 @@ def test_copy_sparse_risk_aux_mask_if_needed_copies_when_crw_present(
     assert dst.read_bytes() == b"mask-bytes"
 
 
-def test_copy_sparse_risk_aux_mask_if_needed_skips_when_crw_missing(
+def test_copy_sparse_risk_aux_mask_if_needed_skips_when_no_global_0p05_metric(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_repo = tmp_path / "repo"
@@ -68,7 +68,7 @@ def test_copy_sparse_risk_aux_mask_if_needed_fails_when_source_missing(
     datasets_path = tmp_path / "datasets.json"
     _write_datasets(
         datasets_path,
-        {"version": "0.1", "crw_dhw_daily": {"id": "crw_dhw_daily"}},
+        {"version": "0.1", "any_metric": {"id": "any_metric", "grid_id": "global_0p05"}},
     )
 
     with pytest.raises(FileNotFoundError, match="sparse-risk mask"):

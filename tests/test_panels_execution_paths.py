@@ -248,6 +248,32 @@ def test_build_scored_panels_tiles_registry_success_and_fallback(
             "method": None,
         },
     )
+    monkeypatch.setattr(
+        panels_module,
+        "_compute_t2m_recent_headline",
+        lambda tile_store, lat, lon, unit: {
+            "key": "t2m_recent_local",
+            "label": "Air temperature recent change",
+            "value": None,
+            "unit": unit,
+            "baseline": "1979",
+            "period": "latest 5-year mean",
+            "method": None,
+        },
+    )
+    monkeypatch.setattr(
+        panels_module,
+        "_compute_sst_recent_headline",
+        lambda tile_store, lat, lon, unit: {
+            "key": "sst_recent_local",
+            "label": "Sea surface temperature recent change",
+            "value": None,
+            "unit": unit,
+            "baseline": "1982",
+            "period": "latest 5-year mean",
+            "method": None,
+        },
+    )
 
     scored = panels_module.build_scored_panels_tiles_registry(
         place_resolver=_place_resolver(),
