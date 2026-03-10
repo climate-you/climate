@@ -99,7 +99,7 @@ If you want to create a release from scratch instead of relying on the pre-packa
 
 Before running the API/UI against local data, prepare:
 
-- location search artifacts and ocean naming masks
+- location search artifacts (city + marine autocomplete index, city-only nearest set) and ocean naming masks
 - optional reef-domain masks for DHW workflows
 - optional sparse-risk mask (`0.25°`) for mixed-grid panel bbox optimization
 - packaged release artifacts (metrics/maps) from dataset caches

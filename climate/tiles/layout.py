@@ -6,7 +6,7 @@ from pathlib import Path
 
 import math
 
-from climate.geo import normalize_lon_pm180
+from climate.geo.lon import normalize_lon_pm180
 
 
 @dataclass(frozen=True)

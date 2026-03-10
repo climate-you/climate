@@ -15,6 +15,15 @@ def _write_index(path: Path) -> None:
     )
 
 
+def _write_index_with_marine(path: Path) -> None:
+    path.write_text(
+        "geonameid,label,lat,lon,country_code,population,norm_label,norm_city,city_name\n"
+        '1,"Montréal, Canada",45.5,-73.6,CA,1700000,montreal canada,montreal,Montreal\n'
+        '2000000001,"Barents Sea",75.5,40.5,OC,0,barents sea,barents sea,Barents Sea\n',
+        encoding="utf-8",
+    )
+
+
 def test_norm_strips_accents_and_punctuation() -> None:
     assert _norm(" Montréal!! ") == "montreal"
 
@@ -40,3 +49,13 @@ def test_missing_index_file_raises(tmp_path: Path) -> None:
         assert "Location index not found" in str(exc)
     else:
         raise AssertionError("Expected FileNotFoundError for missing index file.")
+
+
+def test_autocomplete_and_resolve_support_marine_entries(tmp_path: Path) -> None:
+    index_csv = tmp_path / "locations.index.csv"
+    _write_index_with_marine(index_csv)
+    index = LocationIndex(index_csv, min_query_len=2, prefix_len=2)
+
+    hits = index.autocomplete("sea", limit=5)
+    assert [h.label for h in hits] == ["Barents Sea"]
+    assert index.resolve_by_id(2000000001).label == "Barents Sea"

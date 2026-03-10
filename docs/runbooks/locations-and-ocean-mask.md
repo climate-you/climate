@@ -40,10 +40,22 @@ You can install Python dependencies manually outside Conda, but this is not reco
 python scripts/build/build_locations.py --source cities500 --write-index --write-kdtree
 ```
 
+`build_locations.py` now builds two different location artifacts from different inputs:
+
+- `locations.csv` + `locations.kdtree.pkl`: city-only (GeoNames populated places), used by nearest-location logic.
+- `locations.index.csv`: city + marine names (Natural Earth marine polygons by default), used by autocomplete/resolve.
+
+By default, when `--write-index` is enabled, marine polygons are read from Natural Earth and merged into the index with synthetic stable IDs. You can override the marine source with:
+
+- `--marine-input` (local GeoJSON/Shapefile/zip)
+- `--marine-source`
+- `--marine-cache-dir`
+- `--marine-name-field`
+
 Primary outputs:
 
-- `data/locations/locations.csv` (canonical place dataset consumed by backend location services)
-- `data/locations/locations.index.csv` (normalized search index used for fast autocomplete/resolve matching)
+- `data/locations/locations.csv` (canonical city dataset consumed by nearest-location backend services)
+- `data/locations/locations.index.csv` (normalized search index used for autocomplete/resolve; includes city + marine names)
 - `data/locations/locations.kdtree.pkl` (spatial nearest-neighbor index used by nearest-location lookups)
 
 ## Build ocean mask assets

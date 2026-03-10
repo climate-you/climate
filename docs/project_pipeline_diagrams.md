@@ -100,8 +100,8 @@ flowchart TB
   subgraph D["<b>Data + Cache</b>"]
     direction LR
     TS["<b>TileDataStore</b><br/>(series tiles + time axes)"]
-    LI["<b>LocationIndex</b><br/>(locations.index.csv)"]
-    PR["<b>PlaceResolver</b><br/>(locations.csv + locations.kdtree.pkl)"]
+    LI["<b>LocationIndex</b><br/>(locations.index.csv: city + marine names)"]
+    PR["<b>PlaceResolver</b><br/>(locations.csv + locations.kdtree.pkl: city-only nearest)"]
     OC["<b>OceanClassifier</b><br/>(ocean_mask.npz + ocean_names.json)"]
     MAP["<b>Map assets</b><br/>data/releases/<release>/maps/*"]
     CA["<b>Cache</b><br/>(Redis or in-process TTL)"]

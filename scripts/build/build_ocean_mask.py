@@ -23,21 +23,10 @@ import urllib.request
 
 import numpy as np
 
-NATURAL_EARTH_MARINE_POLYS_URL = (
-    "https://www.naturalearthdata.com/http//www.naturalearthdata.com/"
-    "download/10m/physical/ne_10m_geography_marine_polys.zip"
+from climate.geo.marine import (
+    NATURAL_EARTH_MARINE_POLYS_FALLBACK_URLS,
+    normalize_marine_name,
 )
-NATURAL_EARTH_MARINE_POLYS_FALLBACK_URLS = [
-    NATURAL_EARTH_MARINE_POLYS_URL,
-    "https://naciscdn.org/naturalearth/10m/physical/ne_10m_geography_marine_polys.zip",
-]
-
-
-def _normalize_ocean_name(name: str) -> str:
-    # Some upstream datasets provide names in all caps; normalize them to title case.
-    if name and name == name.upper():
-        return name.title()
-    return name
 
 
 def _load_ocean_shapes(
@@ -65,7 +54,7 @@ def _load_ocean_shapes(
                 continue
 
             props = feat.get("properties") or {}
-            name = _normalize_ocean_name(str(props.get(name_field) or "").strip())
+            name = normalize_marine_name(str(props.get(name_field) or "").strip())
             if not name:
                 continue
 

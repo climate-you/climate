@@ -11,13 +11,20 @@ from __future__ import annotations
 import argparse
 import csv
 import io
+import math
 import re
 import sys
 import zipfile
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple, TypedDict
+from typing import Dict, Iterable, List, Optional, Tuple, TypedDict, Any
 import unicodedata
 import requests
+
+from climate.geo.marine import (
+    MARINE_SOURCE_NATURAL_EARTH,
+    NATURAL_EARTH_MARINE_POLYS_MIRROR_URL,
+    normalize_marine_name,
+)
 
 GEONAMES_DUMP_BASE = "https://download.geonames.org/export/dump"
 COUNTRYINFO_TXT = f"{GEONAMES_DUMP_BASE}/countryInfo.txt"
@@ -64,6 +71,10 @@ GEONAMES_COLS_LEN = 19
 
 FEATURE_CLASS_CITY = "P"
 DEFAULT_EXCLUDED_FEATURE_CODES = {"PPLX", "PPLA5"}
+MARINE_SOURCES = {
+    MARINE_SOURCE_NATURAL_EARTH: NATURAL_EARTH_MARINE_POLYS_MIRROR_URL,
+}
+MARINE_SYNTHETIC_ID_START = 2_000_000_000
 
 
 class _LocationRow(TypedDict):
@@ -91,6 +102,14 @@ class _IndexCandidate(TypedDict):
     population: str
     alias_count: int
     feature_code: str
+
+
+class _MarineNameAggregate(TypedDict):
+    label: str
+    weighted_lat_sum: float
+    weighted_lon_x_sum: float
+    weighted_lon_y_sum: float
+    weight_sum: int
 
 
 def cities_zip_url(source: str) -> str:
@@ -264,6 +283,168 @@ def _norm_index(s: str) -> str:
     return s.strip()
 
 
+def _iter_lon_lat_pairs(coords: Any) -> Iterable[Tuple[float, float]]:
+    """
+    Recursively yield (lon, lat) coordinate pairs from GeoJSON-like geometry coords.
+    """
+    if not isinstance(coords, (list, tuple)):
+        return
+    if len(coords) >= 2 and all(isinstance(v, (int, float)) for v in coords[:2]):
+        yield float(coords[0]), float(coords[1])
+        return
+    for part in coords:
+        yield from _iter_lon_lat_pairs(part)
+
+
+def _feature_center_from_geometry(geometry: dict) -> Optional[Tuple[float, float, int]]:
+    """
+    Returns feature center as:
+      (mean_lat, circular_mean_lon, point_count)
+    """
+    if not geometry:
+        return None
+    coords = geometry.get("coordinates")
+    if coords is None:
+        return None
+
+    lats: List[float] = []
+    lon_x_sum = 0.0
+    lon_y_sum = 0.0
+    count = 0
+    for lon, lat in _iter_lon_lat_pairs(coords):
+        lats.append(lat)
+        lon_rad = math.radians(lon)
+        lon_x_sum += math.cos(lon_rad)
+        lon_y_sum += math.sin(lon_rad)
+        count += 1
+
+    if count == 0:
+        return None
+
+    mean_lat = sum(lats) / float(count)
+    mean_lon = math.degrees(math.atan2(lon_y_sum, lon_x_sum))
+    mean_lon = ((mean_lon + 180.0) % 360.0) - 180.0
+    return mean_lat, mean_lon, count
+
+
+def _prepare_marine_input(
+    *,
+    marine_input: Optional[Path],
+    marine_source: str,
+    marine_cache_dir: Path,
+) -> Path:
+    if marine_input is not None:
+        return marine_input
+    if marine_source not in MARINE_SOURCES:
+        raise ValueError(
+            f"Unknown marine source {marine_source!r}. "
+            f"Choose from: {', '.join(sorted(MARINE_SOURCES))}"
+        )
+    return download_cached(MARINE_SOURCES[marine_source], marine_cache_dir)
+
+
+def load_marine_index_rows(
+    *,
+    input_path: Path,
+    name_field: str,
+    existing_ids: set[int],
+) -> List[_IndexCandidate]:
+    try:
+        import fiona
+    except Exception as exc:
+        raise RuntimeError(
+            "fiona is required to read marine polygons. Install with: pip install fiona"
+        ) from exc
+
+    read_path: str | Path
+    if input_path.suffix.lower() == ".zip":
+        read_path = f"zip://{input_path}"
+    else:
+        read_path = input_path
+
+    by_norm_name: Dict[str, _MarineNameAggregate] = {}
+    with fiona.open(str(read_path), "r") as src:
+        for feat in src:
+            geometry = feat.get("geometry")
+            if not geometry:
+                continue
+
+            props = feat.get("properties") or {}
+            raw_name = str(props.get(name_field) or "").strip()
+            name = normalize_marine_name(raw_name)
+            if not name:
+                continue
+
+            center = _feature_center_from_geometry(geometry)
+            if center is None:
+                continue
+            mean_lat, mean_lon, point_count = center
+            if point_count <= 0:
+                continue
+
+            norm_name = _norm_index(name)
+            if not norm_name:
+                continue
+
+            agg = by_norm_name.get(norm_name)
+            lon_rad = math.radians(mean_lon)
+            if agg is None:
+                by_norm_name[norm_name] = {
+                    "label": name,
+                    "weighted_lat_sum": mean_lat * point_count,
+                    "weighted_lon_x_sum": math.cos(lon_rad) * point_count,
+                    "weighted_lon_y_sum": math.sin(lon_rad) * point_count,
+                    "weight_sum": point_count,
+                }
+            else:
+                if len(name) > len(agg["label"]):
+                    agg["label"] = name
+                agg["weighted_lat_sum"] += mean_lat * point_count
+                agg["weighted_lon_x_sum"] += math.cos(lon_rad) * point_count
+                agg["weighted_lon_y_sum"] += math.sin(lon_rad) * point_count
+                agg["weight_sum"] += point_count
+
+    if not by_norm_name:
+        raise RuntimeError(
+            f"No marine polygons with valid names found in {input_path} "
+            f"using --marine-name-field={name_field!r}."
+        )
+
+    used_ids = set(existing_ids)
+    next_id = MARINE_SYNTHETIC_ID_START
+    out: List[_IndexCandidate] = []
+    for norm_name in sorted(by_norm_name.keys()):
+        while next_id in used_ids:
+            next_id += 1
+        agg = by_norm_name[norm_name]
+        weight = max(int(agg["weight_sum"]), 1)
+        lat = agg["weighted_lat_sum"] / float(weight)
+        lon = math.degrees(
+            math.atan2(agg["weighted_lon_y_sum"], agg["weighted_lon_x_sum"])
+        )
+        lon = ((lon + 180.0) % 360.0) - 180.0
+        synthetic_id = next_id
+        used_ids.add(synthetic_id)
+        next_id += 1
+
+        label = agg["label"]
+        out.append(
+            {
+                "geonameid": str(synthetic_id),
+                "label": label,
+                "city_name": label,
+                "country_name": "Ocean",
+                "country_code": "OC",
+                "lat": f"{lat:.5f}",
+                "lon": f"{lon:.5f}",
+                "population": "0",
+                "alias_count": 0,
+                "feature_code": "MARINE",
+            }
+        )
+    return out
+
+
 def _is_better_row(candidate: _LocationRow, current: _LocationRow) -> bool:
     """
     Decide which duplicate to keep.
@@ -324,6 +505,7 @@ def write_locations_csv(
     excluded_feature_codes: set[str],
     collect_points: bool = False,
     index_csv: Optional[Path] = None,
+    marine_index_rows: Optional[List[_IndexCandidate]] = None,
 ) -> Tuple[int, Optional[List[Tuple[float, float]]]]:
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     total = 0
@@ -486,6 +668,33 @@ def write_locations_csv(
             )
 
     if index_writer is not None:
+        if marine_index_rows:
+            used_ids = {
+                int(row["geonameid"])
+                for row in indexed_rows
+                if str(row.get("geonameid", "")).strip()
+            }
+            next_id = MARINE_SYNTHETIC_ID_START
+            for marine_row in sorted(
+                marine_index_rows, key=lambda r: _norm_index(r["label"])
+            ):
+                while next_id in used_ids:
+                    next_id += 1
+                assigned_row: _IndexCandidate = {
+                    "geonameid": str(next_id),
+                    "label": marine_row["label"],
+                    "city_name": marine_row["city_name"],
+                    "country_name": marine_row["country_name"],
+                    "country_code": marine_row["country_code"],
+                    "lat": marine_row["lat"],
+                    "lon": marine_row["lon"],
+                    "population": marine_row["population"],
+                    "alias_count": marine_row["alias_count"],
+                    "feature_code": marine_row["feature_code"],
+                }
+                used_ids.add(next_id)
+                next_id += 1
+                indexed_rows.append(assigned_row)
         # Build-time dedupe by final display label for autocomplete/resolve/index lookups.
         best_by_label: Dict[str, _IndexCandidate] = {}
         for row in indexed_rows:
@@ -572,6 +781,34 @@ def main() -> None:
         help='Index output path (default: "data/locations/locations.index.csv").',
     )
     ap.add_argument(
+        "--marine-input",
+        type=str,
+        default=None,
+        help=(
+            "Optional local marine polygons input for index entries "
+            "(GeoJSON/Shapefile/zip). If omitted, a Natural Earth source is used."
+        ),
+    )
+    ap.add_argument(
+        "--marine-source",
+        type=str,
+        default=MARINE_SOURCE_NATURAL_EARTH,
+        choices=sorted(MARINE_SOURCES.keys()),
+        help='Built-in marine source when --marine-input is omitted (default: "natural_earth").',
+    )
+    ap.add_argument(
+        "--marine-cache-dir",
+        type=str,
+        default="data/cache/geodata",
+        help='Marine input cache directory (default: "data/cache/geodata").',
+    )
+    ap.add_argument(
+        "--marine-name-field",
+        type=str,
+        default="name",
+        help='Marine polygon property field for display name (default: "name").',
+    )
+    ap.add_argument(
         "--source",
         type=str,
         default="cities500",
@@ -605,8 +842,19 @@ def main() -> None:
     admin2_names = parse_admin2_codes(a2path)
     out_csv = Path(args.out)
     index_csv = None
+    marine_index_rows: Optional[List[_IndexCandidate]] = None
     if args.write_index:
         index_csv = Path(args.index_path)
+        marine_input_path = _prepare_marine_input(
+            marine_input=Path(args.marine_input) if args.marine_input else None,
+            marine_source=args.marine_source,
+            marine_cache_dir=Path(args.marine_cache_dir),
+        )
+        marine_index_rows = load_marine_index_rows(
+            input_path=marine_input_path,
+            name_field=args.marine_name_field,
+            existing_ids=set(),
+        )
 
     count, points = write_locations_csv(
         out_csv,
@@ -617,18 +865,24 @@ def main() -> None:
         excluded_feature_codes=excluded_feature_codes,
         collect_points=bool(args.write_kdtree),
         index_csv=index_csv,
+        marine_index_rows=marine_index_rows,
     )
 
     if args.write_kdtree:
         if points is None:
             raise RuntimeError("KD-tree requested but no points were collected.")
-        write_kdtree(points, Path(args.kdtree_path))
+        kdtree_path = Path(args.kdtree_path)
+        write_kdtree(points, kdtree_path)
 
     excluded_msg = ",".join(sorted(excluded_feature_codes)) or "(none)"
     print(
         f"[ok] wrote {out_csv} ({count} locations); excluded feature codes: {excluded_msg}",
         file=sys.stderr,
     )
+    if index_csv is not None:
+        print(f"[ok] wrote {index_csv}", file=sys.stderr)
+    if args.write_kdtree:
+        print(f"[ok] wrote {kdtree_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":
