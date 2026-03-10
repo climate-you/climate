@@ -32,14 +32,15 @@ test("cold-open pointerdown guard ignores touch events", () => {
 test("cold-open interaction advances in two explicit steps before dismiss", () => {
   assert.match(
     explorerPageSource,
-    /if \(!introQuestionVisible\) \{\s*showIntroQuestion\(\);\s*return;\s*\}/,
+    /const advanceColdOpenStep = useCallback\(\(\) => \{[\s\S]*if \(!introQuestionVisible\) \{\s*showIntroQuestion\(\);\s*return;\s*\}/,
   );
   assert.match(
     explorerPageSource,
     /if \(!introPromptVisible\) \{\s*showIntroPrompt\(\);\s*return;\s*\}/,
   );
+  assert.match(explorerPageSource, /dismissColdOpen\(\);/);
   assert.match(explorerPageSource, /const COLD_OPEN_QUESTION_DELAY_MS = 1700;/);
-  assert.match(explorerPageSource, /const COLD_OPEN_PROMPT_DELAY_MS = 6000;/);
+  assert.match(explorerPageSource, /const COLD_OPEN_PROMPT_DELAY_MS = 4000;/);
   assert.match(
     explorerPageSource,
     /const COLD_OPEN_WHEEL_GESTURE_IDLE_MS = 55;/,
@@ -60,6 +61,7 @@ test("cold-open interaction advances in two explicit steps before dismiss", () =
     explorerPageSource,
     /coldOpenWheelGestureResetTimerRef\.current = window\.setTimeout\(\(\) => \{\s*coldOpenWheelGestureActiveRef\.current = false;/,
   );
+  assert.match(explorerPageSource, /advanceColdOpenStep\(\);/);
   assert.match(
     explorerPageSource,
     /const onWindowKeyDown = \(event: KeyboardEvent\) => \{[\s\S]*if \(event\.repeat\) return;/,

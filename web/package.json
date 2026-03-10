@@ -13,7 +13,10 @@
     "lint": "eslint",
     "format": "prettier --write \"src/**/*.{ts,tsx,mjs,js,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,mjs,js,json}\"",
-    "test:unit": "node --test src/lib/*.test.mjs"
+    "test:unit": "node --test src/lib/*.test.mjs",
+    "demo:video:record": "node scripts/record-demo-video.mjs",
+    "demo:video:render": "node scripts/render-demo-video.mjs",
+    "demo:video": "node scripts/build-demo-video.mjs"
   },
   "dependencies": {
     "echarts": "^5.6.0",
@@ -28,6 +31,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
+    "playwright": "^1.58.2",
     "prettier": "^3.8.1",
     "typescript": "^5"
   }

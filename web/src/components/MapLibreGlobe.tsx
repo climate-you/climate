@@ -34,6 +34,20 @@ export type TextureDebugInfo = {
 
 export type TextureVariantOverride = "auto" | "mobile" | "full";
 
+export type MapDemoControls = {
+  flyTo: (opts: {
+    lon: number;
+    lat: number;
+    zoom?: number;
+    duration?: number;
+  }) => Promise<void>;
+  pickAt: (opts: { lon: number; lat: number; duration?: number }) => Promise<void>;
+  setLayer: (layerId: string) => void;
+  home: (duration?: number) => Promise<void>;
+  project: (lon: number, lat: number) => { x: number; y: number } | null;
+  getLayerIds: () => string[];
+};
+
 type Props = {
   panelOpen: boolean;
   focusLocation: LngLat | null;
@@ -57,6 +71,8 @@ type Props = {
   textureVariantOverride?: TextureVariantOverride;
   onTextureDebugInfoChange?: (info: TextureDebugInfo | null) => void;
   autoRotate?: boolean;
+  autoRotateDegPerSec?: number;
+  registerDemoControls?: (controls: MapDemoControls | null) => void;
 };
 
 const initialView = {
@@ -339,6 +355,8 @@ export default function MapLibreGlobe({
   textureVariantOverride = "auto",
   onTextureDebugInfoChange,
   autoRotate = false,
+  autoRotateDegPerSec = AUTO_ROTATE_DEG_PER_SEC,
+  registerDemoControls,
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -360,6 +378,8 @@ export default function MapLibreGlobe({
   const textureVariantOverrideRef = useRef(textureVariantOverride);
   const onTextureDebugInfoChangeRef = useRef(onTextureDebugInfoChange);
   const autoRotateRef = useRef(autoRotate);
+  const autoRotateDegPerSecRef = useRef(autoRotateDegPerSec);
+  const registerDemoControlsRef = useRef(registerDemoControls);
   const maxTextureSizeRef = useRef<number | null>(null);
   const textureBackdropRef = useRef<string>(BACKDROP_WHITE);
   const styleReadyRef = useRef(false);
@@ -433,6 +453,14 @@ export default function MapLibreGlobe({
   useEffect(() => {
     autoRotateRef.current = autoRotate;
   }, [autoRotate]);
+
+  useEffect(() => {
+    autoRotateDegPerSecRef.current = autoRotateDegPerSec;
+  }, [autoRotateDegPerSec]);
+
+  useEffect(() => {
+    registerDemoControlsRef.current = registerDemoControls;
+  }, [registerDemoControls]);
 
   useEffect(() => {
     textureBackdropRef.current = textureBackdrop;
@@ -688,6 +716,28 @@ export default function MapLibreGlobe({
       return panelPaddingForViewport(map, panelOpenRef.current);
     }
 
+    function runFlyTo(options: maplibregl.FlyToOptions): Promise<void> {
+      return new Promise((resolve) => {
+        let settled = false;
+        const done = () => {
+          if (settled) return;
+          settled = true;
+          map.off("moveend", done);
+          resolve();
+        };
+        map.on("moveend", done);
+        map.flyTo({
+          ...options,
+          essential: true,
+        });
+        const durationMs =
+          typeof options.duration === "number" && Number.isFinite(options.duration)
+            ? Math.max(0, options.duration)
+            : 0;
+        window.setTimeout(done, durationMs + 700);
+      });
+    }
+
     function createHomeControl(): maplibregl.IControl {
       let mapInstance: maplibregl.Map | undefined;
       let container: HTMLDivElement | undefined;
@@ -698,14 +748,13 @@ export default function MapLibreGlobe({
         onHomeRef.current();
         const nextBaseZoom = responsiveBaseZoom();
         mapInstance?.setMinZoom(nextBaseZoom);
-        mapInstance?.flyTo({
+        void runFlyTo({
           center: initialView.center,
           zoom: nextBaseZoom,
           pitch: initialView.pitch,
           bearing: initialView.bearing,
           padding: { top: 0, right: 0, bottom: 0, left: 0 },
           duration: 1200,
-          essential: true,
         });
       };
       return {
@@ -998,14 +1047,11 @@ export default function MapLibreGlobe({
     };
     window.addEventListener("resize", onResize);
 
-    const onMapClick = (event: maplibregl.MapMouseEvent) => {
-      if (!enablePickRef.current) return;
-      if (!map.transform.isPointOnMapSurface(event.point)) return;
-      const { lng, lat } = event.lngLat;
-      const snapped = snapTargetAtLowZoom(map, event);
-      const targetLng = snapped?.[0] ?? lng;
-      const targetLat = snapped?.[1] ?? lat;
-
+    const performPick = async (
+      targetLat: number,
+      targetLng: number,
+      duration = FOCUS_FLY_DURATION_MS,
+    ) => {
       if (!markerRef.current) {
         markerRef.current = new maplibregl.Marker({ color: "#ff0000" })
           .setLngLat([targetLng, targetLat])
@@ -1015,16 +1061,67 @@ export default function MapLibreGlobe({
       }
 
       onPickRef.current(targetLat, targetLng);
-      map.flyTo({
+      await runFlyTo({
         center: [targetLng, targetLat],
         zoom: focusZoomTarget(map),
         pitch: 0,
         bearing: 0,
         padding: getPanelPadding(),
-        duration: FOCUS_FLY_DURATION_MS,
+        duration,
         easing: cubicOut,
-        essential: true,
       });
+    };
+
+    registerDemoControlsRef.current?.({
+      async flyTo({ lon, lat, zoom, duration = 2000 }) {
+        await runFlyTo({
+          center: [lon, lat],
+          zoom: typeof zoom === "number" ? zoom : map.getZoom(),
+          pitch: 0,
+          bearing: 0,
+          duration,
+          easing: cubicOut,
+        });
+      },
+      async pickAt({ lon, lat, duration = FOCUS_FLY_DURATION_MS }) {
+        await performPick(lat, lon, duration);
+      },
+      setLayer(layerId: string) {
+        onLayerChangeRef.current(layerId);
+      },
+      async home(duration = 1200) {
+        markerRef.current?.remove();
+        markerRef.current = null;
+        onHomeRef.current();
+        const nextBaseZoom = responsiveBaseZoom();
+        map.setMinZoom(nextBaseZoom);
+        await runFlyTo({
+          center: initialView.center,
+          zoom: nextBaseZoom,
+          pitch: initialView.pitch,
+          bearing: initialView.bearing,
+          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+          duration,
+        });
+      },
+      project(lon: number, lat: number) {
+        if (!mapRef.current) return null;
+        const point = map.project({ lng: lon, lat });
+        return { x: point.x, y: point.y };
+      },
+      getLayerIds() {
+        return layerOptionsRef.current.map((layer) => layer.id);
+      },
+    });
+
+    const onMapClick = (event: maplibregl.MapMouseEvent) => {
+      if (!enablePickRef.current) return;
+      if (!map.transform.isPointOnMapSurface(event.point)) return;
+      const { lng, lat } = event.lngLat;
+      const snapped = snapTargetAtLowZoom(map, event);
+      const targetLng = snapped?.[0] ?? lng;
+      const targetLat = snapped?.[1] ?? lat;
+      void performPick(targetLat, targetLng, FOCUS_FLY_DURATION_MS);
     };
     map.on("click", onMapClick);
 
@@ -1035,6 +1132,7 @@ export default function MapLibreGlobe({
       markerRef.current = null;
       layerControlRef.current = null;
       styleReadyRef.current = false;
+      registerDemoControlsRef.current?.(null);
       onTextureDebugInfoChangeRef.current?.(null);
       map.remove();
       mapRef.current = null;
@@ -1349,8 +1447,9 @@ export default function MapLibreGlobe({
       );
       previousTimestamp = timestamp;
       const center = map.getCenter();
+      const rotateDegPerSec = autoRotateDegPerSecRef.current;
       const nextLon =
-        ((((center.lng + elapsedSeconds * AUTO_ROTATE_DEG_PER_SEC + 180) %
+        ((((center.lng + elapsedSeconds * rotateDegPerSec + 180) %
           360) +
           360) %
           360) -

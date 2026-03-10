@@ -9,6 +9,7 @@ __pycache__
 /docs/plans
 /htmlcov/
 /web/public/data/*
+/web/artifacts/
 /web/web/
 infra/terraform/gcp/terraform.tfvars
 infra/terraform/gcp/terraform.tfstate*

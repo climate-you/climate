@@ -12,6 +12,7 @@ import * as echarts from "echarts";
 import type { EChartsOption } from "echarts";
 import MapLibreGlobe from "@/components/MapLibreGlobe";
 import type {
+  MapDemoControls,
   MapLayerOption,
   TextureDebugInfo,
   TextureVariantOverride,
@@ -208,6 +209,37 @@ type ExplorerPageProps = {
   coldOpen?: boolean;
   initialOverlay?: "about" | "sources" | null;
   initialOverlayBasePath?: string;
+  demoMode?: boolean;
+  onDemoApiReady?: (api: ExplorerDemoApi | null) => void;
+};
+
+export type ExplorerDemoState = {
+  introVisible: boolean;
+  introPromptVisible: boolean;
+  introQuestionVisible: boolean;
+  panelOpen: boolean;
+  panelLoading: boolean;
+  panelHasData: boolean;
+  mapReady: boolean;
+  layerIds: string[];
+  layers: Array<{ id: string; label: string }>;
+};
+
+export type ExplorerDemoApi = {
+  advanceColdOpenStep: () => void;
+  flyTo: (opts: {
+    lon: number;
+    lat: number;
+    zoom?: number;
+    duration?: number;
+  }) => Promise<void>;
+  pickAt: (opts: { lon: number; lat: number; duration?: number }) => Promise<void>;
+  setLayer: (layerId: string) => void;
+  setAutoRotate: (enabled: boolean, speedDegPerSec?: number) => void;
+  home: (duration?: number) => Promise<void>;
+  closePanel: () => void;
+  project: (lon: number, lat: number) => { x: number; y: number } | null;
+  getState: () => ExplorerDemoState;
 };
 
 type GlobeLegendSpec = {
@@ -1844,6 +1876,8 @@ export default function ExplorerPage({
   coldOpen = false,
   initialOverlay = null,
   initialOverlayBasePath = DEFAULT_OVERLAY_BASE_PATH,
+  demoMode = false,
+  onDemoApiReady,
 }: ExplorerPageProps) {
   const debugAllowed = process.env.NODE_ENV !== "production";
   const envDefaultReleaseRaw = process.env.NEXT_PUBLIC_RELEASE;
@@ -1895,6 +1929,8 @@ export default function ExplorerPage({
   const touchGestureAxisRef = useRef<"x" | "y" | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const panelViewportRef = useRef<HTMLDivElement | null>(null);
+  const mapDemoControlsRef = useRef<MapDemoControls | null>(null);
+  const onDemoApiReadyRef = useRef(onDemoApiReady);
   const pendingGraphRestoreIdsRef = useRef<string[] | null>(null);
   const lastGraphViewFingerprintRef = useRef<string | null>(null);
   const lastTrackedLayerIdRef = useRef<string | null>(null);
@@ -1935,9 +1971,18 @@ export default function ExplorerPage({
     useState<TextureVariantOverride>("auto");
   const [textureDebugInfo, setTextureDebugInfo] =
     useState<TextureDebugInfo | null>(null);
+  const [demoAutoRotate, setDemoAutoRotate] = useState(false);
+  const [demoAutoRotateSpeedDegPerSec, setDemoAutoRotateSpeedDegPerSec] =
+    useState(3);
   const [releaseLayers, setReleaseLayers] = useState<
     ReleaseResolveResponse["layers"]
   >([]);
+  useEffect(() => {
+    onDemoApiReadyRef.current = onDemoApiReady;
+  }, [onDemoApiReady]);
+  const handleMapDemoControls = useCallback((controls: MapDemoControls | null) => {
+    mapDemoControlsRef.current = controls;
+  }, []);
   const DEFAULT_API_PORT = 8001;
   const apiBase = useMemo(() => {
     if (process.env.NEXT_PUBLIC_CLIMATE_API_BASE) {
@@ -2082,6 +2127,12 @@ export default function ExplorerPage({
       // Ignore storage access issues (private mode, policy restrictions).
     }
   }, []);
+
+  useEffect(() => {
+    if (demoMode) return;
+    setDemoAutoRotate(false);
+    setDemoAutoRotateSpeedDegPerSec(3);
+  }, [demoMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2704,6 +2755,27 @@ export default function ExplorerPage({
     setIntroQuestionVisible(true);
   }, [introPaused, introQuestionVisible, introVisible]);
 
+  const advanceColdOpenStep = useCallback(() => {
+    if (!introVisible || introPaused) return;
+    if (!introQuestionVisible) {
+      showIntroQuestion();
+      return;
+    }
+    if (!introPromptVisible) {
+      showIntroPrompt();
+      return;
+    }
+    dismissColdOpen();
+  }, [
+    dismissColdOpen,
+    introPaused,
+    introPromptVisible,
+    introQuestionVisible,
+    introVisible,
+    showIntroPrompt,
+    showIntroQuestion,
+  ]);
+
   useEffect(() => {
     if (!introVisible || introQuestionVisible || introPaused) return;
     introPhaseTimerRef.current = window.setTimeout(() => {
@@ -2758,25 +2830,9 @@ export default function ExplorerPage({
       if (!introVisible || introPaused) return;
       e.preventDefault();
       e.stopPropagation();
-      if (!introQuestionVisible) {
-        showIntroQuestion();
-        return;
-      }
-      if (!introPromptVisible) {
-        showIntroPrompt();
-        return;
-      }
-      dismissColdOpen();
+      advanceColdOpenStep();
     },
-    [
-      dismissColdOpen,
-      introPaused,
-      introPromptVisible,
-      introQuestionVisible,
-      introVisible,
-      showIntroPrompt,
-      showIntroQuestion,
-    ],
+    [advanceColdOpenStep, introPaused, introVisible],
   );
 
   const handleColdOpenPointerDownCapture = useCallback(
@@ -2846,28 +2902,16 @@ export default function ExplorerPage({
       }
       event.preventDefault();
       event.stopPropagation();
-      if (!introQuestionVisible) {
-        showIntroQuestion();
-        return;
-      }
-      if (!introPromptVisible) {
-        showIntroPrompt();
-        return;
-      }
-      dismissColdOpen();
+      advanceColdOpenStep();
     };
     window.addEventListener("keydown", onWindowKeyDown, true);
     return () => {
       window.removeEventListener("keydown", onWindowKeyDown, true);
     };
   }, [
-    dismissColdOpen,
+    advanceColdOpenStep,
     introPaused,
-    introPromptVisible,
-    introQuestionVisible,
     introVisible,
-    showIntroPrompt,
-    showIntroQuestion,
   ]);
 
   useEffect(
@@ -3111,8 +3155,7 @@ export default function ExplorerPage({
       ? "Local warming since pre-industrial (1850-1900 baseline) is estimated by combining observed local warming from ERA5 (1979-2025) with a CMIP6-based offset for 1850-1979, computed from 5 models. Source: CDS."
       : "Local warming is computed from recent annual means relative to the configured baseline year for the selected layer.";
   const populationText = formatPopulation(selectedLocation?.population);
-  const coldOpenWarmingText =
-    defaultTemperatureUnitForLocale() === "F" ? "+1.9°F" : "+1.1°C";
+  const coldOpenWarmingText = unit === "F" ? "+1.9°F" : "+1.1°C";
   const coldOpenGlobeRotate =
     introVisible && introPromptVisible && !introFading && !introPaused;
   const showIntroMap = !introVisible || introPromptVisible;
@@ -3123,6 +3166,71 @@ export default function ExplorerPage({
     isMobile && panelOpen
       ? `translateY(${Math.round(panelDragOffsetPx)}px)`
       : undefined;
+
+  const getDemoState = useCallback<() => ExplorerDemoState>(
+    () => ({
+      introVisible,
+      introPromptVisible,
+      introQuestionVisible,
+      panelOpen,
+      panelLoading,
+      panelHasData: !panelLoading && Boolean(resp?.panels?.length),
+      mapReady: mapDemoControlsRef.current !== null,
+      layerIds: mapLayers.map((layer) => layer.id),
+      layers: mapLayers.map((layer) => ({ id: layer.id, label: layer.label })),
+    }),
+    [
+      introPromptVisible,
+      introQuestionVisible,
+      introVisible,
+      mapLayers,
+      panelLoading,
+      panelOpen,
+      resp?.panels?.length,
+    ],
+  );
+
+  useEffect(() => {
+    if (!demoMode) {
+      onDemoApiReadyRef.current?.(null);
+      return;
+    }
+    const api: ExplorerDemoApi = {
+      advanceColdOpenStep,
+      flyTo(opts) {
+        return mapDemoControlsRef.current?.flyTo(opts) ?? Promise.resolve();
+      },
+      pickAt(opts) {
+        return mapDemoControlsRef.current?.pickAt(opts) ?? Promise.resolve();
+      },
+      setLayer(layerId: string) {
+        mapDemoControlsRef.current?.setLayer(layerId);
+      },
+      setAutoRotate(enabled: boolean, speedDegPerSec?: number) {
+        setDemoAutoRotate(enabled);
+        if (
+          typeof speedDegPerSec === "number" &&
+          Number.isFinite(speedDegPerSec) &&
+          speedDegPerSec > 0
+        ) {
+          setDemoAutoRotateSpeedDegPerSec(speedDegPerSec);
+        }
+      },
+      home(duration?: number) {
+        return mapDemoControlsRef.current?.home(duration) ?? Promise.resolve();
+      },
+      closePanel() {
+        setPanelOpen(false);
+      },
+      project(lon: number, lat: number) {
+        return mapDemoControlsRef.current?.project(lon, lat) ?? null;
+      },
+      getState: getDemoState,
+    };
+    onDemoApiReadyRef.current?.(api);
+    return () => onDemoApiReadyRef.current?.(null);
+  }, [advanceColdOpenStep, demoMode, getDemoState]);
+
   return (
     <main
       className={`${styles.app} ${introVisible ? styles.appIntro : styles.appReady}`}
@@ -3159,7 +3267,9 @@ export default function ExplorerPage({
             setPicked(null);
           }}
           enablePick={!introVisible}
-          autoRotate={coldOpenGlobeRotate}
+          autoRotate={coldOpenGlobeRotate || demoAutoRotate}
+          autoRotateDegPerSec={demoAutoRotateSpeedDegPerSec}
+          registerDemoControls={demoMode ? handleMapDemoControls : undefined}
         />
         {activeLayerLegend ? (
           <aside
