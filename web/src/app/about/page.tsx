@@ -10,11 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default function AboutRoutePage() {
-  return (
-    <ExplorerPage
-      coldOpen
-      initialOverlay="about"
-      initialOverlayBasePath="/"
-    />
-  );
+  return <ExplorerPage initialOverlay="about" initialOverlayBasePath="/" />;
 }

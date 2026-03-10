@@ -10,11 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default function SourcesRoutePage() {
-  return (
-    <ExplorerPage
-      coldOpen
-      initialOverlay="sources"
-      initialOverlayBasePath="/"
-    />
-  );
+  return <ExplorerPage initialOverlay="sources" initialOverlayBasePath="/" />;
 }
