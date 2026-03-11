@@ -223,13 +223,6 @@ def write_tile(
     tmp.replace(path)
 
 
-def read_tile_header(path: str | Path) -> TileHeader:
-    path = Path(path)
-    data = path.read_bytes()
-    data = _decompress_if_needed(path, data)
-    return TileHeader.unpack(data[:HEADER_SIZE])
-
-
 def read_tile_array(path: str | Path) -> tuple[TileHeader, np.ndarray]:
     """
     Read the entire tile into memory.

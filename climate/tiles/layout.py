@@ -157,27 +157,6 @@ def tile_path(
     return root / grid.grid_id / metric / zdir / fname
 
 
-def interest_tile_path(
-    root: str | Path,
-    grid: GridSpec,
-    *,
-    tile_r: int,
-    tile_c: int,
-    ext: str = ".bin.zst",
-) -> Path:
-    """
-    Build a path like:
-      {root}/{grid_id}/interest/z{tile_size}/r{tile_r:03d}_c{tile_c:03d}.bin.zst
-
-    Example:
-      data/releases/2026-01/grids/global_0p25/interest/z64/r002_c014.bin.zst
-    """
-    root = Path(root)
-    zdir = f"z{int(grid.tile_size)}"
-    fname = f"r{int(tile_r):03d}_c{int(tile_c):03d}{ext}"
-    return root / grid.grid_id / "interest" / zdir / fname
-
-
 def locate_tile(
     lat: float,
     lon: float,

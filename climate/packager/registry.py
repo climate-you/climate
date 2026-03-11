@@ -904,21 +904,6 @@ def _maybe_regrid_to_metric_grid(
     return interp_da
 
 
-def _append_yearly_part(
-    *,
-    da: xr.DataArray,
-    agg_fn: callable,
-    params: dict | None,
-    years_part: list[int],
-    da_parts: list[xr.DataArray],
-    years_parts: list[int],
-) -> None:
-    da_ann = agg_fn(da, params or {})
-    da_ann = da_ann.sel(year=years_part)
-    da_parts.append(da_ann)
-    years_parts.extend(years_part)
-
-
 def _select_years_if_present(
     da_out: xr.DataArray, years_part: list[int]
 ) -> xr.DataArray:
