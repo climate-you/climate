@@ -1,19 +1,19 @@
 Bug fixes / Cleanup:
 
-- double check color scale of warming layers in India.
+- recent warming:
+  - double check color scale of warming layers in India.
+  - virer recent warming layer.
 - [WIP] ask Claude to code review.
   - asked about hardcoded thingys in the code: (?) Year constants (1979, 2000, 1850) — should live in one place in climate_api/ rather than inline in panels.py and tile_data_store.py
-- autocomplete should work with ocean/sea names
-- (?) Make it clear year range for graphs, eg. "Annual temperature (1979-2025)" (or maybe just in info bubble)
-- clean up unused css and methods in code when all features and bugfix are done.
-- more warming since 1979 than since pre-industrial:
-  - lat=76.91256140487701&lon=43.46278358569498 (barents sea)
 
 Before public website+github:
 
-- Sitemap/robots.txt for google?
-- create small video presentation, cold open + fly-to London.
-- create a new demo release (+ upload somewhere, github?)
+- [WIP] create small video presentation, cold open + fly-to London.
+- [WIP] create a new demo release
+  - create tar.gz file
+  - create tag `demo-v20260310`
+  - create release (mark as pre-release) in github and upload tar.gz file
+  - update docs with proper link
 - Finalise doc: latest screenshots (or video?), link to `demo` release
 
 ---
