@@ -110,6 +110,7 @@ class ProjectionBounds(BaseModel):
 class LayerDescriptor(BaseModel):
     id: str
     label: str
+    enable: bool = True
     unit: Optional[str] = None
     map_id: str
     asset_path: str

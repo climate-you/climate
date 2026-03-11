@@ -165,6 +165,7 @@ type ReleaseResolveResponse = {
   layers: Array<{
     id: string;
     label: string;
+    enable?: boolean | null;
     unit?: "temperature" | "score" | null;
     map_id: string;
     asset_path: string;
@@ -1963,42 +1964,52 @@ export default function ExplorerPage({
     [],
   );
   const mapLayers = useMemo<MapLayerOption[]>(() => {
-    const configuredLayers = releaseLayers.map((layer) => ({
-      id: layer.id,
-      label: layer.label,
-      imageUrl: `${mapAssetBase}/assets/v/${encodedRelease}/${layer.asset_path}`,
-      imageWidth:
-        typeof layer.asset_width === "number" ? layer.asset_width : undefined,
-      imageHeight:
-        typeof layer.asset_height === "number" ? layer.asset_height : undefined,
-      mobileImageUrl:
-        typeof layer.mobile_asset_path === "string" && layer.mobile_asset_path
-          ? `${mapAssetBase}/assets/v/${encodedRelease}/${layer.mobile_asset_path}`
-          : undefined,
-      mobileImageWidth:
-        typeof layer.mobile_asset_width === "number"
-          ? layer.mobile_asset_width
-          : undefined,
-      mobileImageHeight:
-        typeof layer.mobile_asset_height === "number"
-          ? layer.mobile_asset_height
-          : undefined,
-      projectionBounds:
-        layer.projection_bounds &&
-        typeof layer.projection_bounds.lat_min === "number" &&
-        typeof layer.projection_bounds.lat_max === "number" &&
-        typeof layer.projection_bounds.lon_min === "number" &&
-        typeof layer.projection_bounds.lon_max === "number"
-          ? layer.projection_bounds
-          : undefined,
-      opacity: typeof layer.opacity === "number" ? layer.opacity : 0.72,
-      resampling:
-        layer.resampling === "linear" || layer.resampling === "nearest"
-          ? layer.resampling
-          : ("nearest" as const),
-    }));
+    const configuredLayers = releaseLayers
+      .filter((layer) => {
+        const isEnabled = layer.enable !== false;
+        return debugMode || isEnabled;
+      })
+      .map((layer) => {
+        const isEnabled = layer.enable !== false;
+        return {
+          id: layer.id,
+          label: isEnabled ? layer.label : `${layer.label} [disabled]`,
+          imageUrl: `${mapAssetBase}/assets/v/${encodedRelease}/${layer.asset_path}`,
+          imageWidth:
+            typeof layer.asset_width === "number" ? layer.asset_width : undefined,
+          imageHeight:
+            typeof layer.asset_height === "number"
+              ? layer.asset_height
+              : undefined,
+          mobileImageUrl:
+            typeof layer.mobile_asset_path === "string" && layer.mobile_asset_path
+              ? `${mapAssetBase}/assets/v/${encodedRelease}/${layer.mobile_asset_path}`
+              : undefined,
+          mobileImageWidth:
+            typeof layer.mobile_asset_width === "number"
+              ? layer.mobile_asset_width
+              : undefined,
+          mobileImageHeight:
+            typeof layer.mobile_asset_height === "number"
+              ? layer.mobile_asset_height
+              : undefined,
+          projectionBounds:
+            layer.projection_bounds &&
+            typeof layer.projection_bounds.lat_min === "number" &&
+            typeof layer.projection_bounds.lat_max === "number" &&
+            typeof layer.projection_bounds.lon_min === "number" &&
+            typeof layer.projection_bounds.lon_max === "number"
+              ? layer.projection_bounds
+              : undefined,
+          opacity: typeof layer.opacity === "number" ? layer.opacity : 0.72,
+          resampling:
+            layer.resampling === "linear" || layer.resampling === "nearest"
+              ? layer.resampling
+              : ("nearest" as const),
+        };
+      });
     return [{ id: "none", label: "None" }, ...configuredLayers];
-  }, [encodedRelease, mapAssetBase, releaseLayers]);
+  }, [debugMode, encodedRelease, mapAssetBase, releaseLayers]);
   const [activeLayerId, setActiveLayerId] = useState<string>(
     mapLayers[0]?.id ?? "",
   );

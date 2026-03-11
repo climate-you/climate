@@ -2,6 +2,7 @@
   "version": "0.1",
   "warming_air": {
     "id": "warming_air",
+    "enable": false,
     "label": "Air warming (recent baseline)",
     "unit": "temperature",
     "description": "Air temperature anomaly recorded at 2 meters above the surface for 2025 relative to the 1979-1988 average.",

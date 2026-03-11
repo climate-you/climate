@@ -19,6 +19,7 @@
         "unit": { "type": "string", "enum": ["temperature", "score"] },
         "description": { "type": "string" },
         "icon": { "type": "string" },
+        "enable": { "type": "boolean" },
         "map_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "opacity": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
         "resampling": { "type": "string", "enum": ["linear", "nearest"] },

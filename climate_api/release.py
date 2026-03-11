@@ -277,6 +277,7 @@ def _build_release_layers(
             "map_id": map_id,
             "asset_path": f"maps/{grid_id}/{map_id}/{filename}",
         }
+        descriptor["enable"] = bool(layer_spec.get("enable", True))
         if "unit" in layer_spec:
             descriptor["unit"] = layer_spec.get("unit")
         projection = str(map_spec.get("projection", "equirectangular"))
