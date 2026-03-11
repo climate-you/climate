@@ -2269,12 +2269,16 @@ export default function ExplorerPage({
     [graphsPerPage, visibleGraphs],
   );
   const queueGraphRestoreFromVisible = useCallback(() => {
+    if (!panelOpen) {
+      pendingGraphRestoreIdsRef.current = null;
+      return;
+    }
     const visibleIds = visibleGraphs
       .map((entry) => entry?.graph.id)
       .filter((id): id is string => typeof id === "string" && id.length > 0);
     pendingGraphRestoreIdsRef.current =
       visibleIds.length > 0 ? visibleIds : null;
-  }, [visibleGraphs]);
+  }, [panelOpen, visibleGraphs]);
 
   const trackGoatEvent = useCallback((path: string, title: string) => {
     if (typeof window === "undefined") return;
@@ -2663,6 +2667,8 @@ export default function ExplorerPage({
 
   useEffect(() => {
     if (panelOpen) return;
+    pendingGraphRestoreIdsRef.current = null;
+    setGraphPage(0);
     setPanelDragOffsetPx(0);
     setPanelDragActive(false);
     touchGestureAxisRef.current = null;
