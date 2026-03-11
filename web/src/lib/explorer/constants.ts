@@ -1,0 +1,9 @@
+export const COLD_OPEN_FADE_MS = 520;
+export const COLD_OPEN_QUESTION_DELAY_MS = 1700;
+export const COLD_OPEN_PROMPT_DELAY_MS = 4000;
+export const COLD_OPEN_PRIMARY_REVEAL_DELAY_MS = 80;
+export const COLD_OPEN_WHEEL_GESTURE_IDLE_MS = 55;
+export const COLD_OPEN_WHEEL_ACTIVE_DELTA_MIN = 0.35;
+export const COLD_OPEN_SESSION_SEEN_KEY = "climate.coldOpenSeen";
+
+export const DEFAULT_OVERLAY_BASE_PATH = "/";
