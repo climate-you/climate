@@ -73,9 +73,11 @@ key: <your-key>
 - Build-from-scratch path: run the full preparation pipeline (see Data Preparation Overview below).
 - The remaining Quickstart steps assume you selected the pre-packaged `demo` release path.
 
-Pre-packaged archive placeholder:
+Pre-packaged archive:
 
-- `TODO` download link: [demo release archive](https://example.com/TODO-demo-release-archive)
+- download link: [climate-demo-2026_03_11.tar.gz](https://github.com/climate-you/climate/releases/download/demo-v20260311/climate-demo-2026_03_11.tar.gz)
+
+Extract the archive and place the `data` folder at the root of the repository.
 
 2. Start backend:
 
@@ -87,6 +89,7 @@ Pre-packaged archive placeholder:
 
 ```bash
 cd web
+npm install # first time only
 npm run dev
 ```
 
