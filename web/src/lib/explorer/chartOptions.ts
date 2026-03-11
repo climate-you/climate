@@ -394,7 +394,7 @@ export function buildHotDaysOption({
       lineStyle: { width: 3, color: meanColor },
       z: 3,
       animationDurationUpdate: transitionMs,
-      emphasis: { focus: "series" },
+      emphasis: { focus: isMobile ? "none" : "series" },
     });
   }
   if (trendKey && isVisible(trendKey)) {
@@ -410,7 +410,7 @@ export function buildHotDaysOption({
       areaStyle: { color: trendColor },
       z: 4,
       animationDurationUpdate: transitionMs,
-      emphasis: { focus: "series" },
+      emphasis: { focus: isMobile ? "none" : "series" },
     });
   }
 
@@ -521,7 +521,7 @@ export function buildStackedBarOption({
         stack: stackName,
         data: data.map((row) => (row[key] as number | null) ?? null),
         itemStyle: { color: stackedBarColor(s, idx) },
-        emphasis: { focus: "series" },
+        emphasis: { focus: isMobile ? "none" : "series" },
         z: 2,
         animationDurationUpdate: transitionMs,
       };
@@ -651,7 +651,7 @@ export function buildTemperatureOption({
         animationDuration: 700,
         animationDelay: 0,
         animationDurationUpdate: transitionMs,
-        emphasis: { focus: "series" },
+        emphasis: { focus: isMobile ? "none" : "series" },
       };
     },
   );
