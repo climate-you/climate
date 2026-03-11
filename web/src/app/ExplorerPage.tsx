@@ -2998,6 +2998,9 @@ export default function ExplorerPage({
       } else if (e.key === "ArrowUp" || e.key === "PageUp") {
         e.preventDefault();
         goGraphPage(-1);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setPanelOpen(false);
       }
     },
     [goGraphPage],
