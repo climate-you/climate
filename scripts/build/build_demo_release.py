@@ -31,7 +31,9 @@ DEFAULT_RELEASES_ROOT = DEFAULT_DATA_ROOT / "releases"
 DEFAULT_DIST_ROOT = Path("dist")
 DEFAULT_BASE_REEF_MASK = Path("data/masks/crw_dhw_daily_global_0p05_mask.npz")
 DEFAULT_DEMO_REEF_MASK = Path("data/masks/crw_dhw_daily_gbr_demo_global_0p05_mask.npz")
-DEFAULT_DEMO_SPARSE_RISK_MASK = Path("data/masks/sparse_risk_gbr_demo_global_0p25_mask.npz")
+DEFAULT_DEMO_SPARSE_RISK_MASK = Path(
+    "data/masks/sparse_risk_gbr_demo_global_0p25_mask.npz"
+)
 # Approximate Great Barrier Reef bounds: lat_min, lat_max, lon_min, lon_max.
 DEFAULT_GBR_BBOX = (-24.5, -10.0, 142.0, 155.5)
 DEFAULT_REQUIRED_LOCATION_FILES = (
@@ -53,16 +55,13 @@ class DemoProfile:
 def _default_profile(*, skip_dhw_metrics: bool) -> DemoProfile:
     panel_graph_ids = {
         "air_temperature": {"t2m_annual", "t2m_hot_days"},
-        "sea_temperature": {"sst_annual", "sst_hot_days"},
     }
     layer_ids = {
-        "warming_air",
         "warming_vs_preindustrial_air",
-        "warming_sst",
     }
     if not skip_dhw_metrics:
         panel_graph_ids["coral_reef_dhw"] = {"dhw_risk_days"}
-        layer_ids.add("reef_domain")
+        layer_ids.add("reef_stress")
 
     return DemoProfile(
         name=DEFAULT_PROFILE,
@@ -78,7 +77,9 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def _parse_bbox(raw: str) -> tuple[float, float, float, float]:
@@ -182,7 +183,9 @@ def _build_sparse_risk_mask_from_fine_mask(
 ) -> Path:
     with np.load(fine_mask_path, allow_pickle=False) as npz:
         if "data" not in npz:
-            raise ValueError(f"Invalid fine mask file {fine_mask_path}: missing 'data' key.")
+            raise ValueError(
+                f"Invalid fine mask file {fine_mask_path}: missing 'data' key."
+            )
         data = np.asarray(npz["data"])
         if data.ndim != 2:
             raise ValueError(
@@ -302,7 +305,9 @@ def _sanitize_demo_panel_graphs(selected_panels: dict[str, Any]) -> None:
         ]
 
 
-def _collect_panel_metric_ids(selected_panels: dict[str, Any]) -> tuple[set[str], set[str]]:
+def _collect_panel_metric_ids(
+    selected_panels: dict[str, Any],
+) -> tuple[set[str], set[str]]:
     metric_ids: set[str] = set()
     score_map_ids: set[str] = set()
     for panel in selected_panels.values():
@@ -342,7 +347,9 @@ def _resolve_map_metric_dependencies(map_spec: dict[str, Any]) -> set[str]:
     return out
 
 
-def _expand_derived_metrics(metric_ids: set[str], metrics_manifest: dict[str, Any]) -> set[str]:
+def _expand_derived_metrics(
+    metric_ids: set[str], metrics_manifest: dict[str, Any]
+) -> set[str]:
     out = set(metric_ids)
     queue = list(metric_ids)
     while queue:
@@ -372,7 +379,9 @@ def _filter_registries(
     layers_manifest: dict[str, Any],
     panels_manifest: dict[str, Any],
     demo_mask_file: str | None,
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+) -> tuple[
+    dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]
+]:
     selected_panels, _graph_metrics_raw, _score_map_ids_raw = _extract_graph_metrics(
         panels_manifest, profile
     )
@@ -403,7 +412,9 @@ def _filter_registries(
         graph_metrics | map_metrics,
         metrics_manifest,
     )
-    selected_metrics: dict[str, Any] = {"version": metrics_manifest.get("version", "0.1")}
+    selected_metrics: dict[str, Any] = {
+        "version": metrics_manifest.get("version", "0.1")
+    }
     selected_dataset_refs: set[str] = set()
     for metric_id in sorted(selected_metric_ids):
         metric_spec = metrics_manifest.get(metric_id)
@@ -416,7 +427,9 @@ def _filter_registries(
             if isinstance(dataset_ref, str) and dataset_ref:
                 selected_dataset_refs.add(dataset_ref)
 
-    selected_datasets: dict[str, Any] = {"version": datasets_manifest.get("version", "0.1")}
+    selected_datasets: dict[str, Any] = {
+        "version": datasets_manifest.get("version", "0.1")
+    }
     for dataset_id in sorted(selected_dataset_refs):
         dataset_spec = datasets_manifest.get(dataset_id)
         if not isinstance(dataset_spec, dict):
@@ -508,7 +521,9 @@ def _build_archive(
         for mask_path in sorted(mask_paths):
             if not mask_path.exists():
                 raise FileNotFoundError(f"Missing required mask file: {mask_path}")
-            _copy_file_into_stage(src=mask_path, data_root=data_root, stage_root=stage_data)
+            _copy_file_into_stage(
+                src=mask_path, data_root=data_root, stage_root=stage_data
+            )
 
         release_root_resolved = _path_in_data_root(release_root, data_root)
         release_rel = release_root_resolved.relative_to(data_root.resolve())
@@ -529,7 +544,9 @@ def _build_archive(
     with archive_path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
-    checksum_path.write_text(f"{digest.hexdigest()}  {archive_path.name}\n", encoding="utf-8")
+    checksum_path.write_text(
+        f"{digest.hexdigest()}  {archive_path.name}\n", encoding="utf-8"
+    )
 
 
 def _collect_required_masks(
@@ -609,7 +626,9 @@ def _copy_selected_series_from_release(
 ) -> tuple[int, int]:
     source_series_root = source_root / "series"
     if not source_series_root.exists():
-        raise FileNotFoundError(f"Source release missing series folder: {source_series_root}")
+        raise FileNotFoundError(
+            f"Source release missing series folder: {source_series_root}"
+        )
 
     copied_files = 0
     copied_metrics = 0
@@ -620,7 +639,9 @@ def _copy_selected_series_from_release(
         if isinstance(source, dict) and source.get("type") == "derived":
             continue
 
-        metric_dirs = sorted(p for p in source_series_root.glob(f"*/{metric_id}") if p.is_dir())
+        metric_dirs = sorted(
+            p for p in source_series_root.glob(f"*/{metric_id}") if p.is_dir()
+        )
         if not metric_dirs:
             raise FileNotFoundError(
                 f"Missing metric series in source release for '{metric_id}' under {source_series_root}"
@@ -629,7 +650,9 @@ def _copy_selected_series_from_release(
         for src_dir in metric_dirs:
             rel = src_dir.relative_to(source_series_root)
             dst_dir = release_root / "series" / rel
-            copied_files += _copy_tree_with_resume(src=src_dir, dst=dst_dir, resume=resume)
+            copied_files += _copy_tree_with_resume(
+                src=src_dir, dst=dst_dir, resume=resume
+            )
 
     return copied_files, copied_metrics
 
@@ -643,7 +666,9 @@ def _copy_selected_maps_from_release(
 ) -> tuple[int, int]:
     source_maps_root = source_root / "maps"
     if not source_maps_root.exists():
-        raise FileNotFoundError(f"Source release missing maps folder: {source_maps_root}")
+        raise FileNotFoundError(
+            f"Source release missing maps folder: {source_maps_root}"
+        )
 
     copied_files = 0
     copied_maps = 0
@@ -659,7 +684,9 @@ def _copy_selected_maps_from_release(
         for src_dir in map_dirs:
             rel = src_dir.relative_to(source_maps_root)
             dst_dir = release_root / "maps" / rel
-            copied_files += _copy_tree_with_resume(src=src_dir, dst=dst_dir, resume=resume)
+            copied_files += _copy_tree_with_resume(
+                src=src_dir, dst=dst_dir, resume=resume
+            )
 
     return copied_files, copied_maps
 
@@ -705,7 +732,9 @@ def _write_release_manifest(
     }
     manifest_path = release_root / "manifest.json"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8"
+    )
     return manifest_path
 
 
@@ -727,7 +756,9 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Build a self-contained demo release package under data/releases/<release>.",
     )
     parser.add_argument("--release", type=str, default="demo")
-    parser.add_argument("--profile", type=str, default=DEFAULT_PROFILE, choices=[DEFAULT_PROFILE])
+    parser.add_argument(
+        "--profile", type=str, default=DEFAULT_PROFILE, choices=[DEFAULT_PROFILE]
+    )
     parser.add_argument(
         "--gbr-bbox",
         type=str,
@@ -743,11 +774,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output sparse-risk mask path derived from demo reef mask.",
     )
 
-    parser.add_argument("--datasets-path", type=Path, default=Path("registry/datasets.json"))
-    parser.add_argument("--metrics-path", type=Path, default=Path("registry/metrics.json"))
+    parser.add_argument(
+        "--datasets-path", type=Path, default=Path("registry/datasets.json")
+    )
+    parser.add_argument(
+        "--metrics-path", type=Path, default=Path("registry/metrics.json")
+    )
     parser.add_argument("--maps-path", type=Path, default=Path("registry/maps.json"))
-    parser.add_argument("--layers-path", type=Path, default=Path("registry/layers.json"))
-    parser.add_argument("--panels-path", type=Path, default=Path("registry/panels.json"))
+    parser.add_argument(
+        "--layers-path", type=Path, default=Path("registry/layers.json")
+    )
+    parser.add_argument(
+        "--panels-path", type=Path, default=Path("registry/panels.json")
+    )
 
     parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument("--releases-root", type=Path, default=DEFAULT_RELEASES_ROOT)
@@ -797,7 +836,9 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = _build_parser().parse_args()
     if args.clean and args.resume:
-        raise ValueError("Do not combine --clean with --resume. --clean removes prior release outputs.")
+        raise ValueError(
+            "Do not combine --clean with --resume. --clean removes prior release outputs."
+        )
     if args.skip_package and args.source_release:
         raise ValueError("Do not combine --skip-package with --source-release.")
     profile = _default_profile(skip_dhw_metrics=bool(args.skip_dhw_metrics))
@@ -828,7 +869,9 @@ def main() -> None:
             target_deg=0.25,
         )
     else:
-        print("[mask] skip-dhw-metrics enabled; skipping GBR demo reef mask generation.")
+        print(
+            "[mask] skip-dhw-metrics enabled; skipping GBR demo reef mask generation."
+        )
 
     datasets_manifest = _load_json(Path(args.datasets_path))
     metrics_manifest = _load_json(Path(args.metrics_path))
@@ -860,7 +903,9 @@ def main() -> None:
     _validate_demo_registries(registry_out)
     print(f"[registry] wrote and validated demo registries in {registry_out}")
     selected_metric_ids = sorted(
-        key for key, value in selected_metrics.items() if key != "version" and isinstance(value, dict)
+        key
+        for key, value in selected_metrics.items()
+        if key != "version" and isinstance(value, dict)
     )
 
     if not args.skip_package:
@@ -959,9 +1004,7 @@ def main() -> None:
         release=args.release,
     )
     if archive_path.suffixes[-2:] != [".tar", ".gz"]:
-        raise ValueError(
-            f"Archive output must end with .tar.gz, got: {archive_path}"
-        )
+        raise ValueError(f"Archive output must end with .tar.gz, got: {archive_path}")
     checksum_path = archive_path.with_suffix(archive_path.suffix + ".sha256")
     mask_paths = _collect_required_masks(
         datasets_manifest=selected_datasets,
