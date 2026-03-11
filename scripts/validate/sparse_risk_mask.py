@@ -37,10 +37,19 @@ def main() -> int:
         default=Path("data/releases"),
         help='Releases root (default: "data/releases").',
     )
+    ap.add_argument(
+        "--datasets-path",
+        type=Path,
+        default=None,
+        help=(
+            "Optional datasets registry path override. "
+            'Defaults to "data/releases/<release>/registry/datasets.json".'
+        ),
+    )
     args = ap.parse_args()
 
     release_root = args.releases_root / args.release
-    datasets_path = release_root / "registry" / "datasets.json"
+    datasets_path = args.datasets_path or (release_root / "registry" / "datasets.json")
     if not datasets_path.exists():
         print(f"Missing datasets registry: {datasets_path}")
         return 1

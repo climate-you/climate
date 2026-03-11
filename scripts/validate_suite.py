@@ -28,12 +28,20 @@ def main() -> int:
     ap.add_argument(
         "--registry-release",
         default=None,
-        help="Release to validate registry from data/releases/<release>/registry. Defaults to --release when registry/tile checks run.",
+        help=(
+            "Release to validate registry from data/releases/<release>/registry. "
+            "Defaults to --release when registry/tile checks run, except for "
+            'dev which uses repo-root "registry/".'
+        ),
     )
     ap.add_argument(
         "--manifest-release",
         default=None,
-        help="Release id whose data/releases/<release>/manifest.json should be validated. Defaults to --release when registry/tile checks run.",
+        help=(
+            "Release id whose data/releases/<release>/manifest.json should be "
+            "validated. Defaults to --release when registry/tile checks run, "
+            "except for dev where manifest validation is skipped."
+        ),
     )
     ap.add_argument(
         "--releases-root",
@@ -138,17 +146,18 @@ def main() -> int:
     args = ap.parse_args()
 
     root = Path(__file__).resolve().parent.parent
+    run_release_checks = not args.skip_registry or not args.skip_tiles
     effective_registry_release = args.registry_release
-    if effective_registry_release is None and (
-        not args.skip_registry or not args.skip_tiles
-    ):
-        effective_registry_release = args.release
+    if effective_registry_release is None and run_release_checks:
+        # Development mode resolves registry files from repo root.
+        if args.release != "dev":
+            effective_registry_release = args.release
 
     effective_manifest_release = args.manifest_release
-    if effective_manifest_release is None and (
-        not args.skip_registry or not args.skip_tiles
-    ):
-        effective_manifest_release = args.release
+    if effective_manifest_release is None and run_release_checks:
+        # Development mode does not require a release manifest.
+        if args.release != "dev":
+            effective_manifest_release = args.release
 
     tiles_root = args.tiles_root
     if effective_registry_release and args.tiles_root == Path("data/releases/dev"):
@@ -174,6 +183,19 @@ def main() -> int:
                 effective_manifest_release,
                 "--releases-root",
                 str(args.releases_root),
+            ]
+        )
+    elif args.release == "dev" and run_release_checks:
+        steps.append(
+            [
+                sys.executable,
+                "scripts/validate/sparse_risk_mask.py",
+                "--release",
+                args.release,
+                "--releases-root",
+                str(args.releases_root),
+                "--datasets-path",
+                "registry/datasets.json",
             ]
         )
 
@@ -233,6 +255,19 @@ def main() -> int:
                     str(registry_root / "maps.json"),
                     "--panels-path",
                     str(registry_root / "panels.json"),
+                ]
+            )
+        elif args.release == "dev":
+            tile_cmd.extend(
+                [
+                    "--metrics-path",
+                    "registry/metrics.json",
+                    "--datasets-path",
+                    "registry/datasets.json",
+                    "--maps-path",
+                    "registry/maps.json",
+                    "--panels-path",
+                    "registry/panels.json",
                 ]
             )
         steps.append(tile_cmd)

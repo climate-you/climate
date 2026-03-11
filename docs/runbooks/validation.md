@@ -16,6 +16,12 @@ What this runbook verifies:
 - tile/map assets under `data/releases/<release>/`
 - locations assets under `data/locations/` (for API smoke/e2e location calls)
 
+`dev` release behavior:
+
+- registry validation uses repo-root `registry/*.json` (not `data/releases/dev/registry/*.json`)
+- `data/releases/dev/manifest.json` is not required
+- sparse-risk mask validation for `dev` reads dataset definitions from `registry/datasets.json`
+
 ## Environment Setup (Recommended)
 
 Conda (Anaconda or Miniconda) is recommended for reproducible local runs.
@@ -65,11 +71,23 @@ PYTHONPATH=. RUN_API_E2E=1 API_E2E_RELEASE=dev pytest -q tests/test_api_e2e.py
 
 ## API smoke checks
 
+For local validation runs, disable API rate limiting first; otherwise benchmark+smoke requests can trigger `429` responses:
+
+```bash
+RATE_LIMIT_ENABLED=0 ./scripts/api_backend.sh
+```
+
 ```bash
 python scripts/bench_api_endpoints.py --base-url http://127.0.0.1:8001 --release dev --smoke --smoke-only --n 1 --timeout-s 5
 ```
 
 ## One-pass validation suite
+
+When running suite smoke checks against a local backend, start the API with rate limiting disabled:
+
+```bash
+RATE_LIMIT_ENABLED=0 ./scripts/api_backend.sh
+```
 
 ```bash
 python scripts/validate_suite.py --base-url http://127.0.0.1:8001 --release dev
