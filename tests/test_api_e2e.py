@@ -23,12 +23,22 @@ RUN_API_E2E = os.environ.get("RUN_API_E2E", "").strip().lower() in {
 
 
 def _missing_data_reason() -> str | None:
+    release_metrics_path = (
+        REPO_ROOT / "registry" / "metrics.json"
+        if API_E2E_RELEASE == "dev"
+        else REPO_ROOT
+        / "data"
+        / "releases"
+        / API_E2E_RELEASE
+        / "registry"
+        / "metrics.json"
+    )
     required_paths = [
         REPO_ROOT / "data" / "locations" / "locations.csv",
         REPO_ROOT / "data" / "locations" / "locations.index.csv",
         REPO_ROOT / "data" / "releases" / API_E2E_RELEASE / "series",
         REPO_ROOT / "data" / "releases" / API_E2E_RELEASE / "maps",
-        REPO_ROOT / "data" / "releases" / API_E2E_RELEASE / "registry" / "metrics.json",
+        release_metrics_path,
     ]
     missing = [
         str(path.relative_to(REPO_ROOT)) for path in required_paths if not path.exists()
