@@ -66,13 +66,13 @@
           "id": "t2m_annual",
           "title": "Annual air temperature",
           "ui": {
-            "info_text": "Annual air temperature is derived from daily air temperature at 2 meters above the surface, aggregated into monthly and yearly averages. We show a zoomed-in version of the daily and monthly temperatures over 5 years that reflects seasonal changes. Source: CDS.",
+            "info_text": "Annual air temperature is derived from daily air temperature at 2 meters above the surface, aggregated into monthly and yearly averages for 1979-2025. We show a zoomed-in version of the daily and monthly temperatures over 5 years (2021-2025) that reflects seasonal changes. Source: CDS.",
             "chart_mode": "temperature_line",
             "axis_title_mode": "year"
           },
           "x_axis_label": "Year",
           "y_axis_label": "Temperature ({unit})",
-          "source": "CDS ERA5 2m temperature daily means (1979-2025), aggregated to monthly and yearly means",
+          "source": "CDS ERA5 2m temperature daily means (2021-2025), aggregated to monthly and yearly means (1979-2025)",
           "animation": {
             "autoplay": false,
             "loop": false,
@@ -166,7 +166,7 @@
           "id": "t2m_hot_days",
           "title": "Number of hot days",
           "ui": {
-            "info_text": "Number of hot days per year are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979. Source: CDS.",
+            "info_text": "Number of hot days per year are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979, for 1979-2025. Source: CDS.",
             "chart_mode": "hot_days_combo",
             "axis_title_mode": "year"
           },
@@ -215,13 +215,13 @@
           "id": "sst_annual",
           "title": "Annual sea surface temperature",
           "ui": {
-            "info_text": "Annual sea surface temperature is derived from daily sea surface temperature, aggregated into yearly averages. Source: ERDDAP.",
+            "info_text": "Annual sea surface temperature is derived from daily sea surface temperature, aggregated into yearly averages for 1982-2025. Source: ERDDAP.",
             "chart_mode": "temperature_line",
             "axis_title_mode": "year"
           },
           "x_axis_label": "Year",
           "y_axis_label": "Temperature ({unit})",
-          "source": "ERDDAP SST temperature daily means (2021-2025)",
+          "source": "ERDDAP OISST v2.1 daily sea surface temperature (1982-2025), aggregated to yearly means",
           "series": [
             {
               "key": "sst_yearly_mean",
@@ -262,13 +262,13 @@
           "id": "sst_hot_days",
           "title": "Number of sea surface hot days",
           "ui": {
-            "info_text": "Number of sea surface hot days per year are counted as days where the sea surface temperature is warmer than the top 10% warmest days in a 10-year baseline starting in 1979. Source: ERDDAP.",
+            "info_text": "Number of sea surface hot days per year are counted as days where the sea surface temperature is warmer than the top 10% warmest days in a 10-year baseline starting in 1982, for 1982-2025. Source: ERDDAP.",
             "chart_mode": "hot_days_combo",
             "axis_title_mode": "year"
           },
           "x_axis_label": "Year",
           "y_axis_label": "Days/year",
-          "source": "ERDDAP OISST daily means (2021-2025)",
+          "source": "ERDDAP OISST v2.1 daily sea surface temperature (1982-2025)",
           "series": [
             {
               "key": "sst_hotdays",
@@ -311,7 +311,7 @@
           "id": "dhw_risk_days",
           "title": "Coral reef DHW risk days",
           "ui": {
-            "info_text": "This graph shows the number of days per year that coral reefs experienced each DHW (Degree Heating Weeks) heat-stress level: no risk (DHW < 4), moderate risk (4 <= DHW < 8), and severe risk (DHW >= 8). DHW measures accumulated ocean heat stress over the previous 12 weeks; more days in higher DHW categories indicate greater bleaching risk. Source: ERDDAP.",
+            "info_text": "This graph shows the number of days per year that coral reefs experienced each DHW (Degree Heating Weeks) heat-stress level for 1985-2025: no risk (DHW < 4), moderate risk (4 <= DHW < 8), and severe risk (DHW >= 8). DHW measures accumulated ocean heat stress over the previous 12 weeks; more days in higher DHW categories indicate greater bleaching risk. Source: ERDDAP.",
             "chart_mode": "stacked_bar",
             "axis_title_mode": "year"
           },
