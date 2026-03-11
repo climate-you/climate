@@ -287,8 +287,8 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
                   ).
                 </li>
                 <li>
-                  Terrain hillshade source in the web map: Amazon Terrain Tiles
-                  (Terrarium format, elevation-tiles-prod) (
+                  Terrain hillshade tiles: Amazon Terrain Tiles (Terrarium
+                  format) (
                   <a
                     href="https://registry.opendata.aws/terrain-tiles/"
                     target="_blank"
@@ -307,8 +307,8 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
                   ).
                 </li>
                 <li>
-                  ERA5 daily statistics, accessed via the Copernicus Climate
-                  Data Store (C3S), implemented by ECMWF (
+                  ERA5 daily statistics from the Copernicus Climate Data Store
+                  (C3S / ECMWF) (
                   <a
                     href="https://cds.climate.copernicus.eu/datasets/derived-era5-single-levels-daily-statistics"
                     target="_blank"
@@ -327,8 +327,8 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
                   .
                 </li>
                 <li>
-                  CMIP6 historical projections are sourced from CDS
-                  projections-cmip6 using the following models: access_cm2,
+                  CMIP6 historical projections are sourced from the CDS CMIP6
+                  projections dataset using the following models: access_cm2,
                   canesm5, mpi_esm1_2_lr, ipsl_cm6a_lr, ukesm1_0_ll (
                   <a
                     href="https://cds.climate.copernicus.eu/datasets/projections-cmip6"
@@ -359,8 +359,8 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
                   NOAA ERDDAP datasets used here include OISST v2.1 and NOAA
                   Coral Reef Watch DHW. OISST data may be used and redistributed
                   free of charge, with no warranty and not for legal use. CRW
-                  DHW data are available without restriction; please credit NOAA
-                  Coral Reef Watch and include the dataset DOI in citations (
+                  DHW data are available without restriction. Data courtesy of
+                  NOAA Coral Reef Watch (
                   <a
                     href="https://coastwatch.pfeg.noaa.gov/erddap/info/ncdcOisst21Agg_LonPM180/index.html"
                     target="_blank"
@@ -415,7 +415,7 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
                   >
                     Natural Earth
                   </a>{" "}
-                  marine and land layers (public domain; see{" "}
+                  marine and land layers (public domain;{" "}
                   <a
                     href="https://naturalearthdata.com/about/terms-of-use/"
                     target="_blank"

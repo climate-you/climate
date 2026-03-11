@@ -132,6 +132,7 @@
   margin-top: 8px;
   overflow-wrap: anywhere;
   word-break: break-word;
+  text-align: justify;
 }
 
 .sourcesList a {
@@ -147,6 +148,7 @@
   opacity: 0.88;
   overflow-wrap: anywhere;
   word-break: break-word;
+  text-align: justify;
 }
 
 .sourcesNotice a {
