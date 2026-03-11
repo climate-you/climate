@@ -1,26 +1,9 @@
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
 import xarray as xr
 
-from ..time_agg import annual_group, find_time_dim
-
-
-def compute_annual_metrics(
-    dhw_daily: pd.Series,
-) -> tuple[pd.Series, pd.Series, pd.Series]:
-    """
-    Legacy pandas helper kept for local/adhoc analysis scripts.
-    """
-    dhw_max = annual_group(dhw_daily, how="max").rename("dhw_max_year")
-    ge4 = annual_group((dhw_daily >= 4.0).astype("float64"), how="sum").rename(
-        "dhw_ge4_days_year"
-    )
-    ge8 = annual_group((dhw_daily >= 8.0).astype("float64"), how="sum").rename(
-        "dhw_ge8_days_year"
-    )
-    return dhw_max, ge4, ge8
+from ..time_agg import find_time_dim
 
 
 def _prepare_daily_dhw(da_daily: xr.DataArray) -> tuple[xr.DataArray, str]:
