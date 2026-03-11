@@ -501,6 +501,104 @@ def _copy_file_into_stage(*, src: Path, data_root: Path, stage_root: Path) -> No
     shutil.copy2(src_resolved, dst)
 
 
+def _write_demo_readme(*, path: Path, selected_datasets: dict[str, Any]) -> None:
+    dataset_ids = {k for k in selected_datasets if k != "version"}
+    lines: list[str] = [
+        "# Climate Demo Package",
+        "",
+        "This archive is a self-contained demo dataset for the Climate project.",
+        "It contains pre-processed climate data series, map tiles, and a location",
+        "index that let you run the service locally with real data.",
+        "",
+        "## Contents",
+        "",
+        "- `data/releases/demo/` — pre-processed climate metrics and map tiles",
+        "- `data/locations/` — location search index",
+        "- `data/masks/` — domain masks",
+        "",
+        "## Data Licenses and Attributions",
+        "",
+    ]
+
+    if {"era5_daily_t2m", "era5_monthly_t2m"} & dataset_ids:
+        lines += [
+            "### ERA5 — Copernicus Climate Data Store (C3S / ECMWF)",
+            "",
+            "License: [Creative Commons Attribution 4.0 (CC BY 4.0)]"
+            "(https://creativecommons.org/licenses/by/4.0/)",
+            "",
+            "Contains modified Copernicus Climate Change Service information.",
+            "Dataset: [ERA5 daily statistics on single levels]"
+            "(https://cds.climate.copernicus.eu/datasets/derived-era5-single-levels-daily-statistics)",
+            "",
+        ]
+
+    if "cmip6_historical_tas_monthly_5model_mean" in dataset_ids:
+        spec = selected_datasets.get("cmip6_historical_tas_monthly_5model_mean", {})
+        models: list[str] = []
+        try:
+            models = list(spec["source"]["params"]["request_template"]["model"])
+        except (KeyError, TypeError):
+            pass
+        model_list = ", ".join(models) if models else "see dataset page"
+        lines += [
+            "### CMIP6 — Coupled Model Intercomparison Project Phase 6",
+            "",
+            "License: [CMIP6 Terms of Use](https://pcmdi.llnl.gov/CMIP6/TermsOfUse)",
+            "",
+            "Sourced via the Copernicus Climate Data Store: [projections-cmip6]"
+            "(https://cds.climate.copernicus.eu/datasets/projections-cmip6)",
+            f"Models used: {model_list}",
+            "",
+        ]
+
+    lines += [
+        "### GeoNames",
+        "",
+        "License: [Creative Commons Attribution 4.0 (CC BY 4.0)]"
+        "(https://creativecommons.org/licenses/by/4.0/)",
+        "",
+        "Used for location search index.",
+        "Source: [geonames.org](https://www.geonames.org/)",
+        "",
+        "### Natural Earth",
+        "",
+        "License: Public Domain"
+        " ([terms of use](https://www.naturalearthdata.com/about/terms-of-use/))",
+        "",
+        "Used for ocean and land mask preprocessing.",
+        "Source: [naturalearthdata.com](https://www.naturalearthdata.com/)",
+        "",
+    ]
+
+    if "oisst_sst_v21_daily" in dataset_ids:
+        lines += [
+            "### OISST v2.1 — NOAA Optimum Interpolation SST",
+            "",
+            "May be used and redistributed free of charge; not for legal use.",
+            "Dataset: [OISST v2.1 daily SST]"
+            "(https://coastwatch.pfeg.noaa.gov/erddap/info/ncdcOisst21Agg_LonPM180/index.html)",
+            "",
+        ]
+
+    if "crw_dhw_daily" in dataset_ids:
+        lines += [
+            "### NOAA Coral Reef Watch — Degree Heating Week",
+            "",
+            "Available without restriction. Data courtesy of NOAA Coral Reef Watch.",
+            "Dataset: [CRW DHW daily]"
+            "(https://coastwatch.noaa.gov/erddap/info/noaacrwdhwDaily/index.html)",
+            "Citation guidance: [recommendations for CRW citation]"
+            "(https://coralreefwatch.noaa.gov/satellite/docs/recommendations_crw_citation.php)",
+            "",
+        ]
+
+    while lines and lines[-1] == "":
+        lines.pop()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def _build_archive(
     *,
     archive_path: Path,
@@ -508,6 +606,7 @@ def _build_archive(
     data_root: Path,
     release_root: Path,
     mask_paths: set[Path],
+    selected_datasets: dict[str, Any],
 ) -> None:
     with tempfile.TemporaryDirectory(prefix="demo_release_stage_") as tmp:
         stage = Path(tmp)
@@ -531,6 +630,8 @@ def _build_archive(
         if release_dst.exists():
             shutil.rmtree(release_dst)
         shutil.copytree(release_root_resolved, release_dst)
+
+        _write_demo_readme(path=stage / "README.md", selected_datasets=selected_datasets)
 
         archive_path.parent.mkdir(parents=True, exist_ok=True)
         with tarfile.open(archive_path, mode="w:gz") as tar:
@@ -1016,6 +1117,7 @@ def main() -> None:
         data_root=Path(args.data_root),
         release_root=release_root,
         mask_paths=mask_paths,
+        selected_datasets=selected_datasets,
     )
     print(f"[archive] wrote {archive_path}")
     print(f"[archive] wrote {checksum_path}")
