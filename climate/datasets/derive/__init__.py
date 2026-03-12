@@ -1,5 +1,6 @@
-from .calendar import drop_feb29
-from .series import c_to_f, rolling_mean_centered, linear_trend_line
+from .calendar import drop_feb29, drop_feb29_xr
+from .series import rolling_mean_centered, linear_trend_line
+from .units import c_to_f
 from .time_agg import (
     annual_group,
     daily_to_monthly_and_yearly_t2m,
@@ -11,6 +12,7 @@ from .time_agg import (
 
 __all__ = [
     "drop_feb29",
+    "drop_feb29_xr",
     "c_to_f",
     "rolling_mean_centered",
     "linear_trend_line",

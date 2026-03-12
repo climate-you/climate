@@ -1,10 +1,6 @@
 import numpy as np
 
 
-def c_to_f(x: np.ndarray) -> np.ndarray:
-    return x * (9.0 / 5.0) + 32.0
-
-
 def rolling_mean_centered(y: np.ndarray, window: int) -> np.ndarray:
     """
     Centered rolling mean with NaN-aware behavior.

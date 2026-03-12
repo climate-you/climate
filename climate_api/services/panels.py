@@ -27,11 +27,8 @@ from ..schemas import (
 )
 from ..store.place_resolver import PlaceResolver
 from ..store.tile_data_store import TileDataStore
-from climate.datasets.derive.series import (
-    rolling_mean_centered,
-    linear_trend_line,
-    c_to_f,
-)
+from climate.datasets.derive.series import rolling_mean_centered, linear_trend_line
+from climate.datasets.derive.units import c_to_f
 from climate.registry.panels import DEFAULT_PANELS_PATH, load_panels
 from climate.tiles.layout import GridSpec, locate_tile, cell_center_latlon
 
