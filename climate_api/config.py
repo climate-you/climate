@@ -30,6 +30,18 @@ class Settings:
     repo_root: Path = Path(".")
 
 
+_FALSY_STRINGS = {"", "none", "null", "0", "false"}
+
+
+def _env_optional_path(name: str, default: Optional[Path]) -> Optional[Path]:
+    raw = os.environ.get(name)
+    if raw is not None and raw.strip().lower() in _FALSY_STRINGS:
+        return None
+    if raw:
+        return Path(raw)
+    return default
+
+
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.environ.get(name)
     if raw is None:
@@ -62,19 +74,9 @@ def load_settings() -> Settings:
             "LOCATIONS_CSV", repo_root / "data" / "locations" / "locations.csv"
         )
     )
-    kdtree_env = os.environ.get("KDTREE_PATH")
-    if kdtree_env is not None and kdtree_env.strip().lower() in {
-        "",
-        "none",
-        "null",
-        "0",
-        "false",
-    }:
-        kdtree_path = None
-    elif kdtree_env:
-        kdtree_path = Path(kdtree_env)
-    else:
-        kdtree_path = repo_root / "data" / "locations" / "locations.kdtree.pkl"
+    kdtree_path = _env_optional_path(
+        "KDTREE_PATH", repo_root / "data" / "locations" / "locations.kdtree.pkl"
+    )
 
     locations_index_csv = Path(
         os.environ.get(
@@ -82,33 +84,13 @@ def load_settings() -> Settings:
             repo_root / "data" / "locations" / "locations.index.csv",
         )
     )
-    ocean_mask_env = os.environ.get("OCEAN_MASK_NPZ")
-    if ocean_mask_env is not None and ocean_mask_env.strip().lower() in {
-        "",
-        "none",
-        "null",
-        "0",
-        "false",
-    }:
-        ocean_mask_npz = None
-    elif ocean_mask_env:
-        ocean_mask_npz = Path(ocean_mask_env)
-    else:
-        ocean_mask_npz = repo_root / "data" / "locations" / "ocean_mask.npz"
+    ocean_mask_npz = _env_optional_path(
+        "OCEAN_MASK_NPZ", repo_root / "data" / "locations" / "ocean_mask.npz"
+    )
 
-    ocean_names_env = os.environ.get("OCEAN_NAMES_JSON")
-    if ocean_names_env is not None and ocean_names_env.strip().lower() in {
-        "",
-        "none",
-        "null",
-        "0",
-        "false",
-    }:
-        ocean_names_json = None
-    elif ocean_names_env:
-        ocean_names_json = Path(ocean_names_env)
-    else:
-        ocean_names_json = repo_root / "data" / "locations" / "ocean_names.json"
+    ocean_names_json = _env_optional_path(
+        "OCEAN_NAMES_JSON", repo_root / "data" / "locations" / "ocean_names.json"
+    )
 
     ocean_off_city_max_km = float(os.environ.get("OCEAN_OFF_CITY_MAX_KM", "80.0"))
     ocean_city_override_max_km = float(
