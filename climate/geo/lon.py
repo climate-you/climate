@@ -22,3 +22,11 @@ def ensure_lon_pm180(ds: xr.Dataset, lon_name: str) -> xr.Dataset:
         ds = ds.assign_coords({lon_name: lon_pm180})
         ds = ds.sortby(lon_name)
     return ds
+
+
+def ensure_lon_pm180_da(da: xr.DataArray, lon_name: str) -> xr.DataArray:
+    lon_raw = np.asarray(da[lon_name].values, dtype=np.float64)
+    lon_norm = ((lon_raw + 180.0) % 360.0) - 180.0
+    if np.any(np.abs(lon_raw - lon_norm) > 1e-10):
+        da = da.assign_coords({lon_name: lon_norm})
+    return da.sortby(lon_name)

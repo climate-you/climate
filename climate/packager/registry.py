@@ -51,7 +51,8 @@ from climate.registry.panels import (
     validate_panels_against_maps,
     validate_panels_against_metrics,
 )
-from climate.tiles.layout import GridSpec, cell_center_latlon, tile_counts, tile_path
+from climate.geo import ensure_lon_pm180_da
+from climate.tiles.layout import GridSpec, cell_center_latlon, grid_from_id, tile_counts, tile_path
 from climate.tiles.spec import write_tile
 from climate.datasets.products.erddap_specs import ERDDAP_DATASETS
 from climate.datasets.sources.erddap import build_griddap_query, make_griddap_url
@@ -85,14 +86,6 @@ _REGRID_DEBUG_SEEN: set[str] = set()
 _REGRID_DEBUG_SEEN_LOCK = threading.Lock()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _SPARSE_RISK_MASK_FILENAME = "sparse_risk_global_0p25_mask.npz"
-
-
-def _grid_from_id(grid_id: str, *, tile_size: int) -> GridSpec:
-    if grid_id == "global_0p25":
-        return GridSpec.global_0p25(tile_size=tile_size)
-    if grid_id == "global_0p05":
-        return GridSpec.global_0p05(tile_size=tile_size)
-    raise ValueError(f"Unsupported grid_id: {grid_id}")
 
 
 def _find_lat_lon_names(ds: xr.Dataset) -> tuple[str, str]:
@@ -811,14 +804,6 @@ def _batch_target_lat_lon(
     return lat_vals, lon_vals
 
 
-def _normalize_lon_to_180(da: xr.DataArray, lon_name: str) -> xr.DataArray:
-    lon_raw = np.asarray(da[lon_name].values, dtype=np.float64)
-    lon_norm = ((lon_raw + 180.0) % 360.0) - 180.0
-    if np.any(np.abs(lon_raw - lon_norm) > 1e-10):
-        da = da.assign_coords({lon_name: lon_norm})
-    return da.sortby(lon_name)
-
-
 def _maybe_regrid_to_metric_grid(
     *,
     da: xr.DataArray,
@@ -848,7 +833,7 @@ def _maybe_regrid_to_metric_grid(
         )
 
     da_src = da.sortby(lat_name)
-    da_src = _normalize_lon_to_180(da_src, lon_name)
+    da_src = ensure_lon_pm180_da(da_src, lon_name)
     # Some CMIP files use object/cftime coordinates on time; xarray+dask interpolation can
     # raise on object dtype rechunking. Regridding batch chunks in-memory is robust here.
     if bool((params or {}).get("regrid_in_memory", True)):
@@ -2303,7 +2288,7 @@ def package_registry(
             raise ValueError(f"Unsupported time_axis for packager: {time_axis}")
 
         tile_size = int(storage.get("tile_size", 64))
-        grid = _grid_from_id(spec["grid_id"], tile_size=tile_size)
+        grid = grid_from_id(spec["grid_id"], tile_size=tile_size)
         metric_tile_range = _metric_tile_range(grid, tile_range)
 
         dtype = np.dtype(spec.get("dtype", "float32"))

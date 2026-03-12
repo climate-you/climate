@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from PIL import Image
 
-from climate.tiles.layout import GridSpec, tile_counts, tile_path
+from climate.tiles.layout import GridSpec, grid_from_id, tile_counts, tile_path
 from climate.tiles.spec import read_tile_array
 
 MERCATOR_MAX_LAT = 85.05112878
@@ -182,7 +183,7 @@ def _load_scalar_grid_from_metric(
     compression = storage.get("compression")
     ext = _compression_ext(compression)
     tile_size = int(storage.get("tile_size", 64))
-    grid = _grid_from_id(str(metric_spec["grid_id"]), tile_size=tile_size)
+    grid = grid_from_id(str(metric_spec["grid_id"]), tile_size=tile_size)
     axis = _load_metric_axis(
         series_root, grid, metric_id, str(metric_spec.get("time_axis", "yearly"))
     )
@@ -894,12 +895,6 @@ def _resize_if_needed(
         raise ValueError("Both output.width and output.height must be set together.")
     if image.shape[1] == int(width) and image.shape[0] == int(height):
         return image
-    try:
-        from PIL import Image
-    except Exception as exc:  # pragma: no cover
-        raise RuntimeError(
-            "Pillow is required for map PNG resizing. Install with: pip install pillow"
-        ) from exc
     mode = _texture_image_mode(image)
     im = Image.fromarray(image, mode=mode)
     im = im.resize((int(width), int(height)), resample=Image.BILINEAR)
@@ -918,12 +913,6 @@ def _texture_image_mode(image: np.ndarray) -> str:
 
 
 def _save_png(path: Path, image: np.ndarray) -> None:
-    try:
-        from PIL import Image
-    except Exception as exc:  # pragma: no cover
-        raise RuntimeError(
-            "Pillow is required for map PNG output. Install with: pip install pillow"
-        ) from exc
     path.parent.mkdir(parents=True, exist_ok=True)
     mode = _texture_image_mode(image)
     Image.fromarray(image, mode=mode).save(path, format="PNG")
@@ -936,12 +925,6 @@ def _save_texture(path: Path, image: np.ndarray, *, file_format: str) -> None:
         return
 
     if fmt == "webp":
-        try:
-            from PIL import Image
-        except Exception as exc:  # pragma: no cover
-            raise RuntimeError(
-                "Pillow is required for map WebP output. Install with: pip install pillow"
-            ) from exc
         path.parent.mkdir(parents=True, exist_ok=True)
         mode = _texture_image_mode(image)
         Image.fromarray(image, mode=mode).save(
@@ -961,14 +944,6 @@ def _compression_ext(compression: dict | None) -> str:
     if codec == "none":
         return ".bin"
     raise ValueError(f"Unsupported compression codec: {codec}")
-
-
-def _grid_from_id(grid_id: str, *, tile_size: int) -> GridSpec:
-    if grid_id == "global_0p25":
-        return GridSpec.global_0p25(tile_size=tile_size)
-    if grid_id == "global_0p05":
-        return GridSpec.global_0p05(tile_size=tile_size)
-    raise ValueError(f"Unsupported grid_id for maps: {grid_id}")
 
 
 def _load_metric_axis(

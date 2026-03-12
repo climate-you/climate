@@ -7,10 +7,7 @@ from pathlib import Path
 import numpy as np
 import struct
 
-try:
-    import zstandard as zstd  # pip install zstandard
-except Exception:  # pragma: no cover
-    zstd = None  # type: ignore
+import zstandard as zstd
 
 
 MAGIC = b"CLMTILE\0"  # 8 bytes
@@ -108,23 +105,14 @@ def cell_index(o_lat: int, o_lon: int, tile_w: int) -> int:
     return int(o_lat) * int(tile_w) + int(o_lon)
 
 
-def _require_zstd() -> None:
-    if zstd is None:
-        raise RuntimeError(
-            "zstandard is required for .zst tiles. Install with: pip install zstandard"
-        )
-
-
 def _decompress_if_needed(path: Path, data: bytes) -> bytes:
     if path.suffix == ".zst":
-        _require_zstd()
         return zstd.ZstdDecompressor().decompress(data)
     return data
 
 
 def _compress_if_needed(path: Path, data: bytes, *, level: int = 10) -> bytes:
     if path.suffix == ".zst":
-        _require_zstd()
         cctx = zstd.ZstdCompressor(level=level)
         return cctx.compress(data)
     return data

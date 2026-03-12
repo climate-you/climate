@@ -60,6 +60,14 @@ class GridSpec:
         )
 
 
+def grid_from_id(grid_id: str, *, tile_size: int) -> GridSpec:
+    if grid_id == "global_0p25":
+        return GridSpec.global_0p25(tile_size=tile_size)
+    if grid_id == "global_0p05":
+        return GridSpec.global_0p05(tile_size=tile_size)
+    raise ValueError(f"Unsupported grid_id: {grid_id}")
+
+
 @dataclass(frozen=True)
 class CellIndex:
     i_lat: int
