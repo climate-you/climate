@@ -4,6 +4,8 @@ import warnings
 
 import xarray as xr
 
+from .calendar import drop_feb29_xr
+
 
 def hot_days_per_year_xr(
     da_daily: xr.DataArray,
@@ -15,9 +17,7 @@ def hot_days_per_year_xr(
     tname = "time" if "time" in da_daily.dims else da_daily.dims[0]
 
     da = da_daily.sortby(tname)
-    time = da[tname]
-    is_feb29 = (time.dt.month == 2) & (time.dt.day == 29)
-    da = da.sel({tname: ~is_feb29})
+    da = drop_feb29_xr(da, tname)
 
     years = da[tname].dt.year
     start_year = int(years.min().item())
