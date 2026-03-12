@@ -1,7 +1,7 @@
 # Third-Party Notices
 
 This file is machine-derived from local project metadata and the current Python environment.
-Generated: 2026-03-02 07:36 UTC.
+Generated: 2026-03-12 13:22 UTC.
 
 ## Scope and Method
 
@@ -37,7 +37,8 @@ Data/map attributions are maintained in the in-app Sources/Licenses tab.
 
 
 
-## NPM Packages (422)
+
+## NPM Packages (423)
 
 | Package | Version | License |
 | --- | --- | --- |
@@ -151,7 +152,7 @@ Data/map attributions are maintained in the in-app Sources/Licenses tab.
 | @typescript-eslint/types | 8.50.1 | MIT |
 | @typescript-eslint/typescript-estree | 8.50.1 | MIT |
 | @typescript-eslint/typescript-estree/node_modules/brace-expansion | 2.0.2 | MIT |
-| @typescript-eslint/typescript-estree/node_modules/minimatch | 9.0.5 | ISC |
+| @typescript-eslint/typescript-estree/node_modules/minimatch | 9.0.9 | ISC |
 | @typescript-eslint/typescript-estree/node_modules/semver | 7.7.3 | ISC |
 | @typescript-eslint/utils | 8.50.1 | MIT |
 | @typescript-eslint/visitor-keys | 8.50.1 | MIT |
@@ -176,7 +177,7 @@ Data/map attributions are maintained in the in-app Sources/Licenses tab.
 | @unrs/resolver-binding-win32-x64-msvc | 1.11.1 | MIT |
 | acorn | 8.15.0 | MIT |
 | acorn-jsx | 5.3.2 | MIT |
-| ajv | 6.12.6 | MIT |
+| ajv | 6.14.0 | MIT |
 | ansi-styles | 4.3.0 | MIT |
 | argparse | 2.0.1 | Python-2.0 |
 | aria-query | 5.3.2 | Apache-2.0 |
@@ -350,7 +351,7 @@ Data/map attributions are maintained in the in-app Sources/Licenses tab.
 | math-intrinsics | 1.1.0 | MIT |
 | merge2 | 1.4.1 | MIT |
 | micromatch | 4.0.8 | MIT |
-| minimatch | 3.1.2 | ISC |
+| minimatch | 3.1.5 | ISC |
 | minimist | 1.2.8 | MIT |
 | ms | 2.1.3 | MIT |
 | murmurhash-js | 1.0.0 | MIT |
@@ -382,6 +383,7 @@ Data/map attributions are maintained in the in-app Sources/Licenses tab.
 | possible-typed-array-names | 1.1.0 | MIT |
 | potpack | 2.1.0 | ISC |
 | prelude-ls | 1.2.1 | MIT |
+| prettier | 3.8.1 | MIT |
 | prop-types | 15.8.1 | MIT |
 | protocol-buffers-schema | 3.6.0 | MIT |
 | punycode | 2.3.1 | MIT |
@@ -463,4 +465,6 @@ Data/map attributions are maintained in the in-app Sources/Licenses tab.
 | zod-validation-error | 4.0.2 | MIT |
 | zrender | 5.6.1 | BSD-3-Clause |
 | zrender/node_modules/tslib | 2.3.0 | 0BSD |
+
+
 

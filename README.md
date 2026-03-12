@@ -34,11 +34,17 @@ Pipeline diagrams: [`docs/project_pipeline_diagrams.md`](docs/project_pipeline_d
 
 ### Python environment (recommended: Conda)
 
-Using Conda (Anaconda or Miniconda) is the recommended path. Create and use a dedicated environment, then run all Python scripts/backend commands from that environment.
+Using Conda ([Anaconda](https://www.anaconda.com/download) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html)) is the recommended path. Create and use a dedicated environment, then run all Python scripts/backend commands from that environment.
 
 ```bash
 conda create -n <your-env-name> python=3.11
 conda activate <your-env-name>
+```
+
+Install Python dependencies (Conda alone does not provide all required packages):
+
+```bash
+pip install -e ".[api,packager,validate-all,dev]"
 ```
 
 Set repo-local import path when running scripts:
@@ -71,7 +77,8 @@ key: <your-key>
 
 - Preferred for quick start: use the pre-packaged `demo` release archive (includes locations, masks, and release assets).
 - Build-from-scratch path: run the full preparation pipeline (see Data Preparation Overview below).
-- The remaining Quickstart steps assume you selected the pre-packaged `demo` release path.
+
+> **info:** The remaining Quickstart steps assume you selected the pre-packaged `demo` release path.
 
 Pre-packaged archive:
 
