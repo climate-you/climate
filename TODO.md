@@ -7,8 +7,6 @@ Bug fixes / Cleanup:
 For later:
 
 - Year constants should come from registry.
-- [WIP] Continue investigating offset between texture and cells (display a specific lat/lon area in texture and check in debug)
-- regenerate recent warming layer with mean of last 5 years instead of just one year.
 - [WIP] map of users and clicks (in GoatCounter ? or in a lightweight file/db sqlite, etc.)
 - [WIP] precipitations graph (annual temperature, dry spells, maybe check patterns?)
 - Seasons graph: do we need defer loading of daily metrics? (check performance)
