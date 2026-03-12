@@ -64,5 +64,3 @@ def build_daily_stats_request(
     if area is not None:
         req["area"] = [area[0], area[1], area[2], area[3]]
     return req
-
-

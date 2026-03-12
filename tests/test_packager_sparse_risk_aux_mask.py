@@ -25,7 +25,10 @@ def test_copy_sparse_risk_aux_mask_if_needed_copies_when_global_0p05_metric_pres
     datasets_path = tmp_path / "datasets.json"
     _write_datasets(
         datasets_path,
-        {"version": "0.1", "any_metric": {"id": "any_metric", "grid_id": "global_0p05"}},
+        {
+            "version": "0.1",
+            "any_metric": {"id": "any_metric", "grid_id": "global_0p05"},
+        },
     )
     release_root = tmp_path / "releases" / "dev"
 
@@ -68,7 +71,10 @@ def test_copy_sparse_risk_aux_mask_if_needed_fails_when_source_missing(
     datasets_path = tmp_path / "datasets.json"
     _write_datasets(
         datasets_path,
-        {"version": "0.1", "any_metric": {"id": "any_metric", "grid_id": "global_0p05"}},
+        {
+            "version": "0.1",
+            "any_metric": {"id": "any_metric", "grid_id": "global_0p05"},
+        },
     )
 
     with pytest.raises(FileNotFoundError, match="sparse-risk mask"):

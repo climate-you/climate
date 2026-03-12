@@ -52,7 +52,13 @@ from climate.registry.panels import (
     validate_panels_against_metrics,
 )
 from climate.geo import ensure_lon_pm180_da
-from climate.tiles.layout import GridSpec, cell_center_latlon, grid_from_id, tile_counts, tile_path
+from climate.tiles.layout import (
+    GridSpec,
+    cell_center_latlon,
+    grid_from_id,
+    tile_counts,
+    tile_path,
+)
 from climate.tiles.spec import write_tile
 from climate.datasets.products.erddap_specs import ERDDAP_DATASETS
 from climate.datasets.sources.erddap import build_griddap_query, make_griddap_url
