@@ -17,10 +17,13 @@ import sys
 import shutil
 import zipfile
 
+import fiona
 import numpy as np
-import requests
+from rasterio.features import rasterize
+from rasterio.transform import from_origin
 
-from climate.tiles.layout import GridSpec
+from climate.datasets.sources.http import download_to
+from climate.tiles.layout import GridSpec, grid_from_id
 
 NATURAL_EARTH_REEF_FALLBACK_URLS = [
     "https://naciscdn.org/naturalearth/10m/physical/ne_10m_reefs.zip",
@@ -29,33 +32,9 @@ NATURAL_EARTH_REEF_FALLBACK_URLS = [
 UNEP_WCMC_REEF_FALLBACK_URLS = [
     "https://wcmc.io/WCMC_008",
 ]
-DOWNLOAD_HEADERS = {
-    # Some hosts return HTML/challenge pages to generic clients.
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/122.0.0.0 Safari/537.36"
-    ),
-    "Accept": "*/*",
-}
-
-
-def _grid_from_id(grid_id: str, tile_size: int) -> GridSpec:
-    if grid_id == "global_0p25":
-        return GridSpec.global_0p25(tile_size=tile_size)
-    if grid_id == "global_0p05":
-        return GridSpec.global_0p05(tile_size=tile_size)
-    raise ValueError(f"Unsupported grid_id: {grid_id}")
 
 
 def _pick_best_shapefile(candidates: list[Path]) -> Path:
-    try:
-        import fiona
-    except Exception as exc:
-        raise RuntimeError(
-            "fiona is required to read vector files. Install with: pip install fiona"
-        ) from exc
-
     polygon_files: list[tuple[int, Path]] = []
     non_point_files: list[tuple[int, Path]] = []
     for p in candidates:
@@ -128,13 +107,6 @@ def _resolve_read_path(input_path: Path) -> Path:
 
 
 def _iter_shapes(input_path: Path) -> list[tuple[dict, int]]:
-    try:
-        import fiona
-    except Exception as exc:
-        raise RuntimeError(
-            "fiona is required to read vector files. Install with: pip install fiona"
-        ) from exc
-
     read_path = _resolve_read_path(input_path)
 
     shapes: list[tuple[dict, int]] = []
@@ -149,35 +121,6 @@ def _iter_shapes(input_path: Path) -> list[tuple[dict, int]]:
     return shapes
 
 
-def _http_download(
-    url: str,
-    dest: Path,
-    *,
-    timeout: int = 120,
-    verify_ssl: bool = True,
-) -> dict[str, str]:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    with requests.get(
-        url,
-        stream=True,
-        timeout=timeout,
-        verify=verify_ssl,
-        headers=DOWNLOAD_HEADERS,
-        allow_redirects=True,
-    ) as r:
-        r.raise_for_status()
-        tmp = dest.with_suffix(dest.suffix + ".tmp")
-        with tmp.open("wb") as f:
-            for chunk in r.iter_content(chunk_size=1 << 20):
-                if chunk:
-                    f.write(chunk)
-        tmp.replace(dest)
-        return {
-            "content_type": str(r.headers.get("content-type", "")),
-            "content_disposition": str(r.headers.get("content-disposition", "")),
-            "final_url": str(r.url),
-        }
-
 
 def _prepare_input(
     *,
@@ -185,7 +128,6 @@ def _prepare_input(
     source: str,
     source_url: str | None,
     cache_dir: Path,
-    verify_ssl: bool,
 ) -> Path:
     if input_path is not None:
         return input_path
@@ -217,7 +159,7 @@ def _prepare_input(
     for url in urls:
         try:
             print(f"[download] {url} -> {dest}", file=sys.stderr)
-            meta = _http_download(url, dest, verify_ssl=verify_ssl)
+            download_to(url, dest, retries=3, timeout=(30, 120))
             if not zipfile.is_zipfile(dest):
                 snippet = ""
                 try:
@@ -225,11 +167,8 @@ def _prepare_input(
                 except Exception:
                     snippet = "<unreadable>"
                 raise RuntimeError(
-                    "Downloaded file is not a valid zip archive: "
-                    f"{dest} (url={url}, final_url={meta.get('final_url')}, "
-                    f"content_type={meta.get('content_type')}, "
-                    f"content_disposition={meta.get('content_disposition')}, "
-                    f"head={snippet!r})"
+                    f"Downloaded file is not a valid zip archive: {dest} "
+                    f"(url={url}, head={snippet!r})"
                 )
             return dest
         except Exception as exc:
@@ -255,14 +194,6 @@ def build_reef_mask(
     grid: GridSpec,
     all_touched: bool,
 ) -> None:
-    try:
-        from rasterio.features import rasterize
-        from rasterio.transform import from_origin
-    except Exception as exc:
-        raise RuntimeError(
-            "rasterio is required to rasterize polygons. Install with: pip install rasterio"
-        ) from exc
-
     shapes = _iter_shapes(input_path)
     transform = from_origin(grid.lon_min, grid.lat_max, grid.deg, grid.deg)
     mask = rasterize(
@@ -346,13 +277,12 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    grid = _grid_from_id(args.grid_id, int(args.tile_size))
+    grid = grid_from_id(args.grid_id, tile_size=int(args.tile_size))
     input_path = _prepare_input(
         input_path=args.input,
         source=str(args.source),
         source_url=args.source_url,
         cache_dir=args.cache_dir,
-        verify_ssl=True,
     )
     build_reef_mask(
         input_path=input_path,

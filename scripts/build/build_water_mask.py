@@ -9,35 +9,18 @@ import argparse
 from pathlib import Path
 import sys
 
+import fiona
 import numpy as np
-import requests
+from rasterio.features import rasterize
+from rasterio.transform import from_origin
 
-from climate.tiles.layout import GridSpec
+from climate.datasets.sources.http import download_to
+from climate.tiles.layout import GridSpec, grid_from_id
 
 NATURAL_EARTH_LAND_URLS = [
     "https://naciscdn.org/naturalearth/10m/physical/ne_10m_land.zip",
     "https://naturalearth.s3.amazonaws.com/10m_physical/ne_10m_land.zip",
 ]
-
-
-def _grid_from_id(grid_id: str, tile_size: int) -> GridSpec:
-    if grid_id == "global_0p25":
-        return GridSpec.global_0p25(tile_size=tile_size)
-    if grid_id == "global_0p05":
-        return GridSpec.global_0p05(tile_size=tile_size)
-    raise ValueError(f"Unsupported grid_id: {grid_id}")
-
-
-def _http_download(url: str, dest: Path, *, timeout: int = 120) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    with requests.get(url, stream=True, timeout=timeout) as r:
-        r.raise_for_status()
-        tmp = dest.with_suffix(dest.suffix + ".tmp")
-        with tmp.open("wb") as f:
-            for chunk in r.iter_content(chunk_size=1 << 20):
-                if chunk:
-                    f.write(chunk)
-        tmp.replace(dest)
 
 
 def _prepare_input(input_path: Path | None, cache_dir: Path) -> Path:
@@ -54,7 +37,7 @@ def _prepare_input(input_path: Path | None, cache_dir: Path) -> Path:
     for url in NATURAL_EARTH_LAND_URLS:
         try:
             print(f"[download] {url} -> {dest}", file=sys.stderr)
-            _http_download(url, dest)
+            download_to(url, dest, retries=3, timeout=(30, 120))
             return dest
         except Exception as exc:
             last_err = exc
@@ -63,13 +46,6 @@ def _prepare_input(input_path: Path | None, cache_dir: Path) -> Path:
 
 
 def _iter_shapes(input_path: Path) -> list[tuple[dict, int]]:
-    try:
-        import fiona
-    except Exception as exc:
-        raise RuntimeError(
-            "fiona is required to read vector files. Install with: pip install fiona"
-        ) from exc
-
     read_path: str | Path
     if input_path.suffix.lower() == ".zip":
         read_path = f"zip://{input_path}"
@@ -95,14 +71,6 @@ def build_water_mask(
     grid: GridSpec,
     all_touched_land: bool,
 ) -> None:
-    try:
-        from rasterio.features import rasterize
-        from rasterio.transform import from_origin
-    except Exception as exc:
-        raise RuntimeError(
-            "rasterio is required to rasterize polygons. Install with: pip install rasterio"
-        ) from exc
-
     shapes = _iter_shapes(input_path)
     transform = from_origin(grid.lon_min, grid.lat_max, grid.deg, grid.deg)
     land = rasterize(
@@ -156,8 +124,14 @@ def main() -> None:
         type=str,
         default="global_0p05",
         choices=["global_0p05", "global_0p25"],
+        help='Target grid id (default: "global_0p05").',
     )
-    ap.add_argument("--tile-size", type=int, default=64)
+    ap.add_argument(
+        "--tile-size",
+        type=int,
+        default=64,
+        help="Tile size used to instantiate GridSpec (default: 64).",
+    )
     ap.add_argument(
         "--all-touched-land",
         action="store_true",
@@ -165,7 +139,7 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    grid = _grid_from_id(args.grid_id, int(args.tile_size))
+    grid = grid_from_id(args.grid_id, tile_size=int(args.tile_size))
     input_path = _prepare_input(args.input, args.cache_dir)
     build_water_mask(
         input_path=input_path,

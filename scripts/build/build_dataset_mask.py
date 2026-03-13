@@ -1,4 +1,17 @@
 #!/usr/bin/env python3
+"""
+Build a reusable sparse-data mask for an ERDDAP dataset.
+
+Downloads a seed window from ERDDAP and marks cells as valid where
+at least --min-finite-days finite values are present.
+
+Output NPZ fields:
+  - data: 2D uint8 mask (1=valid, 0=sparse/missing)
+  - deg: grid resolution in degrees
+  - lat_max: northern origin latitude
+  - lon_min: western origin longitude
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -10,18 +23,9 @@ import xarray as xr
 from climate.datasets.products.erddap_specs import ERDDAP_DATASETS
 from climate.datasets.sources.erddap import build_griddap_query, make_griddap_url
 from climate.datasets.sources.http import download_to
+from climate.geo.lon import ensure_lon_pm180_da
 from climate.registry.metrics import DEFAULT_DATASETS_PATH, load_datasets
-from climate.tiles.layout import GridSpec, cell_center_latlon
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-
-
-def _grid_from_id(grid_id: str, tile_size: int) -> GridSpec:
-    if grid_id == "global_0p25":
-        return GridSpec.global_0p25(tile_size=tile_size)
-    if grid_id == "global_0p05":
-        return GridSpec.global_0p05(tile_size=tile_size)
-    raise ValueError(f"Unsupported grid_id: {grid_id}")
+from climate.tiles.layout import GridSpec, cell_center_latlon, grid_from_id
 
 
 def _find_lat_lon_names(ds: xr.Dataset) -> tuple[str, str]:
@@ -60,13 +64,6 @@ def _expected_coords(grid: GridSpec) -> tuple[np.ndarray, np.ndarray]:
     )
     return lat_vals, lon_vals
 
-
-def _normalize_lon_to_pm180(da: xr.DataArray, lon_name: str) -> xr.DataArray:
-    lon_raw = np.asarray(da[lon_name].values, dtype=np.float64)
-    lon_norm = ((lon_raw + 180.0) % 360.0) - 180.0
-    if np.any(np.abs(lon_raw - lon_norm) > 1e-10):
-        da = da.assign_coords({lon_name: lon_norm})
-    return da.sortby(lon_name)
 
 
 def _pick_data_var(ds: xr.Dataset, preferred: str | None) -> str:
@@ -173,7 +170,7 @@ def _build_mask_from_seed(
 
         lat_name, lon_name = _find_lat_lon_names(da.to_dataset(name="v"))
         da = da.sortby(lat_name)
-        da = _normalize_lon_to_pm180(da, lon_name)
+        da = ensure_lon_pm180_da(da, lon_name)
         da = da.reindex(
             {lat_name: lat_expected, lon_name: lon_expected},
             method="nearest",
@@ -197,15 +194,44 @@ def main() -> None:
         )
     )
     ap.add_argument("--dataset-id", required=True, help="Dataset id from registry/datasets.json")
-    ap.add_argument("--datasets-path", type=Path, default=DEFAULT_DATASETS_PATH)
-    ap.add_argument("--output", type=Path, default=None, help="Output NPZ path (defaults to source.mask_file)")
-    ap.add_argument("--cache-dir", type=Path, default=Path("data/cache/erddap_masks"))
+    ap.add_argument(
+        "--datasets-path",
+        type=Path,
+        default=DEFAULT_DATASETS_PATH,
+        help=f'Path to datasets.json (default: "{DEFAULT_DATASETS_PATH}").',
+    )
+    ap.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Output NPZ path (default: source.mask_file from dataset registry).",
+    )
+    ap.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=Path("data/cache/erddap_masks"),
+        help='Download cache directory (default: "data/cache/erddap_masks").',
+    )
     ap.add_argument("--start-date", required=True, help="Seed period start date YYYY-MM-DD")
     ap.add_argument("--end-date", required=True, help="Seed period end date YYYY-MM-DD")
-    ap.add_argument("--min-finite-days", type=int, default=1)
-    ap.add_argument("--stride-time", type=int, default=1)
-    ap.add_argument("--stride-lat", type=int, default=1)
-    ap.add_argument("--stride-lon", type=int, default=1)
+    ap.add_argument(
+        "--min-finite-days",
+        type=int,
+        default=1,
+        help="Minimum number of finite timesteps to mark a cell valid (default: 1).",
+    )
+    ap.add_argument(
+        "--stride-time", type=int, default=1, help="Temporal stride for ERDDAP query (default: 1)."
+    )
+    ap.add_argument(
+        "--stride-lat", type=int, default=1, help="Latitude stride for ERDDAP query (default: 1)."
+    )
+    ap.add_argument(
+        "--stride-lon",
+        type=int,
+        default=1,
+        help="Longitude stride for ERDDAP query (default: 1).",
+    )
     args = ap.parse_args()
 
     datasets = load_datasets(path=args.datasets_path, validate=True)
@@ -223,7 +249,7 @@ def main() -> None:
 
     grid_id = str(ds_spec.get("grid_id"))
     tile_size = int(ds_spec.get("tile_size", 64))
-    grid = _grid_from_id(grid_id, tile_size)
+    grid = grid_from_id(grid_id, tile_size=tile_size)
 
     dataset_spec = ERDDAP_DATASETS[dataset_key]
     dataset_id = str(source.get("dataset_id") or dataset_spec["dataset_id"])
@@ -237,9 +263,6 @@ def main() -> None:
                 "No --output provided and source.mask_file is missing in dataset registry"
             )
         out_path = Path(mask_file)
-    if not out_path.is_absolute():
-        out_path = REPO_ROOT / out_path
-
     nc_path = _download_erddap_full_grid(
         dataset_key=dataset_key,
         dataset_id=dataset_id,

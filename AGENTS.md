@@ -82,6 +82,13 @@ cd web && npm run lint && npm run build
 - `tests/`: pytest unit/integration tests
 - `web/`: Next.js frontend
 
+## Formatting
+
+Always format touched files before saving:
+
+- **Python**: `black <file>` (or `black <dir>/`)
+- **JavaScript / TypeScript / Markdown**: `prettier --write <file>`
+
 ## Conventions
 
 - Keep backend imports rooted at `climate_api.*`.

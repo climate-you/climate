@@ -12,14 +12,19 @@ import argparse
 import csv
 import io
 import math
+import pickle
 import re
 import sys
 import zipfile
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, TypedDict, Any
 import unicodedata
-import requests
 
+import fiona
+import numpy as np
+from scipy.spatial import cKDTree
+
+from climate.datasets.sources.http import download_to
 from climate.geo.marine import (
     MARINE_SOURCE_NATURAL_EARTH,
     NATURAL_EARTH_MARINE_POLYS_MIRROR_URL,
@@ -120,27 +125,10 @@ def cities_zip_url(source: str) -> str:
     return CITIES_SOURCES[source]
 
 
-def _http_download(url: str, dest: Path, timeout: int = 60) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    with requests.get(url, stream=True, timeout=timeout) as r:
-        r.raise_for_status()
-        tmp = dest.with_suffix(dest.suffix + ".tmp")
-        with open(tmp, "wb") as f:
-            for chunk in r.iter_content(chunk_size=1 << 20):
-                if chunk:
-                    f.write(chunk)
-        tmp.replace(dest)
-
-
 def download_cached(url: str, cache_dir: Path) -> Path:
-    cache_dir.mkdir(parents=True, exist_ok=True)
     filename = url.rstrip("/").split("/")[-1]
     dest = cache_dir / filename
-    if dest.exists() and dest.stat().st_size > 0:
-        return dest
-    print(f"[download] {url} -> {dest}", file=sys.stderr)
-    _http_download(url, dest)
-    return dest
+    return download_to(url, dest, retries=3)
 
 
 def parse_country_info(path_txt: Path) -> Dict[str, str]:
@@ -163,11 +151,8 @@ def parse_country_info(path_txt: Path) -> Dict[str, str]:
     return out
 
 
-def parse_admin2_codes(path_txt: Path) -> Dict[str, str]:
-    """
-    admin2Codes.txt is tab-delimited.
-    Column 0 is '<CC>.<ADMIN1>.<ADMIN2>', column 1 is admin2 name.
-    """
+def _parse_key_name_tsv(path_txt: Path) -> Dict[str, str]:
+    """Parse a tab-delimited file where column 0 is a key and column 1 is a name."""
     out: Dict[str, str] = {}
     with open(path_txt, "r", encoding="utf-8") as f:
         for line in f:
@@ -181,6 +166,14 @@ def parse_admin2_codes(path_txt: Path) -> Dict[str, str]:
             if key and name:
                 out[key] = name
     return out
+
+
+def parse_admin2_codes(path_txt: Path) -> Dict[str, str]:
+    """
+    admin2Codes.txt is tab-delimited.
+    Column 0 is '<CC>.<ADMIN1>.<ADMIN2>', column 1 is admin2 name.
+    """
+    return _parse_key_name_tsv(path_txt)
 
 
 def parse_admin1_codes(path_txt: Path) -> Dict[str, str]:
@@ -188,19 +181,7 @@ def parse_admin1_codes(path_txt: Path) -> Dict[str, str]:
     admin1CodesASCII.txt is tab-delimited.
     Column 0 is '<CC>.<ADMIN1>', column 1 is admin1 name.
     """
-    out: Dict[str, str] = {}
-    with open(path_txt, "r", encoding="utf-8") as f:
-        for line in f:
-            if not line.strip():
-                continue
-            parts = line.rstrip("\n").split("\t")
-            if len(parts) < 2:
-                continue
-            key = parts[0].strip()
-            name = parts[1].strip()
-            if key and name:
-                out[key] = name
-    return out
+    return _parse_key_name_tsv(path_txt)
 
 
 def _iter_geonames_rows(
@@ -349,13 +330,6 @@ def load_marine_index_rows(
     name_field: str,
     existing_ids: set[int],
 ) -> List[_IndexCandidate]:
-    try:
-        import fiona
-    except Exception as exc:
-        raise RuntimeError(
-            "fiona is required to read marine polygons. Install with: pip install fiona"
-        ) from exc
-
     read_path: str | Path
     if input_path.suffix.lower() == ".zip":
         read_path = f"zip://{input_path}"
@@ -725,21 +699,9 @@ def write_locations_csv(
 
 
 def write_kdtree(points: List[Tuple[float, float]], out_path: Path) -> None:
-    try:
-        import numpy as np
-        from scipy.spatial import cKDTree
-    except Exception as exc:
-        raise RuntimeError(
-            "scipy is required to build the KD-tree. "
-            "Install scipy and re-run with --write-kdtree."
-        ) from exc
-
     out_path.parent.mkdir(parents=True, exist_ok=True)
     data = np.asarray(points, dtype=np.float64)
     tree = cKDTree(data)
-
-    import pickle
-
     with open(out_path, "wb") as f:
         pickle.dump(tree, f, protocol=pickle.HIGHEST_PROTOCOL)
 

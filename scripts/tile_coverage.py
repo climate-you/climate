@@ -7,8 +7,8 @@ contain non-NaN data (for float tiles). This matches the current v0 convention
 where "missing" is encoded as NaN for float metrics.
 
 Example:
-  python scripts/debug_tile_coverage.py --root data/releases/dev --metric t2m_yearly_mean_c
-  python scripts/debug_tile_coverage.py --root data/releases/dev
+  python scripts/tile_coverage.py --root data/releases/dev --metric t2m_yearly_mean_c
+  python scripts/tile_coverage.py --root data/releases/dev
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from climate.registry.panels import (
     DEFAULT_PANELS_SCHEMA_PATH,
     load_panels,
 )
-from climate.tiles.layout import GridSpec
+from climate.tiles.layout import GridSpec, grid_from_id
 from climate.tiles.spec import read_tile_array
 
 
@@ -145,16 +145,6 @@ def _count_nonempty_cells(hdr_nyears: int, arr: np.ndarray) -> tuple[int, int]:
     return nonempty, total
 
 
-def _grid_from_id(grid_id: str, tile_size: int) -> GridSpec:
-    if grid_id == "global_0p25":
-        return GridSpec.global_0p25(tile_size=tile_size)
-    if grid_id == "global_0p05":
-        return GridSpec.global_0p05(tile_size=tile_size)
-    raise SystemExit(
-        f"Unsupported grid_id {grid_id!r} (supported: 'global_0p25', 'global_0p05')"
-    )
-
-
 def _metric_summary(
     *,
     root: Path,
@@ -166,7 +156,7 @@ def _metric_summary(
     domain_mask: np.ndarray | None = None,
     domain_label: str = "global",
 ) -> dict[str, float]:
-    grid = _grid_from_id(grid_id, tile_size=tile_size)
+    grid = grid_from_id(grid_id, tile_size=tile_size)
     zdir = root / "series" / grid.grid_id / metric_id / f"z{grid.tile_size}"
     if not zdir.exists():
         print(f"[warn] Tile directory not found: {zdir}")
@@ -414,7 +404,7 @@ def _build_metric_presence_mask(
     grid_id: str,
     tile_size: int,
 ) -> np.ndarray:
-    grid = _grid_from_id(grid_id, tile_size=tile_size)
+    grid = grid_from_id(grid_id, tile_size=tile_size)
     zdir = root / "series" / grid.grid_id / metric_id / f"z{grid.tile_size}"
     if not zdir.exists():
         raise SystemExit(f"Mask metric tiles not found: {zdir}")
@@ -677,8 +667,8 @@ def main() -> None:
                                 tile_size=ocean_tile_size,
                             )
                         )
-                    source_grid = _grid_from_id(ocean_grid_id, ocean_tile_size)
-                    target_grid = _grid_from_id(grid_id, tile_size)
+                    source_grid = grid_from_id(ocean_grid_id, tile_size=ocean_tile_size)
+                    target_grid = grid_from_id(grid_id, tile_size=tile_size)
                     ocean_mask_cache[key] = _remap_mask_to_grid(
                         source_mask=ocean_mask_cache[ocean_source_key],
                         source_grid=source_grid,
@@ -688,7 +678,7 @@ def main() -> None:
             elif domain_label == "dataset_mask":
                 key = (grid_id, tile_size, metric_id)
                 if key not in dataset_mask_cache:
-                    metric_grid = _grid_from_id(grid_id, tile_size)
+                    metric_grid = grid_from_id(grid_id, tile_size=tile_size)
                     mask_file = _resolve_dataset_mask_file(
                         metric_id=metric_id,
                         metrics=metrics_by_id,

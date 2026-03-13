@@ -14,6 +14,7 @@ import argparse
 from pathlib import Path
 
 import numpy as np
+from scipy.ndimage import binary_dilation
 
 
 def _load_mask(path: Path) -> tuple[np.ndarray, dict[str, float]]:
@@ -60,7 +61,12 @@ def main() -> None:
     ap.add_argument("--water-mask", type=Path, required=True, help="Water mask NPZ (1=water).")
     ap.add_argument("--dhw-mask", type=Path, required=True, help="DHW availability mask NPZ.")
     ap.add_argument("--dilate-iterations", type=int, default=1, help="Sea-only dilation iterations (default: 1).")
-    ap.add_argument("--output", type=Path, default=Path("data/masks/crw_dhw_daily_global_0p05_mask.npz"))
+    ap.add_argument(
+        "--output",
+        type=Path,
+        default=Path("data/masks/crw_dhw_daily_global_0p05_mask.npz"),
+        help='Output NPZ path (default: "data/masks/crw_dhw_daily_global_0p05_mask.npz").',
+    )
     args = ap.parse_args()
 
     reef_paths = [Path(p) for p in args.reef_mask]
@@ -85,10 +91,6 @@ def main() -> None:
     print(f"[stats] dhw_mask={int(np.count_nonzero(dhw_mask))}/{total} ({_pct(int(np.count_nonzero(dhw_mask)), total)})")
 
     if int(args.dilate_iterations) > 0:
-        try:
-            from scipy.ndimage import binary_dilation
-        except Exception as exc:
-            raise RuntimeError("scipy is required for dilation. Install with: pip install scipy") from exc
         # 8-neighbor connectivity to close diagonal coastal gaps.
         structure = np.ones((3, 3), dtype=bool)
         dilated = binary_dilation(

@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+"""
+Build a self-contained demo release package.
+
+Extracts a regional subset (default: Great Barrier Reef) from a full release,
+filters registries to a curated set of metrics/panels/layers, and packages
+everything into a distributable tar.gz archive.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -15,6 +23,7 @@ from typing import Any
 
 import numpy as np
 
+from climate.geo.lon import normalize_lon_pm180
 from climate.registry.layers import load_layers, validate_layers_against_maps
 from climate.registry.maps import load_maps, validate_maps_against_metrics
 from climate.registry.metrics import load_metrics
@@ -92,14 +101,6 @@ def _parse_bbox(raw: str) -> tuple[float, float, float, float]:
     return (lat_min, lat_max, lon_min, lon_max)
 
 
-def _normalize_lon(lon: float) -> float:
-    value = float(lon)
-    while value < -180.0:
-        value += 360.0
-    while value >= 180.0:
-        value -= 360.0
-    return value
-
 
 def _to_mask_bool(data: np.ndarray) -> np.ndarray:
     if data.dtype == np.bool_:
@@ -133,12 +134,12 @@ def _build_gbr_demo_mask(
     base_mask = _to_mask_bool(data)
     nlat, nlon = base_mask.shape
     lat_min, lat_max_bbox, lon_min_bbox, lon_max_bbox = bbox
-    lon_min_bbox = _normalize_lon(lon_min_bbox)
-    lon_max_bbox = _normalize_lon(lon_max_bbox)
+    lon_min_bbox = normalize_lon_pm180(lon_min_bbox)
+    lon_max_bbox = normalize_lon_pm180(lon_max_bbox)
 
     lat_centers = lat_max - (np.arange(nlat, dtype=np.float64) + 0.5) * deg
     lon_centers = lon_min + (np.arange(nlon, dtype=np.float64) + 0.5) * deg
-    lon_centers = np.asarray([_normalize_lon(v) for v in lon_centers], dtype=np.float64)
+    lon_centers = np.asarray([normalize_lon_pm180(v) for v in lon_centers], dtype=np.float64)
 
     row_idx = np.flatnonzero((lat_centers >= lat_min) & (lat_centers <= lat_max_bbox))
     if lon_min_bbox <= lon_max_bbox:
