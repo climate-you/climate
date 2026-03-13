@@ -300,123 +300,6 @@
   }
 }
 
-.coldOpenOverlay {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  opacity: 1;
-  transition:
-    opacity 520ms ease,
-    transform 520ms ease,
-    filter 520ms ease;
-}
-
-.coldOpenOverlayFading {
-  opacity: 0;
-  transform: translateY(-8px);
-  filter: blur(4px);
-}
-
-.coldOpenMessage {
-  margin: 0;
-  width: min(92vw, 1200px);
-  font-size: 107px;
-  font-weight: 300;
-  line-height: 0.95;
-  text-align: center;
-  letter-spacing: 0.02em;
-  color: var(--text-primary);
-}
-
-.coldOpenMessagePrimary {
-  font-size: 70px;
-}
-
-.coldOpenMessageStack {
-  display: grid;
-  align-items: center;
-  justify-items: center;
-}
-
-.coldOpenMessageStack .coldOpenMessage {
-  grid-area: 1 / 1;
-  transition:
-    opacity 900ms ease,
-    transform 900ms ease,
-    filter 900ms ease;
-}
-
-.coldOpenMessageStack .coldOpenMessage:nth-child(1) {
-  opacity: 1;
-  transform: translateY(0);
-  filter: blur(0);
-}
-
-.coldOpenMessageStack .coldOpenMessage:nth-child(2) {
-  opacity: 0;
-  transform: translateY(10px);
-  filter: blur(2px);
-}
-
-.coldOpenMessagePrimaryHidden {
-  opacity: 0 !important;
-  transform: translateY(-10px) !important;
-  filter: blur(2px) !important;
-}
-
-.coldOpenMessageSecondaryVisible {
-  opacity: 1 !important;
-  transform: translateY(0) !important;
-  filter: blur(0) !important;
-}
-
-.coldOpenMessageDark {
-  color: #040404;
-}
-
-.coldOpenMessageAccent {
-  color: #ff0000;
-}
-
-.coldOpenPrimaryLine {
-  display: block;
-  opacity: 0;
-  transform: translateY(10px);
-  filter: blur(2px);
-  transition:
-    opacity 900ms ease,
-    transform 900ms ease,
-    filter 900ms ease;
-}
-
-.coldOpenPrimaryLineVisible {
-  opacity: 1;
-  transform: translateY(0);
-  filter: blur(0);
-}
-
-.coldOpenQuestion {
-  display: block;
-  margin-top: 1.6em;
-  opacity: 0;
-  transform: translateY(10px);
-  filter: blur(2px);
-  transition:
-    opacity 900ms ease,
-    transform 900ms ease,
-    filter 900ms ease;
-}
-
-.coldOpenQuestionVisible {
-  opacity: 1;
-  transform: translateY(0);
-  filter: blur(0);
-}
-
 .locationPanel {
   position: absolute;
   top: 50%;
@@ -853,14 +736,6 @@
     --meta-dock-width: 62px;
   }
 
-  .coldOpenMessage.coldOpenMessagePrimary {
-    font-size: 52px;
-  }
-
-  .coldOpenMessage {
-    font-size: 80px;
-  }
-
   .app {
     height: 100svh;
     min-height: 100svh;
@@ -996,13 +871,5 @@
 @media (max-width: 480px) {
   .panelTitle {
     font-size: 1.4rem;
-  }
-
-  .coldOpenMessage.coldOpenMessagePrimary {
-    font-size: 36px;
-  }
-
-  .coldOpenMessage {
-    font-size: 31px;
   }
 }

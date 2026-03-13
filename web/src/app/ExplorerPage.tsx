@@ -16,6 +16,7 @@ import type {
 import AboutOverlay from "@/components/AboutOverlay";
 import GraphCard from "@/components/explorer/GraphCard";
 import InfoBubble from "@/components/explorer/InfoBubble";
+import ColdOpenOverlay from "@/components/explorer/ColdOpenOverlay";
 import SearchOverlay from "@/components/explorer/SearchOverlay";
 import type { AutocompleteItem } from "@/components/explorer/SearchOverlay";
 import SourcesOverlay from "@/components/SourcesOverlay";
@@ -24,13 +25,6 @@ import { useOverlayRouteSync } from "@/hooks/explorer/useOverlayRouteSync";
 import { useReleaseResolution } from "@/hooks/explorer/useReleaseResolution";
 import {
   CLIMATE_DATA_LOAD_ERROR,
-  COLD_OPEN_FADE_MS,
-  COLD_OPEN_PRIMARY_REVEAL_DELAY_MS,
-  COLD_OPEN_PROMPT_DELAY_MS,
-  COLD_OPEN_QUESTION_DELAY_MS,
-  COLD_OPEN_SESSION_SEEN_KEY,
-  COLD_OPEN_WHEEL_ACTIVE_DELTA_MIN,
-  COLD_OPEN_WHEEL_GESTURE_IDLE_MS,
   DEFAULT_OVERLAY_BASE_PATH,
   DEFAULT_TITLE_ACTION_TEXT,
   MIN_PANEL_VIEWPORT_HEIGHT_FOR_TWO_GRAPHS,
@@ -54,11 +48,7 @@ import {
   mergeSeries,
 } from "@/lib/explorer/chartData";
 import { isMobileViewport } from "@/lib/explorer/chartOptions";
-import { parseIntroOverrideQuery } from "@/lib/explorer/routing";
-import {
-  defaultTemperatureUnitForLocale,
-  observedWarmingString,
-} from "@/lib/temperatureUnit";
+import { defaultTemperatureUnitForLocale } from "@/lib/temperatureUnit";
 import styles from "./page.module.css";
 
 type TimeDuration = {
@@ -244,17 +234,9 @@ export default function ExplorerPage({
   const [graphStepById, setGraphStepById] = useState<Record<string, number>>(
     {},
   );
-  const [introVisible, setIntroVisible] = useState(coldOpen);
-  const [introFading, setIntroFading] = useState(false);
-  const [introPromptVisible, setIntroPromptVisible] = useState(!coldOpen);
-  const [introPrimaryVisible, setIntroPrimaryVisible] = useState(!coldOpen);
-  const [introQuestionVisible, setIntroQuestionVisible] = useState(!coldOpen);
-  const introDismissTimerRef = useRef<number | null>(null);
-  const introPhaseTimerRef = useRef<number | null>(null);
-  const introPrimaryTimerRef = useRef<number | null>(null);
-  const introQuestionTimerRef = useRef<number | null>(null);
-  const coldOpenWheelGestureActiveRef = useRef(false);
-  const coldOpenWheelGestureResetTimerRef = useRef<number | null>(null);
+  const [introActive, setIntroActive] = useState(coldOpen);
+  const [introShowMap, setIntroShowMap] = useState(!coldOpen);
+  const [coldOpenAutoRotate, setColdOpenAutoRotate] = useState(false);
   const { aboutOpen, sourcesOpen, setOverlayOpenWithUrl } = useOverlayRouteSync(
     {
       initialOverlay,
@@ -413,39 +395,6 @@ export default function ExplorerPage({
   const resolvedTitleActionText = shouldUseNoWarmingWording
     ? (effectiveTitleActionTextNonPositive?.trim() ?? effectiveTitleActionText)
     : effectiveTitleActionText;
-  const introPaused = introVisible && (aboutOpen || sourcesOpen);
-  const markColdOpenSeen = useCallback(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.sessionStorage.setItem(COLD_OPEN_SESSION_SEEN_KEY, "1");
-    } catch {
-      // Ignore storage access issues (private mode, policy restrictions).
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!coldOpen || typeof window === "undefined") return;
-    const introOverride = parseIntroOverrideQuery(window.location.search);
-    if (introOverride === true) return;
-    if (introOverride === false) {
-      setIntroVisible(false);
-      setIntroFading(false);
-      setIntroPrimaryVisible(true);
-      setIntroQuestionVisible(true);
-      setIntroPromptVisible(true);
-      markColdOpenSeen();
-      return;
-    }
-    const seen =
-      window.sessionStorage.getItem(COLD_OPEN_SESSION_SEEN_KEY) === "1";
-    if (!seen) return;
-    setIntroVisible(false);
-    setIntroFading(false);
-    setIntroPrimaryVisible(true);
-    setIntroQuestionVisible(true);
-    setIntroPromptVisible(true);
-  }, [coldOpen, markColdOpenSeen]);
-
   useEffect(() => {
     if (defaultTemperatureUnitForLocale() !== "F") return;
     setUnit("F");
@@ -839,232 +788,11 @@ export default function ExplorerPage({
   }, [panelOpen]);
 
   const keepPanelFocused = useCallback(() => {
-    if (!panelOpen || introVisible) return;
+    if (!panelOpen || introActive) return;
     window.requestAnimationFrame(() => {
       panelRef.current?.focus({ preventScroll: true });
     });
-  }, [introVisible, panelOpen]);
-
-  const dismissColdOpen = useCallback(() => {
-    if (!introVisible || introFading || introPaused) return;
-    setIntroFading(true);
-    introDismissTimerRef.current = window.setTimeout(() => {
-      setIntroVisible(false);
-      setIntroFading(false);
-      markColdOpenSeen();
-      introDismissTimerRef.current = null;
-    }, COLD_OPEN_FADE_MS);
-  }, [introFading, introPaused, introVisible, markColdOpenSeen]);
-
-  const showIntroPrompt = useCallback(() => {
-    if (!introVisible || introPromptVisible || introPaused) return;
-    if (introPhaseTimerRef.current) {
-      window.clearTimeout(introPhaseTimerRef.current);
-      introPhaseTimerRef.current = null;
-    }
-    setIntroPromptVisible(true);
-  }, [introPaused, introPromptVisible, introVisible]);
-
-  const showIntroQuestion = useCallback(() => {
-    if (!introVisible || introQuestionVisible || introPaused) return;
-    if (introQuestionTimerRef.current) {
-      window.clearTimeout(introQuestionTimerRef.current);
-      introQuestionTimerRef.current = null;
-    }
-    setIntroQuestionVisible(true);
-  }, [introPaused, introQuestionVisible, introVisible]);
-
-  useEffect(() => {
-    if (!introVisible || introQuestionVisible || introPaused) return;
-    introPhaseTimerRef.current = window.setTimeout(() => {
-      setIntroQuestionVisible(true);
-      introPhaseTimerRef.current = null;
-    }, COLD_OPEN_QUESTION_DELAY_MS);
-    return () => {
-      if (introPhaseTimerRef.current) {
-        window.clearTimeout(introPhaseTimerRef.current);
-        introPhaseTimerRef.current = null;
-      }
-    };
-  }, [introPaused, introQuestionVisible, introVisible]);
-
-  useEffect(() => {
-    if (
-      !introVisible ||
-      introPromptVisible ||
-      introPrimaryVisible ||
-      introPaused
-    )
-      return;
-    introPrimaryTimerRef.current = window.setTimeout(() => {
-      setIntroPrimaryVisible(true);
-      introPrimaryTimerRef.current = null;
-    }, COLD_OPEN_PRIMARY_REVEAL_DELAY_MS);
-    return () => {
-      if (introPrimaryTimerRef.current) {
-        window.clearTimeout(introPrimaryTimerRef.current);
-        introPrimaryTimerRef.current = null;
-      }
-    };
-  }, [introPaused, introPrimaryVisible, introPromptVisible, introVisible]);
-
-  useEffect(() => {
-    if (
-      !introVisible ||
-      !introQuestionVisible ||
-      introPromptVisible ||
-      introPaused
-    )
-      return;
-    introQuestionTimerRef.current = window.setTimeout(() => {
-      setIntroPromptVisible(true);
-      introQuestionTimerRef.current = null;
-    }, COLD_OPEN_PROMPT_DELAY_MS);
-    return () => {
-      if (introQuestionTimerRef.current) {
-        window.clearTimeout(introQuestionTimerRef.current);
-        introQuestionTimerRef.current = null;
-      }
-    };
-  }, [introPaused, introPromptVisible, introQuestionVisible, introVisible]);
-
-  const handleColdOpenInteractionCapture = useCallback(
-    (e: React.SyntheticEvent) => {
-      if (!introVisible || introPaused) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (!introQuestionVisible) {
-        showIntroQuestion();
-        return;
-      }
-      if (!introPromptVisible) {
-        showIntroPrompt();
-        return;
-      }
-      dismissColdOpen();
-    },
-    [
-      dismissColdOpen,
-      introPaused,
-      introPromptVisible,
-      introQuestionVisible,
-      introVisible,
-      showIntroPrompt,
-      showIntroQuestion,
-    ],
-  );
-
-  const handleColdOpenPointerDownCapture = useCallback(
-    (e: React.PointerEvent<HTMLElement>) => {
-      if (!introVisible || introPaused) return;
-      if (e.pointerType === "touch") {
-        // Touch interactions are handled in onTouchStartCapture to avoid
-        // processing the same tap twice on mobile browsers.
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-      handleColdOpenInteractionCapture(e);
-    },
-    [handleColdOpenInteractionCapture, introPaused, introVisible],
-  );
-
-  const handleColdOpenWheelCapture = useCallback(
-    (e: React.WheelEvent<HTMLElement>) => {
-      if (!introVisible || introPaused) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const gestureDelta = Math.max(Math.abs(e.deltaX), Math.abs(e.deltaY));
-      if (!coldOpenWheelGestureActiveRef.current) {
-        if (gestureDelta < COLD_OPEN_WHEEL_ACTIVE_DELTA_MIN) {
-          return;
-        }
-        coldOpenWheelGestureActiveRef.current = true;
-        handleColdOpenInteractionCapture(e);
-      }
-      // Do not extend the gesture session for tiny inertial wheel events.
-      if (gestureDelta < COLD_OPEN_WHEEL_ACTIVE_DELTA_MIN) {
-        return;
-      }
-      if (coldOpenWheelGestureResetTimerRef.current) {
-        window.clearTimeout(coldOpenWheelGestureResetTimerRef.current);
-      }
-      coldOpenWheelGestureResetTimerRef.current = window.setTimeout(() => {
-        coldOpenWheelGestureActiveRef.current = false;
-        coldOpenWheelGestureResetTimerRef.current = null;
-      }, COLD_OPEN_WHEEL_GESTURE_IDLE_MS);
-    },
-    [handleColdOpenInteractionCapture, introPaused, introVisible],
-  );
-
-  useEffect(() => {
-    if (!introVisible || introPaused) return;
-    const onWindowKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat) return;
-      if (
-        event.key === "Shift" ||
-        event.key === "Control" ||
-        event.key === "Alt" ||
-        event.key === "Meta"
-      ) {
-        return;
-      }
-      const target = event.target;
-      if (
-        target instanceof HTMLElement &&
-        (target.isContentEditable ||
-          target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT")
-      ) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      if (!introQuestionVisible) {
-        showIntroQuestion();
-        return;
-      }
-      if (!introPromptVisible) {
-        showIntroPrompt();
-        return;
-      }
-      dismissColdOpen();
-    };
-    window.addEventListener("keydown", onWindowKeyDown, true);
-    return () => {
-      window.removeEventListener("keydown", onWindowKeyDown, true);
-    };
-  }, [
-    dismissColdOpen,
-    introPaused,
-    introPromptVisible,
-    introQuestionVisible,
-    introVisible,
-    showIntroPrompt,
-    showIntroQuestion,
-  ]);
-
-  useEffect(
-    () => () => {
-      if (introDismissTimerRef.current) {
-        window.clearTimeout(introDismissTimerRef.current);
-      }
-      if (introPhaseTimerRef.current) {
-        window.clearTimeout(introPhaseTimerRef.current);
-      }
-      if (introPrimaryTimerRef.current) {
-        window.clearTimeout(introPrimaryTimerRef.current);
-      }
-      if (introQuestionTimerRef.current) {
-        window.clearTimeout(introQuestionTimerRef.current);
-      }
-      if (coldOpenWheelGestureResetTimerRef.current) {
-        window.clearTimeout(coldOpenWheelGestureResetTimerRef.current);
-      }
-    },
-    [],
-  );
+  }, [introActive, panelOpen]);
 
   useEffect(() => {
     const place = resp?.location.place;
@@ -1289,10 +1017,6 @@ export default function ExplorerPage({
       ? PANEL_TITLE_INFO_PREINDUSTRIAL
       : PANEL_TITLE_INFO_RECENT;
   const populationText = formatPopulation(selectedLocation?.population);
-  const coldOpenWarmingText = `+${observedWarmingString(defaultTemperatureUnitForLocale())}`;
-  const coldOpenGlobeRotate =
-    introVisible && introPromptVisible && !introFading && !introPaused;
-  const showIntroMap = !introVisible || introPromptVisible;
   const debugBbox = resp?.location?.panel_valid_bbox ?? null;
   const debugInBbox = inBbox(lat, lon, debugBbox);
   const isMobile = isMobileViewport();
@@ -1302,13 +1026,10 @@ export default function ExplorerPage({
       : undefined;
   return (
     <main
-      className={`${styles.app} ${introVisible ? styles.appIntro : styles.appReady}`}
-      onPointerDownCapture={handleColdOpenPointerDownCapture}
-      onTouchStartCapture={handleColdOpenInteractionCapture}
-      onWheelCapture={handleColdOpenWheelCapture}
+      className={`${styles.app} ${introActive ? styles.appIntro : styles.appReady}`}
     >
       <div
-        className={`${styles.map} ${showIntroMap ? styles.mapVisible : styles.mapHidden}`}
+        className={`${styles.map} ${introShowMap ? styles.mapVisible : styles.mapHidden}`}
         onPointerDownCapture={keepPanelFocused}
       >
         <MapLibreGlobe
@@ -1335,8 +1056,8 @@ export default function ExplorerPage({
             setPanelOpen(false);
             setPicked(null);
           }}
-          enablePick={!introVisible}
-          autoRotate={coldOpenGlobeRotate}
+          enablePick={!introActive}
+          autoRotate={coldOpenAutoRotate}
         />
         {activeLayerLegend ? (
           <aside
@@ -1407,51 +1128,13 @@ export default function ExplorerPage({
         ) : null}
       </div>
 
-      {introVisible ? (
-        <div
-          className={`${styles.coldOpenOverlay} ${introFading ? styles.coldOpenOverlayFading : ""}`}
-          aria-hidden="true"
-        >
-          <div className={styles.coldOpenMessageStack}>
-            <h1
-              className={`${styles.coldOpenMessage} ${styles.coldOpenMessagePrimary} ${
-                introPromptVisible ? styles.coldOpenMessagePrimaryHidden : ""
-              }`}
-            >
-              <span
-                className={`${styles.coldOpenPrimaryLine} ${
-                  introPrimaryVisible ? styles.coldOpenPrimaryLineVisible : ""
-                }`}
-              >
-                Human activities have caused{" "}
-                <span className={styles.coldOpenMessageAccent}>
-                  {coldOpenWarmingText}
-                </span>{" "}
-                of global warming {PREINDUSTRIAL_TITLE_SUFFIX}
-              </span>
-              <span
-                className={`${styles.coldOpenQuestion} ${
-                  introQuestionVisible ? styles.coldOpenQuestionVisible : ""
-                }`}
-              >
-                What does this mean{" "}
-                <span className={styles.coldOpenMessageAccent}>for you</span> ?
-              </span>
-            </h1>
-            <h1
-              className={`${styles.coldOpenMessage} ${
-                introPromptVisible ? styles.coldOpenMessageSecondaryVisible : ""
-              }`}
-            >
-              <span className={styles.coldOpenMessageAccent}>Ple</span>
-              <span className={styles.coldOpenMessageDark}>
-                ase select locat
-              </span>
-              <span className={styles.coldOpenMessageAccent}>ion</span>
-            </h1>
-          </div>
-        </div>
-      ) : null}
+      <ColdOpenOverlay
+        active={coldOpen}
+        paused={aboutOpen || sourcesOpen}
+        onVisibleChange={setIntroActive}
+        onShowMapChange={setIntroShowMap}
+        onAutoRotateChange={setColdOpenAutoRotate}
+      />
 
       <SearchOverlay
         className={styles.searchOverlay}
@@ -1460,7 +1143,7 @@ export default function ExplorerPage({
         onLocationSelect={applyLocation}
         externalError={locationError}
       />
-      {!introVisible ? (
+      {!introActive ? (
         <div className={styles.sourcesLinkDock}>
           <button
             type="button"

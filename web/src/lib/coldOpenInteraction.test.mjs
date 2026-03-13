@@ -3,62 +3,68 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const explorerPagePath = resolve("src/app/ExplorerPage.tsx");
-const explorerPageSource = readFileSync(explorerPagePath, "utf8");
+const coldOpenOverlayPath = resolve(
+  "src/components/explorer/ColdOpenOverlay.tsx",
+);
+const coldOpenOverlaySource = readFileSync(coldOpenOverlayPath, "utf8");
 
 const constantsPath = resolve("src/lib/explorer/constants.ts");
 const constantsSource = readFileSync(constantsPath, "utf8");
 
 test("cold-open pointerdown guard ignores touch events", () => {
+  // Touch guard inside the window pointerdown handler
   assert.match(
-    explorerPageSource,
-    /const handleColdOpenPointerDownCapture[\s\S]*if \(e\.pointerType === "touch"\)/,
+    coldOpenOverlaySource,
+    /handlePointerDown[\s\S]*if \(e\.pointerType === "touch"\)/,
+  );
+  // All three interaction types registered as window-level capture listeners
+  assert.match(
+    coldOpenOverlaySource,
+    /window\.addEventListener\("pointerdown", handlePointerDown, true\)/,
   );
   assert.match(
-    explorerPageSource,
-    /onPointerDownCapture=\{handleColdOpenPointerDownCapture\}/,
+    coldOpenOverlaySource,
+    /window\.addEventListener\("touchstart", handleTouchStart,/,
   );
   assert.match(
-    explorerPageSource,
-    /onTouchStartCapture=\{handleColdOpenInteractionCapture\}/,
+    coldOpenOverlaySource,
+    /window\.addEventListener\("wheel", handleWheel,/,
   );
   assert.match(
-    explorerPageSource,
-    /onWheelCapture=\{handleColdOpenWheelCapture\}/,
-  );
-  assert.match(
-    explorerPageSource,
-    /window\.addEventListener\("keydown", onWindowKeyDown, true\);/,
+    coldOpenOverlaySource,
+    /window\.addEventListener\("keydown", onWindowKeyDown, true\)/,
   );
 });
 
 test("cold-open interaction advances in two explicit steps before dismiss", () => {
   assert.match(
-    explorerPageSource,
+    coldOpenOverlaySource,
     /if \(!introQuestionVisible\) \{\s*showIntroQuestion\(\);\s*return;\s*\}/,
   );
   assert.match(
-    explorerPageSource,
+    coldOpenOverlaySource,
     /if \(!introPromptVisible\) \{\s*showIntroPrompt\(\);\s*return;\s*\}/,
   );
   assert.match(constantsSource, /COLD_OPEN_QUESTION_DELAY_MS = 1700/);
   assert.match(constantsSource, /COLD_OPEN_PROMPT_DELAY_MS = 4000/);
   assert.match(constantsSource, /COLD_OPEN_WHEEL_GESTURE_IDLE_MS = 55/);
   assert.match(constantsSource, /COLD_OPEN_WHEEL_ACTIVE_DELTA_MIN = 0\.35/);
+  // Wheel gesture tracking via closure variable (not ref)
+  assert.match(coldOpenOverlaySource, /let wheelGestureActive = false;/);
   assert.match(
-    explorerPageSource,
-    /if \(!coldOpenWheelGestureActiveRef\.current\) \{[\s\S]*coldOpenWheelGestureActiveRef\.current = true;\s*handleColdOpenInteractionCapture\(e\);/,
+    coldOpenOverlaySource,
+    /if \(!wheelGestureActive\) \{[\s\S]*wheelGestureActive = true;\s*handleInteraction\(\);/,
   );
   assert.match(
-    explorerPageSource,
-    /if \(gestureDelta < COLD_OPEN_WHEEL_ACTIVE_DELTA_MIN\) \{\s*return;\s*\}/,
+    coldOpenOverlaySource,
+    /if \(gestureDelta < COLD_OPEN_WHEEL_ACTIVE_DELTA_MIN\) return;/,
   );
   assert.match(
-    explorerPageSource,
-    /coldOpenWheelGestureResetTimerRef\.current = window\.setTimeout\(\(\) => \{\s*coldOpenWheelGestureActiveRef\.current = false;/,
+    coldOpenOverlaySource,
+    /wheelResetTimer = window\.setTimeout\(\(\) => \{\s*wheelGestureActive = false;/,
   );
   assert.match(
-    explorerPageSource,
+    coldOpenOverlaySource,
     /const onWindowKeyDown = \(event: KeyboardEvent\) => \{[\s\S]*if \(event\.repeat\) return;/,
   );
 });
