@@ -16,6 +16,8 @@ import type {
 import AboutOverlay from "@/components/AboutOverlay";
 import GraphCard from "@/components/explorer/GraphCard";
 import InfoBubble from "@/components/explorer/InfoBubble";
+import SearchOverlay from "@/components/explorer/SearchOverlay";
+import type { AutocompleteItem } from "@/components/explorer/SearchOverlay";
 import SourcesOverlay from "@/components/SourcesOverlay";
 import { useDebugTextureSync } from "@/hooks/explorer/useDebugTextureSync";
 import { useOverlayRouteSync } from "@/hooks/explorer/useOverlayRouteSync";
@@ -162,19 +164,6 @@ type PanelResponse = {
   >;
 };
 
-type AutocompleteItem = {
-  geonameid: number;
-  label: string;
-  lat: number;
-  lon: number;
-  country_code: string;
-  population: number;
-};
-
-type AutocompleteResponse = {
-  results: AutocompleteItem[];
-};
-
 type NearestLocationResponse = {
   result: {
     geonameid: number;
@@ -185,10 +174,6 @@ type NearestLocationResponse = {
     country_code?: string | null;
     population?: number | null;
   };
-};
-
-type ResolveLocationResponse = {
-  result?: AutocompleteItem | null;
 };
 
 type ChartRow = {
@@ -225,12 +210,7 @@ export default function ExplorerPage({
   const [lon, setLon] = useState<number>(57.37056);
   const [unit, setUnit] = useState<"C" | "F">("C");
   const [resp, setResp] = useState<PanelResponse | null>(null);
-  const [search, setSearch] = useState<string>("");
-  const [suggestions, setSuggestions] = useState<AutocompleteItem[]>([]);
-  const [suggestOpen, setSuggestOpen] = useState<boolean>(false);
-  const [suggestIndex, setSuggestIndex] = useState<number>(-1);
-  const [suggestLoading, setSuggestLoading] = useState<boolean>(false);
-  const [suggestError, setSuggestError] = useState<string | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [panelLoadError, setPanelLoadError] = useState<string | null>(null);
   const [panelLoading, setPanelLoading] = useState<boolean>(false);
   const [panelRetrying, setPanelRetrying] = useState<boolean>(false);
@@ -245,8 +225,6 @@ export default function ExplorerPage({
   const [selectedGeonameidForPanel, setSelectedGeonameidForPanel] = useState<
     number | null
   >(null);
-  const debounceRef = useRef<number | null>(null);
-  const searchWrapRef = useRef<HTMLDivElement | null>(null);
   const wheelAccumRef = useRef(0);
   const wheelLastEventTsRef = useRef(0);
   const wheelGestureConsumedRef = useRef(false);
@@ -728,27 +706,6 @@ export default function ExplorerPage({
     }
   }
 
-  const fetchAutocomplete = useCallback(
-    async (q: string) => {
-      const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/autocomplete?q=${encodeURIComponent(
-        q,
-      )}&limit=8`;
-      const r = await fetch(url);
-      if (!r.ok) throw new Error(await r.text());
-      const data = (await r.json()) as AutocompleteResponse;
-      return data.results ?? [];
-    },
-    [apiBase, releaseForSession],
-  );
-
-  async function resolveByLabel(label: string) {
-    const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/resolve?label=${encodeURIComponent(label)}`;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(await r.text());
-    const data = (await r.json()) as ResolveLocationResponse;
-    return data.result ?? null;
-  }
-
   async function fetchNearestLocation(nextLat: number, nextLon: number) {
     const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
       nextLon,
@@ -761,7 +718,6 @@ export default function ExplorerPage({
 
   function applyLocation(item: AutocompleteItem) {
     queueGraphRestoreFromVisible();
-    setSearch("");
     setLat(item.lat);
     setLon(item.lon);
     setPicked({ lat: item.lat, lon: item.lon });
@@ -828,73 +784,11 @@ export default function ExplorerPage({
         prev ? { ...prev, population: null } : prev,
       );
       setPanelLoadError(CLIMATE_DATA_LOAD_ERROR);
-      setSuggestError(
+      setLocationError(
         err instanceof Error ? err.message : "Failed to load location data",
       );
     }
   }
-
-  useEffect(() => {
-    if (debounceRef.current) {
-      window.clearTimeout(debounceRef.current);
-    }
-    if (search.trim().length < 3) {
-      setSuggestions([]);
-      setSuggestOpen(false);
-      setSuggestIndex(-1);
-      setSuggestLoading(false);
-      setSuggestError(null);
-      return;
-    }
-
-    setSuggestLoading(true);
-    setSuggestError(null);
-    debounceRef.current = window.setTimeout(async () => {
-      try {
-        const results = await fetchAutocomplete(search.trim());
-        setSuggestions(results);
-        setSuggestOpen(true);
-        setSuggestIndex(results.length ? 0 : -1);
-      } catch (err: unknown) {
-        setSuggestError(
-          err instanceof Error ? err.message : "Autocomplete failed",
-        );
-        setSuggestions([]);
-        setSuggestOpen(false);
-        setSuggestIndex(-1);
-      } finally {
-        setSuggestLoading(false);
-      }
-    }, 250);
-  }, [fetchAutocomplete, search]);
-
-  useEffect(() => {
-    if (!suggestOpen) return;
-    const closeIfOutside = (target: EventTarget | null) => {
-      if (!searchWrapRef.current) return;
-      if (!(target instanceof Node)) return;
-      if (searchWrapRef.current.contains(target)) return;
-      setSuggestOpen(false);
-      setSuggestIndex(-1);
-    };
-    const onWindowPointerDown = (event: PointerEvent) => {
-      closeIfOutside(event.target);
-    };
-    const onWindowFocusIn = (event: FocusEvent) => {
-      closeIfOutside(event.target);
-    };
-    const onWindowWheel = (event: WheelEvent) => {
-      closeIfOutside(event.target);
-    };
-    window.addEventListener("pointerdown", onWindowPointerDown, true);
-    window.addEventListener("focusin", onWindowFocusIn, true);
-    window.addEventListener("wheel", onWindowWheel, true);
-    return () => {
-      window.removeEventListener("pointerdown", onWindowPointerDown, true);
-      window.removeEventListener("focusin", onWindowFocusIn, true);
-      window.removeEventListener("wheel", onWindowWheel, true);
-    };
-  }, [suggestOpen]);
 
   useEffect(() => {
     if (!mapLayers.length) return;
@@ -1223,7 +1117,7 @@ export default function ExplorerPage({
       if (Math.abs(e.deltaY) < 5) return;
       e.preventDefault();
       const now = Date.now();
-      if (now - wheelLastEventTsRef.current > wheelGestureGapMs) {
+      if (now - wheelLastEventTsRef.current > WHEEL_GESTURE_GAP_MS) {
         wheelAccumRef.current = 0;
       }
       wheelLastEventTsRef.current = now;
@@ -1234,7 +1128,7 @@ export default function ExplorerPage({
         wheelGestureConsumedRef.current = false;
         wheelGestureConsumedAtRef.current = 0;
         wheelAccumRef.current = 0;
-      }, wheelGestureGapMs);
+      }, WHEEL_GESTURE_GAP_MS);
       if (wheelGestureConsumedRef.current) {
         if (now - wheelGestureConsumedAtRef.current < WHEEL_SUSTAIN_REPEAT_MS) {
           return;
@@ -1258,7 +1152,7 @@ export default function ExplorerPage({
     },
     [
       goGraphPage,
-      wheelGestureGapMs,
+      WHEEL_GESTURE_GAP_MS,
       WHEEL_REPEAT_KICK_THRESHOLD,
       WHEEL_STEP_THRESHOLD,
       WHEEL_SUSTAIN_REPEAT_MS,
@@ -1366,17 +1260,17 @@ export default function ExplorerPage({
         return;
       }
       if (axis === "y" && deltaY > 0 && Math.abs(deltaY) > Math.abs(deltaX)) {
-        if (deltaY >= touchClosePanelThresholdPx) {
+        if (deltaY >= TOUCH_CLOSE_PANEL_THRESHOLD_PX) {
           setPanelOpen(false);
         }
         return;
       }
       if (axis === "y") return;
-      if (Math.abs(deltaX) < touchSwipeThresholdPx) return;
+      if (Math.abs(deltaX) < TOUCH_SWIPE_THRESHOLD_PX) return;
       if (Math.abs(deltaX) <= Math.abs(deltaY)) return;
       goGraphPage(deltaX < 0 ? 1 : -1);
     },
-    [goGraphPage, touchClosePanelThresholdPx, touchSwipeThresholdPx],
+    [goGraphPage, TOUCH_CLOSE_PANEL_THRESHOLD_PX, TOUCH_SWIPE_THRESHOLD_PX],
   );
 
   const handlePanelTouchCancel = useCallback(() => {
@@ -1433,7 +1327,7 @@ export default function ExplorerPage({
           activeLayerId={activeLayerId || null}
           warmingLayerVisible={darkBackdropLayerActive}
           onLayerChange={(layerId) => setActiveLayerId(layerId)}
-          onLayerMenuOpen={() => setSuggestOpen(false)}
+          onLayerMenuOpen={() => {}}
           onPick={(la, lo) => {
             void handlePick(la, lo);
           }}
@@ -1559,70 +1453,13 @@ export default function ExplorerPage({
         </div>
       ) : null}
 
-      <div className={styles.searchOverlay}>
-        <div ref={searchWrapRef} className={styles.searchWrap}>
-          <input
-            className={styles.searchInput}
-            placeholder="Type a city name..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onFocus={() => {
-              if (suggestions.length) setSuggestOpen(true);
-            }}
-            onKeyDown={async (e) => {
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setSuggestIndex((i) => Math.min(i + 1, suggestions.length - 1));
-              } else if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setSuggestIndex((i) => Math.max(i - 1, 0));
-              } else if (e.key === "Enter") {
-                e.preventDefault();
-                if (suggestIndex >= 0 && suggestions[suggestIndex]) {
-                  applyLocation(suggestions[suggestIndex]);
-                  setSuggestOpen(false);
-                  return;
-                }
-                if (search.trim().length >= 3) {
-                  const hit = await resolveByLabel(search.trim());
-                  if (hit) {
-                    applyLocation(hit);
-                  }
-                  setSuggestOpen(false);
-                }
-              } else if (e.key === "Escape") {
-                setSuggestOpen(false);
-              }
-            }}
-          />
-          {suggestOpen && suggestions.length > 0 ? (
-            <div className={styles.suggestionList}>
-              {suggestions.map((s, i) => (
-                <div
-                  key={`${s.geonameid}:${s.label}`}
-                  onMouseDown={(evt) => {
-                    evt.preventDefault();
-                    applyLocation(s);
-                    setSuggestOpen(false);
-                  }}
-                  onMouseEnter={() => setSuggestIndex(i)}
-                  className={`${styles.suggestionItem} ${
-                    i === suggestIndex ? styles.suggestionItemActive : ""
-                  }`}
-                >
-                  {s.label}
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-        {suggestLoading ? (
-          <div className={styles.searchStatus}>Searching...</div>
-        ) : null}
-        {suggestError ? (
-          <div className={styles.searchError}>{suggestError}</div>
-        ) : null}
-      </div>
+      <SearchOverlay
+        className={styles.searchOverlay}
+        apiBase={apiBase}
+        releaseForSession={releaseForSession}
+        onLocationSelect={applyLocation}
+        externalError={locationError}
+      />
       {!introVisible ? (
         <div className={styles.sourcesLinkDock}>
           <button
