@@ -1,5 +1,6 @@
 import type { EChartsOption } from "echarts";
 
+import { CHART_ANIMATION_DURATION_MS } from "@/lib/explorer/constants";
 import {
   formatAxisTitle,
   formatDayMonthYearLabel,
@@ -415,7 +416,7 @@ export function buildHotDaysOption({
   }
 
   return {
-    animationDuration: 700,
+    animationDuration: CHART_ANIMATION_DURATION_MS,
     animationDurationUpdate: transitionMs,
     animationEasing: "cubicOut",
     ...sharedChartScaffold(),
@@ -477,18 +478,6 @@ export function buildHotDaysOption({
   };
 }
 
-function stackedBarColor(
-  seriesItem: SeriesPayload | undefined,
-  index: number,
-): string {
-  const configured = seriesItem?.style?.color;
-  if (typeof configured === "string" && configured.trim().length > 0) {
-    return configured;
-  }
-  const fallback = ["#4caf50", "#fbc02d", "#ef5350", "#fb8c00", "#8e24aa"];
-  return fallback[index % fallback.length];
-}
-
 export function buildStackedBarOption({
   graph,
   series,
@@ -509,7 +498,7 @@ export function buildStackedBarOption({
     ) || /day/i.test(String(graph.y_axis_label ?? ""));
   const defaultStack = "stacked-bars";
   const chartSeries: NonNullable<EChartsOption["series"]> = barKeys.map(
-    (key, idx) => {
+    (key) => {
       const s = series[key];
       const stackName =
         typeof s?.style?.stack === "string" && s.style.stack.trim().length > 0
@@ -520,7 +509,7 @@ export function buildStackedBarOption({
         type: "bar",
         stack: stackName,
         data: data.map((row) => (row[key] as number | null) ?? null),
-        itemStyle: { color: stackedBarColor(s, idx) },
+        itemStyle: { color: seriesColor(series, key, "") },
         emphasis: { focus: isMobile ? "none" : "series" },
         z: 2,
         animationDurationUpdate: transitionMs,
@@ -530,7 +519,7 @@ export function buildStackedBarOption({
   const chartScaffold = sharedChartScaffold();
 
   return {
-    animationDuration: 700,
+    animationDuration: CHART_ANIMATION_DURATION_MS,
     animationDurationUpdate: transitionMs,
     animationEasing: "cubicOut",
     ...chartScaffold,
@@ -550,7 +539,9 @@ export function buildStackedBarOption({
             (item) =>
               item as { value?: unknown; marker?: string; seriesName?: string },
           )
-          .filter((r) => typeof r.value === "number" && Number.isFinite(r.value))
+          .filter(
+            (r) => typeof r.value === "number" && Number.isFinite(r.value),
+          )
           .map((r) => {
             const rawLabel = String(r.seriesName ?? "");
             const label = rawLabel;
@@ -599,10 +590,8 @@ export function buildTemperatureOption({
   const trendKeys = visibleKeys.filter(
     (key) => seriesRole(series, key) === "trend",
   );
-  const isAnnualTemperatureSeasonsView =
-    graph.id === "t2m_annual" &&
-    visibleKeys.includes("t2m_daily_mean") &&
-    visibleKeys.includes("t2m_monthly_mean");
+  const isDateBasedView =
+    data.length > 0 && /^\d{4}-\d{2}/.test(String(data[0]?.x ?? ""));
   const trendSeriesNames = new Set<string>();
   const chartSeries: NonNullable<EChartsOption["series"]> = visibleKeys.map(
     (key) => {
@@ -644,11 +633,11 @@ export function buildTemperatureOption({
         },
         lineStyle: {
           width: isTrend ? 0 : isMean ? 3 : 1.5,
-          color: isTrend ? "rgba(255, 0, 0, 0)" : baseColor,
+          color: isTrend ? "transparent" : baseColor,
         },
         z: isTrend ? 1 : isMean ? 3 : 2,
         areaStyle: isTrend ? { color: theme.trendArea } : undefined,
-        animationDuration: 700,
+        animationDuration: CHART_ANIMATION_DURATION_MS,
         animationDelay: 0,
         animationDurationUpdate: transitionMs,
         emphasis: { focus: isMobile ? "none" : "series" },
@@ -677,7 +666,7 @@ export function buildTemperatureOption({
   }
 
   return {
-    animationDuration: 700,
+    animationDuration: CHART_ANIMATION_DURATION_MS,
     animationDurationUpdate: transitionMs,
     animationEasing: "cubicOut",
     ...sharedChartScaffold(),
@@ -697,7 +686,7 @@ export function buildTemperatureOption({
           : undefined;
         const ts = Number(firstValue ?? first.axisValue ?? 0);
         const title = Number.isFinite(ts)
-          ? isAnnualTemperatureSeasonsView
+          ? isDateBasedView
             ? formatDayMonthYearLabel(ts)
             : formatAxisTitle(graph, ts)
           : String(rows[0]?.axisValue ?? "");
@@ -712,15 +701,10 @@ export function buildTemperatureOption({
               },
           )
           .filter(
-            (r) => Array.isArray(r.value) && Number.isFinite(Number(r.value[1])),
+            (r) =>
+              Array.isArray(r.value) && Number.isFinite(Number(r.value[1])),
           )
-          .filter((r) => {
-            const key = typeof r.seriesId === "string" ? r.seriesId : "";
-            if (isAnnualTemperatureSeasonsView) {
-              return key === "t2m_daily_mean" || key === "t2m_monthly_mean";
-            }
-            return !trendSeriesNames.has(String(r.seriesName ?? ""));
-          });
+          .filter((r) => !trendSeriesNames.has(String(r.seriesName ?? "")));
         const lines = values.map((r) => {
           const key = typeof r.seriesId === "string" ? r.seriesId : "";
           const label = key

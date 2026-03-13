@@ -19,10 +19,9 @@ import InfoBubble from "@/components/explorer/InfoBubble";
 import SourcesOverlay from "@/components/SourcesOverlay";
 import { useDebugTextureSync } from "@/hooks/explorer/useDebugTextureSync";
 import { useOverlayRouteSync } from "@/hooks/explorer/useOverlayRouteSync";
+import { useReleaseResolution } from "@/hooks/explorer/useReleaseResolution";
 import {
-  useReleaseResolution,
-} from "@/hooks/explorer/useReleaseResolution";
-import {
+  CLIMATE_DATA_LOAD_ERROR,
   COLD_OPEN_FADE_MS,
   COLD_OPEN_PRIMARY_REVEAL_DELAY_MS,
   COLD_OPEN_PROMPT_DELAY_MS,
@@ -31,6 +30,19 @@ import {
   COLD_OPEN_WHEEL_ACTIVE_DELTA_MIN,
   COLD_OPEN_WHEEL_GESTURE_IDLE_MS,
   DEFAULT_OVERLAY_BASE_PATH,
+  DEFAULT_TITLE_ACTION_TEXT,
+  MIN_PANEL_VIEWPORT_HEIGHT_FOR_TWO_GRAPHS,
+  PANEL_TITLE_INFO_PREINDUSTRIAL,
+  PANEL_TITLE_INFO_RECENT,
+  PREINDUSTRIAL_TITLE_SUFFIX,
+  TOUCH_CLOSE_PANEL_THRESHOLD_PX,
+  TOUCH_PANEL_LIFT_MAX_PX,
+  TOUCH_PANEL_PULL_MAX_PX,
+  TOUCH_SWIPE_THRESHOLD_PX,
+  WHEEL_GESTURE_GAP_MS,
+  WHEEL_REPEAT_KICK_THRESHOLD,
+  WHEEL_STEP_THRESHOLD,
+  WHEEL_SUSTAIN_REPEAT_MS,
 } from "@/lib/explorer/constants";
 import {
   formatHeadlineDelta,
@@ -40,10 +52,11 @@ import {
   mergeSeries,
 } from "@/lib/explorer/chartData";
 import { isMobileViewport } from "@/lib/explorer/chartOptions";
+import { parseIntroOverrideQuery } from "@/lib/explorer/routing";
 import {
-  parseIntroOverrideQuery,
-} from "@/lib/explorer/routing";
-import { defaultTemperatureUnitForLocale } from "@/lib/temperatureUnit";
+  defaultTemperatureUnitForLocale,
+  observedWarmingString,
+} from "@/lib/temperatureUnit";
 import styles from "./page.module.css";
 
 type TimeDuration = {
@@ -208,15 +221,6 @@ export default function ExplorerPage({
 }: ExplorerPageProps) {
   const debugAllowed = process.env.NODE_ENV !== "production";
   const envDefaultReleaseRaw = process.env.NEXT_PUBLIC_RELEASE;
-  const minPanelViewportHeightForTwoGraphs = 600;
-  const wheelStepThreshold = 130;
-  const wheelGestureGapMs = 160;
-  const wheelSustainRepeatMs = 520;
-  const wheelRepeatKickThreshold = 55;
-  const touchSwipeThresholdPx = 44;
-  const touchClosePanelThresholdPx = 72;
-  const touchPanelLiftMaxPx = 24;
-  const touchPanelPullMaxPx = 240;
   const [lat, setLat] = useState<number>(-20.32556);
   const [lon, setLon] = useState<number>(57.37056);
   const [unit, setUnit] = useState<"C" | "F">("C");
@@ -321,13 +325,16 @@ export default function ExplorerPage({
           label: isEnabled ? layer.label : `${layer.label} [disabled]`,
           imageUrl: `${mapAssetBase}/assets/v/${encodedRelease}/${layer.asset_path}`,
           imageWidth:
-            typeof layer.asset_width === "number" ? layer.asset_width : undefined,
+            typeof layer.asset_width === "number"
+              ? layer.asset_width
+              : undefined,
           imageHeight:
             typeof layer.asset_height === "number"
               ? layer.asset_height
               : undefined,
           mobileImageUrl:
-            typeof layer.mobile_asset_path === "string" && layer.mobile_asset_path
+            typeof layer.mobile_asset_path === "string" &&
+            layer.mobile_asset_path
               ? `${mapAssetBase}/assets/v/${encodedRelease}/${layer.mobile_asset_path}`
               : undefined,
           mobileImageWidth:
@@ -387,7 +394,7 @@ export default function ExplorerPage({
     (activeTitleMode === "preindustrial" ? "t2m_vs_preindustrial_local" : null);
   const activeTitleSuffix =
     activeLayerOverride?.title_suffix ??
-    (activeTitleMode === "preindustrial" ? "since 1850-1900." : "");
+    (activeTitleMode === "preindustrial" ? PREINDUSTRIAL_TITLE_SUFFIX : "");
   const requestedTitleHeadline = useMemo(() => {
     if (!resp?.headlines?.length || !activeTitleMetricKey) return null;
     return resp.headlines.find((h) => h.key === activeTitleMetricKey) ?? null;
@@ -408,12 +415,11 @@ export default function ExplorerPage({
     ? "preindustrial"
     : activeTitleMode;
   const effectiveTitleSuffix = shouldFallbackToPreindustrial
-    ? "since 1850-1900."
+    ? PREINDUSTRIAL_TITLE_SUFFIX
     : activeTitleSuffix;
   const effectiveTitleActionText = shouldFallbackToPreindustrial
-    ? "human activities have caused"
-    : (activeLayerOverride?.title_action_text ??
-      "human activities have caused");
+    ? DEFAULT_TITLE_ACTION_TEXT
+    : (activeLayerOverride?.title_action_text ?? DEFAULT_TITLE_ACTION_TEXT);
   const effectiveTitleActionTextNonPositive = shouldFallbackToPreindustrial
     ? null
     : (activeLayerOverride?.title_action_text_non_positive ?? null);
@@ -452,7 +458,8 @@ export default function ExplorerPage({
       markColdOpenSeen();
       return;
     }
-    const seen = window.sessionStorage.getItem(COLD_OPEN_SESSION_SEEN_KEY) === "1";
+    const seen =
+      window.sessionStorage.getItem(COLD_OPEN_SESSION_SEEN_KEY) === "1";
     if (!seen) return;
     setIntroVisible(false);
     setIntroFading(false);
@@ -714,7 +721,7 @@ export default function ExplorerPage({
       setSelectedLocation((prev) =>
         prev ? { ...prev, population: null } : prev,
       );
-      setPanelLoadError("Couldn’t load climate data.");
+      setPanelLoadError(CLIMATE_DATA_LOAD_ERROR);
       return null;
     } finally {
       setPanelLoading(false);
@@ -820,7 +827,7 @@ export default function ExplorerPage({
       setSelectedLocation((prev) =>
         prev ? { ...prev, population: null } : prev,
       );
-      setPanelLoadError("Couldn’t load climate data.");
+      setPanelLoadError(CLIMATE_DATA_LOAD_ERROR);
       setSuggestError(
         err instanceof Error ? err.message : "Failed to load location data",
       );
@@ -900,7 +907,9 @@ export default function ExplorerPage({
     if (!viewport) return;
     const updateGraphsPerPage = () => {
       const next =
-        viewport.clientHeight < minPanelViewportHeightForTwoGraphs ? 1 : 2;
+        viewport.clientHeight < MIN_PANEL_VIEWPORT_HEIGHT_FOR_TWO_GRAPHS
+          ? 1
+          : 2;
       setGraphsPerPage((prev) => (prev === next ? prev : next));
     };
     updateGraphsPerPage();
@@ -986,7 +995,12 @@ export default function ExplorerPage({
   }, [introPaused, introQuestionVisible, introVisible]);
 
   useEffect(() => {
-    if (!introVisible || introPromptVisible || introPrimaryVisible || introPaused)
+    if (
+      !introVisible ||
+      introPromptVisible ||
+      introPrimaryVisible ||
+      introPaused
+    )
       return;
     introPrimaryTimerRef.current = window.setTimeout(() => {
       setIntroPrimaryVisible(true);
@@ -1222,19 +1236,19 @@ export default function ExplorerPage({
         wheelAccumRef.current = 0;
       }, wheelGestureGapMs);
       if (wheelGestureConsumedRef.current) {
-        if (now - wheelGestureConsumedAtRef.current < wheelSustainRepeatMs) {
+        if (now - wheelGestureConsumedAtRef.current < WHEEL_SUSTAIN_REPEAT_MS) {
           return;
         }
         // Allow another step only on a fresh strong impulse.
         // This blocks trackpad momentum from cascading through many pages.
-        if (Math.abs(e.deltaY) < wheelRepeatKickThreshold) {
+        if (Math.abs(e.deltaY) < WHEEL_REPEAT_KICK_THRESHOLD) {
           return;
         }
         wheelGestureConsumedRef.current = false;
         wheelAccumRef.current = 0;
       }
       wheelAccumRef.current += e.deltaY;
-      if (Math.abs(wheelAccumRef.current) < wheelStepThreshold) return;
+      if (Math.abs(wheelAccumRef.current) < WHEEL_STEP_THRESHOLD) return;
       const changed = goGraphPage(wheelAccumRef.current > 0 ? 1 : -1);
       wheelAccumRef.current = 0;
       if (changed) {
@@ -1245,9 +1259,9 @@ export default function ExplorerPage({
     [
       goGraphPage,
       wheelGestureGapMs,
-      wheelRepeatKickThreshold,
-      wheelStepThreshold,
-      wheelSustainRepeatMs,
+      WHEEL_REPEAT_KICK_THRESHOLD,
+      WHEEL_STEP_THRESHOLD,
+      WHEEL_SUSTAIN_REPEAT_MS,
     ],
   );
 
@@ -1312,8 +1326,8 @@ export default function ExplorerPage({
         e.preventDefault();
         setPanelDragActive(true);
         const nextOffset = Math.max(
-          -touchPanelLiftMaxPx,
-          Math.min(touchPanelPullMaxPx, deltaY),
+          -TOUCH_PANEL_LIFT_MAX_PX,
+          Math.min(TOUCH_PANEL_PULL_MAX_PX, deltaY),
         );
         setPanelDragOffsetPx(nextOffset);
         return;
@@ -1323,7 +1337,7 @@ export default function ExplorerPage({
         e.preventDefault();
       }
     },
-    [touchPanelLiftMaxPx, touchPanelPullMaxPx],
+    [TOUCH_PANEL_LIFT_MAX_PX, TOUCH_PANEL_PULL_MAX_PX],
   );
 
   const handlePanelTouchEnd = useCallback(
@@ -1378,11 +1392,10 @@ export default function ExplorerPage({
   const titleLocationLabel = locationLabel || "this location";
   const panelTitleInfoText =
     effectiveTitleMode === "preindustrial"
-      ? "Local warming since pre-industrial (1850-1900 baseline) is estimated by combining observed local warming from ERA5 (1979-2025) with a CMIP6-based offset for 1850-1979, computed from 5 models. Source: CDS."
-      : "Local warming is computed from recent annual means relative to the configured baseline year for the selected layer.";
+      ? PANEL_TITLE_INFO_PREINDUSTRIAL
+      : PANEL_TITLE_INFO_RECENT;
   const populationText = formatPopulation(selectedLocation?.population);
-  const coldOpenWarmingText =
-    defaultTemperatureUnitForLocale() === "F" ? "+1.9°F" : "+1.1°C";
+  const coldOpenWarmingText = `+${observedWarmingString(defaultTemperatureUnitForLocale())}`;
   const coldOpenGlobeRotate =
     introVisible && introPromptVisible && !introFading && !introPaused;
   const showIntroMap = !introVisible || introPromptVisible;
@@ -1520,7 +1533,7 @@ export default function ExplorerPage({
                 <span className={styles.coldOpenMessageAccent}>
                   {coldOpenWarmingText}
                 </span>{" "}
-                of global warming since 1850-1900.
+                of global warming {PREINDUSTRIAL_TITLE_SUFFIX}
               </span>
               <span
                 className={`${styles.coldOpenQuestion} ${
@@ -1742,7 +1755,7 @@ export default function ExplorerPage({
                 <h2 className={styles.panelTitle}>
                   {panelLoadError ? (
                     <span className={styles.panelTitleTempAccent}>
-                      Couldn’t load climate data.
+                      {CLIMATE_DATA_LOAD_ERROR}
                     </span>
                   ) : panelLoading ? (
                     <span>Loading climate data...</span>

@@ -165,9 +165,13 @@ export function mergeSeries(
   );
 }
 
+export function isYearValue(n: number): boolean {
+  return n >= 1000 && n <= 3000;
+}
+
 function parseAxisValue(v: unknown): { numeric?: number; timestamp?: number } {
   if (typeof v === "number" && Number.isFinite(v)) {
-    if (v >= 1000 && v <= 3000) {
+    if (isYearValue(v)) {
       const ts = new Date(`${Math.trunc(v)}-01-01`).getTime();
       return { numeric: v, timestamp: Number.isFinite(ts) ? ts : undefined };
     }
@@ -175,7 +179,7 @@ function parseAxisValue(v: unknown): { numeric?: number; timestamp?: number } {
   }
   const n = Number(v);
   if (Number.isFinite(n) && String(v).trim() !== "") {
-    if (n >= 1000 && n <= 3000) {
+    if (isYearValue(n)) {
       const ts = new Date(`${Math.trunc(n)}-01-01`).getTime();
       return { numeric: n, timestamp: Number.isFinite(ts) ? ts : undefined };
     }
@@ -193,7 +197,10 @@ function durationToMs(d: TimeDuration): number {
   return 0;
 }
 
-export function sliceRowsByTimeRange(rows: ChartRow[], range?: TimeRange): ChartRow[] {
+export function sliceRowsByTimeRange(
+  rows: ChartRow[],
+  range?: TimeRange,
+): ChartRow[] {
   if (!range || rows.length === 0) return rows;
 
   if (
@@ -375,12 +382,13 @@ export function graphChartMode(
 export function toChartTimestamp(x: number | string): number {
   if (typeof x === "number" && Number.isFinite(x)) {
     const n = Math.trunc(x);
-    if (n >= 1000 && n <= 3000) {
+    if (isYearValue(n)) {
       const t = new Date(`${n}-01-01`).getTime();
       return Number.isFinite(t) ? t : Date.now();
     }
-    if (Math.abs(n) >= 1e11) return n;
-    if (Math.abs(n) >= 1e9) return n * 1000;
+    // Distinguish ms timestamps (~1e12) from second timestamps (~1e9).
+    if (Math.abs(n) >= 1e11) return n; // already ms
+    if (Math.abs(n) >= 1e9) return n * 1000; // seconds → ms
     const t = new Date(String(x)).getTime();
     return Number.isFinite(t) ? t : Date.now();
   }
@@ -422,7 +430,7 @@ export function formatAxisTitle(graph: GraphPayload, value: unknown): string {
   if (graph.ui?.axis_title_mode !== "date") {
     const directYear = Number.parseInt(asString, 10);
     const year =
-      Number.isFinite(directYear) && directYear >= 1000 && directYear <= 3000
+      Number.isFinite(directYear) && isYearValue(directYear)
         ? directYear
         : new Date(toChartTimestamp(value as number | string)).getUTCFullYear();
     const yearText = Number.isFinite(year) ? String(year) : asString;
@@ -444,7 +452,9 @@ export function formatDayMonthYearLabel(value: number | string): string {
   return `${dd} ${mon} ${yy}`;
 }
 
-export function formatPopulation(value: number | null | undefined): string | null {
+export function formatPopulation(
+  value: number | null | undefined,
+): string | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return null;
   }

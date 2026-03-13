@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
-import { defaultTemperatureUnitForLocale } from "@/lib/temperatureUnit";
+import {
+  defaultTemperatureUnitForLocale,
+  observedWarmingString,
+} from "@/lib/temperatureUnit";
 import styles from "./AboutOverlay.module.css";
 
 type AboutOverlayProps = {
@@ -24,10 +27,8 @@ export default function AboutOverlay({
   }, [onClose]);
 
   const defaultUnit = defaultTemperatureUnitForLocale();
-  const observedWarmingText =
-    defaultUnit === "F" ? "approximately 1.9°F" : "approximately 1.1°C";
-  const parisTargetText =
-    defaultUnit === "F" ? "well below 3.6°F" : "well below 2°C";
+  const observedWarmingText = `${observedWarmingString(defaultUnit)}`;
+  const parisTargetText = defaultUnit === "F" ? "3.6°F" : "2°C";
 
   return (
     <section
@@ -61,11 +62,11 @@ export default function AboutOverlay({
         <section className={styles.aboutSection}>
           <p className={`${styles.aboutText} ${styles.aboutParagraph}`}>
             The IPCC&apos;s 2023 Synthesis Report indicates that global mean
-            temperature has already increased by <b>{observedWarmingText}</b>,
-            while the Paris Agreement sets the objective of limiting warming to{" "}
-            <b>{parisTargetText}</b>. For us, these global numbers felt
-            abstract, so this project asks a simple question: how do these
-            changes translate at the local level?
+            temperature has already increased by approximately{" "}
+            <b>{observedWarmingText}</b>, while the Paris Agreement sets the
+            objective of limiting warming to well below <b>{parisTargetText}</b>
+            . For us, these global numbers felt abstract, so this project asks a
+            simple question: how do these changes translate at the local level?
           </p>
           <p className={`${styles.aboutText} ${styles.aboutParagraph}`}>
             We focus only on temperature change, over land and sea, to show how

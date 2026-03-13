@@ -8,3 +8,7 @@ export function defaultTemperatureUnitForLocale(): "C" | "F" {
   const primaryLocale = navigator.languages?.[0] ?? navigator.language ?? "";
   return isUsLocale(primaryLocale) ? "F" : "C";
 }
+
+export function observedWarmingString(unit: "C" | "F"): string {
+  return unit === "F" ? "1.9°F" : "1.1°C";
+}

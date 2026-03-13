@@ -3,6 +3,35 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import type { FeatureCollection, Polygon } from "geojson";
+import {
+  AUTO_ROTATE_DEG_PER_SEC,
+  BACKDROP_BLUE,
+  BACKDROP_DARK_MODE,
+  BACKDROP_WHITE,
+  CITY_SNAP_LAYER_IDS,
+  CITY_SNAP_MAX_ZOOM,
+  CITY_SNAP_RADIUS_PX,
+  DATELINE_OVERDRAW_DEG,
+  DEBUG_BBOX_FILL_LAYER_ID,
+  DEBUG_BBOX_LAYER_ID,
+  DEBUG_BBOX_SOURCE_ID,
+  DEFAULT_BASE_ZOOM,
+  DESKTOP_PANEL_WIDTH_RATIO,
+  FOCUS_FLY_DURATION_MS,
+  FOCUS_LOCATION_ZOOM,
+  FOCUS_RECENTER_DURATION_MS,
+  HOME_FLY_DURATION_MS,
+  LAYER_MENU_AUTO_CLOSE_MS,
+  LAYER_MENU_FADE_MS,
+  MARKER_COLOR,
+  MERCATOR_MAX_LAT,
+  MOBILE_PANEL_HEIGHT_RATIO,
+  MOBILE_TEXTURE_FALLBACK_LIMIT,
+  PANEL_BREAKPOINT_PX,
+  PANEL_TRANSITION_MS,
+  TEXTURE_LAYER_ID,
+  TEXTURE_SOURCE_ID,
+} from "@/lib/explorer/constants";
 
 type LngLat = { lat: number; lon: number };
 export type MapLayerOption = {
@@ -64,34 +93,6 @@ const initialView = {
   pitch: 0,
   bearing: 0,
 };
-
-const PANEL_BREAKPOINT_PX = 900;
-const DESKTOP_PANEL_WIDTH_RATIO = 0.62;
-const MOBILE_PANEL_HEIGHT_RATIO = 0.6;
-const FOCUS_LOCATION_ZOOM = 5.5;
-const FOCUS_FLY_DURATION_MS = 1900;
-const FOCUS_RECENTER_DURATION_MS = 650;
-const PANEL_TRANSITION_MS = 300;
-const DEFAULT_BASE_ZOOM = 2.5;
-const MERCATOR_MAX_LAT = 85.05112878;
-// Tiny dateline overdraw hides wrap seams from compressed textures while
-// keeping grid alignment error far below a 0.05° cell.
-const DATELINE_OVERDRAW_DEG = 1e-4;
-const TEXTURE_SOURCE_ID = "climateTextureSource";
-const TEXTURE_LAYER_ID = "climateTextureLayer";
-const DEBUG_BBOX_SOURCE_ID = "debugPanelBboxSource";
-const DEBUG_BBOX_FILL_LAYER_ID = "debugPanelBboxFillLayer";
-const DEBUG_BBOX_LAYER_ID = "debugPanelBboxLayer";
-const BACKDROP_BLUE = "#0000ff";
-const BACKDROP_WHITE = "#ffffff";
-const BACKDROP_DARK_MODE = "#181818";
-const CITY_SNAP_MAX_ZOOM = 6;
-const CITY_SNAP_RADIUS_PX = 28;
-const CITY_SNAP_LAYER_IDS = ["label_city_capital", "label_city"] as const;
-const LAYER_MENU_AUTO_CLOSE_MS = 800;
-const LAYER_MENU_FADE_MS = 500;
-const MOBILE_TEXTURE_FALLBACK_LIMIT = 4096;
-const AUTO_ROTATE_DEG_PER_SEC = 3;
 
 function baseZoomForViewportWidth(width: number) {
   if (width <= 480) return 1.0;
@@ -688,6 +689,12 @@ export default function MapLibreGlobe({
       return panelPaddingForViewport(map, panelOpenRef.current);
     }
 
+    function applyCtrlIconStyle(btn: HTMLButtonElement, fontSize: string) {
+      btn.style.fontSize = fontSize;
+      btn.style.lineHeight = "1";
+      btn.style.color = "#111";
+    }
+
     function createHomeControl(): maplibregl.IControl {
       let mapInstance: maplibregl.Map | undefined;
       let container: HTMLDivElement | undefined;
@@ -704,7 +711,7 @@ export default function MapLibreGlobe({
           pitch: initialView.pitch,
           bearing: initialView.bearing,
           padding: { top: 0, right: 0, bottom: 0, left: 0 },
-          duration: 1200,
+          duration: HOME_FLY_DURATION_MS,
           essential: true,
         });
       };
@@ -720,9 +727,7 @@ export default function MapLibreGlobe({
           button.ariaLabel = "Return to initial globe position";
           button.title = "Home";
           button.textContent = "⌂";
-          button.style.fontSize = "26px";
-          button.style.lineHeight = "1";
-          button.style.color = "#111";
+          applyCtrlIconStyle(button, "26px");
           button.addEventListener("click", onClick);
 
           container.appendChild(button);
@@ -903,9 +908,7 @@ export default function MapLibreGlobe({
           button.ariaLabel = "Select map layer";
           button.title = "Layers";
           button.textContent = "◫";
-          button.style.fontSize = "24px";
-          button.style.lineHeight = "1";
-          button.style.color = "#111";
+          applyCtrlIconStyle(button, "24px");
           button.addEventListener("pointerenter", onButtonPointerEnter);
           button.addEventListener("click", onButtonClick);
 
@@ -991,7 +994,7 @@ export default function MapLibreGlobe({
       if (!focusLocationRef.current && isAtBaseZoom) {
         map.easeTo({
           zoom: nextMinZoom,
-          duration: 300,
+          duration: PANEL_TRANSITION_MS,
           essential: true,
         });
       }
@@ -1007,7 +1010,7 @@ export default function MapLibreGlobe({
       const targetLat = snapped?.[1] ?? lat;
 
       if (!markerRef.current) {
-        markerRef.current = new maplibregl.Marker({ color: "#ff0000" })
+        markerRef.current = new maplibregl.Marker({ color: MARKER_COLOR })
           .setLngLat([targetLng, targetLat])
           .addTo(map);
       } else {
@@ -1257,7 +1260,7 @@ export default function MapLibreGlobe({
 
     const { lat, lon } = focusLocation;
     if (!markerRef.current) {
-      markerRef.current = new maplibregl.Marker({ color: "#ff0000" })
+      markerRef.current = new maplibregl.Marker({ color: MARKER_COLOR })
         .setLngLat([lon, lat])
         .addTo(map);
     } else {
@@ -1319,7 +1322,7 @@ export default function MapLibreGlobe({
     if (!focusLocation) return;
     map.easeTo({
       padding: { top: 0, right: 0, bottom: 0, left: 0 },
-      duration: 300,
+      duration: PANEL_TRANSITION_MS,
       essential: true,
     });
   }, [panelOpen, focusLocation]);

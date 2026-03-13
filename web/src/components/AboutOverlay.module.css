@@ -124,9 +124,9 @@
   gap: 8px;
   min-height: 36px;
   padding: 0 14px;
-  border: 1px solid #0000ff;
+  border: 1px solid var(--cta);
   border-radius: 999px;
-  background: #0000ff;
+  background: var(--cta);
   color: #ffffff;
   text-decoration: none;
   font-weight: 400;
@@ -137,8 +137,8 @@
 
 .aboutActionButton:hover,
 .aboutActionButton:focus-visible {
-  background: #001dff;
-  border-color: #001dff;
+  background: var(--cta-hover);
+  border-color: var(--cta-hover);
 }
 
 .aboutActionButtonDisabled,

@@ -14,6 +14,8 @@
   --muted-text: rgba(17, 17, 17, 0.72);
   --overlay-scrim: rgba(29, 95, 255, 0.28);
   --link: #0f50ff;
+  --cta: #0000ff;
+  --cta-hover: #001dff;
   --danger: #b91c1c;
   --control-active-bg: #111111;
   --control-active-fg: #ffffff;
