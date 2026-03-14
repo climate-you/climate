@@ -1,17 +1,3 @@
-Deploy v1:
-
-- tag as `v1.0.0`
-- make github repository public
-- change `The code for this website will soon be available on`
-- enable `Report a bug`
-- copy `registry/` to `data/releases/2026_03_04/registry/` after git pull
-
-Run this after new deploy:
-rg -n "goatcounter|gc.zgo.at" /opt/climate/app/web/.next
-curl -fsS https://climate.you | rg "goatcounter|gc.zgo.at"
-
----
-
 For later:
 
 - Year constants should come from registry.
