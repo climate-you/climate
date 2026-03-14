@@ -29,6 +29,14 @@ export default function AboutOverlay({
   const defaultUnit = defaultTemperatureUnitForLocale();
   const observedWarmingText = `${observedWarmingString(defaultUnit)}`;
   const parisTargetText = defaultUnit === "F" ? "3.6°F" : "2°C";
+  const appVersionText = appVersion ?? "unknown";
+  const assetsReleaseText = assetsRelease ?? "latest";
+  const issueBody = `\n\n---\nApp version: ${appVersionText}\nAssets release: ${assetsReleaseText}`;
+  const issueUrl = `https://github.com/climate-you/climate/issues/new?${new URLSearchParams(
+    {
+      body: issueBody,
+    },
+  ).toString()}`;
 
   return (
     <section
@@ -81,7 +89,7 @@ export default function AboutOverlay({
             migration, and conflict risks.
           </p>
           <p className={styles.aboutText}>
-            The code for this website will soon be available on{" "}
+            The code for this website is available on{" "}
             <a
               href="https://github.com/climate-you/climate"
               target="_blank"
@@ -143,22 +151,22 @@ export default function AboutOverlay({
                 <span className={styles.aboutKofiIcon} aria-hidden="true" />
                 Buy us a coffee
               </a>
-              <button
-                type="button"
-                className={`${styles.aboutActionButton} ${styles.aboutActionButtonDisabled}`}
-                disabled
-                aria-disabled="true"
+              <a
+                className={styles.aboutActionButton}
+                href={issueUrl}
+                target="_blank"
+                rel="noreferrer"
               >
                 <span
                   className={`${styles.aboutActionPngIcon} ${styles.aboutGithubIcon}`}
                   aria-hidden="true"
                 />
                 Report a bug
-              </button>
+              </a>
             </div>
             <p className={`${styles.aboutText} ${styles.aboutVersion}`}>
-              <span>App version: {appVersion ?? "unknown"}</span>
-              <span>Assets release: {assetsRelease ?? "latest"}</span>
+              <span>App version: {appVersionText}</span>
+              <span>Assets release: {assetsReleaseText}</span>
             </p>
           </div>
         </section>
