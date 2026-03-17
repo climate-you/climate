@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from .country import (
+    COUNTRY_CODE_FIELD,
+    NATURAL_EARTH_COUNTRIES_FALLBACK_URLS,
+    NATURAL_EARTH_COUNTRIES_MIRROR_URL,
+    NATURAL_EARTH_COUNTRIES_PRIMARY_URL,
+)
 from .lon import ensure_lon_pm180, ensure_lon_pm180_da, normalize_lon_pm180
 from .marine import (
     MARINE_SOURCE_NATURAL_EARTH,
@@ -14,6 +20,10 @@ __all__ = [
     "ensure_lon_pm180_da",
     "normalize_lon_pm180",
     "normalize_marine_name",
+    "COUNTRY_CODE_FIELD",
+    "NATURAL_EARTH_COUNTRIES_PRIMARY_URL",
+    "NATURAL_EARTH_COUNTRIES_MIRROR_URL",
+    "NATURAL_EARTH_COUNTRIES_FALLBACK_URLS",
     "MARINE_SOURCE_NATURAL_EARTH",
     "NATURAL_EARTH_MARINE_POLYS_PRIMARY_URL",
     "NATURAL_EARTH_MARINE_POLYS_MIRROR_URL",

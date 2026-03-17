@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import csv
 import io
+import json
 import math
 import pickle
 import re
@@ -25,6 +26,10 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 from climate.datasets.sources.http import download_to
+from climate.geo.country import (
+    COUNTRY_CODE_FIELD,
+    NATURAL_EARTH_COUNTRIES_FALLBACK_URLS,
+)
 from climate.geo.marine import (
     MARINE_SOURCE_NATURAL_EARTH,
     NATURAL_EARTH_MARINE_POLYS_MIRROR_URL,
@@ -706,6 +711,126 @@ def write_kdtree(points: List[Tuple[float, float]], out_path: Path) -> None:
         pickle.dump(tree, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
+def build_country_mask(
+    *,
+    output_npz: Path,
+    output_codes_json: Path,
+    deg: float = 0.1,
+    cache_dir: Path,
+    input_path: Optional[Path] = None,
+    code_field: str = COUNTRY_CODE_FIELD,
+) -> None:
+    """
+    Download Natural Earth country polygons and rasterize them into a country_mask.npz
+    for fast point-in-polygon country lookup at runtime.
+
+    NPZ layout (mirrors ocean_mask.npz):
+      - data: 2D uint16 array (nlat × nlon), 0 = unknown/ocean, >0 = country id
+      - deg, lat_max, lon_min: grid parameters
+
+    Companion JSON maps integer ids to ISO 3166-1 alpha-2 codes:
+      {"1": "FR", "2": "BE", ...}
+    """
+    try:
+        from rasterio.features import rasterize
+        from rasterio.transform import from_origin
+    except Exception as exc:
+        raise RuntimeError(
+            "rasterio is required to build the country mask. "
+            "Install with: pip install rasterio"
+        ) from exc
+
+    if input_path is None:
+        zip_name = "ne_50m_admin_0_countries.zip"
+        zip_path = cache_dir / zip_name
+        if not zip_path.exists() or zip_path.stat().st_size == 0:
+            last_err: Optional[Exception] = None
+            for url in NATURAL_EARTH_COUNTRIES_FALLBACK_URLS:
+                try:
+                    print(f"[download] {url} -> {zip_path}", file=sys.stderr)
+                    download_cached(url, cache_dir)
+                    last_err = None
+                    break
+                except Exception as exc:
+                    last_err = exc
+            if last_err is not None:
+                raise RuntimeError(
+                    "Failed to download Natural Earth country polygons from all sources."
+                ) from last_err
+        input_path = zip_path
+
+    read_path: str | Path = (
+        f"zip://{input_path}" if input_path.suffix.lower() == ".zip" else input_path
+    )
+
+    # Assign stable integer ids to each unique ISO country code encountered.
+    code_to_id: Dict[str, int] = {}
+    id_to_code: Dict[int, str] = {}
+    shapes: List[Tuple[Any, int]] = []
+    next_id = 1
+
+    with fiona.open(str(read_path), "r") as src:
+        for feat in src:
+            geom = feat.get("geometry")
+            if not geom:
+                continue
+            props = feat.get("properties") or {}
+            raw_code = str(props.get(code_field) or "").strip().upper()
+            # Natural Earth uses "-99" as a sentinel for unassigned ISO codes.
+            if not raw_code or raw_code == "-99":
+                continue
+            country_id = code_to_id.get(raw_code)
+            if country_id is None:
+                country_id = next_id
+                next_id += 1
+                code_to_id[raw_code] = country_id
+                id_to_code[country_id] = raw_code
+            shapes.append((geom, country_id))
+
+    if not shapes:
+        raise RuntimeError(
+            f"No country shapes loaded from {input_path}. "
+            f"Check --country-code-field (currently {code_field!r})."
+        )
+
+    lat_max = 90.0
+    lon_min = -180.0
+    nlat = int(round((2.0 * lat_max) / deg))
+    nlon = int(round(360.0 / deg))
+    transform = from_origin(lon_min, lat_max, deg, deg)
+
+    mask = rasterize(
+        shapes=shapes,
+        out_shape=(nlat, nlon),
+        transform=transform,
+        fill=0,
+        dtype="uint16",
+        all_touched=False,
+    )
+
+    output_npz.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        output_npz,
+        data=mask.astype(np.uint16, copy=False),
+        deg=np.float64(deg),
+        lat_max=np.float64(lat_max),
+        lon_min=np.float64(lon_min),
+    )
+
+    output_codes_json.parent.mkdir(parents=True, exist_ok=True)
+    codes_payload = {str(k): v for k, v in sorted(id_to_code.items())}
+    output_codes_json.write_text(
+        json.dumps(codes_payload, ensure_ascii=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    print(
+        f"[ok] wrote {output_npz} shape={mask.shape} deg={deg} countries={len(id_to_code)}",
+        file=sys.stderr,
+    )
+    print(f"[ok] wrote {output_codes_json}", file=sys.stderr)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -786,6 +911,50 @@ def main() -> None:
             f"(default: {','.join(sorted(DEFAULT_EXCLUDED_FEATURE_CODES))})."
         ),
     )
+    ap.add_argument(
+        "--write-country-mask",
+        action="store_true",
+        help="Build a country raster mask for country-constrained nearest-location queries.",
+    )
+    ap.add_argument(
+        "--country-mask-path",
+        type=str,
+        default="data/locations/country_mask.npz",
+        help='Country mask NPZ output path (default: "data/locations/country_mask.npz").',
+    )
+    ap.add_argument(
+        "--country-codes-path",
+        type=str,
+        default="data/locations/country_codes.json",
+        help='Country codes JSON output path (default: "data/locations/country_codes.json").',
+    )
+    ap.add_argument(
+        "--country-mask-deg",
+        type=float,
+        default=0.1,
+        help="Grid resolution in degrees for the country mask (default: 0.1 ≈ 11 km).",
+    )
+    ap.add_argument(
+        "--country-input",
+        type=str,
+        default=None,
+        help=(
+            "Optional local country polygons input (GeoJSON/Shapefile/zip). "
+            "If omitted, Natural Earth 50m countries are downloaded."
+        ),
+    )
+    ap.add_argument(
+        "--country-cache-dir",
+        type=str,
+        default="data/cache/geodata",
+        help='Country polygons download cache directory (default: "data/cache/geodata").',
+    )
+    ap.add_argument(
+        "--country-code-field",
+        type=str,
+        default=COUNTRY_CODE_FIELD,
+        help=f'Property field for ISO country code (default: "{COUNTRY_CODE_FIELD}").',
+    )
     args = ap.parse_args()
     excluded_feature_codes = {
         code.strip().upper()
@@ -835,6 +1004,16 @@ def main() -> None:
             raise RuntimeError("KD-tree requested but no points were collected.")
         kdtree_path = Path(args.kdtree_path)
         write_kdtree(points, kdtree_path)
+
+    if args.write_country_mask:
+        build_country_mask(
+            output_npz=Path(args.country_mask_path),
+            output_codes_json=Path(args.country_codes_path),
+            deg=args.country_mask_deg,
+            cache_dir=Path(args.country_cache_dir),
+            input_path=Path(args.country_input) if args.country_input else None,
+            code_field=args.country_code_field,
+        )
 
     excluded_msg = ",".join(sorted(excluded_feature_codes)) or "(none)"
     print(

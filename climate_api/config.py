@@ -17,6 +17,9 @@ class Settings:
     ocean_names_json: Optional[Path]
     ocean_off_city_max_km: float
     ocean_city_override_max_km: float
+    country_mask_npz: Optional[Path]
+    country_codes_json: Optional[Path]
+    country_constrained_max_km: float
     redis_url: Optional[str]
     ttl_resolve_s: int
     ttl_panel_s: int
@@ -96,6 +99,15 @@ def load_settings() -> Settings:
     ocean_city_override_max_km = float(
         os.environ.get("OCEAN_CITY_OVERRIDE_MAX_KM", "2.0")
     )
+    country_mask_npz = _env_optional_path(
+        "COUNTRY_MASK_NPZ", repo_root / "data" / "locations" / "country_mask.npz"
+    )
+    country_codes_json = _env_optional_path(
+        "COUNTRY_CODES_JSON", repo_root / "data" / "locations" / "country_codes.json"
+    )
+    country_constrained_max_km = float(
+        os.environ.get("COUNTRY_CONSTRAINED_MAX_KM", "100.0")
+    )
     redis_url = os.environ.get("REDIS_URL")  # e.g. redis://localhost:6379/0
     ttl_resolve_s = int(os.environ.get("TTL_RESOLVE_S", "86400"))  # 1 day
     ttl_panel_s = int(os.environ.get("TTL_PANEL_S", "86400"))  # 1 day
@@ -121,6 +133,9 @@ def load_settings() -> Settings:
         ocean_names_json=ocean_names_json,
         ocean_off_city_max_km=ocean_off_city_max_km,
         ocean_city_override_max_km=ocean_city_override_max_km,
+        country_mask_npz=country_mask_npz,
+        country_codes_json=country_codes_json,
+        country_constrained_max_km=country_constrained_max_km,
         redis_url=redis_url,
         ttl_resolve_s=ttl_resolve_s,
         ttl_panel_s=ttl_panel_s,

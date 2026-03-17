@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from ..cache import Cache
+from .country_classifier import CountryClassifier
 from .ocean_classifier import OceanClassifier
 
 
@@ -76,6 +77,8 @@ class PlaceResolver:
         ocean_classifier: OceanClassifier | None = None,
         ocean_off_city_max_km: float = 80.0,
         ocean_city_override_max_km: float = 2.0,
+        country_classifier: CountryClassifier | None = None,
+        country_constrained_max_km: float = 100.0,
         cache: Cache | None = None,
         ttl_resolve_s: int = 86400,
         round_decimals: int = 3,
@@ -87,6 +90,8 @@ class PlaceResolver:
         self.ocean_classifier = ocean_classifier
         self.ocean_off_city_max_km = float(ocean_off_city_max_km)
         self.ocean_city_override_max_km = float(ocean_city_override_max_km)
+        self.country_classifier = country_classifier
+        self.country_constrained_max_km = float(country_constrained_max_km)
         self._logger = logging.getLogger("uvicorn.error")
 
         df = pd.read_csv(self.locations_csv)
@@ -173,6 +178,26 @@ class PlaceResolver:
             self.locations_csv,
             len(df),
         )
+
+        # Build per-country index for the 2-step country-constrained lookup.
+        self._country_lats: dict[str, np.ndarray] = {}
+        self._country_lons: dict[str, np.ndarray] = {}
+        self._country_idxs: dict[str, np.ndarray] = {}
+        if self.country_classifier is not None:
+            for cc in np.unique(self._country_codes):
+                if not cc:
+                    continue
+                mask = self._country_codes == cc
+                idxs = np.where(mask)[0]
+                self._country_lats[cc] = self._lats[idxs]
+                self._country_lons[cc] = self._lons[idxs]
+                self._country_idxs[cc] = idxs
+            self._logger.info(
+                "PlaceResolver: country-constrained lookup enabled (%d countries, fallback at %.1f km)",
+                len(self._country_lats),
+                self.country_constrained_max_km,
+            )
+
         if self.ocean_classifier is not None:
             self._logger.info(
                 "PlaceResolver: ocean labeling enabled (city override <= %.1f km, off-city <= %.1f km)",
@@ -206,14 +231,32 @@ class PlaceResolver:
                     ),
                 )
 
-        if self._kdtree_ready and self._kdtree is not None:
-            _, i = self._kdtree.query([lat, lon], k=1)
-            i = int(i)
-            dist = None
-        else:
-            d = _haversine_km_vec(lat, lon, self._lats, self._lons)
-            i = int(np.argmin(d))
-            dist = float(d[i])
+        # Step 1: country-constrained nearest (if enabled and country is known).
+        i: int | None = None
+        dist: float | None = None
+        if self.country_classifier is not None:
+            country_code = self.country_classifier.classify(lat, lon)
+            if country_code and country_code in self._country_idxs:
+                c_lats = self._country_lats[country_code]
+                c_lons = self._country_lons[country_code]
+                c_idxs = self._country_idxs[country_code]
+                d_c = _haversine_km_vec(lat, lon, c_lats, c_lons)
+                best = int(np.argmin(d_c))
+                dist_c = float(d_c[best])
+                if dist_c <= self.country_constrained_max_km:
+                    i = int(c_idxs[best])
+                    dist = dist_c
+
+        # Step 2: fall back to unconstrained nearest (KD-tree or full scan).
+        if i is None:
+            if self._kdtree_ready and self._kdtree is not None:
+                _, i = self._kdtree.query([lat, lon], k=1)
+                i = int(i)
+                dist = None
+            else:
+                d = _haversine_km_vec(lat, lon, self._lats, self._lons)
+                i = int(np.argmin(d))
+                dist = float(d[i])
 
         geonameid = int(self._ids[i])
 

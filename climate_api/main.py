@@ -29,6 +29,7 @@ from .services.panels import (
     build_panel_tiles_registry,
     build_scored_panels_tiles_registry,
 )
+from .store.country_classifier import CountryClassifier
 from .store.location_index import LocationIndex
 from .store.ocean_classifier import OceanClassifier
 from .store.place_resolver import PlaceResolver
@@ -87,12 +88,29 @@ def create_app() -> FastAPI:
         except Exception as exc:
             uvicorn_logger.warning("Ocean classifier disabled: %s", exc)
 
+    country_classifier = None
+    if settings.country_mask_npz is not None:
+        try:
+            country_classifier = CountryClassifier(
+                settings.country_mask_npz,
+                settings.country_codes_json,
+            )
+            uvicorn_logger.info(
+                "Country classifier enabled: mask=%s codes=%s",
+                settings.country_mask_npz,
+                settings.country_codes_json,
+            )
+        except Exception as exc:
+            uvicorn_logger.warning("Country classifier disabled: %s", exc)
+
     place_resolver = PlaceResolver(
         locations_csv=settings.locations_csv,
         kdtree_path=settings.kdtree_path,
         ocean_classifier=ocean_classifier,
         ocean_off_city_max_km=settings.ocean_off_city_max_km,
         ocean_city_override_max_km=settings.ocean_city_override_max_km,
+        country_classifier=country_classifier,
+        country_constrained_max_km=settings.country_constrained_max_km,
         cache=cache,
         ttl_resolve_s=settings.ttl_resolve_s,
         round_decimals=3,
