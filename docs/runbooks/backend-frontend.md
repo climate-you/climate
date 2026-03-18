@@ -11,7 +11,7 @@ What you are running:
 ## Runtime Inputs
 
 - release assets under `data/releases/<release>/` (series, maps, registry snapshots)
-- location assets under `data/locations/` (resolver index, KD-tree, ocean naming assets)
+- location assets under `data/locations/` (resolver index, KD-tree, ocean mask, country mask)
 - optional Redis instance for cache acceleration: <https://redis.io/docs/latest/>
 
 ## Environment Setup (Recommended)

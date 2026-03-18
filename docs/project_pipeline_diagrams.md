@@ -101,11 +101,12 @@ flowchart TB
     direction LR
     TS["<b>TileDataStore</b><br/>(series tiles + time axes)"]
     LI["<b>LocationIndex</b><br/>(locations.index.csv: city + marine names)"]
-    PR["<b>PlaceResolver</b><br/>(locations.csv + locations.kdtree.pkl: city-only nearest)"]
+    PR["<b>PlaceResolver</b><br/>(locations.csv + locations.kdtree.pkl: country-constrained nearest)"]
     OC["<b>OceanClassifier</b><br/>(ocean_mask.npz + ocean_names.json)"]
+    CC["<b>CountryClassifier</b><br/>(country_mask.npz + country_codes.json)"]
     MAP["<b>Map assets</b><br/>data/releases/<release>/maps/*"]
     CA["<b>Cache</b><br/>(Redis or in-process TTL)"]
-    TS ~~~ LI ~~~ PR ~~~ OC ~~~ MAP ~~~ CA
+    TS ~~~ LI ~~~ PR ~~~ OC ~~~ CC ~~~ MAP ~~~ CA
   end
 
   E1 --> R
@@ -131,7 +132,7 @@ flowchart TB
 
   class E1,E2,E3,E4,E5,E6,E7 endpoint;
   class R,PG,LS,AS service;
-  class TS,LI,PR,OC,MAP,CA data;
+  class TS,LI,PR,OC,CC,MAP,CA data;
 
   style E fill:#F3F8FF,stroke:#6D9EEB,stroke-width:1.5px;
   style A fill:#FFF7EF,stroke:#E3A36E,stroke-width:1.5px;
