@@ -533,6 +533,12 @@ export default function ExplorerPage({
   }, [activeLayer?.label, activeLayerId, trackGoatEvent]);
 
   useEffect(() => {
+    if (sessionStorage.getItem("session_reported")) return;
+    sessionStorage.setItem("session_reported", "1");
+    fetch(`${apiBase}/api/events/session`, { method: "POST" }).catch(() => {});
+  }, [apiBase]);
+
+  useEffect(() => {
     setGraphPage((prev) => Math.min(prev, maxGraphPage));
   }, [maxGraphPage]);
 
@@ -666,6 +672,11 @@ export default function ExplorerPage({
   }
 
   function applyLocation(item: AutocompleteItem) {
+    fetch(`${apiBase}/api/events/click`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat: item.lat, lon: item.lon }),
+    }).catch(() => {});
     queueGraphRestoreFromVisible();
     setLat(item.lat);
     setLon(item.lon);
@@ -682,6 +693,11 @@ export default function ExplorerPage({
   }
 
   async function handlePick(la: number, lo: number) {
+    fetch(`${apiBase}/api/events/click`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat: la, lon: lo }),
+    }).catch(() => {});
     queueGraphRestoreFromVisible();
     setLat(la);
     setLon(lo);

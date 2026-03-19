@@ -5,6 +5,14 @@ example.com {
   # Optional local snippets (e.g. beta auth gate).
   import /etc/caddy/conf.d/*.caddy
 
+  # Admin pages: require basic auth before routing.
+  # Set ADMIN_USER and ADMIN_PASSWORD_HASH (bcrypt) in the environment.
+  # Generate hash with: caddy hash-password
+  @admin path /admin* /api/admin/*
+  basicauth @admin {
+    {$ADMIN_USER} {$ADMIN_PASSWORD_HASH}
+  }
+
   # Basic security headers
   header {
     Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"

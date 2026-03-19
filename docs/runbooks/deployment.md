@@ -219,8 +219,10 @@ Set production values for:
 - `SITE_URL`
 - `NEXT_PUBLIC_CLIMATE_API_BASE`
 - `NEXT_PUBLIC_MAP_ASSET_BASE`
-- `GOATCOUNTER_ENDPOINT` (optional; leave unset to disable analytics)
+- `GOATCOUNTER_ENDPOINT` (optional; leave unset to disable GoatCounter analytics)
 - release/data paths if custom
+- `ANALYTICS_ENABLED=1` to enable the analytics event recording (off by default)
+- `ANALYTICS_DB_PATH` (defaults to `<REPO_ROOT>/data/analytics/events.db`; the directory is created automatically on first write)
 
 For IP-only testing, use:
 
@@ -233,6 +235,47 @@ Then reload services:
 
 ```bash
 sudo systemctl restart climate-backend climate-web caddy
+```
+
+## 8b) Set Admin Credentials (for `/admin` page)
+
+The `/admin` analytics page and the `/api/admin/*` endpoints are protected by Caddy basic auth. The credentials are passed to Caddy as environment variables — they are **not** stored in the application env file.
+
+Generate a bcrypt password hash (run on the VM or locally):
+
+```bash
+caddy hash-password
+# enter your chosen password at the prompt; copy the printed hash
+```
+
+Set the variables in the Caddy environment. The safest approach is a systemd override:
+
+```bash
+sudo systemctl edit caddy
+```
+
+Add:
+
+```ini
+[Service]
+Environment="ADMIN_USER=admin"
+Environment="ADMIN_PASSWORD_HASH=$2a$14$..."
+```
+
+Then reload:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart caddy
+```
+
+Verify the gate works:
+
+```bash
+# should return 401
+curl -fsS http://127.0.0.1/admin
+# should return the page
+curl -u admin:<your-password> http://127.0.0.1/admin
 ```
 
 ## 9) Verify IP-based Runtime
@@ -413,6 +456,7 @@ Alert thresholds (initial):
 - backend and web running as non-root `climate` user
 - unattended upgrades enabled
 - fail2ban + ufw active
+- `/admin` and `/api/admin/*` protected by Caddy basic auth (`ADMIN_USER` / `ADMIN_PASSWORD_HASH` set in Caddy environment)
 
 ## 16) Notes
 

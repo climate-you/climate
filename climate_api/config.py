@@ -31,6 +31,9 @@ class Settings:
     rate_limit_burst: int
     rate_limit_window_s: int
     repo_root: Path = Path(".")
+    analytics_db_path: Path = Path("data/analytics/events.db")
+    analytics_enabled: bool = False
+    geoip_cache_ttl_s: int = 3600
 
 
 _FALSY_STRINGS = {"", "none", "null", "0", "false"}
@@ -122,6 +125,14 @@ def load_settings() -> Settings:
     rate_limit_burst = int(os.environ.get("RATE_LIMIT_BURST", "20"))
     rate_limit_window_s = int(os.environ.get("RATE_LIMIT_WINDOW_S", "10"))
 
+    analytics_db_path = Path(
+        os.environ.get(
+            "ANALYTICS_DB_PATH", repo_root / "data" / "analytics" / "events.db"
+        )
+    )
+    analytics_enabled = _env_bool("ANALYTICS_ENABLED", False)
+    geoip_cache_ttl_s = int(os.environ.get("GEOIP_CACHE_TTL_S", "3600"))
+
     return Settings(
         release=release,
         releases_root=releases_root,
@@ -147,4 +158,7 @@ def load_settings() -> Settings:
         rate_limit_burst=rate_limit_burst,
         rate_limit_window_s=rate_limit_window_s,
         repo_root=repo_root,
+        analytics_db_path=analytics_db_path,
+        analytics_enabled=analytics_enabled,
+        geoip_cache_ttl_s=geoip_cache_ttl_s,
     )

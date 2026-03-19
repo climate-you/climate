@@ -112,6 +112,38 @@ export REDIS_URL="redis://localhost:6379/0"
 ./scripts/api_backend.sh
 ```
 
+## Optional Analytics Recording
+
+Analytics event recording (map clicks and session origins) is **disabled by default** locally. Enable it when you need to test the analytics pipeline before deploying to production:
+
+```bash
+./scripts/api_backend.sh --analytics
+```
+
+Equivalent environment variable:
+
+```bash
+export ANALYTICS_ENABLED=1
+./scripts/api_backend.sh
+```
+
+When enabled, events are written to `data/analytics/events.db` (created automatically). The admin dashboard is then accessible at `http://localhost:3000/admin` — note that Caddy basic auth only applies in production; locally Next.js serves the page without a password gate.
+
+### GeoIP override for local testing
+
+Locally, session events are recorded with a null location because `127.0.0.1` cannot be geolocated. To test with a real location, override the IP used for GeoIP lookup:
+
+```bash
+export GEOIP_TEST_IP=<your.public.ip>
+./scripts/api_backend.sh --analytics
+```
+
+Unset after testing:
+
+```bash
+unset GEOIP_TEST_IP
+```
+
 ## Optional Score-Map Preload
 
 Score-map preload is independent from Redis configuration. Enable it when you want startup-time preloading behavior for score maps.

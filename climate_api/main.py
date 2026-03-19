@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import logging
+import os
+import resource
+import shutil
 import time
 from collections import defaultdict, deque
 from threading import Lock
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Response
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from uvicorn.logging import AccessFormatter
 
+from .analytics.db import AnalyticsDB
+from .analytics.geo import GeoIPCache
 from .cache import Cache, make_redis_client
 from .config import load_settings
 from .logging import configure_access_logger, format_access_line
@@ -33,9 +39,16 @@ from .store.country_classifier import CountryClassifier
 from .store.location_index import LocationIndex
 from .store.ocean_classifier import OceanClassifier
 from .store.place_resolver import PlaceResolver
+from .system_stats import current_rss_bytes, system_memory
 from .versioning import resolve_app_version
 
 logging.getLogger("uvicorn.access").disabled = True
+
+
+
+class _ClickBody(BaseModel):
+    lat: float
+    lon: float
 
 
 def _normalize_lon(lon: float) -> float:
@@ -117,10 +130,17 @@ def create_app() -> FastAPI:
     )
     location_index = LocationIndex(settings.locations_index_csv)
 
+    analytics_db = AnalyticsDB(settings.analytics_db_path)
+    geoip_cache = GeoIPCache(ttl_s=settings.geoip_cache_ttl_s)
+
     app = FastAPI(title="Climate API", version="0.1")
     access_logger = configure_access_logger()
     ip_windows: dict[str, deque[float]] = defaultdict(deque)
     ip_windows_lock = Lock()
+    # Rolling CPU samples: (wall_time, cpu_user+sys_seconds). maxlen=20 gives
+    # ~5 min history at a 15-second poll interval.
+    cpu_samples: deque[tuple[float, float]] = deque(maxlen=20)
+    cpu_samples_lock = Lock()
     release_resolver = ReleaseResolver(settings=settings, logger=uvicorn_logger)
     warm_release: str | None = None
     if settings.score_map_preload:
@@ -144,6 +164,23 @@ def create_app() -> FastAPI:
         settings.release,
         warm_release,
     )
+    if settings.analytics_enabled:
+        uvicorn_logger.info(
+            "Analytics enabled: db=%s geoip_cache_ttl=%ds",
+            settings.analytics_db_path,
+            settings.geoip_cache_ttl_s,
+        )
+    else:
+        uvicorn_logger.info(
+            "Analytics disabled (set ANALYTICS_ENABLED=1 to enable)."
+        )
+    geoip_test_ip = os.environ.get("GEOIP_TEST_IP", "").strip()
+    if geoip_test_ip:
+        uvicorn_logger.warning(
+            "GEOIP_TEST_IP is set (%s) — GeoIP lookups are overridden. "
+            "Unset this variable before deploying to production.",
+            geoip_test_ip,
+        )
 
     @app.middleware("http")
     async def access_log_with_timing(request: Request, call_next):
@@ -201,6 +238,91 @@ def create_app() -> FastAPI:
     @app.get("/healthz")
     def healthz():
         return {"status": "ok"}
+
+    @app.post("/api/events/session", status_code=204)
+    def record_session(request: Request):
+        if not settings.analytics_enabled:
+            return Response(status_code=204)
+        # GEOIP_TEST_IP overrides the resolved IP (local dev only; unset after testing)
+        test_ip = os.environ.get("GEOIP_TEST_IP", "").strip()
+        if test_ip:
+            ip = test_ip
+        else:
+            forwarded = request.headers.get("x-forwarded-for")
+            ip = forwarded.split(",")[0].strip() if forwarded else (
+                request.client.host if request.client else ""
+            )
+        country, lat, lon = geoip_cache.lookup(ip) if ip else (None, None, None)
+        analytics_db.record_session(country, lat, lon)
+        return Response(status_code=204)
+
+    @app.post("/api/events/click", status_code=204)
+    def record_click(body: _ClickBody):
+        if not settings.analytics_enabled:
+            return Response(status_code=204)
+        analytics_db.record_click(body.lat, body.lon)
+        return Response(status_code=204)
+
+    @app.get("/api/admin/events")
+    def get_admin_events():
+        return {
+            "clicks": analytics_db.get_click_aggregates(),
+            "origins": analytics_db.get_session_aggregates(),
+        }
+
+    @app.get("/api/admin/status")
+    def get_admin_status():
+        now_wall = time.time()
+        rusage = resource.getrusage(resource.RUSAGE_SELF)
+        now_cpu = rusage.ru_utime + rusage.ru_stime
+
+        with cpu_samples_lock:
+            cpu_samples.append((now_wall, now_cpu))
+            cutoff = now_wall - 60.0
+            baseline = next(((t, c) for t, c in cpu_samples if t >= cutoff), None)
+
+        cpu_1m_pct: float | None = None
+        if baseline is not None and baseline[0] < now_wall:
+            wall_delta = now_wall - baseline[0]
+            cpu_delta = now_cpu - baseline[1]
+            cpu_1m_pct = round(min(100.0, (cpu_delta / wall_delta) * 100.0), 1)
+
+        disk = shutil.disk_usage(settings.repo_root)
+        db_size_bytes = (
+            settings.analytics_db_path.stat().st_size
+            if settings.analytics_db_path.exists()
+            else None
+        )
+        try:
+            resolved_release = release_resolver.resolve_release_alias(settings.release)
+        except Exception:
+            resolved_release = settings.release
+        return {
+            "app": {
+                "version": app_version_info.app_version,
+                "tag": app_version_info.app_tag,
+                "commit": app_version_info.app_commit,
+            },
+            "release": resolved_release,
+            "analytics": {
+                "enabled": settings.analytics_enabled,
+                "db_size_bytes": db_size_bytes,
+            },
+            "system": {
+                "disk_total_bytes": disk.total,
+                "disk_used_bytes": disk.used,
+                "disk_free_bytes": disk.free,
+                "rss_bytes": current_rss_bytes(),
+                "cpu_1m_pct": cpu_1m_pct,
+                **({
+                    "mem_total_bytes": sys_mem["total"],
+                    "mem_available_bytes": sys_mem["available"],
+                } if (sys_mem := system_memory()) else {
+                    "mem_total_bytes": None,
+                    "mem_available_bytes": None,
+                }),
+            },
+        }
 
     @app.get("/api/v/{release}/release", response_model=ReleaseResolveResponse)
     def resolve_release(release: str):

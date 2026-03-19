@@ -11,6 +11,7 @@ Options:
   --no-reload           Disable autoreload (required for multi-worker mode).
   --redis-url URL       Export REDIS_URL before starting uvicorn.
   --score-map-preload   Export SCORE_MAP_PRELOAD=1 before starting uvicorn.
+  --analytics           Export ANALYTICS_ENABLED=1 before starting uvicorn.
   --help                Show this help and exit.
 
 Environment overrides:
@@ -29,6 +30,7 @@ LAN_MODE=0
 RELOAD_MODE=1
 REDIS_URL_VALUE=""
 SCORE_MAP_PRELOAD_VALUE=""
+ANALYTICS_VALUE=""
 EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -57,6 +59,10 @@ while [[ $# -gt 0 ]]; do
       SCORE_MAP_PRELOAD_VALUE="1"
       shift
       ;;
+    --analytics)
+      ANALYTICS_VALUE="1"
+      shift
+      ;;
     --help|-h)
       usage
       exit 0
@@ -80,6 +86,9 @@ if [[ -n "$REDIS_URL_VALUE" ]]; then
 fi
 if [[ -n "$SCORE_MAP_PRELOAD_VALUE" ]]; then
   export SCORE_MAP_PRELOAD="$SCORE_MAP_PRELOAD_VALUE"
+fi
+if [[ -n "$ANALYTICS_VALUE" ]]; then
+  export ANALYTICS_ENABLED="$ANALYTICS_VALUE"
 fi
 
 API_PORT="${API_PORT:-8001}"
