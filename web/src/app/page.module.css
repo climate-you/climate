@@ -704,6 +704,10 @@
   height: 50px;
 }
 
+.panelScrollArrowNext svg {
+  transform: rotate(180deg);
+}
+
 .graphTitle {
   font-size: 15px;
   font-weight: 600;
@@ -893,7 +897,27 @@
   }
 
   .panelScrollNav {
-    display: none;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    position: absolute;
+    right: 14px;
+    bottom: 2px;
+    z-index: 30;
+    pointer-events: none;
+  }
+
+  .panelScrollArrowPrev svg {
+    transform: rotate(-90deg);
+    width: 12px;
+    height: 30px;
+  }
+
+  .panelScrollArrowNext svg {
+    transform: rotate(90deg);
+    width: 12px;
+    height: 30px;
   }
 
   .panelStepDot {
@@ -919,6 +943,12 @@
   .searchMetaLink {
     width: var(--meta-dock-width);
     text-align: center;
+  }
+}
+
+@container panel (max-width: 280px) {
+  .panelScrollNav {
+    display: none;
   }
 }
 

@@ -1327,7 +1327,7 @@ export default function ExplorerPage({
           <div className={styles.panelScrollNav}>
             <button
               type="button"
-              className={styles.panelScrollArrow}
+              className={`${styles.panelScrollArrow} ${styles.panelScrollArrowPrev}`}
               aria-label="Previous graphs"
               onClick={() => {
                 const next = graphPage > 0 ? graphPage - 1 : maxGraphPage;
@@ -1349,7 +1349,7 @@ export default function ExplorerPage({
             </button>
             <button
               type="button"
-              className={styles.panelScrollArrow}
+              className={`${styles.panelScrollArrow} ${styles.panelScrollArrowNext}`}
               aria-label="Next graphs"
               onClick={() => {
                 const next = graphPage < maxGraphPage ? graphPage + 1 : 0;
@@ -1365,7 +1365,6 @@ export default function ExplorerPage({
                 height="35"
                 fill="currentColor"
                 aria-hidden="true"
-                style={{ transform: "rotate(180deg)" }}
               >
                 <polygon points="0,7.91 6.94,0.34 7.26,0 7.57,0.34 14.51,7.91 14.04,8.35 7.57,1.3 7.57,35.1 6.94,35.1 6.94,1.3 0.47,8.35" />
               </svg>
