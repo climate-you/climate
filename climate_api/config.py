@@ -19,6 +19,7 @@ class Settings:
     ocean_city_override_max_km: float
     country_mask_npz: Optional[Path]
     country_codes_json: Optional[Path]
+    country_names_json: Optional[Path]
     country_constrained_max_km: float
     redis_url: Optional[str]
     ttl_resolve_s: int
@@ -105,6 +106,9 @@ def load_settings() -> Settings:
     country_codes_json = _env_optional_path(
         "COUNTRY_CODES_JSON", repo_root / "data" / "locations" / "country_codes.json"
     )
+    country_names_json = _env_optional_path(
+        "COUNTRY_NAMES_JSON", repo_root / "data" / "locations" / "country_names.json"
+    )
     country_constrained_max_km = float(
         os.environ.get("COUNTRY_CONSTRAINED_MAX_KM", "100.0")
     )
@@ -135,6 +139,7 @@ def load_settings() -> Settings:
         ocean_city_override_max_km=ocean_city_override_max_km,
         country_mask_npz=country_mask_npz,
         country_codes_json=country_codes_json,
+        country_names_json=country_names_json,
         country_constrained_max_km=country_constrained_max_km,
         redis_url=redis_url,
         ttl_resolve_s=ttl_resolve_s,

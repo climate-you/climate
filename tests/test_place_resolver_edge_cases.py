@@ -36,6 +36,14 @@ class _KDTree:
         return 0.0, self._index
 
 
+class _AlwaysCountry:
+    def __init__(self, code: str) -> None:
+        self._code = code
+
+    def classify(self, lat: float, lon: float) -> str | None:
+        return self._code
+
+
 class _AlwaysLand:
     def classify(self, lat: float, lon: float) -> OceanHit:
         return OceanHit(in_water=False, ocean_id=0, ocean_name=None)
@@ -125,6 +133,39 @@ def test_place_resolver_kdtree_paths(tmp_path: Path) -> None:
     )
     place_fallback = resolver_fallback.resolve_place(10.1, 20.1)
     assert place_fallback.geonameid in {1, 2}
+
+
+def test_place_resolver_country_name_fallback_for_no_city_country(
+    tmp_path: Path,
+) -> None:
+    csv_path = tmp_path / "locations.csv"
+    _write_locations(csv_path)
+    # "ZZ" is a country code with no cities in the index.
+    resolver = PlaceResolver(
+        locations_csv=csv_path,
+        country_classifier=_AlwaysCountry("ZZ"),
+        country_names={"ZZ": "Nowhere Land"},
+        cache=None,
+    )
+    place = resolver.resolve_place(-78.0, 16.0)
+    assert place.label == "Nowhere Land"
+
+
+def test_place_resolver_country_name_fallback_unknown_code_falls_through(
+    tmp_path: Path,
+) -> None:
+    csv_path = tmp_path / "locations.csv"
+    _write_locations(csv_path)
+    # "ZZ" has no cities and no entry in country_names → falls through to global search.
+    resolver = PlaceResolver(
+        locations_csv=csv_path,
+        country_classifier=_AlwaysCountry("ZZ"),
+        country_names={"AQ": "Antarctica"},
+        cache=None,
+    )
+    place = resolver.resolve_place(-78.0, 16.0)
+    assert place.label != "Antarctica"
+    assert place.geonameid in {1, 2}
 
 
 def test_place_resolver_ocean_open_ocean_label_and_city_fallback(
