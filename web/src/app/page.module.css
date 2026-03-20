@@ -301,6 +301,8 @@
 }
 
 .locationPanel {
+  container-type: size;
+  container-name: panel;
   position: absolute;
   top: 50%;
   right: 2%;
@@ -388,7 +390,7 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  width: calc(100% - 120px);
+  width: calc(100% - 36px);
   box-sizing: border-box;
   position: relative;
   z-index: 12;
@@ -532,13 +534,13 @@
   z-index: 9;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   padding: 16px 16px 16px;
 }
 
 .panelStepDot {
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   padding: 0;
   border-radius: 999px;
   border: 1.5px solid var(--surface-border-strong);
@@ -561,7 +563,10 @@
 }
 
 .unitControl {
-  position: static;
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  z-index: 10;
 }
 
 .unitToggle {
@@ -659,6 +664,44 @@
 .panelViewport {
   height: 100%;
   overflow: hidden;
+  position: relative;
+}
+
+.panelScrollNav {
+  display: none;
+}
+
+@container panel (min-height: 430px) {
+  .panelScrollNav {
+    position: absolute;
+    right: 16px;
+    bottom: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    z-index: 30;
+    pointer-events: none;
+  }
+}
+
+.panelScrollArrow {
+  pointer-events: auto;
+  background: none;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  transition: opacity 140ms ease;
+}
+
+.panelScrollArrow svg {
+  width: 20px;
+  height: 50px;
 }
 
 .graphTitle {
@@ -845,10 +888,21 @@
   }
 
   .unitControl {
-    position: absolute;
-    right: 14px;
+    left: 14px;
     bottom: 14px;
-    z-index: 10;
+  }
+
+  .panelScrollNav {
+    display: none;
+  }
+
+  .panelStepDot {
+    width: 10px;
+    height: 10px;
+  }
+
+  .panelSteps {
+    gap: 8px;
   }
 
   .sourcesLinkDock {
