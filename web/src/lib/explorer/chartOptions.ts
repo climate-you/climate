@@ -406,6 +406,7 @@ export function buildHotDaysOption({
       data: data.map((row) => (row[trendKey] as number | null) ?? null),
       smooth: false,
       showSymbol: false,
+      symbol: "none",
       itemStyle: { color: trendColor },
       lineStyle: { width: 0, color: "rgba(255, 0, 0, 0)" },
       areaStyle: { color: trendColor },
@@ -626,6 +627,7 @@ export function buildTemperatureOption({
         data: points,
         smooth: isTrend ? false : 0.35,
         showSymbol: false,
+        symbol: isTrend ? "none" : undefined,
         connectNulls: true,
         universalTransition: true,
         itemStyle: {
