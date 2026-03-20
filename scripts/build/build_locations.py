@@ -955,6 +955,17 @@ def main() -> None:
         default=COUNTRY_CODE_FIELD,
         help=f'Property field for ISO country code (default: "{COUNTRY_CODE_FIELD}").',
     )
+    ap.add_argument(
+        "--write-country-names",
+        action="store_true",
+        help="Write a country code → name JSON for countries with no populated places.",
+    )
+    ap.add_argument(
+        "--country-names-path",
+        type=str,
+        default="data/locations/country_names.json",
+        help='Country names JSON output path (default: "data/locations/country_names.json").',
+    )
     args = ap.parse_args()
     excluded_feature_codes = {
         code.strip().upper()
@@ -1014,6 +1025,15 @@ def main() -> None:
             input_path=Path(args.country_input) if args.country_input else None,
             code_field=args.country_code_field,
         )
+
+    if args.write_country_names:
+        country_names_path = Path(args.country_names_path)
+        country_names_path.parent.mkdir(parents=True, exist_ok=True)
+        country_names_path.write_text(
+            json.dumps(country_names, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"[ok] wrote {country_names_path}", file=sys.stderr)
 
     excluded_msg = ",".join(sorted(excluded_feature_codes)) or "(none)"
     print(

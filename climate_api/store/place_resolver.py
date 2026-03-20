@@ -79,6 +79,7 @@ class PlaceResolver:
         ocean_city_override_max_km: float = 2.0,
         country_classifier: CountryClassifier | None = None,
         country_constrained_max_km: float = 100.0,
+        country_names: dict[str, str] | None = None,
         cache: Cache | None = None,
         ttl_resolve_s: int = 86400,
         round_decimals: int = 3,
@@ -92,6 +93,7 @@ class PlaceResolver:
         self.ocean_city_override_max_km = float(ocean_city_override_max_km)
         self.country_classifier = country_classifier
         self.country_constrained_max_km = float(country_constrained_max_km)
+        self._country_names: dict[str, str] = country_names or {}
         self._logger = logging.getLogger("uvicorn.error")
 
         df = pd.read_csv(self.locations_csv)
@@ -234,18 +236,23 @@ class PlaceResolver:
         # Step 1: country-constrained nearest (if enabled and country is known).
         i: int | None = None
         dist: float | None = None
+        country_override_label: str | None = None
+        detected_country: str | None = None
         if self.country_classifier is not None:
-            country_code = self.country_classifier.classify(lat, lon)
-            if country_code and country_code in self._country_idxs:
-                c_lats = self._country_lats[country_code]
-                c_lons = self._country_lons[country_code]
-                c_idxs = self._country_idxs[country_code]
-                d_c = _haversine_km_vec(lat, lon, c_lats, c_lons)
-                best = int(np.argmin(d_c))
-                dist_c = float(d_c[best])
-                if dist_c <= self.country_constrained_max_km:
-                    i = int(c_idxs[best])
-                    dist = dist_c
+            detected_country = self.country_classifier.classify(lat, lon)
+            if detected_country:
+                if detected_country in self._country_idxs:
+                    c_lats = self._country_lats[detected_country]
+                    c_lons = self._country_lons[detected_country]
+                    c_idxs = self._country_idxs[detected_country]
+                    d_c = _haversine_km_vec(lat, lon, c_lats, c_lons)
+                    best = int(np.argmin(d_c))
+                    dist_c = float(d_c[best])
+                    if dist_c <= self.country_constrained_max_km:
+                        i = int(c_idxs[best])
+                        dist = dist_c
+                elif self._country_names:
+                    country_override_label = self._country_names.get(detected_country)
 
         # Step 2: fall back to unconstrained nearest (KD-tree or full scan).
         if i is None:
@@ -270,7 +277,7 @@ class PlaceResolver:
             if i < len(self._populations) and int(self._populations[i]) > 0
             else None
         )
-        if self.ocean_classifier is not None:
+        if self.ocean_classifier is not None and not detected_country:
             ocean = self.ocean_classifier.classify(lat, lon)
             if ocean.in_water:
                 population = None
@@ -292,6 +299,9 @@ class PlaceResolver:
         elif dist is None:
             # No ocean classifier configured: keep accurate distance for API payload.
             dist = _haversine_km_pair(lat, lon, self._lats[i], self._lons[i])
+
+        if country_override_label is not None:
+            label = country_override_label
 
         place = Place(
             geonameid=geonameid,

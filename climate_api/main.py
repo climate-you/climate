@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import resource
@@ -116,6 +117,15 @@ def create_app() -> FastAPI:
         except Exception as exc:
             uvicorn_logger.warning("Country classifier disabled: %s", exc)
 
+    country_names: dict[str, str] | None = None
+    if settings.country_names_json is not None and settings.country_names_json.exists():
+        try:
+            country_names = json.loads(
+                settings.country_names_json.read_text(encoding="utf-8")
+            )
+        except Exception as exc:
+            uvicorn_logger.warning("Country names JSON failed to load: %s", exc)
+
     place_resolver = PlaceResolver(
         locations_csv=settings.locations_csv,
         kdtree_path=settings.kdtree_path,
@@ -124,6 +134,7 @@ def create_app() -> FastAPI:
         ocean_city_override_max_km=settings.ocean_city_override_max_km,
         country_classifier=country_classifier,
         country_constrained_max_km=settings.country_constrained_max_km,
+        country_names=country_names,
         cache=cache,
         ttl_resolve_s=settings.ttl_resolve_s,
         round_decimals=3,

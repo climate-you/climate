@@ -8,6 +8,7 @@ What you are building:
 - a fast text index and nearest-neighbor structure for resolver endpoints
 - an ocean mask + ocean-name mapping so sea coordinates can still resolve to readable place labels
 - a country raster mask so nearest-location lookups are constrained to the clicked country before falling back to unconstrained search
+- a country name map so coordinates in countries with no populated places (e.g. Antarctica) still resolve to a readable country label
 
 Where it is used:
 
@@ -39,14 +40,15 @@ You can install Python dependencies manually outside Conda, but this is not reco
 ## Build locations index and KD-tree
 
 ```bash
-python scripts/build/build_locations.py --source cities500 --write-index --write-kdtree --write-country-mask
+python scripts/build/build_locations.py --source cities500 --write-index --write-kdtree --write-country-mask --write-country-names
 ```
 
-`build_locations.py` builds three different location artifacts from different inputs:
+`build_locations.py` builds four different location artifacts from different inputs:
 
 - `locations.csv` + `locations.kdtree.pkl`: city-only (GeoNames populated places), used by nearest-location logic.
 - `locations.index.csv`: city + marine names (Natural Earth marine polygons by default), used by autocomplete/resolve.
 - `country_mask.npz` + `country_codes.json`: country raster mask (Natural Earth 50m country polygons), used by country-constrained nearest-location lookup.
+- `country_names.json`: country code → name map (from GeoNames `countryInfo.txt`), used by nearest-location lookup as a label fallback for countries with no populated places.
 
 By default, when `--write-index` is enabled, marine polygons are read from Natural Earth and merged into the index with synthetic stable IDs. You can override the marine source with:
 
@@ -69,6 +71,7 @@ Primary outputs:
 - `data/locations/locations.kdtree.pkl` (spatial nearest-neighbor index used by nearest-location lookups)
 - `data/locations/country_mask.npz` (raster mask mapping grid cells to country ids, used by country-constrained nearest-location lookup)
 - `data/locations/country_codes.json` (mapping of country ids to ISO 3166-1 alpha-2 codes)
+- `data/locations/country_names.json` (mapping of ISO 3166-1 alpha-2 codes to country names, used as a label fallback for countries with no populated places)
 
 ## Build ocean mask assets
 
