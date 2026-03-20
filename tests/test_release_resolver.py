@@ -26,6 +26,7 @@ def _settings(releases_root: Path) -> Settings:
         ocean_city_override_max_km=2.0,
         country_mask_npz=None,
         country_codes_json=None,
+        country_names_json=None,
         country_constrained_max_km=100.0,
         redis_url=None,
         ttl_resolve_s=60,

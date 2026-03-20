@@ -33,6 +33,7 @@ class Settings:
     rate_limit_window_s: int
     repo_root: Path = Path(".")
     analytics_db_path: Path = Path("data/analytics/events.db")
+    analytics_ip_blocklist: Path = Path("data/analytics/ip_blocklist.txt")
     analytics_enabled: bool = False
     geoip_cache_ttl_s: int = 3600
 
@@ -134,6 +135,12 @@ def load_settings() -> Settings:
             "ANALYTICS_DB_PATH", repo_root / "data" / "analytics" / "events.db"
         )
     )
+    analytics_ip_blocklist = Path(
+        os.environ.get(
+            "ANALYTICS_IP_BLOCKLIST",
+            repo_root / "data" / "analytics" / "ip_blocklist.txt",
+        )
+    )
     analytics_enabled = _env_bool("ANALYTICS_ENABLED", False)
     geoip_cache_ttl_s = int(os.environ.get("GEOIP_CACHE_TTL_S", "3600"))
 
@@ -164,6 +171,7 @@ def load_settings() -> Settings:
         rate_limit_window_s=rate_limit_window_s,
         repo_root=repo_root,
         analytics_db_path=analytics_db_path,
+        analytics_ip_blocklist=analytics_ip_blocklist,
         analytics_enabled=analytics_enabled,
         geoip_cache_ttl_s=geoip_cache_ttl_s,
     )

@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from uvicorn.logging import AccessFormatter
 
-from .analytics.db import AnalyticsDB
+from .analytics.db import AnalyticsDB, IPBlocklist
 from .analytics.geo import GeoIPCache
 from .cache import Cache, make_redis_client
 from .config import load_settings
@@ -143,6 +143,7 @@ def create_app() -> FastAPI:
 
     analytics_db = AnalyticsDB(settings.analytics_db_path)
     geoip_cache = GeoIPCache(ttl_s=settings.geoip_cache_ttl_s)
+    ip_blocklist = IPBlocklist(settings.analytics_ip_blocklist)
 
     app = FastAPI(title="Climate API", version="0.1")
     access_logger = configure_access_logger()
@@ -185,6 +186,20 @@ def create_app() -> FastAPI:
         uvicorn_logger.info(
             "Analytics disabled (set ANALYTICS_ENABLED=1 to enable)."
         )
+    if settings.analytics_enabled:
+        blocklist_count = len(ip_blocklist)
+        if blocklist_count:
+            uvicorn_logger.info(
+                "IP blocklist: %d entr%s loaded from %s",
+                blocklist_count,
+                "y" if blocklist_count == 1 else "ies",
+                settings.analytics_ip_blocklist,
+            )
+        else:
+            uvicorn_logger.info(
+                "IP blocklist: empty (file not found or blank): %s",
+                settings.analytics_ip_blocklist,
+            )
     geoip_test_ip = os.environ.get("GEOIP_TEST_IP", "").strip()
     if geoip_test_ip:
         uvicorn_logger.warning(
@@ -250,26 +265,32 @@ def create_app() -> FastAPI:
     def healthz():
         return {"status": "ok"}
 
+    def _extract_ip(request: Request) -> str:
+        test_ip = os.environ.get("GEOIP_TEST_IP", "").strip()
+        if test_ip:
+            return test_ip
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        return request.client.host if request.client else ""
+
     @app.post("/api/events/session", status_code=204)
     def record_session(request: Request):
         if not settings.analytics_enabled:
             return Response(status_code=204)
-        # GEOIP_TEST_IP overrides the resolved IP (local dev only; unset after testing)
-        test_ip = os.environ.get("GEOIP_TEST_IP", "").strip()
-        if test_ip:
-            ip = test_ip
-        else:
-            forwarded = request.headers.get("x-forwarded-for")
-            ip = forwarded.split(",")[0].strip() if forwarded else (
-                request.client.host if request.client else ""
-            )
+        ip = _extract_ip(request)
+        if ip and ip_blocklist.is_blocked(ip):
+            return Response(status_code=204)
         country, lat, lon = geoip_cache.lookup(ip) if ip else (None, None, None)
         analytics_db.record_session(country, lat, lon)
         return Response(status_code=204)
 
     @app.post("/api/events/click", status_code=204)
-    def record_click(body: _ClickBody):
+    def record_click(body: _ClickBody, request: Request):
         if not settings.analytics_enabled:
+            return Response(status_code=204)
+        ip = _extract_ip(request)
+        if ip and ip_blocklist.is_blocked(ip):
             return Response(status_code=204)
         analytics_db.record_click(body.lat, body.lon)
         return Response(status_code=204)
@@ -313,11 +334,13 @@ def create_app() -> FastAPI:
                 "version": app_version_info.app_version,
                 "tag": app_version_info.app_tag,
                 "commit": app_version_info.app_commit,
+                "branch": app_version_info.app_branch,
             },
             "release": resolved_release,
             "analytics": {
                 "enabled": settings.analytics_enabled,
                 "db_size_bytes": db_size_bytes,
+                "last_event_ts": analytics_db.get_last_event_ts(),
             },
             "system": {
                 "disk_total_bytes": disk.total,

@@ -115,3 +115,38 @@ class AnalyticsDB:
         except Exception:
             logger.exception("Failed to query session aggregates")
             return []
+
+    def get_last_event_ts(self) -> int | None:
+        """Return the Unix timestamp of the most recent click or session event."""
+        try:
+            with self._lock:
+                conn = self._connect()
+                r1 = conn.execute("SELECT MAX(ts) FROM click_events").fetchone()[0]
+                r2 = conn.execute("SELECT MAX(ts) FROM session_events").fetchone()[0]
+            candidates = [t for t in (r1, r2) if t is not None]
+            return max(candidates) if candidates else None
+        except Exception:
+            logger.exception("Failed to query last event ts")
+            return None
+
+
+class IPBlocklist:
+    """Loads a plaintext file of IPs (one per line, # comments allowed) once at startup."""
+
+    def __init__(self, path: Path) -> None:
+        self._ips: frozenset[str] = frozenset()
+        try:
+            if path.exists():
+                self._ips = frozenset(
+                    line.strip()
+                    for line in path.read_text().splitlines()
+                    if line.strip() and not line.startswith("#")
+                )
+        except Exception:
+            logger.exception("Failed to load IP blocklist from %s", path)
+
+    def __len__(self) -> int:
+        return len(self._ips)
+
+    def is_blocked(self, ip: str) -> bool:
+        return ip in self._ips

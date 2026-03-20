@@ -37,9 +37,9 @@ type OriginCell = {
 };
 type AdminEvents = { clicks: ClickCell[]; origins: OriginCell[] };
 type AdminStatus = {
-  app: { version: string; tag: string | null; commit: string | null };
+  app: { version: string; tag: string | null; commit: string | null; branch: string | null };
   release: string;
-  analytics: { enabled: boolean; db_size_bytes: number | null };
+  analytics: { enabled: boolean; db_size_bytes: number | null; last_event_ts: number | null };
   system: {
     disk_total_bytes: number;
     disk_used_bytes: number;
@@ -81,6 +81,14 @@ function toOriginGeoJSON(
 
 function fmt(n: number): string {
   return n.toLocaleString();
+}
+
+function relativeTime(ts: number): string {
+  const sec = Math.floor(Date.now() / 1000) - ts;
+  if (sec < 60) return `${sec}s ago`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
+  return `${Math.floor(sec / 86400)}d ago`;
 }
 
 function fmtBytes(bytes: number): string {
@@ -320,6 +328,7 @@ export default function AdminPage() {
         <Card title="Version">
           <Row label="App" value={status?.app.version ?? "–"} />
           <Row label="Tag" value={status?.app.tag ?? "–"} />
+          <Row label="Branch" value={status?.app.branch ?? "–"} />
           <Row
             label="Commit"
             value={status?.app.commit?.slice(0, 8) ?? "–"}
@@ -387,6 +396,16 @@ export default function AdminPage() {
               value={fmtBytes(status.analytics.db_size_bytes)}
             />
           )}
+          <Row
+            label="Last event"
+            value={
+              status
+                ? status.analytics.last_event_ts != null
+                  ? relativeTime(status.analytics.last_event_ts)
+                  : "none"
+                : "–"
+            }
+          />
         </Card>
       </div>
 

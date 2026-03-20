@@ -13,6 +13,7 @@ class AppVersionInfo:
     app_version: str
     app_tag: str | None
     app_commit: str | None
+    app_branch: str | None
 
 
 def _run_git(*, repo_root: Path, args: list[str]) -> str | None:
@@ -53,16 +54,18 @@ def _select_preferred_tag(tags: list[str]) -> str | None:
 
 def resolve_app_version(*, repo_root: Path) -> AppVersionInfo:
     commit = _run_git(repo_root=repo_root, args=["rev-parse", "--short", "HEAD"])
+    branch = _run_git(repo_root=repo_root, args=["rev-parse", "--abbrev-ref", "HEAD"])
     tags_raw = _run_git(repo_root=repo_root, args=["tag", "--points-at", "HEAD"])
     tags = tags_raw.splitlines() if tags_raw else []
     tag = _select_preferred_tag(tags)
 
     if tag:
-        return AppVersionInfo(app_version=tag, app_tag=tag, app_commit=commit)
+        return AppVersionInfo(app_version=tag, app_tag=tag, app_commit=commit, app_branch=branch)
     if commit:
         return AppVersionInfo(
             app_version=f"dev+{commit}",
             app_tag=None,
             app_commit=commit,
+            app_branch=branch,
         )
-    return AppVersionInfo(app_version="unknown", app_tag=None, app_commit=None)
+    return AppVersionInfo(app_version="unknown", app_tag=None, app_commit=None, app_branch=None)

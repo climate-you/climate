@@ -274,6 +274,7 @@ def _make_settings(tmp_path: Path) -> Settings:
         ocean_city_override_max_km=2.0,
         country_mask_npz=None,
         country_codes_json=None,
+        country_names_json=None,
         country_constrained_max_km=100.0,
         redis_url=None,
         ttl_resolve_s=60,
@@ -286,6 +287,7 @@ def _make_settings(tmp_path: Path) -> Settings:
         rate_limit_burst=20,
         rate_limit_window_s=10,
         analytics_db_path=tmp_path / "analytics" / "events.db",
+        analytics_ip_blocklist=tmp_path / "analytics" / "ip_blocklist.txt",
         analytics_enabled=True,
         geoip_cache_ttl_s=3600,
     )
