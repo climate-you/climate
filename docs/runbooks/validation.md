@@ -13,7 +13,7 @@ What this runbook verifies:
 
 - registry files (`registry/*.json` or `data/releases/<release>/registry/*.json`)
 - release manifest (`data/releases/<release>/manifest.json`)
-- tile/map assets under `data/releases/<release>/`
+- tile/map assets under `data/releases/<release>/` (v1) or `data/artifacts/` (v2)
 - locations assets under `data/locations/` (for API smoke/e2e location calls)
 
 `dev` release behavior:
@@ -103,4 +103,24 @@ Release-focused checks:
 
 ```bash
 python scripts/validate_suite.py --release dev --smoke-only --smoke-n 1
+```
+
+### Validating a v2 release manifest
+
+For v2 releases (artifact-store), pass `--artifacts-root` so the validator can check that referenced artifact directories and their `manifest.json` files exist:
+
+```bash
+python scripts/validate/release_manifest.py \
+  --release 2026_04_01 \
+  --releases-root data/releases \
+  --artifacts-root data/artifacts
+```
+
+Or via the validation suite:
+
+```bash
+python scripts/validate_suite.py \
+  --release 2026_04_01 \
+  --artifacts-root data/artifacts \
+  --skip-smoke
 ```

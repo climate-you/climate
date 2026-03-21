@@ -408,6 +408,7 @@ def create_app() -> FastAPI:
             panels_manifest=context.panels_manifest,
             maps_manifest=context.maps_manifest,
             maps_root=context.maps_root,
+            map_artifact_roots=context.map_artifact_roots or None,
             selected_place=selected_place,
             release_root=context.release_root,
         )
@@ -534,6 +535,40 @@ def create_app() -> FastAPI:
         if not relative_path:
             raise HTTPException(status_code=404, detail="Asset path is required.")
 
+        if release == "latest":
+            cache_control = "no-store"
+        elif canonical_release == "dev":
+            cache_control = "public, max-age=0, must-revalidate"
+        else:
+            cache_control = "public, max-age=31536000, immutable"
+
+        headers = {"Cache-Control": cache_control}
+
+        # For v2 releases, map assets live in the artifact store, not release_root.
+        # Path pattern: maps/<map_id>/<filename>  (no grid_id segment).
+        if canonical_release != "dev":
+            try:
+                context = release_resolver.resolve_release_context(canonical_release)
+            except Exception:
+                context = None
+            if (
+                context is not None
+                and context.format_version >= 2
+                and relative_path.startswith("maps/")
+            ):
+                parts = relative_path.split("/", 2)  # ["maps", map_id, filename]
+                if len(parts) == 3:
+                    _, map_id, filename = parts
+                    artifact_root = context.map_artifact_roots.get(map_id)
+                    if artifact_root is not None:
+                        candidate = (artifact_root / filename).resolve()
+                        if not candidate.exists() or not candidate.is_file():
+                            raise HTTPException(
+                                status_code=404,
+                                detail=f"Asset not found: {relative_path}",
+                            )
+                        return FileResponse(candidate, headers=headers)
+
         candidate = (release_root / relative_path).resolve()
         try:
             candidate.relative_to(release_root)
@@ -545,14 +580,6 @@ def create_app() -> FastAPI:
                 status_code=404, detail=f"Asset not found: {relative_path}"
             )
 
-        if release == "latest":
-            cache_control = "no-store"
-        elif canonical_release == "dev":
-            cache_control = "public, max-age=0, must-revalidate"
-        else:
-            cache_control = "public, max-age=31536000, immutable"
-
-        headers = {"Cache-Control": cache_control}
         return FileResponse(candidate, headers=headers)
 
     return app

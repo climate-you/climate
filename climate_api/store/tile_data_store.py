@@ -78,6 +78,11 @@ class TileDataStore:
 
     tiles_root points at ".../series" so we can build:
       {tiles_root}/{grid_id}/{metric}/z64/rXXX_cYYY.bin.zst
+
+    For v2 artifact-store releases, per_metric_roots maps metric_id to its
+    artifact directory (e.g. data/artifacts/series/<metric_id>/<date>/).
+    When a metric has an entry in per_metric_roots the path is built as:
+      {artifact_root}/z64/rXXX_cYYY.bin.zst  (no grid_id/metric prefix)
     """
 
     tiles_root: Path
@@ -85,6 +90,7 @@ class TileDataStore:
     start_year_fallback: int = 1979  # used only if yearly.json missing
     metrics: dict[str, dict[str, Any]] = field(default_factory=dict)
     grids: dict[str, GridSpec] = field(default_factory=dict)
+    per_metric_roots: dict[str, Path] = field(default_factory=dict)
 
     @classmethod
     def discover(
@@ -204,6 +210,14 @@ class TileDataStore:
         if not axis_name:
             axis_name = "yearly"
 
+        # v2 artifact store: per-metric root with no grid_id/metric prefix
+        artifact_root = self.per_metric_roots.get(metric)
+        if artifact_root is not None:
+            p = artifact_root / "time" / f"{axis_name}.json"
+            if p.exists():
+                return json.loads(p.read_text(encoding="utf-8"))
+            return []
+
         grid = self._metric_grid(metric)
         p = self.tiles_root / grid.grid_id / metric / "time" / f"{axis_name}.json"
         if p.exists():
@@ -243,6 +257,12 @@ class TileDataStore:
     def _metric_tile_path(self, metric: str, tile_r: int, tile_c: int) -> Path:
         grid = self._metric_grid(metric)
         ext = self._metric_tile_ext(metric)
+        artifact_root = self.per_metric_roots.get(metric)
+        if artifact_root is not None:
+            # v2: artifact dir is the root; no grid_id/metric prefix
+            zdir = f"z{int(grid.tile_size)}"
+            fname = f"r{int(tile_r):03d}_c{int(tile_c):03d}{ext}"
+            return artifact_root / zdir / fname
         return tile_path(
             self.tiles_root,
             grid,

@@ -36,6 +36,7 @@ class Settings:
     analytics_ip_blocklist: Path = Path("data/analytics/ip_blocklist.txt")
     analytics_enabled: bool = False
     geoip_cache_ttl_s: int = 3600
+    artifacts_root: Optional[Path] = None
 
 
 _FALSY_STRINGS = {"", "none", "null", "0", "false"}
@@ -143,6 +144,10 @@ def load_settings() -> Settings:
     )
     analytics_enabled = _env_bool("ANALYTICS_ENABLED", False)
     geoip_cache_ttl_s = int(os.environ.get("GEOIP_CACHE_TTL_S", "3600"))
+    # Default: sibling of releases_root (e.g. data/releases/../artifacts = data/artifacts)
+    artifacts_root = Path(
+        os.environ.get("ARTIFACTS_ROOT", releases_root.parent / "artifacts")
+    )
 
     return Settings(
         release=release,
@@ -174,4 +179,5 @@ def load_settings() -> Settings:
         analytics_ip_blocklist=analytics_ip_blocklist,
         analytics_enabled=analytics_enabled,
         geoip_cache_ttl_s=geoip_cache_ttl_s,
+        artifacts_root=artifacts_root,
     )

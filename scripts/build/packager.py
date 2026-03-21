@@ -10,7 +10,6 @@ from climate.registry.metrics import DEFAULT_METRICS_PATH, DEFAULT_SCHEMA_PATH
 from climate.registry.maps import DEFAULT_MAPS_PATH, DEFAULT_MAPS_SCHEMA_PATH
 from climate.registry.panels import DEFAULT_PANELS_PATH, DEFAULT_PANELS_SCHEMA_PATH
 
-
 def _parse_ids(ids_csv: str | None, ids_list: list[str]) -> list[str] | None:
     ids: list[str] = []
     if ids_csv:
@@ -96,16 +95,17 @@ def main() -> None:
 
     args = ap.parse_args()
 
-    out_root = args.out_root
-    if out_root is None:
-        out_root = Path("data/releases") / args.release / "series"
-
     metric_ids = _parse_ids(args.metrics, args.metric)
     map_ids = _parse_ids(args.maps, args.map)
     if args.all_maps and map_ids:
         raise SystemExit("Do not combine --all-maps with --maps/--map.")
     if args.all_maps:
         map_ids = None
+
+    out_root = args.out_root
+    if out_root is None:
+        out_root = Path("data/releases") / args.release / "series"
+
     tile_range = _parse_tile_range(args)
 
     package_registry(
@@ -144,6 +144,7 @@ def main() -> None:
         all_maps=args.all_maps,
         skip_maps=args.skip_maps,
     )
+
 
 
 if __name__ == "__main__":

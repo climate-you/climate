@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import functools
+import json
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,9 @@ class ReleaseContext:
     maps_manifest: dict[str, Any]
     maps_root: Path
     layers: list[dict[str, Any]]
+    format_version: int = 1
+    # v2 only: maps map_id -> absolute artifact dir (data/artifacts/maps/<map_id>/<date>/)
+    map_artifact_roots: dict[str, Path] = field(default_factory=dict)
 
 
 def _resolve_texture_file_format(map_spec: dict[str, Any]) -> str:
@@ -230,6 +234,8 @@ def _build_release_layers(
     maps_manifest: dict[str, Any],
     metrics_manifest: dict[str, Any],
     maps_root: Path | None = None,
+    map_artifact_roots: dict[str, Path] | None = None,
+    format_version: int = 1,
 ) -> list[dict[str, Any]]:
     maps = {
         key: spec
@@ -271,11 +277,16 @@ def _build_release_layers(
             filename_key="mobile_filename",
         )
         output = map_spec.get("output", {}) or {}
+        if format_version >= 2 and map_artifact_roots and map_id in map_artifact_roots:
+            # v2: asset_path is relative to the artifact root (no grid_id prefix)
+            asset_path = f"maps/{map_id}/{filename}"
+        else:
+            asset_path = f"maps/{grid_id}/{map_id}/{filename}"
         descriptor: dict[str, Any] = {
             "id": str(layer_spec["id"]),
             "label": str(layer_spec["label"]),
             "map_id": map_id,
-            "asset_path": f"maps/{grid_id}/{map_id}/{filename}",
+            "asset_path": asset_path,
         }
         descriptor["enable"] = bool(layer_spec.get("enable", True))
         if "unit" in layer_spec:
@@ -288,9 +299,12 @@ def _build_release_layers(
         if isinstance(output.get("mobile_filename"), str) and output.get(
             "mobile_filename"
         ):
-            descriptor["mobile_asset_path"] = (
-                f"maps/{grid_id}/{map_id}/{mobile_filename}"
-            )
+            if format_version >= 2 and map_artifact_roots and map_id in map_artifact_roots:
+                descriptor["mobile_asset_path"] = f"maps/{map_id}/{mobile_filename}"
+            else:
+                descriptor["mobile_asset_path"] = (
+                    f"maps/{grid_id}/{map_id}/{mobile_filename}"
+                )
         if isinstance(output.get("width"), int):
             descriptor["asset_width"] = int(output["width"])
         if isinstance(output.get("height"), int):
@@ -299,24 +313,32 @@ def _build_release_layers(
             descriptor["mobile_asset_width"] = int(output["mobile_width"])
         if isinstance(output.get("mobile_height"), int):
             descriptor["mobile_asset_height"] = int(output["mobile_height"])
-        if maps_root is not None and (
-            "asset_width" not in descriptor or "asset_height" not in descriptor
-        ):
-            dims = _read_image_dimensions(maps_root / grid_id / map_id / filename)
+        artifact_map_root = (map_artifact_roots or {}).get(map_id)
+        if "asset_width" not in descriptor or "asset_height" not in descriptor:
+            if artifact_map_root is not None:
+                dims = _read_image_dimensions(artifact_map_root / filename)
+            elif maps_root is not None:
+                dims = _read_image_dimensions(maps_root / grid_id / map_id / filename)
+            else:
+                dims = None
             if dims is not None:
                 descriptor.setdefault("asset_width", dims[0])
                 descriptor.setdefault("asset_height", dims[1])
         if (
-            maps_root is not None
-            and "mobile_asset_path" in descriptor
+            "mobile_asset_path" in descriptor
             and (
                 "mobile_asset_width" not in descriptor
                 or "mobile_asset_height" not in descriptor
             )
         ):
-            mobile_dims = _read_image_dimensions(
-                maps_root / grid_id / map_id / mobile_filename
-            )
+            if artifact_map_root is not None:
+                mobile_dims = _read_image_dimensions(artifact_map_root / mobile_filename)
+            elif maps_root is not None:
+                mobile_dims = _read_image_dimensions(
+                    maps_root / grid_id / map_id / mobile_filename
+                )
+            else:
+                mobile_dims = None
             if mobile_dims is not None:
                 descriptor.setdefault("mobile_asset_width", mobile_dims[0])
                 descriptor.setdefault("mobile_asset_height", mobile_dims[1])
@@ -422,13 +444,60 @@ class ReleaseResolver:
             maps_path = DEFAULT_MAPS_PATH
             panels_path = DEFAULT_PANELS_PATH
             layers_path = DEFAULT_LAYERS_PATH
+            format_version = 1
+            per_metric_roots: dict[str, Path] = {}
+            map_artifact_roots: dict[str, Path] = {}
         else:
+            # Read manifest.json to determine format version and artifact pointers
+            manifest_path = release_root / "manifest.json"
+            format_version = 1
+            per_metric_roots = {}
+            map_artifact_roots = {}
+            if manifest_path.exists():
+                try:
+                    release_manifest = json.loads(
+                        manifest_path.read_text(encoding="utf-8")
+                    )
+                    format_version = int(release_manifest.get("format_version", 1))
+                except Exception as exc:
+                    raise ValueError(
+                        f"Release '{canonical_release}' manifest.json is invalid: {exc}"
+                    ) from exc
+
+                if format_version >= 2:
+                    artifacts_root = self._settings.artifacts_root
+                    if artifacts_root is None:
+                        raise ValueError(
+                            "format_version 2 release requires artifacts_root to be configured."
+                        )
+                    # Build per_metric_roots: metric_id -> artifact date dir
+                    # Artifact layout: artifacts/series/{metric_id}/{date}/z64/...  (flat, no grid_id)
+                    series_pointers: dict[str, str] = release_manifest.get("series", {})
+                    for metric_id, artifact_date in series_pointers.items():
+                        artifact_dir = artifacts_root / "series" / metric_id / artifact_date
+                        artifact_manifest_path = artifact_dir / "manifest.json"
+                        if not artifact_manifest_path.exists():
+                            raise FileNotFoundError(
+                                f"Artifact manifest missing for '{metric_id}' date "
+                                f"'{artifact_date}': {artifact_manifest_path}"
+                            )
+                        per_metric_roots[metric_id] = artifact_dir
+
+                    # Build map_artifact_roots: map_id -> artifacts/maps/<map_id>/<date>/
+                    # Map artifact layout: artifacts/maps/{map_id}/{date}/{filename} (flat)
+                    maps_pointers: dict[str, str] = release_manifest.get("maps", {})
+                    for map_id, artifact_date in maps_pointers.items():
+                        map_artifact_roots[map_id] = (
+                            artifacts_root / "maps" / map_id / artifact_date
+                        )
+
             registry_root = release_root / "registry"
             metrics_path = registry_root / "metrics.json"
             datasets_path = registry_root / "datasets.json"
             maps_path = registry_root / "maps.json"
             panels_path = registry_root / "panels.json"
             layers_path = registry_root / "layers.json"
+
         for required_path in (metrics_path, datasets_path, maps_path, panels_path):
             if not required_path.exists():
                 raise FileNotFoundError(
@@ -440,18 +509,45 @@ class ReleaseResolver:
             datasets_path=datasets_path,
             validate=True,
         )
-        tile_store = TileDataStore.discover(
-            release_root / "series",
-            start_year_fallback=1979,
-            metrics_path=metrics_path,
-            datasets_path=datasets_path,
-        )
+
+        if format_version >= 2 and per_metric_roots:
+            # v2: build a TileDataStore with per_metric_roots; tiles_root is unused but required
+            tile_store = TileDataStore.discover(
+                release_root / "series",
+                start_year_fallback=1979,
+                metrics_path=metrics_path,
+                datasets_path=datasets_path,
+            )
+            # Attach per_metric_roots by rebuilding with the same fields
+            tile_store = TileDataStore(
+                tiles_root=tile_store.tiles_root,
+                grid=tile_store.grid,
+                start_year_fallback=tile_store.start_year_fallback,
+                metrics=tile_store.metrics,
+                grids=tile_store.grids,
+                per_metric_roots=per_metric_roots,
+            )
+        else:
+            tile_store = TileDataStore.discover(
+                release_root / "series",
+                start_year_fallback=1979,
+                metrics_path=metrics_path,
+                datasets_path=datasets_path,
+            )
+
         panels_manifest = load_panels(path=panels_path, validate=True)
         maps_manifest = load_maps(path=maps_path, validate=True)
         validate_maps_against_metrics(maps_manifest, metrics_manifest)
         validate_panels_against_metrics(panels_manifest, metrics_manifest)
         validate_panels_against_maps(panels_manifest, maps_manifest)
         layers: list[dict[str, Any]] = []
+
+        # Resolve maps_root: for v2 we don't have a single maps root; use None or a dummy
+        if format_version >= 2:
+            maps_root = release_root / "maps"  # may not exist; only used as fallback
+        else:
+            maps_root = release_root / "maps"
+
         if layers_path.exists():
             layers_manifest = load_layers(path=layers_path, validate=True)
             validate_layers_against_maps(layers_manifest, maps_manifest)
@@ -464,7 +560,9 @@ class ReleaseResolver:
                 layers_manifest=layers_manifest,
                 maps_manifest=maps_manifest,
                 metrics_manifest=metrics_manifest,
-                maps_root=release_root / "maps",
+                maps_root=maps_root if maps_root.exists() else None,
+                map_artifact_roots=map_artifact_roots if map_artifact_roots else None,
+                format_version=format_version,
             )
         else:
             self._logger.warning(
@@ -473,12 +571,12 @@ class ReleaseResolver:
                 layers_path,
             )
 
-        maps_root = release_root / "maps"
         if self._settings.score_map_preload:
             loaded_count, skipped_constant_count = preload_score_maps_cache(
                 maps_manifest=maps_manifest,
                 tile_store=tile_store,
                 maps_root=maps_root,
+                map_artifact_roots=map_artifact_roots if map_artifact_roots else None,
             )
             self._logger.info(
                 "Preloaded score maps for release %s: loaded=%d skipped_constant=%d",
@@ -487,7 +585,7 @@ class ReleaseResolver:
                 skipped_constant_count,
             )
 
-        return ReleaseContext(
+        ctx = ReleaseContext(
             release=canonical_release,
             release_root=release_root,
             tile_store=tile_store,
@@ -495,7 +593,20 @@ class ReleaseResolver:
             maps_manifest=maps_manifest,
             maps_root=maps_root,
             layers=layers,
+            format_version=format_version,
+            map_artifact_roots=map_artifact_roots,
         )
+        manifest_desc = (
+            f"manifest v{ctx.format_version} (artifact store)"
+            if ctx.format_version >= 2
+            else "manifest v1 (legacy)"
+        )
+        self._logger.info(
+            "Loaded release '%s' using %s.",
+            canonical_release,
+            manifest_desc,
+        )
+        return ctx
 
     def resolve_release_context(self, requested_release: str) -> ReleaseContext:
         canonical_release = self.resolve_release_alias(requested_release)

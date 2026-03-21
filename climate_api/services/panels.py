@@ -46,6 +46,7 @@ def preload_score_maps_cache(
     maps_manifest: dict[str, Any],
     tile_store: TileDataStore,
     maps_root: Path,
+    map_artifact_roots: dict[str, Path] | None = None,
 ) -> tuple[int, int]:
     maps_specs = {
         key: spec
@@ -69,7 +70,11 @@ def preload_score_maps_cache(
         grid = _grid_from_id(grid_id)
         output = map_spec.get("output", {}) or {}
         binary_name = str(output.get("binary_filename") or f"{map_id}.i16.bin")
-        bin_path = maps_root / grid.grid_id / map_id / binary_name
+        artifact_root = (map_artifact_roots or {}).get(map_id)
+        if artifact_root is not None:
+            bin_path = artifact_root / binary_name
+        else:
+            bin_path = maps_root / grid.grid_id / map_id / binary_name
         expected = grid.nlat * grid.nlon
         _load_score_map_values_cached(bin_path=bin_path, expected=expected)
         loaded += 1
@@ -972,6 +977,7 @@ def build_scored_panels_tiles_registry(
     panels_manifest: dict[str, Any],
     maps_manifest: dict[str, Any],
     maps_root: Path,
+    map_artifact_roots: dict[str, Path] | None = None,
     selected_place: PlaceInfo | None = None,
     release_root: Path | None = None,
 ) -> PanelListResponse:
@@ -1006,6 +1012,7 @@ def build_scored_panels_tiles_registry(
             map_spec=map_spec,
             tile_store=tile_store,
             maps_root=maps_root,
+            map_artifact_roots=map_artifact_roots,
         )
         if score > 0:
             scored_panel_ids.append((score, panel_id))
@@ -1107,6 +1114,7 @@ def _read_score_value(
     map_spec: dict[str, Any],
     tile_store: TileDataStore,
     maps_root: Path,
+    map_artifact_roots: dict[str, Path] | None = None,
 ) -> int:
     constant_score = map_spec.get("constant_score")
     if constant_score is not None:
@@ -1117,7 +1125,6 @@ def _read_score_value(
             return 4
         return score
 
-    score_values = None
     grid_id = str(map_spec.get("grid_id") or "")
     if not grid_id:
         source_metric = map_spec.get("source_metric")
@@ -1127,14 +1134,17 @@ def _read_score_value(
             )
         grid_id = tile_store._metric_grid(source_metric).grid_id
     grid = _grid_from_id(grid_id)
-    if score_values is None:
-        output = map_spec.get("output", {}) or {}
-        binary_name = str(output.get("binary_filename") or f"{map_id}.i16.bin")
+    output = map_spec.get("output", {}) or {}
+    binary_name = str(output.get("binary_filename") or f"{map_id}.i16.bin")
+    artifact_root = (map_artifact_roots or {}).get(map_id)
+    if artifact_root is not None:
+        bin_path = artifact_root / binary_name
+    else:
         bin_path = maps_root / grid.grid_id / map_id / binary_name
-        expected = grid.nlat * grid.nlon
-        score_values = _load_score_map_values_cached(
-            bin_path=bin_path, expected=expected
-        )
+    expected = grid.nlat * grid.nlon
+    score_values = _load_score_map_values_cached(
+        bin_path=bin_path, expected=expected
+    )
 
     cell, _tile = locate_tile(lat, lon, grid)
     idx = cell.i_lat * grid.nlon + cell.i_lon

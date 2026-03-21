@@ -70,13 +70,37 @@ Maps/layers are generated under `data/releases/<release>/maps/`.
 
 ### Releases
 
-A release is a versioned package of registry snapshots, metric tiles, and map assets.
+A release is a versioned package of registry snapshots and pointers to metric tile and map assets.
 
-Typical layout:
+There are two release formats:
 
-- `data/releases/<release>/series/`
-- `data/releases/<release>/maps/`
-- `data/releases/<release>/registry/`
+**Format v1** (self-contained): all tiles and maps live inside the release directory.
+
+```
+data/releases/<release>/series/<grid_id>/<metric>/z64/...
+data/releases/<release>/maps/<grid_id>/<map_id>/<filename>
+data/releases/<release>/registry/
+```
+
+**Format v2** (artifact-store): tiles and maps are stored as independently versioned artifacts; the release manifest contains pointers to them.
+
+```
+data/releases/<release>/manifest.json   ← format_version: 2, series/maps pointers
+data/releases/<release>/registry/
+data/artifacts/series/<metric_id>/<date>/<grid_id>/<metric_id>/z64/...
+data/artifacts/maps/<map_id>/<date>/<filename>
+```
+
+The `dev` release always uses the self-contained format and reads registry files from the repo root.
+
+### Artifact Store
+
+The artifact store (`data/artifacts/`) holds independently versioned metric tile sets and map image files. Each artifact is identified by `(<id>, <date>)` and contains a `manifest.json` with a `tree_sha256` checksum written after a successful build.
+
+- Series artifacts: `data/artifacts/series/<metric_id>/<YYYY_MM_DD>/`
+- Map artifacts: `data/artifacts/maps/<map_id>/<YYYY_MM_DD>/`
+
+A v2 release manifest declares which artifact version to use for each metric and map. This means only changed artifacts need to be rebuilt and redeployed when updating a release.
 
 ## Acronyms
 

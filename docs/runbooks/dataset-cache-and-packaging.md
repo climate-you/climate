@@ -111,7 +111,57 @@ Override cache root:
 python scripts/build/packager.py --release dev --all --all-maps --cache-dir /path/to/cache
 ```
 
+## Publishing to Production (v2 artifact-store releases)
+
+`publish_release.py` is the single command to publish a new release to the production server. There is no separate artifact-build or manifest-compose step — the script handles diffing, syncing, and versioning in one pass.
+
+### How it works
+
+1. Runs `validate_suite.py` on the local dev release as a pre-flight check
+2. Scans `data/releases/dev/series/` and `data/releases/dev/maps/`
+3. Computes a `tree_sha256` checksum for each metric and map
+4. Fetches the current prod release state via SSH and shows a diff (new / changed / unchanged / removed)
+5. Prompts for confirmation, then rsyncs only new or changed artifacts
+6. Writes a new v2 release manifest and registry snapshot on the server
+7. Optionally updates the `LATEST` pointer
+
+### Publish to production
+
+```bash
+python scripts/deploy/publish_release.py \
+  --remote <SSH_USER>@<PUBLIC_IP> \
+  --remote-releases-root /opt/climate/data/releases \
+  --update-latest
+```
+
+The release id defaults to today's date (`YYYY_MM_DD`). Pass `--release <id>` to override.
+
+`ARTIFACTS_ROOT` does not need to be set on the server — it defaults to the sibling of `RELEASES_ROOT`, i.e. `/opt/climate/data/artifacts`.
+
+### Local testing (no SSH)
+
+Omit `--remote` to run entirely locally. Useful for testing the v2 code path before deploying:
+
+```bash
+python scripts/deploy/publish_release.py \
+  --remote-releases-root data/releases \
+  --release test_v2 \
+  --skip-validate \
+  -y
+```
+
+This writes artifacts to `data/artifacts/` and creates `data/releases/test_v2/manifest.json`. Point the local API at it by setting `RELEASE=test_v2`.
+
+### Skip pre-flight validation
+
+The pre-flight `validate_suite` run can be skipped when migrating existing data or in other situations where the dev release is not available locally:
+
+```bash
+  --skip-validate
+```
+
 ## Related runbooks
 
 - Locations/ocean prerequisites: [`docs/runbooks/locations-and-ocean-mask.md`](locations-and-ocean-mask.md)
 - Reef-domain masks: [`docs/runbooks/reef-mask.md`](reef-mask.md)
+- Deployment: [`docs/runbooks/deployment.md`](deployment.md)

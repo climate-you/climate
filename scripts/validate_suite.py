@@ -50,6 +50,15 @@ def main() -> int:
         help='Releases root for --registry-release/--manifest-release (default: "data/releases").',
     )
     ap.add_argument(
+        "--artifacts-root",
+        type=Path,
+        default=None,
+        help=(
+            "Artifact store root for v2 release manifest validation "
+            "(default: sibling of releases-root named 'artifacts')."
+        ),
+    )
+    ap.add_argument(
         "--base-url",
         default=f"http://127.0.0.1:{os.environ.get('API_PORT', '8001')}",
         help='API base URL for smoke checks (default: "http://127.0.0.1:8001", overridden by API_PORT env).',
@@ -98,6 +107,11 @@ def main() -> int:
         "--tile-global-domain",
         action="store_true",
         help="Disable domain-aware coverage and enforce global real coverage for all metrics.",
+    )
+    ap.add_argument(
+        "--tile-summary-only",
+        action="store_true",
+        help="Pass --summary-only to tile_coverage: print one summary line per metric instead of every tile.",
     )
     ap.add_argument(
         "--tile-ocean-mask-metric",
@@ -165,16 +179,17 @@ def main() -> int:
 
     steps: list[list[str]] = []
     if effective_manifest_release:
-        steps.append(
-            [
-                sys.executable,
-                "scripts/validate/release_manifest.py",
-                "--release",
-                effective_manifest_release,
-                "--releases-root",
-                str(args.releases_root),
-            ]
-        )
+        manifest_cmd = [
+            sys.executable,
+            "scripts/validate/release_manifest.py",
+            "--release",
+            effective_manifest_release,
+            "--releases-root",
+            str(args.releases_root),
+        ]
+        if args.artifacts_root is not None:
+            manifest_cmd.extend(["--artifacts-root", str(args.artifacts_root)])
+        steps.append(manifest_cmd)
         steps.append(
             [
                 sys.executable,
@@ -236,6 +251,8 @@ def main() -> int:
             )
         if use_referenced_metrics:
             tile_cmd.append("--only-referenced-metrics")
+        if args.tile_summary_only:
+            tile_cmd.append("--summary-only")
         if args.tile_require_real_coverage_pct is not None:
             tile_cmd.extend(
                 [

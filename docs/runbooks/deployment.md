@@ -139,6 +139,19 @@ cd <repo>
 
 Recommended: use `/opt/climate/source` as the single deployment checkout to avoid drift between multiple copies.
 
+Recommended production data layout:
+
+- `/opt/climate/source` — git checkout
+- `/opt/climate/data/releases/` — release directories (`RELEASES_ROOT`)
+- `/opt/climate/data/artifacts/` — artifact store for v2 releases (default: sibling of `releases/`)
+
+Bootstrap sets `chown -R climate:climate .../data/`, so both `releases/` and
+`artifacts/` start owned by the `climate` service user. When you deploy new
+artifact data with `deploy_release.py`, the script's default `--rsync-chmod a+rX`
+keeps transferred files world-readable so the service can read them regardless
+of which user ran rsync. See the "Deploying v2 release data" section in step 10
+for permission options.
+
 ## 6) Copy Data Package Before First Bootstrap
 
 Backend and web services depend on data assets under `<repo>/data` (release artifacts, location assets, masks, and related files). On a fresh VM, copy a prepared archive from your local machine before service validation.
@@ -291,6 +304,8 @@ If both pass, open `http://<PUBLIC_IP>` in browser and validate web + API integr
 
 ## 10) Deploy Updates
 
+### Deploying application code (any release format)
+
 Recommended workflow on the VM:
 
 ```bash
@@ -315,6 +330,76 @@ sudo ./scripts/deploy/deploy_app.sh --tag v1.0.0
 ```
 
 All workflows rebuild backend/web assets, restart services, and run smoke checks.
+
+### Deploying v2 release data (artifact-store releases)
+
+Use `publish_release.py` from your local workstation to publish the local dev release to the production server. The script checksums all local metrics and maps, fetches the current prod state, shows a diff, rsyncs only what changed, and writes the new v2 release manifest in one step.
+
+```bash
+python scripts/deploy/publish_release.py \
+  --remote <SSH_USER>@<PUBLIC_IP> \
+  --remote-releases-root /opt/climate/data/releases \
+  --update-latest
+```
+
+The release id defaults to today's date (`YYYY_MM_DD`). Pass `--release <id>` to override. `ARTIFACTS_ROOT` does not need to be set on the server — it defaults to the sibling of `RELEASES_ROOT`.
+
+See `docs/runbooks/dataset-cache-and-packaging.md` for the full publish workflow and local-testing instructions.
+
+#### File ownership and permissions
+
+`publish_release.py` runs rsync as your SSH user (e.g. `deploy`). The `climate`
+service user that runs the API also needs read access to artifact files.
+The script defaults to `--rsync-chmod a+rX`, which makes all transferred files
+world-readable (644) and directories world-executable (755). Because artifact
+data is public scientific data this is appropriate and requires no further
+chown step.
+
+If you prefer explicit ownership (e.g. so only the `climate` user can read
+files), two alternatives:
+
+**Option A — shared group (recommended for tighter access control):**
+
+Run once on the VM after bootstrap:
+
+```bash
+# Add the SSH/deploy user to the climate group
+sudo usermod -aG climate <SSH_USER>
+# Make the artifact root group-writable so rsync can create subdirs
+sudo chmod g+rwx /opt/climate/data/artifacts
+```
+
+Then publish with group-only permissions:
+
+```bash
+python scripts/deploy/publish_release.py \
+  --remote <SSH_USER>@<PUBLIC_IP> \
+  --remote-releases-root /opt/climate/data/releases \
+  --rsync-chmod Dg+rwx,Fg+r \
+  --update-latest
+```
+
+**Option B — explicit chown via SSH (mirrors the manual scp + sudo chown workflow):**
+
+Requires passwordless `sudo chown` for the SSH user on the VM. Add to `/etc/sudoers`:
+
+```
+<SSH_USER> ALL=(root) NOPASSWD: /bin/chown
+```
+
+Then publish with explicit chown:
+
+```bash
+python scripts/deploy/publish_release.py \
+  --remote <SSH_USER>@<PUBLIC_IP> \
+  --remote-releases-root /opt/climate/data/releases \
+  --rsync-chmod "" \
+  --remote-chown climate:climate \
+  --update-latest
+```
+
+The script will SSH after each artifact sync and run
+`sudo chown -R climate:climate <artifact_dir>`.
 
 Important:
 
