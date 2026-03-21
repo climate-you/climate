@@ -141,8 +141,9 @@
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_tp",
+      "batch_tiles_override": 4,
       "agg": "annual_sum_from_daily",
-      "time_range": { "start_year": 1979, "end_year": 1994 }
+      "time_range": { "start_year": 1979, "end_year": 2025 }
     },
     "storage": {
       "tiled": true,
@@ -167,7 +168,7 @@
         "north_summer_months": [6, 7, 8],
         "south_summer_months": [12, 1, 2]
       },
-      "time_range": { "start_year": 1979, "end_year": 1994 }
+      "time_range": { "start_year": 1979, "end_year": 2025 }
     },
     "storage": {
       "tiled": true,
