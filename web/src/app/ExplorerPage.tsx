@@ -34,6 +34,7 @@ import {
   TOUCH_CLOSE_PANEL_THRESHOLD_PX,
   TOUCH_PANEL_LIFT_MAX_PX,
   TOUCH_PANEL_PULL_MAX_PX,
+  TOUCH_SWIPE_MIN_VELOCITY_PX_MS,
   TOUCH_SWIPE_THRESHOLD_PX,
   WHEEL_GESTURE_GAP_MS,
   WHEEL_REPEAT_KICK_THRESHOLD,
@@ -222,6 +223,7 @@ export default function ExplorerPage({
   const wheelGestureResetTimerRef = useRef<number | null>(null);
   const touchStartYRef = useRef<number | null>(null);
   const touchStartXRef = useRef<number | null>(null);
+  const touchStartTimeRef = useRef<number | null>(null);
   const touchGestureAxisRef = useRef<"x" | "y" | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const panelViewportRef = useRef<HTMLDivElement | null>(null);
@@ -929,6 +931,7 @@ export default function ExplorerPage({
       }
       touchStartYRef.current = e.touches[0].clientY;
       touchStartXRef.current = e.touches[0].clientX;
+      touchStartTimeRef.current = Date.now();
       touchGestureAxisRef.current = null;
       setPanelDragActive(false);
       setPanelDragOffsetPx(0);
@@ -1012,9 +1015,11 @@ export default function ExplorerPage({
       if (axis === "y") return;
       if (Math.abs(deltaX) < TOUCH_SWIPE_THRESHOLD_PX) return;
       if (Math.abs(deltaX) <= Math.abs(deltaY)) return;
+      const duration = touchStartTimeRef.current !== null ? Date.now() - touchStartTimeRef.current : 0;
+      if (duration > 0 && Math.abs(deltaX) / duration < TOUCH_SWIPE_MIN_VELOCITY_PX_MS) return;
       goGraphPage(deltaX < 0 ? 1 : -1);
     },
-    [goGraphPage, TOUCH_CLOSE_PANEL_THRESHOLD_PX, TOUCH_SWIPE_THRESHOLD_PX],
+    [goGraphPage, TOUCH_CLOSE_PANEL_THRESHOLD_PX, TOUCH_SWIPE_THRESHOLD_PX, TOUCH_SWIPE_MIN_VELOCITY_PX_MS],
   );
 
   const handlePanelTouchCancel = useCallback(() => {
