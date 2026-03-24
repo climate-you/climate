@@ -286,10 +286,50 @@ Verify the gate works:
 
 ```bash
 # should return 401
-curl -fsS http://127.0.0.1/admin
+curl -fsS https://<your-domain>/admin; echo "Exit: $?"
 # should return the page
-curl -u admin:<your-password> http://127.0.0.1/admin
+curl -u admin:<your-password> https://<your-domain>/admin; echo "Exit: $?"
 ```
+
+> **Note:** Testing via `http://127.0.0.1/admin` will bypass the auth gate because Caddy's site block is bound to the domain name. Requests to `127.0.0.1` do not match that block. Always test using the real domain (or set the `Host` header: `curl -H "Host: <your-domain>" http://127.0.0.1/admin`).
+
+## 8c) Exclude IPs from Analytics
+
+To prevent visits from specific IPs (e.g. your own) from being recorded in analytics, add them to the IP blocklist file on the VM.
+
+First, find your current public IP:
+
+```bash
+curl -s https://checkip.amazonaws.com
+```
+
+Then SSH into the VM and append the IP to the blocklist file (one IP per line; lines starting with `#` are treated as comments):
+
+```bash
+echo "YOUR_IP_HERE" >> /opt/climate/source/data/analytics/ip_blocklist.txt
+```
+
+Verify it was added:
+
+```bash
+cat /opt/climate/source/data/analytics/ip_blocklist.txt
+```
+
+The blocklist is loaded at startup, so restart the backend for it to take effect:
+
+```bash
+sudo systemctl restart climate-backend
+```
+
+To confirm the new blocklist was picked up, check the startup log:
+
+```bash
+sudo journalctl -u climate-backend -n 30 | grep -i blocklist
+```
+
+You should see a line reporting the number of IPs loaded (e.g. `Analytics IP blocklist: 1 entries`).
+
+> **Note:** The blocklist file path defaults to `/opt/climate/source/data/analytics/ip_blocklist.txt`. To override it, set `ANALYTICS_IP_BLOCKLIST` in `/etc/climate/backend.env`.
 
 ## 9) Verify IP-based Runtime
 
