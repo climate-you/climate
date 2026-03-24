@@ -647,6 +647,28 @@ def main() -> int:
         )
     else:
         print(f"  WARNING: registry directory not found at {registry_src}, skipping.")
+    local_aux_dir = dev_root / "aux"
+    if local_aux_dir.is_dir():
+        print(f"  Copying aux files from {local_aux_dir}...")
+        _ssh_run(
+            remote,
+            f"mkdir -p {shlex.quote(remote_release_dir + '/aux')}",
+            dry_run=args.dry_run,
+        )
+        _rsync_dir(
+            str(local_aux_dir),
+            _dst(remote, f"{remote_release_dir}/aux/"),
+            dry_run=args.dry_run,
+            chmod=args.rsync_chmod,
+        )
+        if args.remote_chown:
+            _ssh_run(
+                remote,
+                f"sudo chown -R {args.remote_chown} {shlex.quote(remote_release_dir + '/aux')}",
+                dry_run=args.dry_run,
+            )
+    else:
+        print(f"  WARNING: no aux directory found at {local_aux_dir}; sparse risk mask will not be included in the release.")
     _write_remote_json(
         remote,
         f"{remote_release_dir}/manifest.json",
