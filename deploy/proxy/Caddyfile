@@ -23,7 +23,7 @@ example.com {
 
   # API and map assets routes with timeouts.
   # Request rate limiting is enforced in the backend middleware by default.
-  @backend path /api/* /assets/*
+  @backend path /api/* /assets/* /healthz
   handle @backend {
     reverse_proxy 127.0.0.1:8001 {
       transport http {
