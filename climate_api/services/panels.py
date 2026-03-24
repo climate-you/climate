@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import logging
 from typing import Dict, Any, List
 import numpy as np
 import math
@@ -79,6 +80,29 @@ def preload_score_maps_cache(
         _load_score_map_values_cached(bin_path=bin_path, expected=expected)
         loaded += 1
     return loaded, skipped_constant
+
+
+def preload_sparse_risk_mask_cache(
+    *, release_root: Path | None, logger: logging.Logger
+) -> None:
+    """Pre-load and cache the sparse risk mask for a release at load time.
+
+    Logs INFO if the mask is found, WARNING if absent in all candidate locations.
+    Should be called once per release from the release loader, not per-request.
+    """
+    candidate_paths: list[Path] = []
+    if release_root is not None:
+        candidate_paths.append(release_root / "aux" / _SPARSE_RISK_MASK_FILENAME)
+    candidate_paths.append(Path("data/masks") / _SPARSE_RISK_MASK_FILENAME)
+    for p in candidate_paths:
+        arr = _load_sparse_risk_mask(p)
+        if arr is not None:
+            logger.info("Loaded sparse risk mask from %s", p)
+            return
+    logger.warning(
+        "Sparse risk mask not found (checked: %s); sparse risk zone detection disabled.",
+        ", ".join(str(p) for p in candidate_paths),
+    )
 
 
 def _bbox_from_cell(*, grid: GridSpec, i_lat: int, i_lon: int) -> PanelValidBBox:

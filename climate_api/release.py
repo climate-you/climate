@@ -35,7 +35,7 @@ from climate.registry.panels import (
 from climate.tiles.layout import GridSpec
 
 from .config import Settings
-from .services.panels import preload_score_maps_cache
+from .services.panels import preload_score_maps_cache, preload_sparse_risk_mask_cache
 from .store.tile_data_store import TileDataStore
 
 _RELEASE_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -584,6 +584,8 @@ class ReleaseResolver:
                 loaded_count,
                 skipped_constant_count,
             )
+
+        preload_sparse_risk_mask_cache(release_root=release_root, logger=self._logger)
 
         ctx = ReleaseContext(
             release=canonical_release,
