@@ -138,7 +138,9 @@ def _grid_from_id(grid_id: str) -> GridSpec:
     raise ValueError(f"Unsupported grid_id for projection bounds: {grid_id}")
 
 
-def _texture_projection_bounds(*, projection: str, grid_id: str) -> dict[str, float]:
+def _texture_projection_bounds(
+    *, projection: str, grid_id: str, mercator_lat_max: float = _MERCATOR_MAX_LAT
+) -> dict[str, float]:
     projection_norm = str(projection).strip().lower() or "equirectangular"
     if projection_norm == "equirectangular":
         return {
@@ -155,20 +157,21 @@ def _texture_projection_bounds(*, projection: str, grid_id: str) -> dict[str, fl
     grid = _grid_from_id(grid_id)
     deg = float(grid.deg)
     centers = [90.0 - (float(i_lat) + 0.5) * deg for i_lat in range(int(grid.nlat))]
-    valid = [lat for lat in centers if -_MERCATOR_MAX_LAT <= lat <= _MERCATOR_MAX_LAT]
+    valid = [lat for lat in centers if -mercator_lat_max <= lat <= mercator_lat_max]
     if not valid:
         return {
-            "lat_min": -_MERCATOR_MAX_LAT,
-            "lat_max": _MERCATOR_MAX_LAT,
+            "lat_min": -mercator_lat_max,
+            "lat_max": mercator_lat_max,
             "lon_min": -180.0,
             "lon_max": 180.0,
         }
 
-    lat_max = min(_MERCATOR_MAX_LAT, float(valid[0] + (deg / 2.0)))
-    lat_min = max(-_MERCATOR_MAX_LAT, float(valid[-1] - (deg / 2.0)))
-    # Keep small floating-point noise from leaking into API responses.
-    lat_max = float(round(lat_max, 10))
-    lat_min = float(round(lat_min, 10))
+    # Use the grid-cell centres of the outermost valid rows.  Adding ±deg/2 to
+    # reach the cell edge would work at low latitudes, but near 90° Mercator Y
+    # grows so steeply that even a 0.125° overshoot (for a 0.25° grid) produces
+    # a ~28 % mismatch in Mercator space, visibly misaligning the texture.
+    lat_max = float(round(valid[0], 10))
+    lat_min = float(round(valid[-1], 10))
     return {
         "lat_min": lat_min,
         "lat_max": lat_max,
@@ -295,6 +298,7 @@ def _build_release_layers(
         descriptor["projection_bounds"] = _texture_projection_bounds(
             projection=projection,
             grid_id=grid_id,
+            mercator_lat_max=float(map_spec.get("mercator_lat_max", _MERCATOR_MAX_LAT)),
         )
         if isinstance(output.get("mobile_filename"), str) and output.get(
             "mobile_filename"

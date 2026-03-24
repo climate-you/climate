@@ -32,6 +32,7 @@
           "type": "string",
           "enum": ["equirectangular", "mercator"]
         },
+        "mercator_lat_max": { "type": "number", "minimum": 0, "maximum": 90 },
         "web_write": { "type": "boolean" },
         "reducer": { "$ref": "#/$defs/reducer" },
         "palette": { "$ref": "#/$defs/palette" },

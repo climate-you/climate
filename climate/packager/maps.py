@@ -356,7 +356,10 @@ def _write_texture_map(
             f"Invalid palette.nan_alpha for {map_id}: {nan_alpha}. Expected 0..1."
         )
     projection = _resolve_projection(spec)
-    projected_values, bounds = _project_texture_values(values, projection=projection)
+    mercator_lat_max = float(spec.get("mercator_lat_max", MERCATOR_MAX_LAT))
+    projected_values, bounds = _project_texture_values(
+        values, projection=projection, mercator_lat_max=mercator_lat_max
+    )
     projected_values = _stitch_longitude_edges(projected_values)
 
     image = _apply_palette(
@@ -725,7 +728,10 @@ def _resolve_projection(spec: dict[str, Any]) -> str:
 
 
 def _project_texture_values(
-    values: np.ndarray, *, projection: str
+    values: np.ndarray,
+    *,
+    projection: str,
+    mercator_lat_max: float = MERCATOR_MAX_LAT,
 ) -> tuple[np.ndarray, dict[str, float]]:
     arr = np.asarray(values, dtype=np.float64)
     if projection == "equirectangular":
@@ -739,12 +745,26 @@ def _project_texture_values(
             },
         )
     if projection == "mercator":
-        merc = _warp_lat_to_mercator(arr)
+        merc = _warp_lat_to_mercator(arr, mercator_lat_max=mercator_lat_max)
+        # Derive actual bounds from the outermost valid grid-cell centres, matching
+        # how _warp_lat_to_mercator sets up y_tgt.  Using the raw mercator_lat_max
+        # would overstate the covered range near 90° (Mercator Y diverges steeply),
+        # causing visible texture misalignment in the frontend.
+        nlat = arr.shape[0]
+        deg = 180.0 / float(nlat)
+        lat_src = 90.0 - (np.arange(nlat, dtype=np.float64) + 0.5) * deg
+        lat_clip = lat_src[(lat_src >= -mercator_lat_max) & (lat_src <= mercator_lat_max)]
+        if lat_clip.size >= 1:
+            actual_lat_max = float(round(float(lat_clip[0]), 10))
+            actual_lat_min = float(round(float(lat_clip[-1]), 10))
+        else:
+            actual_lat_max = float(mercator_lat_max)
+            actual_lat_min = -float(mercator_lat_max)
         return (
             merc,
             {
-                "lat_min": -float(MERCATOR_MAX_LAT),
-                "lat_max": float(MERCATOR_MAX_LAT),
+                "lat_min": actual_lat_min,
+                "lat_max": actual_lat_max,
                 "lon_min": -180.0,
                 "lon_max": 180.0,
             },
@@ -752,7 +772,9 @@ def _project_texture_values(
     raise ValueError(f"Unsupported texture projection: {projection}")
 
 
-def _warp_lat_to_mercator(values: np.ndarray) -> np.ndarray:
+def _warp_lat_to_mercator(
+    values: np.ndarray, *, mercator_lat_max: float = MERCATOR_MAX_LAT
+) -> np.ndarray:
     arr = np.asarray(values, dtype=np.float64)
     if arr.ndim != 2:
         raise ValueError(
@@ -765,7 +787,7 @@ def _warp_lat_to_mercator(values: np.ndarray) -> np.ndarray:
     # Row centers on a strict global cell grid.
     deg = 180.0 / float(nlat)
     lat_src = 90.0 - (np.arange(nlat, dtype=np.float64) + 0.5) * deg
-    valid = (lat_src <= MERCATOR_MAX_LAT) & (lat_src >= -MERCATOR_MAX_LAT)
+    valid = (lat_src <= mercator_lat_max) & (lat_src >= -mercator_lat_max)
     if np.count_nonzero(valid) < 2:
         return arr.copy()
 

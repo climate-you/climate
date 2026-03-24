@@ -39,6 +39,7 @@
     "type": "texture",
     "file_format": "webp",
     "projection": "mercator",
+    "mercator_lat_max": 89.99,
     "web_write": true,
     "source_metric": "t2m_yearly_mean_c",
     "reducer": {
@@ -66,7 +67,9 @@
       "vmax": 4.0
     },
     "output": {
-      "filename": "t2m_warming_2025_vs_1979_1988_mercator.webp"
+      "filename": "t2m_warming_2025_vs_1979_1988_mercator.webp",
+      "width": 1440,
+      "height": 2150
     }
   },
   "t2m_blended_preindustrial_anomaly_2021_2025_texture": {
@@ -101,6 +104,7 @@
     "type": "texture",
     "file_format": "webp",
     "projection": "mercator",
+    "mercator_lat_max": 89.99,
     "web_write": true,
     "source_metric": "t2m_yearly_mean_c",
     "reducer": {
@@ -130,7 +134,9 @@
       "vmax": 4.0
     },
     "output": {
-      "filename": "t2m_blended_preindustrial_anomaly_2021_2025_mercator.webp"
+      "filename": "t2m_blended_preindustrial_anomaly_2021_2025_mercator.webp",
+      "width": 1440,
+      "height": 2150
     }
   },
   "t2m_trend_score": {
@@ -194,6 +200,7 @@
     "type": "texture",
     "file_format": "webp",
     "projection": "mercator",
+    "mercator_lat_max": 89.99,
     "web_write": true,
     "source_metric": "sst_yearly_mean_c",
     "reducer": {
@@ -221,7 +228,9 @@
       "vmax": 4.0
     },
     "output": {
-      "filename": "sst_warming_2025_vs_1982_1991_mercator.webp"
+      "filename": "sst_warming_2025_vs_1982_1991_mercator.webp",
+      "width": 1440,
+      "height": 2150
     }
   },
   "sst_trend_score": {
@@ -252,6 +261,7 @@
     "type": "texture",
     "file_format": "webp",
     "projection": "mercator",
+    "mercator_lat_max": 50,
     "web_write": true,
     "source_metric": "dhw_risk_score_per_year",
     "reducer": {
