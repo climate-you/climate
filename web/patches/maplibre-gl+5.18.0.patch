@@ -1,0 +1,138 @@
+diff --git a/node_modules/maplibre-gl/src/render/draw_hillshade.ts b/node_modules/maplibre-gl/src/render/draw_hillshade.ts
+index cf9b6cf..b04c943 100644
+--- a/node_modules/maplibre-gl/src/render/draw_hillshade.ts
++++ b/node_modules/maplibre-gl/src/render/draw_hillshade.ts
+@@ -70,7 +70,7 @@ function renderHillshade(
+         if (!fbo) {
+             continue;
+         }
+-        const mesh = projection.getMeshFromTileID(context, coord.canonical, useBorder, true, 'raster');
++        const mesh = projection.getMeshFromTileID(context, coord.canonical, useBorder, false, 'raster');
+ 
+         const terrainData = painter.style.map.terrain?.getTerrainData(coord);
+ 
+diff --git a/node_modules/maplibre-gl/src/shaders/hillshade.fragment.glsl b/node_modules/maplibre-gl/src/shaders/hillshade.fragment.glsl
+index 95533b7..54a10a0 100644
+--- a/node_modules/maplibre-gl/src/shaders/hillshade.fragment.glsl
++++ b/node_modules/maplibre-gl/src/shaders/hillshade.fragment.glsl
+@@ -151,6 +151,9 @@ void combined_hillshade(vec2 deriv)
+ }
+ 
+ void main() {
++    // Discard pole cap triangles: pole vertices have v_pos.y ≈ 4.0 (32767/8192),
++    // so any interpolated fragment outside [0,1] is inside a pole cap triangle.
++    if (v_pos.x < 0.0 || v_pos.y < 0.0 || v_pos.y > 1.0) discard;
+     vec4 pixel = texture(u_image, v_pos);
+ 
+     // We divide the slope by a scale factor based on the cosin of the pixel's approximate latitude
+diff --git a/node_modules/maplibre-gl/src/shaders/hillshade.fragment.glsl.g.ts b/node_modules/maplibre-gl/src/shaders/hillshade.fragment.glsl.g.ts
+index c55b37a..cdb929e 100644
+--- a/node_modules/maplibre-gl/src/shaders/hillshade.fragment.glsl.g.ts
++++ b/node_modules/maplibre-gl/src/shaders/hillshade.fragment.glsl.g.ts
+@@ -1,2 +1,2 @@
+ // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
+-export default 'uniform sampler2D u_image;in vec2 v_pos;uniform vec2 u_latrange;uniform float u_exaggeration;uniform vec4 u_accent;uniform int u_method;uniform float u_altitudes[NUM_ILLUMINATION_SOURCES];uniform float u_azimuths[NUM_ILLUMINATION_SOURCES];uniform vec4 u_shadows[NUM_ILLUMINATION_SOURCES];uniform vec4 u_highlights[NUM_ILLUMINATION_SOURCES];\n#define PI 3.141592653589793\n#define STANDARD 0\n#define COMBINED 1\n#define IGOR 2\n#define MULTIDIRECTIONAL 3\n#define BASIC 4\nfloat get_aspect(vec2 deriv){return deriv.x !=0.0 ? atan(deriv.y,-deriv.x) : PI/2.0*(deriv.y > 0.0 ? 1.0 :-1.0);}void igor_hillshade(vec2 deriv){deriv=deriv*u_exaggeration*2.0;float aspect=get_aspect(deriv);float azimuth=u_azimuths[0]+PI;float slope_stength=atan(length(deriv))*2.0/PI;float aspect_strength=1.0-abs(mod((aspect+azimuth)/PI+0.5,2.0)-1.0);float shadow_strength=slope_stength*aspect_strength;float highlight_strength=slope_stength*(1.0-aspect_strength);fragColor=u_shadows[0]*shadow_strength+u_highlights[0]*highlight_strength;}void standard_hillshade(vec2 deriv){float azimuth=u_azimuths[0]+PI;float slope=atan(0.625*length(deriv));float aspect=get_aspect(deriv);float intensity=u_exaggeration;float base=1.875-intensity*1.75;float maxValue=0.5*PI;float scaledSlope=intensity !=0.5 ? ((pow(base,slope)-1.0)/(pow(base,maxValue)-1.0))*maxValue : slope;float accent=cos(scaledSlope);vec4 accent_color=(1.0-accent)*u_accent*clamp(intensity*2.0,0.0,1.0);float shade=abs(mod((aspect+azimuth)/PI+0.5,2.0)-1.0);vec4 shade_color=mix(u_shadows[0],u_highlights[0],shade)*sin(scaledSlope)*clamp(intensity*2.0,0.0,1.0);fragColor=accent_color*(1.0-shade_color.a)+shade_color;}void basic_hillshade(vec2 deriv){deriv=deriv*u_exaggeration*2.0;float azimuth=u_azimuths[0]+PI;float cos_az=cos(azimuth);float sin_az=sin(azimuth);float cos_alt=cos(u_altitudes[0]);float sin_alt=sin(u_altitudes[0]);float cang=(sin_alt-(deriv.y*cos_az*cos_alt-deriv.x*sin_az*cos_alt))/sqrt(1.0+dot(deriv,deriv));float shade=clamp(cang,0.0,1.0);if(shade > 0.5){fragColor=u_highlights[0]*(2.0*shade-1.0);}else\n{fragColor=u_shadows[0]*(1.0-2.0*shade);}}void multidirectional_hillshade(vec2 deriv){deriv=deriv*u_exaggeration*2.0;fragColor=vec4(0,0,0,0);for(int i=0; i < NUM_ILLUMINATION_SOURCES; i++){float cos_alt=cos(u_altitudes[i]);float sin_alt=sin(u_altitudes[i]);float cos_az=-cos(u_azimuths[i]);float sin_az=-sin(u_azimuths[i]);float cang=(sin_alt-(deriv.y*cos_az*cos_alt-deriv.x*sin_az*cos_alt))/sqrt(1.0+dot(deriv,deriv));float shade=clamp(cang,0.0,1.0);if(shade > 0.5){fragColor+=u_highlights[i]*(2.0*shade-1.0)/float(NUM_ILLUMINATION_SOURCES);}else\n{fragColor+=u_shadows[i]*(1.0-2.0*shade)/float(NUM_ILLUMINATION_SOURCES);}}}void combined_hillshade(vec2 deriv){deriv=deriv*u_exaggeration*2.0;float azimuth=u_azimuths[0]+PI;float cos_az=cos(azimuth);float sin_az=sin(azimuth);float cos_alt=cos(u_altitudes[0]);float sin_alt=sin(u_altitudes[0]);float cang=acos((sin_alt-(deriv.y*cos_az*cos_alt-deriv.x*sin_az*cos_alt))/sqrt(1.0+dot(deriv,deriv)));cang=clamp(cang,0.0,PI/2.0);float shade=cang*atan(length(deriv))*4.0/PI/PI;float highlight=(PI/2.0-cang)*atan(length(deriv))*4.0/PI/PI;fragColor=u_shadows[0]*shade+u_highlights[0]*highlight;}void main() {vec4 pixel=texture(u_image,v_pos);float scaleFactor=cos(radians((u_latrange[0]-u_latrange[1])*(1.0-v_pos.y)+u_latrange[1]));vec2 deriv=((pixel.rg*8.0)-4.0)/scaleFactor;if (u_method==BASIC) {basic_hillshade(deriv);} else if (u_method==COMBINED) {combined_hillshade(deriv);} else if (u_method==IGOR) {igor_hillshade(deriv);} else if (u_method==MULTIDIRECTIONAL) {multidirectional_hillshade(deriv);} else if (u_method==STANDARD) {standard_hillshade(deriv);} else {standard_hillshade(deriv);}\n#ifdef OVERDRAW_INSPECTOR\nfragColor=vec4(1.0);\n#endif\n}';
++export default 'uniform sampler2D u_image;in vec2 v_pos;uniform vec2 u_latrange;uniform float u_exaggeration;uniform vec4 u_accent;uniform int u_method;uniform float u_altitudes[NUM_ILLUMINATION_SOURCES];uniform float u_azimuths[NUM_ILLUMINATION_SOURCES];uniform vec4 u_shadows[NUM_ILLUMINATION_SOURCES];uniform vec4 u_highlights[NUM_ILLUMINATION_SOURCES];\n#define PI 3.141592653589793\n#define STANDARD 0\n#define COMBINED 1\n#define IGOR 2\n#define MULTIDIRECTIONAL 3\n#define BASIC 4\nfloat get_aspect(vec2 deriv){return deriv.x !=0.0 ? atan(deriv.y,-deriv.x) : PI/2.0*(deriv.y > 0.0 ? 1.0 :-1.0);}void igor_hillshade(vec2 deriv){deriv=deriv*u_exaggeration*2.0;float aspect=get_aspect(deriv);float azimuth=u_azimuths[0]+PI;float slope_stength=atan(length(deriv))*2.0/PI;float aspect_strength=1.0-abs(mod((aspect+azimuth)/PI+0.5,2.0)-1.0);float shadow_strength=slope_stength*aspect_strength;float highlight_strength=slope_stength*(1.0-aspect_strength);fragColor=u_shadows[0]*shadow_strength+u_highlights[0]*highlight_strength;}void standard_hillshade(vec2 deriv){float azimuth=u_azimuths[0]+PI;float slope=atan(0.625*length(deriv));float aspect=get_aspect(deriv);float intensity=u_exaggeration;float base=1.875-intensity*1.75;float maxValue=0.5*PI;float scaledSlope=intensity !=0.5 ? ((pow(base,slope)-1.0)/(pow(base,maxValue)-1.0))*maxValue : slope;float accent=cos(scaledSlope);vec4 accent_color=(1.0-accent)*u_accent*clamp(intensity*2.0,0.0,1.0);float shade=abs(mod((aspect+azimuth)/PI+0.5,2.0)-1.0);vec4 shade_color=mix(u_shadows[0],u_highlights[0],shade)*sin(scaledSlope)*clamp(intensity*2.0,0.0,1.0);fragColor=accent_color*(1.0-shade_color.a)+shade_color;}void basic_hillshade(vec2 deriv){deriv=deriv*u_exaggeration*2.0;float azimuth=u_azimuths[0]+PI;float cos_az=cos(azimuth);float sin_az=sin(azimuth);float cos_alt=cos(u_altitudes[0]);float sin_alt=sin(u_altitudes[0]);float cang=(sin_alt-(deriv.y*cos_az*cos_alt-deriv.x*sin_az*cos_alt))/sqrt(1.0+dot(deriv,deriv));float shade=clamp(cang,0.0,1.0);if(shade > 0.5){fragColor=u_highlights[0]*(2.0*shade-1.0);}else\n{fragColor=u_shadows[0]*(1.0-2.0*shade);}}void multidirectional_hillshade(vec2 deriv){deriv=deriv*u_exaggeration*2.0;fragColor=vec4(0,0,0,0);for(int i=0; i < NUM_ILLUMINATION_SOURCES; i++){float cos_alt=cos(u_altitudes[i]);float sin_alt=sin(u_altitudes[i]);float cos_az=-cos(u_azimuths[i]);float sin_az=-sin(u_azimuths[i]);float cang=(sin_alt-(deriv.y*cos_az*cos_alt-deriv.x*sin_az*cos_alt))/sqrt(1.0+dot(deriv,deriv));float shade=clamp(cang,0.0,1.0);if(shade > 0.5){fragColor+=u_highlights[i]*(2.0*shade-1.0)/float(NUM_ILLUMINATION_SOURCES);}else\n{fragColor+=u_shadows[i]*(1.0-2.0*shade)/float(NUM_ILLUMINATION_SOURCES);}}}void combined_hillshade(vec2 deriv){deriv=deriv*u_exaggeration*2.0;float azimuth=u_azimuths[0]+PI;float cos_az=cos(azimuth);float sin_az=sin(azimuth);float cos_alt=cos(u_altitudes[0]);float sin_alt=sin(u_altitudes[0]);float cang=acos((sin_alt-(deriv.y*cos_az*cos_alt-deriv.x*sin_az*cos_alt))/sqrt(1.0+dot(deriv,deriv)));cang=clamp(cang,0.0,PI/2.0);float shade=cang*atan(length(deriv))*4.0/PI/PI;float highlight=(PI/2.0-cang)*atan(length(deriv))*4.0/PI/PI;fragColor=u_shadows[0]*shade+u_highlights[0]*highlight;}void main() {if (v_pos.x < 0.0 || v_pos.y < 0.0 || v_pos.y > 1.0) discard;vec4 pixel=texture(u_image,v_pos);float scaleFactor=cos(radians((u_latrange[0]-u_latrange[1])*(1.0-v_pos.y)+u_latrange[1]));vec2 deriv=((pixel.rg*8.0)-4.0)/scaleFactor;if (u_method==BASIC) {basic_hillshade(deriv);} else if (u_method==COMBINED) {combined_hillshade(deriv);} else if (u_method==IGOR) {igor_hillshade(deriv);} else if (u_method==MULTIDIRECTIONAL) {multidirectional_hillshade(deriv);} else if (u_method==STANDARD) {standard_hillshade(deriv);} else {standard_hillshade(deriv);}\n#ifdef OVERDRAW_INSPECTOR\nfragColor=vec4(1.0);\n#endif\n}';
+diff --git a/node_modules/maplibre-gl/src/shaders/hillshade.vertex.glsl b/node_modules/maplibre-gl/src/shaders/hillshade.vertex.glsl
+index 5a0b271..f9bf2f6 100644
+--- a/node_modules/maplibre-gl/src/shaders/hillshade.vertex.glsl
++++ b/node_modules/maplibre-gl/src/shaders/hillshade.vertex.glsl
+@@ -7,12 +7,10 @@ out vec2 v_pos;
+ void main() {
+     gl_Position = projectTile(a_pos, a_pos);
+     v_pos = a_pos / 8192.0;
+-    // North pole
+-    if (a_pos.y < -32767.5) {
+-        v_pos.y = 0.0;
+-    }
+-    // South pole
+-    if (a_pos.y > 32766.5) {
+-        v_pos.y = 1.0;
++    // North/south pole cap triangles have no DEM data — signal fragment shader to discard.
++    // Thresholds cover both original pole Y values and subdivision.ts-modified values
++    // (NORTH_POLE_Y=-32768 → -32767, SOUTH_POLE_Y=32767 → 32766).
++    if (a_pos.y < -32766.5 || a_pos.y > 32765.5) {
++        v_pos.x = -100.0;
+     }
+ }
+diff --git a/node_modules/maplibre-gl/src/shaders/hillshade.vertex.glsl.g.ts b/node_modules/maplibre-gl/src/shaders/hillshade.vertex.glsl.g.ts
+index f415189..b15e1ac 100644
+--- a/node_modules/maplibre-gl/src/shaders/hillshade.vertex.glsl.g.ts
++++ b/node_modules/maplibre-gl/src/shaders/hillshade.vertex.glsl.g.ts
+@@ -1,2 +1,2 @@
+ // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
+-export default 'uniform mat4 u_matrix;in vec2 a_pos;out vec2 v_pos;void main() {gl_Position=projectTile(a_pos,a_pos);v_pos=a_pos/8192.0;if (a_pos.y <-32767.5) {v_pos.y=0.0;}if (a_pos.y > 32766.5) {v_pos.y=1.0;}}';
++export default 'uniform mat4 u_matrix;in vec2 a_pos;out vec2 v_pos;void main() {gl_Position=projectTile(a_pos,a_pos);v_pos=a_pos/8192.0;if (a_pos.y <-32766.5||a_pos.y > 32765.5) {v_pos.x=-100.0;}}';
+diff --git a/node_modules/maplibre-gl/src/shaders/line.fragment.glsl b/node_modules/maplibre-gl/src/shaders/line.fragment.glsl
+index 2bd82dc..eaf1663 100644
+--- a/node_modules/maplibre-gl/src/shaders/line.fragment.glsl
++++ b/node_modules/maplibre-gl/src/shaders/line.fragment.glsl
+@@ -5,6 +5,8 @@ in vec2 v_normal;
+ in float v_gamma_scale;
+ #ifdef GLOBE
+ in float v_depth;
++in float v_mercator_y;
++in float v_mercator_x;
+ #endif
+ 
+ #pragma mapbox: define highp vec4 color
+@@ -36,6 +38,12 @@ void main() {
+         // Thus we render line geometry without face culling, and clip the lines manually here.
+         discard;
+     }
++    if (v_mercator_y < 0.031 || v_mercator_y > 0.969) {
++        discard;
++    }
++    if (v_mercator_x < 0.02 || v_mercator_x > 0.98) {
++        discard;
++    }
+     #endif
+ 
+ #ifdef OVERDRAW_INSPECTOR
+diff --git a/node_modules/maplibre-gl/src/shaders/line.vertex.glsl b/node_modules/maplibre-gl/src/shaders/line.vertex.glsl
+index 92a7b38..4f87906 100644
+--- a/node_modules/maplibre-gl/src/shaders/line.vertex.glsl
++++ b/node_modules/maplibre-gl/src/shaders/line.vertex.glsl
+@@ -20,6 +20,8 @@ out float v_gamma_scale;
+ out highp float v_linesofar;
+ #ifdef GLOBE
+ out float v_depth;
++out float v_mercator_y;
++out float v_mercator_x;
+ #endif
+ 
+ #pragma mapbox: define highp vec4 color
+@@ -81,6 +83,8 @@ void main() {
+     vec4 projected_with_extrude = projectTile(pos + offset2 / u_ratio * adjustedThickness + u_translation + dist / u_ratio * adjustedThickness);
+     gl_Position = projected_with_extrude;
+     #ifdef GLOBE
++    v_mercator_y = u_projection_tile_mercator_coords.y + u_projection_tile_mercator_coords.w * pos.y;
++    v_mercator_x = (pos.x < 1.0 || pos.x > 8190.0) ? (u_projection_tile_mercator_coords.x + u_projection_tile_mercator_coords.z * pos.x) : 0.5;
+     v_depth = gl_Position.z / gl_Position.w;
+     #endif
+ 
+diff --git a/node_modules/maplibre-gl/src/shaders/raster.vertex.glsl b/node_modules/maplibre-gl/src/shaders/raster.vertex.glsl
+index 365fcec..5a09e82 100644
+--- a/node_modules/maplibre-gl/src/shaders/raster.vertex.glsl
++++ b/node_modules/maplibre-gl/src/shaders/raster.vertex.glsl
+@@ -28,10 +28,12 @@ void main() {
+     // North pole
+     if (a_pos.y < -32767.5) {
+         v_pos0.y = 0.0;
++        v_pos0.x = 0.5;
+     }
+     // South pole
+     if (a_pos.y > 32766.5) {
+         v_pos0.y = 1.0;
++        v_pos0.x = 0.5;
+     }
+     #endif
+ 
+diff --git a/node_modules/maplibre-gl/src/shaders/raster.vertex.glsl.g.ts b/node_modules/maplibre-gl/src/shaders/raster.vertex.glsl.g.ts
+index b9f8822..7e60989 100644
+--- a/node_modules/maplibre-gl/src/shaders/raster.vertex.glsl.g.ts
++++ b/node_modules/maplibre-gl/src/shaders/raster.vertex.glsl.g.ts
+@@ -1,2 +1,2 @@
+ // This file is generated. Edit build/generate-shaders.ts, then run `npm run codegen`.
+-export default 'uniform vec2 u_tl_parent;uniform float u_scale_parent;uniform float u_buffer_scale;uniform vec4 u_coords_top;uniform vec4 u_coords_bottom;in vec2 a_pos;out vec2 v_pos0;out vec2 v_pos1;void main() {vec2 fractionalPos=a_pos/8192.0;vec2 position=mix(mix(u_coords_top.xy,u_coords_top.zw,fractionalPos.x),mix(u_coords_bottom.xy,u_coords_bottom.zw,fractionalPos.x),fractionalPos.y);gl_Position=projectTile(position,position);v_pos0=((fractionalPos-0.5)/u_buffer_scale)+0.5;\n#ifdef GLOBE\nif (a_pos.y <-32767.5) {v_pos0.y=0.0;}if (a_pos.y > 32766.5) {v_pos0.y=1.0;}\n#endif\nv_pos1=(v_pos0*u_scale_parent)+u_tl_parent;}';
++export default 'uniform vec2 u_tl_parent;uniform float u_scale_parent;uniform float u_buffer_scale;uniform vec4 u_coords_top;uniform vec4 u_coords_bottom;in vec2 a_pos;out vec2 v_pos0;out vec2 v_pos1;void main() {vec2 fractionalPos=a_pos/8192.0;vec2 position=mix(mix(u_coords_top.xy,u_coords_top.zw,fractionalPos.x),mix(u_coords_bottom.xy,u_coords_bottom.zw,fractionalPos.x),fractionalPos.y);gl_Position=projectTile(position,position);v_pos0=((fractionalPos-0.5)/u_buffer_scale)+0.5;\n#ifdef GLOBE\nif (a_pos.y <-32767.5) {v_pos0.y=0.0;v_pos0.x=0.5;}if (a_pos.y > 32766.5) {v_pos0.y=1.0;v_pos0.x=0.5;}\n#endif\nv_pos1=(v_pos0*u_scale_parent)+u_tl_parent;}';
