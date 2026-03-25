@@ -93,10 +93,22 @@ def _dst(remote: str | None, path: str) -> str:
     return f"{remote}:{path}" if remote else path
 
 
+def _ssh_mkdir(remote: str | None, path: str, owner: str, *, dry_run: bool = False) -> None:
+    """Create a remote directory via sudo and chown it to owner so it is writable."""
+    _ssh_run(remote, f"sudo mkdir -p {shlex.quote(path)}", dry_run=dry_run)
+    _ssh_run(remote, f"sudo chown {shlex.quote(owner)} {shlex.quote(path)}", dry_run=dry_run)
+
+
+def _ssh_chown(remote: str | None, path: str, owner: str, *, recursive: bool = False, dry_run: bool = False) -> None:
+    """Chown a remote path via sudo, optionally recursively."""
+    flag = "-R " if recursive else ""
+    _ssh_run(remote, f"sudo chown {flag}{shlex.quote(owner)} {shlex.quote(path)}", dry_run=dry_run)
+
+
 def _rsync_dir(src: str, dst: str, *, dry_run: bool = False, chmod: str = "a+rX") -> None:
     if not src.endswith("/"):
         src += "/"
-    cmd = ["rsync", "-av", "--progress"]
+    cmd = ["rsync", "-av", "--progress", "--exclude=._*", "--exclude=.DS_Store"]
     if chmod:
         cmd += ["--chmod", chmod]
     cmd += [src, dst]
@@ -166,16 +178,16 @@ def _metric_sha256(dev_series_root: Path, metric_id: str) -> str:
         if not metric_dir.is_dir():
             continue
         for p in sorted(metric_dir.rglob("*")):
-            if p.is_file():
+            if p.is_file() and not p.name.startswith("."):
                 files.append((p.relative_to(metric_dir).as_posix(), p))
     return _hash_files(files)
 
 
 def _map_sha256(map_dir: Path) -> str:
-    """Hash all files for a map; relative paths rooted at the map dir."""
+    """Hash all data files for a map; relative paths rooted at the map dir."""
     files: list[tuple[str, Path]] = []
     for p in sorted(map_dir.rglob("*")):
-        if p.is_file():
+        if p.is_file() and not p.name.startswith("."):
             files.append((p.relative_to(map_dir).as_posix(), p))
     return _hash_files(files)
 
@@ -239,7 +251,7 @@ def _fetch_prod_state(
     for metric_id, date in manifest.get("series", {}).items():
         try:
             info = json.loads(
-                _ssh_read(remote, f"{artifacts_root}/series/{metric_id}/{date}/manifest.json")
+                _ssh_read(remote, f"{artifacts_root}/series/{metric_id}/{date}/.artifact_manifest.json")
             )
             series_checksums[metric_id] = info.get("tree_sha256")
         except (FileNotFoundError, json.JSONDecodeError):
@@ -249,7 +261,7 @@ def _fetch_prod_state(
     for map_id, date in manifest.get("maps", {}).items():
         try:
             info = json.loads(
-                _ssh_read(remote, f"{artifacts_root}/maps/{map_id}/{date}/manifest.json")
+                _ssh_read(remote, f"{artifacts_root}/maps/{map_id}/{date}/.artifact_manifest.json")
             )
             maps_checksums[map_id] = info.get("tree_sha256")
         except (FileNotFoundError, json.JSONDecodeError):
@@ -383,6 +395,7 @@ def main() -> int:
         or str(Path(remote_releases_root).parent / "artifacts")
     )
     release: str = args.release or datetime.date.today().strftime("%Y_%m_%d")
+    deploy_user: str = remote.split("@")[0] if remote and "@" in remote else "deploy"
     dev_root: Path = args.dev_root
     dev_series_root = dev_root / "series"
     dev_maps_root = dev_root / "maps"
@@ -539,7 +552,7 @@ def main() -> int:
             grid_ids = local_metrics[metric_id]
             print(f"  series/{metric_id}  (grid_ids: {', '.join(grid_ids)})")
             dst_dir = f"{remote_artifacts_root}/series/{metric_id}/{artifact_date}"
-            _ssh_run(remote, f"mkdir -p {shlex.quote(dst_dir)}", dry_run=args.dry_run)
+            _ssh_mkdir(remote, dst_dir, deploy_user, dry_run=args.dry_run)
             for grid_id in grid_ids:
                 src = str(dev_series_root / grid_id / metric_id)
                 _rsync_dir(
@@ -547,13 +560,6 @@ def main() -> int:
                     _dst(remote, f"{dst_dir}/"),
                     dry_run=args.dry_run,
                     chmod=args.rsync_chmod,
-                )
-            if args.remote_chown:
-                art_dir = f"{remote_artifacts_root}/series/{metric_id}/{artifact_date}"
-                _ssh_run(
-                    remote,
-                    f"sudo chown -R {args.remote_chown} {shlex.quote(art_dir)}",
-                    dry_run=args.dry_run,
                 )
             artifact_manifest = {
                 "artifact_type": "series",
@@ -565,11 +571,13 @@ def main() -> int:
             }
             _write_remote_json(
                 remote,
-                f"{remote_artifacts_root}/series/{metric_id}/{artifact_date}/manifest.json",
+                f"{remote_artifacts_root}/series/{metric_id}/{artifact_date}/.artifact_manifest.json",
                 artifact_manifest,
                 dry_run=args.dry_run,
                 chmod=args.rsync_chmod,
             )
+            if args.remote_chown:
+                _ssh_chown(remote, dst_dir, args.remote_chown, recursive=True, dry_run=args.dry_run)
         print()
 
     if sync_maps:
@@ -578,19 +586,13 @@ def main() -> int:
             print(f"  maps/{map_id}")
             src = str(local_maps[map_id])
             dst_dir = f"{remote_artifacts_root}/maps/{map_id}/{artifact_date}"
-            _ssh_run(remote, f"mkdir -p {shlex.quote(dst_dir)}", dry_run=args.dry_run)
+            _ssh_mkdir(remote, dst_dir, deploy_user, dry_run=args.dry_run)
             _rsync_dir(
                 src,
                 _dst(remote, f"{dst_dir}/"),
                 dry_run=args.dry_run,
                 chmod=args.rsync_chmod,
             )
-            if args.remote_chown:
-                _ssh_run(
-                    remote,
-                    f"sudo chown -R {args.remote_chown} {shlex.quote(dst_dir)}",
-                    dry_run=args.dry_run,
-                )
             artifact_manifest = {
                 "artifact_type": "maps",
                 "map_id": map_id,
@@ -600,11 +602,13 @@ def main() -> int:
             }
             _write_remote_json(
                 remote,
-                f"{remote_artifacts_root}/maps/{map_id}/{artifact_date}/manifest.json",
+                f"{remote_artifacts_root}/maps/{map_id}/{artifact_date}/.artifact_manifest.json",
                 artifact_manifest,
                 dry_run=args.dry_run,
                 chmod=args.rsync_chmod,
             )
+            if args.remote_chown:
+                _ssh_chown(remote, dst_dir, args.remote_chown, recursive=True, dry_run=args.dry_run)
         print()
 
     # --- Build new release manifest ---
@@ -632,11 +636,8 @@ def main() -> int:
     # --- Write release dir on remote ---
     print(f"[release] Creating release '{release}' on remote...")
     remote_release_dir = f"{remote_releases_root}/{release}"
-    _ssh_run(
-        remote,
-        f"mkdir -p {shlex.quote(remote_release_dir + '/registry')}",
-        dry_run=args.dry_run,
-    )
+    _ssh_mkdir(remote, remote_release_dir, deploy_user, dry_run=args.dry_run)
+    _ssh_mkdir(remote, f"{remote_release_dir}/registry", deploy_user, dry_run=args.dry_run)
     registry_src = args.registry
     if registry_src.is_dir():
         _rsync_dir(
@@ -650,23 +651,13 @@ def main() -> int:
     local_aux_dir = dev_root / "aux"
     if local_aux_dir.is_dir():
         print(f"  Copying aux files from {local_aux_dir}...")
-        _ssh_run(
-            remote,
-            f"mkdir -p {shlex.quote(remote_release_dir + '/aux')}",
-            dry_run=args.dry_run,
-        )
+        _ssh_mkdir(remote, f"{remote_release_dir}/aux", deploy_user, dry_run=args.dry_run)
         _rsync_dir(
             str(local_aux_dir),
             _dst(remote, f"{remote_release_dir}/aux/"),
             dry_run=args.dry_run,
             chmod=args.rsync_chmod,
         )
-        if args.remote_chown:
-            _ssh_run(
-                remote,
-                f"sudo chown -R {args.remote_chown} {shlex.quote(remote_release_dir + '/aux')}",
-                dry_run=args.dry_run,
-            )
     else:
         print(f"  WARNING: no aux directory found at {local_aux_dir}; sparse risk mask will not be included in the release.")
     _write_remote_json(
@@ -676,6 +667,8 @@ def main() -> int:
         dry_run=args.dry_run,
         chmod=args.rsync_chmod,
     )
+    if args.remote_chown:
+        _ssh_chown(remote, remote_release_dir, args.remote_chown, recursive=True, dry_run=args.dry_run)
     print()
 
     # --- Update LATEST ---
@@ -683,7 +676,7 @@ def main() -> int:
         print(f"[LATEST] Updating LATEST -> {release}")
         _ssh_run(
             remote,
-            f"echo {shlex.quote(release)} > {shlex.quote(remote_releases_root + '/LATEST')}",
+            f"echo {shlex.quote(release)} | sudo tee {shlex.quote(remote_releases_root + '/LATEST')} > /dev/null",
             dry_run=args.dry_run,
         )
         print()
