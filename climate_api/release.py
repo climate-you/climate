@@ -479,7 +479,7 @@ class ReleaseResolver:
                     series_pointers: dict[str, str] = release_manifest.get("series", {})
                     for metric_id, artifact_date in series_pointers.items():
                         artifact_dir = artifacts_root / "series" / metric_id / artifact_date
-                        artifact_manifest_path = artifact_dir / "manifest.json"
+                        artifact_manifest_path = artifact_dir / ".artifact_manifest.json"
                         if not artifact_manifest_path.exists():
                             raise FileNotFoundError(
                                 f"Artifact manifest missing for '{metric_id}' date "

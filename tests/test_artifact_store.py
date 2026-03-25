@@ -160,7 +160,7 @@ def _write_registry(release_dir: Path) -> None:
 
 def _write_artifact_manifest(artifact_dir: Path, info: dict) -> None:
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    (artifact_dir / "manifest.json").write_text(
+    (artifact_dir / ".artifact_manifest.json").write_text(
         json.dumps(info), encoding="utf-8"
     )
 

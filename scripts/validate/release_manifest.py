@@ -108,7 +108,7 @@ def _validate_v2(
                     f"Series artifact dir missing: {artifact_dir}"
                 )
             else:
-                manifest_file = artifact_dir / "manifest.json"
+                manifest_file = artifact_dir / ".artifact_manifest.json"
                 if not manifest_file.exists():
                     errors.append(
                         f"Series artifact manifest missing (build incomplete?): {manifest_file}"
@@ -129,7 +129,7 @@ def _validate_v2(
                     f"Map artifact dir missing: {artifact_dir}"
                 )
             else:
-                manifest_file = artifact_dir / "manifest.json"
+                manifest_file = artifact_dir / ".artifact_manifest.json"
                 if not manifest_file.exists():
                     errors.append(
                         f"Map artifact manifest missing (build incomplete?): {manifest_file}"
