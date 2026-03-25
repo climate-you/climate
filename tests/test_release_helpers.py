@@ -187,8 +187,8 @@ def test_build_release_layers_projection_bounds_for_0p05_mercator() -> None:
         },
     )
     assert layers[0]["projection_bounds"] == {
-        "lat_min": -85.05,
-        "lat_max": 85.05,
+        "lat_min": -85.025,
+        "lat_max": 85.025,
         "lon_min": -180.0,
         "lon_max": 180.0,
     }

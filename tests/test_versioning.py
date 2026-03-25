@@ -44,6 +44,7 @@ def test_resolve_app_version_uses_exact_semver_tag(
         app_version="v1.2.3",
         app_tag="v1.2.3",
         app_commit="abc1234",
+        app_branch=None,
     )
 
 
@@ -61,6 +62,7 @@ def test_resolve_app_version_uses_dev_commit_without_tag(monkeypatch) -> None:
         app_version="dev+deadbee",
         app_tag=None,
         app_commit="deadbee",
+        app_branch=None,
     )
 
 
@@ -74,4 +76,5 @@ def test_resolve_app_version_returns_unknown_when_git_unavailable(monkeypatch) -
         app_version="unknown",
         app_tag=None,
         app_commit=None,
+        app_branch=None,
     )
