@@ -8,6 +8,7 @@ __pycache__
 /data/*
 /dist
 /docs/plans
+/experiments/results/*
 /htmlcov/
 /web/public/data/*
 /web/web/
