@@ -20,6 +20,8 @@ import ColdOpenOverlay from "@/components/explorer/ColdOpenOverlay";
 import SearchOverlay from "@/components/explorer/SearchOverlay";
 import type { AutocompleteItem } from "@/components/explorer/SearchOverlay";
 import SourcesOverlay from "@/components/SourcesOverlay";
+import ChatDrawer from "@/components/chat/ChatDrawer";
+import { useChatFeatureFlag } from "@/hooks/explorer/useChatFeatureFlag";
 import { useDebugTextureSync } from "@/hooks/explorer/useDebugTextureSync";
 import { useOverlayRouteSync } from "@/hooks/explorer/useOverlayRouteSync";
 import { useReleaseResolution } from "@/hooks/explorer/useReleaseResolution";
@@ -247,6 +249,7 @@ export default function ExplorerPage({
   );
   const { debugMode, textureVariantOverride } =
     useDebugTextureSync(debugAllowed);
+  const chatEnabled = useChatFeatureFlag();
   const [textureDebugInfo, setTextureDebugInfo] =
     useState<TextureDebugInfo | null>(null);
   const DEFAULT_API_PORT = 8001;
@@ -1427,6 +1430,22 @@ export default function ExplorerPage({
           </div>
         </div>
       </aside>
+
+      {chatEnabled && (
+        <ChatDrawer
+          apiBase={apiBase}
+          mapContext={
+            selectedLocation
+              ? {
+                  lat,
+                  lon,
+                  label: selectedLocation.label,
+                }
+              : null
+          }
+          devMode={debugMode}
+        />
+      )}
     </main>
   );
 }

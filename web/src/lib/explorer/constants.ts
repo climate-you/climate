@@ -77,3 +77,15 @@ export const LAYER_MENU_FADE_MS = 500;
 // MapLibreGlobe — misc
 export const MOBILE_TEXTURE_FALLBACK_LIMIT = 4096;
 export const AUTO_ROTATE_DEG_PER_SEC = 3;
+
+// Chat feature flag
+export const CHAT_FEATURE_FLAG_KEY = "climate.chatBotEnabled";
+export const CHAT_OPT_OUT_KEY = "climate.chatOptOut";
+export const CHAT_MODEL_OVERRIDE_KEY = "climate.chatModelOverride";
+export const CHAT_EXAMPLE_QUESTIONS_GENERIC = [
+  "What is the hottest capital city in the world?",
+  "What are the top 5 warmest large cities in the world?",
+  "How have winters changed in Tokyo since 2000?",
+];
+export const CHAT_PRIVACY_NOTICE =
+  "Your questions may be reviewed to improve the assistant.";

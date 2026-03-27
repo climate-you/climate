@@ -61,6 +61,7 @@ OUT_COLS = [
     "kind",
     "label",
     "geonameid",
+    "capital",
 ]
 
 
@@ -508,6 +509,7 @@ def write_locations_csv(
                 "population",
                 "norm_label",
                 "norm_city",
+                "capital",
             ],
         )
         index_writer.writeheader()
@@ -626,6 +628,7 @@ def write_locations_csv(
                     "geonameid": geonameid,
                     "kind": "city",
                     "label": label,
+                    "capital": "true" if row["feature_code"] == "PPLC" else "false",
                 }
             )
             if points is not None:
@@ -694,6 +697,7 @@ def write_locations_csv(
                     "population": row["population"],
                     "norm_label": _norm_index(row["label"]),
                     "norm_city": _norm_index(row["city_name"]),
+                    "capital": "true" if row.get("feature_code") == "PPLC" else "false",
                 }
             )
 

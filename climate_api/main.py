@@ -12,7 +12,7 @@ from threading import Lock
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from uvicorn.logging import AccessFormatter
 
 from .analytics.db import AnalyticsDB, IPBlocklist
@@ -36,6 +36,7 @@ from .services.panels import (
     build_panel_tiles_registry,
     build_scored_panels_tiles_registry,
 )
+from .chat.orchestrator import ChatOrchestrator, ProviderTier
 from .store.country_classifier import CountryClassifier
 from .store.location_index import LocationIndex
 from .store.ocean_classifier import OceanClassifier
@@ -50,6 +51,26 @@ logging.getLogger("uvicorn.access").disabled = True
 class _ClickBody(BaseModel):
     lat: float
     lon: float
+
+
+class _MapContext(BaseModel):
+    lat: float
+    lon: float
+    label: str
+
+
+class _ChatRequest(BaseModel):
+    question: str
+    map_context: _MapContext | None = None
+    opt_out: bool = False
+    session_id: str | None = None
+    # Optional tier override — used by the dev UI toggle.
+    # Valid values are tier names configured on the server (e.g. "groq_8b", "local").
+    model_override: str | None = None
+
+
+class _FeedbackBody(BaseModel):
+    feedback: str | None  # "good", "bad", or null to clear
 
 
 def _normalize_lon(lon: float) -> float:
@@ -71,6 +92,72 @@ def _configure_uvicorn_like_access_logger() -> None:
     fmt = '%(client_addr)s - "%(request_line)s" %(status_code)s (%(duration_ms).1f ms)'
     for h in access_logger.handlers:
         h.setFormatter(AccessFormatter(fmt=fmt, use_colors=True))
+
+
+def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
+    """
+    Build the ordered list of provider tiers based on settings.
+
+    Dev mode  (CHAT_DEV_MODE=1):
+      Tier 1 — Groq 8b-instant free (fast, good enough for dev iteration)
+      Tier 2 — Local Ollama qwen2.5:14b (if OLLAMA_BASE_URL is set)
+      Tier 3 — Budget exhausted message (implicit, no tier object)
+
+    Prod mode (default):
+      Tier 1 — Groq 70b free   (GROQ_API_KEY_FREE)
+      Tier 2 — Groq 70b paid   (GROQ_API_KEY_PAID, if set)
+      Tier 3 — Groq 8b free    (GROQ_API_KEY_FREE, degraded-model notice shown)
+      Tier 4 — Budget exhausted message (implicit, no tier object)
+    """
+    from groq import Groq
+
+    tiers: list[ProviderTier] = []
+
+    if settings.chat_dev_mode:
+        # Dev: 8b first (fast), local Ollama as fallback
+        if settings.groq_api_key_free:
+            tiers.append(ProviderTier(
+                name="groq_8b",
+                client=Groq(api_key=settings.groq_api_key_free),
+                model=settings.groq_model_fallback,
+                is_degraded=False,
+            ))
+        if settings.ollama_base_url:
+            try:
+                from openai import OpenAI
+                tiers.append(ProviderTier(
+                    name="local",
+                    client=OpenAI(base_url=settings.ollama_base_url, api_key="ollama"),
+                    model=settings.ollama_model,
+                    is_degraded=False,
+                ))
+            except ImportError:
+                logger.warning("openai package not installed — local Ollama tier unavailable.")
+    else:
+        # Prod: 70b free → 70b paid → 8b free (degraded)
+        if settings.groq_api_key_free:
+            tiers.append(ProviderTier(
+                name="groq_70b_free",
+                client=Groq(api_key=settings.groq_api_key_free),
+                model=settings.groq_model_primary,
+                is_degraded=False,
+            ))
+        if settings.groq_api_key_paid:
+            tiers.append(ProviderTier(
+                name="groq_70b_paid",
+                client=Groq(api_key=settings.groq_api_key_paid),
+                model=settings.groq_model_primary,
+                is_degraded=False,
+            ))
+        if settings.groq_api_key_free:
+            tiers.append(ProviderTier(
+                name="groq_8b",
+                client=Groq(api_key=settings.groq_api_key_free),
+                model=settings.groq_model_fallback,
+                is_degraded=True,
+            ))
+
+    return tiers
 
 
 def create_app() -> FastAPI:
@@ -142,6 +229,7 @@ def create_app() -> FastAPI:
     location_index = LocationIndex(settings.locations_index_csv)
 
     analytics_db = AnalyticsDB(settings.analytics_db_path)
+    analytics_db.check_schema()
     geoip_cache = GeoIPCache(ttl_s=settings.geoip_cache_ttl_s)
     ip_blocklist = IPBlocklist(settings.analytics_ip_blocklist)
 
@@ -207,6 +295,34 @@ def create_app() -> FastAPI:
             "Unset this variable before deploying to production.",
             geoip_test_ip,
         )
+
+    # Chat orchestrator — build provider tiers then initialise
+    chat_orchestrator: ChatOrchestrator | None = None
+    if settings.chat_enabled:
+        chat_tiers = _build_chat_tiers(settings, uvicorn_logger)
+        if chat_tiers:
+            try:
+                chat_ctx = release_resolver.resolve_release_context(settings.release)
+                chat_orchestrator = ChatOrchestrator(
+                    tiers=chat_tiers,
+                    tile_store=chat_ctx.tile_store,
+                    location_index=location_index,
+                    country_names=country_names,
+                    max_steps=settings.chat_max_steps,
+                )
+                tier_summary = ", ".join(f"{t.name}({t.model})" for t in chat_tiers)
+                uvicorn_logger.info(
+                    "Chat orchestrator initialised: dev_mode=%s tiers=[%s]",
+                    settings.chat_dev_mode,
+                    tier_summary,
+                )
+            except Exception as exc:
+                uvicorn_logger.warning("Chat orchestrator failed to initialise: %s", exc)
+        else:
+            uvicorn_logger.warning(
+                "CHAT_ENABLED=1 but no provider keys/URLs configured — chat disabled. "
+                "Set GROQ_API_KEY_FREE (or GROQ_API_KEY) and/or OLLAMA_BASE_URL."
+            )
 
     @app.middleware("http")
     async def access_log_with_timing(request: Request, call_next):
@@ -526,6 +642,110 @@ def create_app() -> FastAPI:
             panel_id=panel_id,
             graph_ids=[g.id for g in resp.panel.graphs],
         )
+
+    # ------------------------------------------------------------------
+    # Chat endpoints
+    # ------------------------------------------------------------------
+
+    @app.post("/api/chat")
+    def chat(body: _ChatRequest, request: Request):
+        if chat_orchestrator is None:
+            raise HTTPException(status_code=503, detail="Chat is not enabled on this server.")
+
+        map_ctx = (
+            {"lat": body.map_context.lat, "lon": body.map_context.lon, "label": body.map_context.label}
+            if body.map_context else None
+        )
+
+        def _event_stream():
+            import json as _json
+            answer_text: list[str] = []
+            final_session_id = body.session_id or ""
+            step_count = 0
+            tools_called: list[str] = []
+            tool_calls_detail: list[dict] = []
+            tier_used: str | None = None
+            total_ms: int | None = None
+            steps_timing: list[dict] | None = None
+
+            for event in chat_orchestrator.run(
+                question=body.question,
+                map_context=map_ctx,
+                session_id=body.session_id,
+                model_override=body.model_override,
+            ):
+                yield f"data: {_json.dumps(event)}\n\n"
+
+                if event["type"] == "tool_call":
+                    tools_called.append(event["name"])
+                    tool_calls_detail.append({
+                        "name": event["name"],
+                        "args": event.get("args", {}),
+                        "step": event.get("step"),
+                    })
+                elif event["type"] == "answer":
+                    answer_text.append(event["text"])
+                elif event["type"] == "done":
+                    final_session_id = event.get("session_id", final_session_id)
+                    step_count = event.get("step_count", 0)
+                    tier_used = event.get("tier")
+                    total_ms = event.get("total_ms")
+                    steps_timing = event.get("steps_timing")
+
+            if settings.chat_enabled and not body.opt_out:
+                analytics_db.record_chat_session(
+                    session_id=final_session_id,
+                    question=body.question,
+                    answer=" ".join(answer_text) or None,
+                    step_count=step_count,
+                    tools_called=tools_called,
+                    tool_calls_detail=tool_calls_detail or None,
+                    tier=tier_used,
+                    opt_out=body.opt_out,
+                    map_lat=body.map_context.lat if body.map_context else None,
+                    map_lon=body.map_context.lon if body.map_context else None,
+                    map_label=body.map_context.label if body.map_context else None,
+                    total_ms=total_ms,
+                    steps_timing=steps_timing,
+                )
+
+        return StreamingResponse(
+            _event_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    @app.post("/api/chat/{session_id}/feedback", status_code=204)
+    def chat_feedback(session_id: str, body: _FeedbackBody):
+        if body.feedback not in ("good", "bad", None):
+            raise HTTPException(status_code=400, detail="feedback must be 'good', 'bad', or null.")
+        if settings.chat_enabled:
+            analytics_db.record_chat_feedback(session_id, body.feedback)
+        return Response(status_code=204)
+
+    @app.post("/api/chat/{session_id}/reviewed", status_code=204)
+    def mark_chat_reviewed(session_id: str):
+        if settings.chat_enabled:
+            analytics_db.mark_bad_answer_reviewed(session_id)
+        return Response(status_code=204)
+
+    @app.get("/api/admin/chat/sessions")
+    def admin_chat_sessions(
+        limit: int = Query(50, ge=1, le=200),
+        offset: int = Query(0, ge=0),
+        feedback: str | None = Query(None),
+    ):
+        return {
+            "sessions": analytics_db.get_chat_sessions(limit=limit, offset=offset, feedback=feedback),
+            "stats": analytics_db.get_chat_stats(),
+        }
+
+    @app.get("/api/admin/chat/bad-answers")
+    def admin_chat_bad_answers(limit: int = Query(50, ge=1, le=200)):
+        return {
+            "bad_answers": analytics_db.get_chat_bad_answers(limit=limit),
+            "stats": analytics_db.get_chat_stats(),
+        }
 
     @app.get("/assets/v/{release}/{asset_path:path}")
     def get_release_asset(release: str, asset_path: str):

@@ -16,6 +16,7 @@ class LocationHit:
     lon: float
     country_code: str
     population: int
+    capital: bool = False
 
 
 def _norm(s: str) -> str:
@@ -48,6 +49,7 @@ class LocationIndex:
         self._lons: List[float] = []
         self._country_codes: List[str] = []
         self._populations: List[int] = []
+        self._capitals: List[bool] = []
         self._by_id: Dict[int, int] = {}
         self._prefix_map: Dict[str, List[int]] = {}
 
@@ -66,6 +68,7 @@ class LocationIndex:
                 lon = float(row.get("lon") or 0.0)
                 cc = (row.get("country_code") or "").strip()
                 pop = int(float(row.get("population") or 0))
+                capital = (row.get("capital") or "").strip().lower() == "true"
                 norm_label = row.get("norm_label") or _norm(label)
                 norm_city = row.get("norm_city") or _norm(row.get("city_name") or "")
 
@@ -78,6 +81,7 @@ class LocationIndex:
                 self._lons.append(lon)
                 self._country_codes.append(cc)
                 self._populations.append(pop)
+                self._capitals.append(capital)
 
                 if geonameid:
                     self._by_id[geonameid] = i
@@ -103,6 +107,7 @@ class LocationIndex:
             lon=self._lons[i],
             country_code=self._country_codes[i],
             population=self._populations[i],
+            capital=self._capitals[i],
         )
 
     def autocomplete(self, query: str, *, limit: int = 10) -> List[LocationHit]:
@@ -142,3 +147,15 @@ class LocationIndex:
             if nl == q:
                 return self._hit(i)
         return None
+
+    def iter_all(self, *, min_population: int = 0, capitals_only: bool = False) -> List[LocationHit]:
+        """Return all locations matching the given filters, sorted by population descending."""
+        result = []
+        for i in range(len(self._labels)):
+            if min_population > 0 and self._populations[i] < min_population:
+                continue
+            if capitals_only and not self._capitals[i]:
+                continue
+            result.append(self._hit(i))
+        result.sort(key=lambda h: -h.population)
+        return result

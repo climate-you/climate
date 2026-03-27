@@ -331,6 +331,26 @@ You should see a line reporting the number of IPs loaded (e.g. `Analytics IP blo
 
 > **Note:** The blocklist file path defaults to `/opt/climate/source/data/analytics/ip_blocklist.txt`. To override it, set `ANALYTICS_IP_BLOCKLIST` in `/etc/climate/backend.env`.
 
+## 8d) Enable Chat Assistant (optional)
+
+The chat feature is disabled by default. To enable it, edit `/etc/climate/backend.env` and set:
+
+```ini
+CHAT_ENABLED=1
+CHAT_DEV_MODE=0
+GROQ_API_KEY_FREE=<your-groq-free-api-key>
+```
+
+`CHAT_DEV_MODE` defaults to `1` (dev/safe mode — uses 8b model, preserves the 70b free allowance). **Always set `CHAT_DEV_MODE=0` explicitly in production** to activate the full 70b tier chain.
+
+For the full setup guide (API key tiers, fallback chain, monitoring, activating for users), see `docs/runbooks/chat.md`.
+
+Then restart the backend:
+
+```bash
+sudo systemctl restart climate-backend
+```
+
 ## 9) Verify IP-based Runtime
 
 From your local machine:

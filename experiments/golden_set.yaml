@@ -1,0 +1,402 @@
+# LLM Chat Assistant — Golden Evaluation Set
+#
+# Layer 1: factual regression tests (automated).
+#   expected_value / expected_year are populated from real tile data at write time.
+#   Run against /api/chat or chat_poc.py and extract numbers from the answer.
+#   Mark a test as failing if the extracted number differs from expected_value
+#   by more than tolerance, or if expected_year doesn't match.
+#
+# Layer 2: qualitative evaluation (LLM-as-judge, run manually on significant changes).
+#   Scored on: accuracy, specificity, relevance, labelling, calibration.
+#   criteria lists what to check; must_not lists disqualifying patterns.
+#
+# expected_value: null means "to be filled in by running against the production release".
+# map_context: simulates a location selected on the map (lat, lon, label).
+
+# ---------------------------------------------------------------------------
+# Layer 1 — Basic point queries
+# ---------------------------------------------------------------------------
+
+- id: L1-01
+  layer: 1
+  question: "What was the annual mean temperature in Paris, France in 2020?"
+  expected_tools: [resolve_location, get_metric_series]
+  checks:
+    - type: numeric
+      description: Returns the correct °C value for Paris 2020
+      expected_value: 12.829
+      tolerance: 0.2
+      unit: "°C"
+
+- id: L1-02
+  layer: 1
+  question: "What was the annual mean temperature in Tokyo, Japan in 2020?"
+  expected_tools: [resolve_location, get_metric_series]
+  checks:
+    - type: numeric
+      description: Returns the correct °C value for Tokyo 2020
+      expected_value: 16.41
+      tolerance: 0.3
+      unit: "°C"
+
+- id: L1-03
+  layer: 1
+  question: "What was the annual mean temperature in New York City, USA in 2010?"
+  expected_tools: [resolve_location, get_metric_series]
+  checks:
+    - type: numeric
+      description: Returns the correct °C value for NYC 2010
+      expected_value: 13.065
+      tolerance: 0.2
+      unit: "°C"
+
+# ---------------------------------------------------------------------------
+# Layer 1 — Year-finding queries
+# ---------------------------------------------------------------------------
+
+- id: L1-04
+  layer: 1
+  question: "In which year between 2000 and 2023 was the annual mean temperature highest in Tokyo, Japan?"
+  expected_tools: [resolve_location, get_metric_series]
+  checks:
+    - type: year
+      description: Returns the correct hottest year for Tokyo in that range
+      expected_year: 2023
+
+- id: L1-05
+  layer: 1
+  question: "In which year between 1980 and 2023 was the annual mean temperature lowest in London, UK?"
+  expected_tools: [resolve_location, get_metric_series]
+  checks:
+    - type: year
+      description: Returns the correct coldest year for London in that range
+      expected_year: 1986
+
+# ---------------------------------------------------------------------------
+# Layer 1 — Data availability fallback
+# Tests that the model states the actual data period, not the requested period,
+# when falling back to the most recent available data.
+# ---------------------------------------------------------------------------
+
+- id: L1-06
+  layer: 1
+  question: "How was the temperature in Paris, France last month?"
+  expected_tools: [resolve_location, get_metric_series]
+  # "last month" = Feb 2026 (past but not yet in dataset which covers to 2025-12).
+  # Acceptable responses: either explain the data gap with the explicit month/year,
+  # OR fall back to the most recent available value (Dec 2025 = 6.562°C).
+  checks:
+    - type: not_contains
+      description: Must not say "last month" without specifying which month/year
+      pattern: "last month."   # trailing dot = sentence-ending "last month" with no date
+    - type: contains
+      description: Must mention a specific year (named the data period or the gap)
+      pattern: "202"
+
+- id: L1-07
+  layer: 1
+  question: "How was the temperature in Paris, France last year?"
+  expected_tools: [resolve_location, get_metric_series]
+  checks:
+    - type: not_contains
+      description: Must not say "last year" when data for that year is unavailable
+      pattern: "last year"
+      condition: "only applies if the calendar last year is outside the dataset range"
+    - type: contains
+      description: Must state the explicit year of the data returned
+      pattern: "202"   # matches 2020, 2021, ... 2029
+    - type: numeric
+      description: Returns the most recent yearly value (2025 = 12.515°C)
+      expected_value: 12.515
+      tolerance: 0.2
+      unit: "°C"
+
+# ---------------------------------------------------------------------------
+# Layer 1 — Multi-year aggregation (model computes from series)
+# ---------------------------------------------------------------------------
+
+- id: L1-08
+  layer: 1
+  question: "What was the average annual mean temperature in Paris, France during the 1990s?"
+  expected_tools: [resolve_location, get_metric_series]
+  checks:
+    - type: numeric
+      description: Mean of yearly values 1990-1999 for Paris
+      expected_value: 11.031
+      tolerance: 0.2
+      unit: "°C"
+    - type: contains
+      description: Mentions the period 1990-1999
+      pattern: "199"
+
+- id: L1-09
+  layer: 1
+  question: "What was the warmest year on record in Sydney, Australia between 1979 and 2023?"
+  expected_tools: [resolve_location, get_metric_series]
+  checks:
+    - type: year
+      description: Returns the correct hottest year for Sydney in full record
+      expected_year: 2016
+
+# ---------------------------------------------------------------------------
+# Layer 1 — Two-location comparison
+# ---------------------------------------------------------------------------
+
+- id: L1-10
+  layer: 1
+  question: "Which was warmer in 2020: Paris, France or London, UK?"
+  expected_tools: [resolve_location, resolve_location, get_metric_series, get_metric_series]
+  checks:
+    - type: numeric
+      description: Gives the Paris 2020 value
+      expected_value: 12.829
+      tolerance: 0.2
+      unit: "°C"
+    - type: numeric
+      description: Gives the London 2020 value
+      expected_value: 11.326
+      tolerance: 0.2
+      unit: "°C"
+    - type: contains
+      description: States which city was warmer
+      pattern: "Paris"
+
+# ---------------------------------------------------------------------------
+# Layer 1 — Map context (location pre-supplied, no resolve_location needed)
+# ---------------------------------------------------------------------------
+
+- id: L1-11
+  layer: 1
+  question: "What was the temperature here in 2015?"
+  map_context: {lat: 35.68, lon: 139.69, label: "Tokyo, Japan"}
+  expected_tools: [get_metric_series]   # resolve_location should NOT be called
+  checks:
+    - type: not_called
+      description: resolve_location should be skipped when map context is provided
+      tool: resolve_location
+    - type: numeric
+      description: Returns the Tokyo 2015 value
+      expected_value: 15.88
+      tolerance: 0.2
+      unit: "°C"
+
+# ---------------------------------------------------------------------------
+# Layer 1 — Out-of-scope / missing data
+# ---------------------------------------------------------------------------
+
+- id: L1-12
+  layer: 1
+  question: "What was the rainfall in Paris, France last year?"
+  expected_tools: []   # ideally no data tool called; model should decline
+  checks:
+    - type: contains
+      description: Explains that precipitation data is not available
+      pattern: "precipitation"
+    - type: not_contains
+      description: Does not hallucinate a rainfall value
+      pattern: "mm"
+
+- id: L1-13
+  layer: 1
+  question: "What will the temperature in Tokyo, Japan be in 2050?"
+  expected_tools: []
+  checks:
+    - type: contains
+      description: Explains that future projections are outside the dataset scope
+      pattern: "dataset"
+
+# ---------------------------------------------------------------------------
+# Layer 2 — Trend description
+# ---------------------------------------------------------------------------
+
+- id: L2-01
+  layer: 2
+  question: "How have winters changed in Tokyo, Japan since 2000?"
+  expected_tools: [resolve_location, get_metric_series]
+  criteria:
+    accuracy: "Mentions a positive or negative trend with an approximate °C/decade figure consistent with ERA5 data"
+    specificity: "Includes actual numbers (e.g. mean winter temperature in 2000-2004 vs 2019-2023, or trend slope)"
+    relevance: "Answers the question about winter (Dec-Feb) specifically, not annual mean"
+
+- id: L2-02
+  layer: 2
+  question: "Has the sea surface temperature near the Great Barrier Reef changed since 1990?"
+  expected_tools: [resolve_location, get_metric_series]
+  criteria:
+    accuracy: "Mentions a warming trend consistent with OISST data for that region"
+    specificity: "Includes a temperature value or change figure, not just 'yes it has warmed'"
+    relevance: "Answers about SST, not air temperature"
+
+# ---------------------------------------------------------------------------
+# Layer 2 — Two-tier labelling (data + general knowledge)
+# The model must clearly separate sourced data claims from general knowledge.
+# ---------------------------------------------------------------------------
+
+- id: L2-03
+  layer: 2
+  question: "Why is India seeing less warming than other countries?"
+  expected_tools: [resolve_location, get_metric_series]   # to confirm the premise from data
+  criteria:
+    accuracy: "Confirms the data-measurable premise (India warming value vs neighbours) using actual tile numbers"
+    labelling: "Clearly labels the scientific explanation as general knowledge, e.g. 'Beyond what our dataset shows...'"
+    calibration: "Hedges the explanation — does not state the cause with the same certainty as the data"
+  must_not:
+    - "Refuses to answer"
+    - "States scientific explanation with the same confidence as a tile-sourced number"
+
+- id: L2-04
+  layer: 2
+  question: "What are the economic consequences of warming in coastal cities?"
+  expected_tools: []
+  criteria:
+    relevance: "Explicitly states this is outside the climate data scope (economic impacts, not measurable from temperature tiles)"
+    calibration: "Does not attempt to answer with data it doesn't have"
+  must_not:
+    - "Invents economic figures"
+    - "Calls any data tool to answer this"
+
+# ---------------------------------------------------------------------------
+# Layer 1 — Ranking queries (find_extreme_location with limit / filters)
+# ---------------------------------------------------------------------------
+
+- id: L1-14
+  layer: 1
+  question: "What are the top 5 warmest large cities in the world by annual mean temperature?"
+  expected_tools: [find_extreme_location]
+  checks:
+    - type: count
+      description: Returns exactly 5 results
+      expected_count: 5
+    - type: contains
+      description: Includes Khartoum (ranked #1 at ~29.6°C)
+      pattern: "Khartoum"
+    - type: not_contains
+      description: Does not list two cities that fall in the same grid cell (dedup check)
+      pattern: "Khartoum North"
+
+- id: L1-15
+  layer: 1
+  question: "What is the hottest capital city in the world by annual mean temperature?"
+  expected_tools: [find_extreme_location]
+  checks:
+    - type: contains
+      description: Names Khartoum as the hottest capital
+      pattern: "Khartoum"
+    - type: numeric
+      description: Gives the annual mean temperature for Khartoum (~29.6°C)
+      expected_value: 29.576
+      tolerance: 0.3
+      unit: "°C"
+
+# ---------------------------------------------------------------------------
+# Layer 2 — Aggregation / regional
+# ---------------------------------------------------------------------------
+
+- id: L2-05
+  layer: 2
+  question: "Across the US, which location has seen the most extreme summer heat in the last decade?"
+  expected_tools: [find_extreme_location]
+  criteria:
+    accuracy: "Returns a named US location consistent with ERA5 data for summer (Jun-Aug) max"
+    specificity: "Includes a temperature value and approximate location"
+    labelling: "Notes that 'location' means a ~28km grid cell area, not a specific city"
+
+- id: L2-06
+  layer: 2
+  question: "What is the trend in winter temperatures in France over the past 20 years?"
+  expected_tools: [resolve_location, get_metric_series]
+  criteria:
+    accuracy: "Trend direction and approximate magnitude consistent with ERA5 monthly data"
+    specificity: "Includes a trend slope figure (°C/decade) or comparable quantified statement"
+    relevance: "Covers Dec-Feb specifically as 'winter'"
+
+# ---------------------------------------------------------------------------
+# Layer 2 — Similarity search (find_similar_locations)
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Layer 1 — Monthly extremes (t2m_monthly_max_c / t2m_monthly_min_c)
+# expected_value: null — to be filled once packager run is complete
+# ---------------------------------------------------------------------------
+
+- id: L1-16
+  layer: 1
+  question: "What was the hottest temperature recorded in Paris, France in July 2023?"
+  expected_tools: [resolve_location, get_metric_series]
+  checks:
+    - type: numeric
+      description: Returns the monthly maximum for Paris July 2023
+      expected_value: null
+      tolerance: 0.5
+      unit: "°C"
+    - type: contains
+      description: Mentions July 2023
+      pattern: "2023"
+
+- id: L1-17
+  layer: 1
+  question: "What was the coldest temperature recorded in Tokyo, Japan in January 2020?"
+  expected_tools: [resolve_location, get_metric_series]
+  checks:
+    - type: numeric
+      description: Returns the monthly minimum for Tokyo January 2020
+      expected_value: null
+      tolerance: 0.5
+      unit: "°C"
+    - type: contains
+      description: Mentions January 2020
+      pattern: "January 2020"
+
+- id: L1-18
+  layer: 1
+  question: "In which month of 2022 did London, UK record its highest temperature?"
+  expected_tools: [resolve_location, get_metric_series]
+  checks:
+    - type: contains
+      description: Identifies the correct month (expected July)
+      pattern: "July"
+    - type: contains
+      description: Mentions 2022
+      pattern: "2022"
+
+# ---------------------------------------------------------------------------
+# Layer 1 — Bare city names (no country qualifier)
+# ---------------------------------------------------------------------------
+
+- id: L1-19
+  layer: 1
+  question: "What was the annual mean temperature in London in 2020?"
+  expected_tools: [resolve_location, get_metric_series]
+  checks:
+    - type: numeric
+      description: Returns the correct °C value for London 2020 (same as L1-10)
+      expected_value: 11.326
+      tolerance: 0.2
+      unit: "°C"
+
+- id: L1-20
+  layer: 1
+  question: "What was the annual mean temperature in Paris in 2020?"
+  expected_tools: [resolve_location, get_metric_series]
+  checks:
+    - type: numeric
+      description: Returns the correct °C value for Paris 2020 (same as L1-01)
+      expected_value: 12.829
+      tolerance: 0.2
+      unit: "°C"
+
+# ---------------------------------------------------------------------------
+# Layer 2 — Similarity search (find_similar_locations)
+# ---------------------------------------------------------------------------
+
+- id: L2-07
+  layer: 2
+  question: "Which cities have a similar annual mean temperature to London, UK?"
+  expected_tools: [find_similar_locations]
+  criteria:
+    accuracy: "Returns cities whose annual mean is genuinely close to London's ERA5 value"
+    specificity: "Includes the temperature values (or delta) for each city listed, not just names"
+    relevance: "Does not confuse 'similar temperature' with 'similar climate' in general"
+  must_not:
+    - "Calls resolve_location + get_metric_series for every candidate city (should use find_similar_locations)"
+    - "Lists cities without any temperature values"
