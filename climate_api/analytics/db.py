@@ -30,25 +30,26 @@ CREATE TABLE IF NOT EXISTS session_events (
 )
 """
 
-_CREATE_CHAT_SESSIONS = """
-CREATE TABLE IF NOT EXISTS chat_sessions (
-    id               TEXT    PRIMARY KEY,
-    ts               INTEGER NOT NULL,
-    question         TEXT    NOT NULL,
-    answer           TEXT,
-    step_count       INTEGER,
-    tools_called     TEXT,
+_CREATE_CHAT_MESSAGES = """
+CREATE TABLE IF NOT EXISTS chat_messages (
+    message_id        TEXT    PRIMARY KEY,
+    session_id        TEXT    NOT NULL,
+    ts                INTEGER NOT NULL,
+    question          TEXT    NOT NULL,
+    answer            TEXT,
+    step_count        INTEGER,
+    tools_called      TEXT,
     tool_calls_detail TEXT,
-    tier             TEXT,
-    feedback         TEXT,
-    feedback_ts      INTEGER,
-    feedback_status  TEXT,
-    opt_out          INTEGER NOT NULL DEFAULT 0,
-    map_lat          REAL,
-    map_lon          REAL,
-    map_label        TEXT,
-    total_ms         INTEGER,
-    steps_timing     TEXT
+    tier              TEXT,
+    feedback          TEXT,
+    feedback_ts       INTEGER,
+    feedback_status   TEXT,
+    opt_out           INTEGER NOT NULL DEFAULT 0,
+    map_lat           REAL,
+    map_lon           REAL,
+    map_label         TEXT,
+    total_ms          INTEGER,
+    steps_timing      TEXT
 )
 """
 
@@ -69,25 +70,26 @@ class AnalyticsDB:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute(_CREATE_CLICK_EVENTS)
             conn.execute(_CREATE_SESSION_EVENTS)
-            conn.execute(_CREATE_CHAT_SESSIONS)
+            conn.execute(_CREATE_CHAT_MESSAGES)
             conn.commit()
             self._conn = conn
         return self._conn
 
     def check_schema(self) -> None:
         """Call at startup. Logs an error and raises if required columns are missing."""
-        required = {"tool_calls_detail", "tier", "total_ms", "steps_timing"}
+        required = {"message_id", "session_id", "tool_calls_detail", "tier", "total_ms", "steps_timing"}
         try:
             with self._lock:
                 conn = self._connect()
-                cols = {row[1] for row in conn.execute("PRAGMA table_info(chat_sessions)").fetchall()}
+                cols = {row[1] for row in conn.execute("PRAGMA table_info(chat_messages)").fetchall()}
             missing = required - cols
             if missing:
                 raise RuntimeError(
                     f"Analytics DB schema is stale — missing columns: {sorted(missing)}. "
                     f"Wipe the DB and restart: "
                     f"sqlite3 {self._db_path} "
-                    f"\"DROP TABLE IF EXISTS chat_sessions; "
+                    f"\"DROP TABLE IF EXISTS chat_messages; "
+                    f"DROP TABLE IF EXISTS chat_sessions; "
                     f"DROP TABLE IF EXISTS click_events; "
                     f"DROP TABLE IF EXISTS session_events;\""
                 )
@@ -177,8 +179,9 @@ class AnalyticsDB:
     # Chat sessions
     # ------------------------------------------------------------------
 
-    def record_chat_session(
+    def record_chat_message(
         self,
+        message_id: str,
         session_id: str,
         question: str,
         answer: str | None,
@@ -199,12 +202,13 @@ class AnalyticsDB:
             with self._lock:
                 conn = self._connect()
                 conn.execute(
-                    """INSERT OR REPLACE INTO chat_sessions
-                       (id, ts, question, answer, step_count, tools_called, tool_calls_detail,
-                        tier, opt_out, map_lat, map_lon, map_label, total_ms, steps_timing)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    """INSERT OR REPLACE INTO chat_messages
+                       (message_id, session_id, ts, question, answer, step_count, tools_called,
+                        tool_calls_detail, tier, opt_out, map_lat, map_lon, map_label,
+                        total_ms, steps_timing)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        session_id, ts, question, answer, step_count,
+                        message_id, session_id, ts, question, answer, step_count,
                         _json.dumps(tools_called),
                         _json.dumps(tool_calls_detail) if tool_calls_detail is not None else None,
                         tier, int(opt_out),
@@ -215,9 +219,9 @@ class AnalyticsDB:
                 )
                 conn.commit()
         except Exception:
-            logger.exception("Failed to record chat session")
+            logger.exception("Failed to record chat message")
 
-    def record_chat_feedback(self, session_id: str, feedback: str | None) -> None:
+    def record_chat_feedback(self, message_id: str, feedback: str | None) -> None:
         """
         feedback: 'good', 'bad', or None (clears feedback).
         When feedback='bad', feedback_status is set to 'new'.
@@ -229,26 +233,26 @@ class AnalyticsDB:
             with self._lock:
                 conn = self._connect()
                 conn.execute(
-                    "UPDATE chat_sessions SET feedback=?, feedback_ts=?, feedback_status=? WHERE id=?",
-                    (feedback, ts, status, session_id),
+                    "UPDATE chat_messages SET feedback=?, feedback_ts=?, feedback_status=? WHERE message_id=?",
+                    (feedback, ts, status, message_id),
                 )
                 conn.commit()
         except Exception:
             logger.exception("Failed to record chat feedback")
 
-    def mark_bad_answer_reviewed(self, session_id: str) -> None:
+    def mark_bad_answer_reviewed(self, message_id: str) -> None:
         try:
             with self._lock:
                 conn = self._connect()
                 conn.execute(
-                    "UPDATE chat_sessions SET feedback_status='reviewed' WHERE id=? AND feedback='bad'",
-                    (session_id,),
+                    "UPDATE chat_messages SET feedback_status='reviewed' WHERE message_id=? AND feedback='bad'",
+                    (message_id,),
                 )
                 conn.commit()
         except Exception:
             logger.exception("Failed to mark bad answer as reviewed")
 
-    def get_chat_sessions(
+    def get_chat_messages(
         self,
         limit: int = 50,
         offset: int = 0,
@@ -259,57 +263,57 @@ class AnalyticsDB:
             with self._lock:
                 conn = self._connect()
                 cols = (
-                    "id, ts, question, answer, step_count, tools_called, "
+                    "message_id, session_id, ts, question, answer, step_count, tools_called, "
                     "tool_calls_detail, tier, feedback, feedback_status, total_ms, steps_timing"
                 )
                 if feedback is not None:
                     rows = conn.execute(
-                        f"SELECT {cols} FROM chat_sessions"
+                        f"SELECT {cols} FROM chat_messages"
                         " WHERE feedback=? ORDER BY ts DESC LIMIT ? OFFSET ?",
                         (feedback, limit, offset),
                     ).fetchall()
                 else:
                     rows = conn.execute(
-                        f"SELECT {cols} FROM chat_sessions"
+                        f"SELECT {cols} FROM chat_messages"
                         " ORDER BY ts DESC LIMIT ? OFFSET ?",
                         (limit, offset),
                     ).fetchall()
             return [
                 {
-                    "id": r[0], "ts": r[1], "question": r[2],
-                    "answer_excerpt": (r[3] or "")[:200],
-                    "step_count": r[4],
-                    "tools_called": _json.loads(r[5]) if r[5] else [],
-                    "tool_calls_detail": _json.loads(r[6]) if r[6] else [],
-                    "tier": r[7],
-                    "feedback": r[8], "feedback_status": r[9],
-                    "total_ms": r[10],
-                    "steps_timing": _json.loads(r[11]) if r[11] else [],
+                    "message_id": r[0], "session_id": r[1], "ts": r[2], "question": r[3],
+                    "answer_excerpt": (r[4] or "")[:200],
+                    "step_count": r[5],
+                    "tools_called": _json.loads(r[6]) if r[6] else [],
+                    "tool_calls_detail": _json.loads(r[7]) if r[7] else [],
+                    "tier": r[8],
+                    "feedback": r[9], "feedback_status": r[10],
+                    "total_ms": r[11],
+                    "steps_timing": _json.loads(r[12]) if r[12] else [],
                 }
                 for r in rows
             ]
         except Exception:
-            logger.exception("Failed to query chat sessions")
+            logger.exception("Failed to query chat messages")
             return []
 
     def get_chat_bad_answers(self, limit: int = 50) -> list[dict]:
-        """Return sessions with feedback='bad' and feedback_status='new'."""
-        return self.get_chat_sessions(limit=limit, feedback="bad")
+        """Return messages with feedback='bad' and feedback_status='new'."""
+        return self.get_chat_messages(limit=limit, feedback="bad")
 
     def get_chat_stats(self) -> dict:
         try:
             with self._lock:
                 conn = self._connect()
-                total = conn.execute("SELECT COUNT(*) FROM chat_sessions").fetchone()[0]
-                good = conn.execute("SELECT COUNT(*) FROM chat_sessions WHERE feedback='good'").fetchone()[0]
-                bad  = conn.execute("SELECT COUNT(*) FROM chat_sessions WHERE feedback='bad'").fetchone()[0]
+                total_messages = conn.execute("SELECT COUNT(*) FROM chat_messages").fetchone()[0]
+                total_sessions = conn.execute("SELECT COUNT(DISTINCT session_id) FROM chat_messages").fetchone()[0]
+                good = conn.execute("SELECT COUNT(*) FROM chat_messages WHERE feedback='good'").fetchone()[0]
+                bad  = conn.execute("SELECT COUNT(*) FROM chat_messages WHERE feedback='bad'").fetchone()[0]
                 new_bad = conn.execute(
-                    "SELECT COUNT(*) FROM chat_sessions WHERE feedback='bad' AND feedback_status='new'"
+                    "SELECT COUNT(*) FROM chat_messages WHERE feedback='bad' AND feedback_status='new'"
                 ).fetchone()[0]
-                avg_steps = conn.execute("SELECT AVG(step_count) FROM chat_sessions").fetchone()[0]
-                # Compute avg and p95 response time from sessions that have total_ms recorded
+                avg_steps = conn.execute("SELECT AVG(step_count) FROM chat_messages").fetchone()[0]
                 timing_rows = conn.execute(
-                    "SELECT total_ms FROM chat_sessions WHERE total_ms IS NOT NULL ORDER BY total_ms"
+                    "SELECT total_ms FROM chat_messages WHERE total_ms IS NOT NULL ORDER BY total_ms"
                 ).fetchall()
 
             avg_resp_ms: float | None = None
@@ -320,8 +324,12 @@ class AnalyticsDB:
                 p95_idx = max(0, int(len(values) * 0.95) - 1)
                 p95_resp_ms = values[p95_idx]
 
+            avg_msg_per_session = round(total_messages / total_sessions, 1) if total_sessions else None
+
             return {
-                "total_sessions": total,
+                "total_messages": total_messages,
+                "total_sessions": total_sessions,
+                "avg_messages_per_session": avg_msg_per_session,
                 "feedback_good": good,
                 "feedback_bad": bad,
                 "bad_answers_unreviewed": new_bad,

@@ -50,8 +50,9 @@ type AdminStatus = {
 
 type ToolCallDetail = { name: string; args: Record<string, unknown>; step: number };
 type StepTiming = { step: number; model_ms: number; tools_ms?: number };
-type ChatSession = {
-  id: string;
+type ChatMessage = {
+  message_id: string;
+  session_id: string;
   ts: number;
   question: string;
   answer_excerpt: string;
@@ -65,7 +66,9 @@ type ChatSession = {
   steps_timing: StepTiming[];
 };
 type ChatStats = {
+  total_messages: number;
   total_sessions: number;
+  avg_messages_per_session: number | null;
   feedback_good: number;
   feedback_bad: number;
   bad_answers_unreviewed: number;
@@ -148,12 +151,13 @@ export default function AdminPage() {
   const [visibleLayers, setVisibleLayers] = useState({ clicks: true, origins: true });
 
   // --- Chat tab state ---
-  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatStats, setChatStats] = useState<ChatStats | null>(null);
-  const [badAnswers, setBadAnswers] = useState<ChatSession[]>([]);
+  const [badAnswers, setBadAnswers] = useState<ChatMessage[]>([]);
   const [chatPage, setChatPage] = useState(0);
   const [chatLoading, setChatLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [highlightedSessionId, setHighlightedSessionId] = useState<string | null>(null);
   const CHAT_PAGE_SIZE = 50;
 
   const apiBase = useMemo(() => {
@@ -177,6 +181,14 @@ export default function AdminPage() {
       return next;
     });
   }, []);
+
+  // Fetch chat stats on mount so the badge is visible before visiting the Chat tab
+  useEffect(() => {
+    fetch(`${apiBase}/api/admin/chat/sessions?limit=1`)
+      .then((r) => r.json() as Promise<{ messages: ChatMessage[]; stats: ChatStats }>)
+      .then((res) => setChatStats(res.stats))
+      .catch(() => {});
+  }, [apiBase]);
 
   // Fetch map/status data
   useEffect(() => {
@@ -209,24 +221,41 @@ export default function AdminPage() {
     const offset = chatPage * CHAT_PAGE_SIZE;
     Promise.all([
       fetch(`${apiBase}/api/admin/chat/sessions?limit=${CHAT_PAGE_SIZE}&offset=${offset}`)
-        .then((r) => r.json() as Promise<{ sessions: ChatSession[]; stats: ChatStats }>),
+        .then((r) => r.json() as Promise<{ messages: ChatMessage[]; stats: ChatStats }>),
       fetch(`${apiBase}/api/admin/chat/bad-answers?limit=200`)
-        .then((r) => r.json() as Promise<{ bad_answers: ChatSession[]; stats: ChatStats }>),
+        .then((r) => r.json() as Promise<{ bad_answers: ChatMessage[]; stats: ChatStats }>),
     ])
-      .then(([sessionsRes, badRes]) => {
-        setChatSessions(sessionsRes.sessions);
-        setChatStats(sessionsRes.stats);
-        setBadAnswers(badRes.bad_answers.filter((s) => s.feedback_status === "new"));
+      .then(([messagesRes, badRes]) => {
+        setChatMessages(messagesRes.messages);
+        setChatStats(messagesRes.stats);
+        setBadAnswers(badRes.bad_answers.filter((m) => m.feedback_status === "new"));
       })
       .catch(() => {})
       .finally(() => setChatLoading(false));
   }, [apiBase, activeTab, chatPage]);
 
-  async function markReviewed(sessionId: string) {
-    await fetch(`${apiBase}/api/chat/${sessionId}/reviewed`, { method: "POST" });
-    setBadAnswers((prev) => prev.filter((s) => s.id !== sessionId));
-    setChatSessions((prev) =>
-      prev.map((s) => s.id === sessionId ? { ...s, feedback_status: "reviewed" } : s)
+  // Group messages by session_id, newest session first
+  const groupedSessions = useMemo(() => {
+    const map = new Map<string, ChatMessage[]>();
+    for (const msg of chatMessages) {
+      const group = map.get(msg.session_id) ?? [];
+      group.push(msg);
+      map.set(msg.session_id, group);
+    }
+    // Sort messages within each session chronologically, sessions by newest message first
+    const groups = Array.from(map.entries()).map(([sid, msgs]) => ({
+      session_id: sid,
+      messages: msgs.sort((a, b) => a.ts - b.ts),
+      latest_ts: Math.max(...msgs.map((m) => m.ts)),
+    }));
+    return groups.sort((a, b) => b.latest_ts - a.latest_ts);
+  }, [chatMessages]);
+
+  async function markReviewed(messageId: string) {
+    await fetch(`${apiBase}/api/chat/${messageId}/reviewed`, { method: "POST" });
+    setBadAnswers((prev) => prev.filter((m) => m.message_id !== messageId));
+    setChatMessages((prev) =>
+      prev.map((m) => m.message_id === messageId ? { ...m, feedback_status: "reviewed" } : m)
     );
     if (chatStats) {
       setChatStats({ ...chatStats, bad_answers_unreviewed: Math.max(0, chatStats.bad_answers_unreviewed - 1) });
@@ -383,8 +412,10 @@ export default function AdminPage() {
           {/* Stats cards */}
           {chatStats && (
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flexShrink: 0 }}>
-              <Card title="Chat sessions">
-                <Row label="Total" value={fmt(chatStats.total_sessions)} />
+              <Card title="Chat activity">
+                <Row label="Sessions" value={fmt(chatStats.total_sessions)} />
+                <Row label="Messages" value={fmt(chatStats.total_messages)} />
+                <Row label="Msgs / session" value={chatStats.avg_messages_per_session != null ? chatStats.avg_messages_per_session.toFixed(1) : "–"} />
                 <Row label="Avg steps" value={chatStats.avg_step_count != null ? chatStats.avg_step_count.toFixed(1) : "–"} />
                 <Row label="Avg resp time" value={fmtMs(chatStats.avg_resp_ms)} />
                 <Row label="p95 resp time" value={fmtMs(chatStats.p95_resp_ms)} />
@@ -392,7 +423,7 @@ export default function AdminPage() {
               <Card title="Feedback">
                 <Row label="👍 Good" value={fmt(chatStats.feedback_good)} />
                 <Row label="👎 Bad" value={fmt(chatStats.feedback_bad)} />
-                <Row label="Unreviewed" value={fmt(chatStats.bad_answers_unreviewed)} ok={chatStats.bad_answers_unreviewed === 0 ? true : false} />
+                <Row label="Unreviewed" value={fmt(chatStats.bad_answers_unreviewed)} ok={chatStats.bad_answers_unreviewed === 0} />
               </Card>
             </div>
           )}
@@ -402,13 +433,14 @@ export default function AdminPage() {
             <section>
               <SectionTitle>Bad answers inbox ({badAnswers.length} unreviewed)</SectionTitle>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {badAnswers.map((s) => (
-                  <SessionRow
-                    key={s.id}
-                    session={s}
-                    expanded={expandedId === s.id}
-                    onToggle={() => setExpandedId(expandedId === s.id ? null : s.id)}
-                    onMarkReviewed={() => void markReviewed(s.id)}
+                {badAnswers.map((m) => (
+                  <MessageRow
+                    key={m.message_id}
+                    message={m}
+                    expanded={expandedId === m.message_id}
+                    onToggle={() => setExpandedId(expandedId === m.message_id ? null : m.message_id)}
+                    onMarkReviewed={() => void markReviewed(m.message_id)}
+                    onViewSession={() => setHighlightedSessionId(m.session_id)}
                     highlight
                   />
                 ))}
@@ -416,26 +448,48 @@ export default function AdminPage() {
             </section>
           )}
 
-          {/* All sessions */}
+          {/* All sessions grouped */}
           <section style={{ flex: 1 }}>
             <SectionTitle>All sessions{chatLoading ? " (loading…)" : ""}</SectionTitle>
-            {chatSessions.length === 0 && !chatLoading && (
-              <div style={{ color: "#555", fontSize: 13 }}>No sessions recorded yet.</div>
+            {groupedSessions.length === 0 && !chatLoading && (
+              <div style={{ color: "#555", fontSize: 13 }}>No messages recorded yet.</div>
             )}
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {chatSessions.map((s) => (
-                <SessionRow
-                  key={s.id}
-                  session={s}
-                  expanded={expandedId === s.id}
-                  onToggle={() => setExpandedId(expandedId === s.id ? null : s.id)}
-                  onMarkReviewed={s.feedback === "bad" && s.feedback_status === "new" ? () => void markReviewed(s.id) : undefined}
-                />
-              ))}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {groupedSessions.map(({ session_id, messages, latest_ts }) => {
+                const isHighlighted = highlightedSessionId === session_id;
+                return (
+                  <div
+                    key={session_id}
+                    style={{
+                      border: "1px solid " + (isHighlighted ? "#7ec8e3" : "#2a2a2a"),
+                      borderRadius: 8,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div style={{ padding: "6px 12px", background: "#161616", display: "flex", gap: 10, fontSize: 11, color: "#555", alignItems: "center" }}>
+                      <span style={{ fontFamily: "ui-monospace, monospace" }}>{session_id.slice(0, 8)}…</span>
+                      <span>{messages.length} message{messages.length !== 1 ? "s" : ""}</span>
+                      <span>{relativeTime(latest_ts)}</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "4px 0" }}>
+                      {messages.map((m) => (
+                        <MessageRow
+                          key={m.message_id}
+                          message={m}
+                          expanded={expandedId === m.message_id}
+                          onToggle={() => setExpandedId(expandedId === m.message_id ? null : m.message_id)}
+                          onMarkReviewed={m.feedback === "bad" && m.feedback_status === "new" ? () => void markReviewed(m.message_id) : undefined}
+                          indented
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Pagination */}
-            {(chatPage > 0 || chatSessions.length === CHAT_PAGE_SIZE) && (
+            {(chatPage > 0 || chatMessages.length === CHAT_PAGE_SIZE) && (
               <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
                 <button
                   onClick={() => setChatPage((p) => Math.max(0, p - 1))}
@@ -447,8 +501,8 @@ export default function AdminPage() {
                 <span style={{ fontSize: 12, color: "#666" }}>Page {chatPage + 1}</span>
                 <button
                   onClick={() => setChatPage((p) => p + 1)}
-                  disabled={chatSessions.length < CHAT_PAGE_SIZE}
-                  style={paginationBtnStyle(chatSessions.length < CHAT_PAGE_SIZE)}
+                  disabled={chatMessages.length < CHAT_PAGE_SIZE}
+                  style={paginationBtnStyle(chatMessages.length < CHAT_PAGE_SIZE)}
                 >
                   Next →
                 </button>
@@ -495,18 +549,22 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-function SessionRow({
-  session: s,
+function MessageRow({
+  message: s,
   expanded,
   onToggle,
   onMarkReviewed,
+  onViewSession,
   highlight = false,
+  indented = false,
 }: {
-  session: ChatSession;
+  message: ChatMessage;
   expanded: boolean;
   onToggle: () => void;
   onMarkReviewed?: () => void;
+  onViewSession?: () => void;
   highlight?: boolean;
+  indented?: boolean;
 }) {
   const feedbackIcon = s.feedback === "good" ? "👍" : s.feedback === "bad" ? "👎" : "—";
   const feedbackColor = s.feedback === "good" ? "#4caf50" : s.feedback === "bad" ? "#f66" : "#555";
@@ -514,9 +572,10 @@ function SessionRow({
   return (
     <div
       style={{
-        background: highlight ? "rgba(229,62,62,0.08)" : "#1a1a1a",
-        border: "1px solid " + (highlight ? "rgba(229,62,62,0.3)" : "#2a2a2a"),
-        borderRadius: 7,
+        background: highlight ? "rgba(229,62,62,0.08)" : indented ? "transparent" : "#1a1a1a",
+        border: indented ? "none" : "1px solid " + (highlight ? "rgba(229,62,62,0.3)" : "#2a2a2a"),
+        borderRadius: indented ? 0 : 7,
+        borderBottom: indented ? "1px solid #1f1f1f" : undefined,
         overflow: "hidden",
       }}
     >
@@ -547,7 +606,7 @@ function SessionRow({
           </DetailSection>
           {s.tool_calls_detail?.length > 0 && (
             <DetailSection label={`Tool calls (${s.tool_calls_detail.length})`}>
-              {s.tool_calls_detail.map((t, i) => (
+              {s.tool_calls_detail.map((t: ToolCallDetail, i: number) => (
                 <div key={i} style={{ marginBottom: 4 }}>
                   <span style={{ color: "#7ec8e3", fontFamily: "monospace", fontSize: 12 }}>
                     step {t.step}: {t.name}
@@ -562,7 +621,7 @@ function SessionRow({
           {s.steps_timing?.length > 0 && (
             <DetailSection label="Timing breakdown">
               <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                {s.steps_timing.map((t, i) => {
+                {s.steps_timing.map((t: StepTiming, i: number) => {
                   const isLast = i === s.steps_timing.length - 1;
                   const hasTools = t.tools_ms != null;
                   return (
@@ -586,11 +645,18 @@ function SessionRow({
               </div>
             </DetailSection>
           )}
-          {onMarkReviewed && (
-            <div>
-              <button onClick={onMarkReviewed} style={reviewBtnStyle}>
-                ✓ Mark as reviewed
-              </button>
+          {(onMarkReviewed || onViewSession) && (
+            <div style={{ display: "flex", gap: 8 }}>
+              {onMarkReviewed && (
+                <button onClick={onMarkReviewed} style={reviewBtnStyle}>
+                  ✓ Mark as reviewed
+                </button>
+              )}
+              {onViewSession && (
+                <button onClick={onViewSession} style={{ ...reviewBtnStyle, borderColor: "#7ec8e3", color: "#7ec8e3" }}>
+                  View session ↓
+                </button>
+              )}
             </div>
           )}
         </div>

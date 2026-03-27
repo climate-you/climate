@@ -63,7 +63,8 @@ class _ChatRequest(BaseModel):
     question: str
     map_context: _MapContext | None = None
     opt_out: bool = False
-    session_id: str | None = None
+    session_id: str | None = None   # browser-session UUID (groups all messages from one conversation)
+    message_id: str | None = None   # per-Q&A UUID (used for feedback/review endpoints)
     # Optional tier override — used by the dev UI toggle.
     # Valid values are tier names configured on the server (e.g. "groq_8b", "local").
     model_override: str | None = None
@@ -660,7 +661,8 @@ def create_app() -> FastAPI:
         def _event_stream():
             import json as _json
             answer_text: list[str] = []
-            final_session_id = body.session_id or ""
+            message_id = body.message_id or str(__import__("uuid").uuid4())
+            session_id = body.session_id or message_id
             step_count = 0
             tools_called: list[str] = []
             tool_calls_detail: list[dict] = []
@@ -671,7 +673,7 @@ def create_app() -> FastAPI:
             for event in chat_orchestrator.run(
                 question=body.question,
                 map_context=map_ctx,
-                session_id=body.session_id,
+                session_id=message_id,
                 model_override=body.model_override,
             ):
                 yield f"data: {_json.dumps(event)}\n\n"
@@ -686,15 +688,15 @@ def create_app() -> FastAPI:
                 elif event["type"] == "answer":
                     answer_text.append(event["text"])
                 elif event["type"] == "done":
-                    final_session_id = event.get("session_id", final_session_id)
                     step_count = event.get("step_count", 0)
                     tier_used = event.get("tier")
                     total_ms = event.get("total_ms")
                     steps_timing = event.get("steps_timing")
 
             if settings.chat_enabled and not body.opt_out:
-                analytics_db.record_chat_session(
-                    session_id=final_session_id,
+                analytics_db.record_chat_message(
+                    message_id=message_id,
+                    session_id=session_id,
                     question=body.question,
                     answer=" ".join(answer_text) or None,
                     step_count=step_count,
@@ -715,18 +717,18 @@ def create_app() -> FastAPI:
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    @app.post("/api/chat/{session_id}/feedback", status_code=204)
-    def chat_feedback(session_id: str, body: _FeedbackBody):
+    @app.post("/api/chat/{message_id}/feedback", status_code=204)
+    def chat_feedback(message_id: str, body: _FeedbackBody):
         if body.feedback not in ("good", "bad", None):
             raise HTTPException(status_code=400, detail="feedback must be 'good', 'bad', or null.")
         if settings.chat_enabled:
-            analytics_db.record_chat_feedback(session_id, body.feedback)
+            analytics_db.record_chat_feedback(message_id, body.feedback)
         return Response(status_code=204)
 
-    @app.post("/api/chat/{session_id}/reviewed", status_code=204)
-    def mark_chat_reviewed(session_id: str):
+    @app.post("/api/chat/{message_id}/reviewed", status_code=204)
+    def mark_chat_reviewed(message_id: str):
         if settings.chat_enabled:
-            analytics_db.mark_bad_answer_reviewed(session_id)
+            analytics_db.mark_bad_answer_reviewed(message_id)
         return Response(status_code=204)
 
     @app.get("/api/admin/chat/sessions")
@@ -736,7 +738,7 @@ def create_app() -> FastAPI:
         feedback: str | None = Query(None),
     ):
         return {
-            "sessions": analytics_db.get_chat_sessions(limit=limit, offset=offset, feedback=feedback),
+            "messages": analytics_db.get_chat_messages(limit=limit, offset=offset, feedback=feedback),
             "stats": analytics_db.get_chat_stats(),
         }
 

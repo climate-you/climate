@@ -19,7 +19,7 @@ type ModelOverride = "groq_8b" | "local" | null;
 type ChatMessage = {
   role: "user" | "assistant";
   text: string;
-  sessionId?: string;
+  messageId?: string;
   notice?: string;       // degraded-model disclaimer
   feedback?: "good" | "bad" | null;
   error?: boolean;
@@ -81,6 +81,7 @@ export default function ChatDrawer({
   devMode = false,
 }: ChatDrawerProps) {
   const [open, setOpen] = useState(false);
+  const [conversationId] = useState(() => crypto.randomUUID());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -143,12 +144,13 @@ export default function ChatDrawer({
     setInput("");
     setLoading(true);
 
-    const sessionId = crypto.randomUUID();
+    const messageId = crypto.randomUUID();
     setMessages((prev) => [
       ...prev,
       { role: "user", text: question },
-      { role: "assistant", text: "", sessionId, loading: true },
+      { role: "assistant", text: "", messageId, loading: true },
     ]);
+
 
     let pendingNotice: string | undefined;
     let answered = false;
@@ -160,7 +162,8 @@ export default function ChatDrawer({
           question,
           map_context: mapContext,
           opt_out: optOut,
-          session_id: sessionId,
+          session_id: conversationId,
+          message_id: messageId,
           model_override: modelOverride ?? undefined,
         },
         (event) => {
@@ -171,7 +174,7 @@ export default function ChatDrawer({
             answered = true;
             setMessages((prev) =>
               prev.map((m) =>
-                m.sessionId === sessionId
+                m.messageId === messageId
                   ? {
                       ...m,
                       text: event.text as string,
@@ -184,7 +187,7 @@ export default function ChatDrawer({
           } else if (type === "error") {
             setMessages((prev) =>
               prev.map((m) =>
-                m.sessionId === sessionId
+                m.messageId === messageId
                   ? {
                       ...m,
                       text: event.message as string,
@@ -202,7 +205,7 @@ export default function ChatDrawer({
         // Stream ended without an answer event
         setMessages((prev) =>
           prev.map((m) =>
-            m.sessionId === sessionId
+            m.messageId === messageId
               ? { ...m, text: "No response received.", loading: false, error: true }
               : m,
           ),
@@ -211,7 +214,7 @@ export default function ChatDrawer({
     } catch {
       setMessages((prev) =>
         prev.map((m) =>
-          m.sessionId === sessionId
+          m.messageId === messageId
             ? {
                 ...m,
                 text: "Failed to connect to the assistant. Please try again.",
@@ -227,17 +230,17 @@ export default function ChatDrawer({
   }
 
   async function submitFeedback(
-    sessionId: string,
+    messageId: string,
     feedback: "good" | "bad" | null,
   ) {
     // Toggle: clicking the active state clears feedback
-    const current = messages.find((m) => m.sessionId === sessionId)?.feedback;
+    const current = messages.find((m) => m.messageId === messageId)?.feedback;
     const next = current === feedback ? null : feedback;
     setMessages((prev) =>
-      prev.map((m) => (m.sessionId === sessionId ? { ...m, feedback: next } : m)),
+      prev.map((m) => (m.messageId === messageId ? { ...m, feedback: next } : m)),
     );
     try {
-      await fetch(`${apiBase}/api/chat/${sessionId}/feedback`, {
+      await fetch(`${apiBase}/api/chat/${messageId}/feedback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ feedback: next }),
@@ -379,14 +382,14 @@ export default function ChatDrawer({
                 </div>
 
                 {/* Feedback buttons for assistant messages */}
-                {msg.role === "assistant" && msg.sessionId && !msg.loading && !msg.error && (
+                {msg.role === "assistant" && msg.messageId && !msg.loading && !msg.error && (
                   <div className={styles.feedback}>
                     <button
                       type="button"
                       className={`${styles.feedbackBtn} ${msg.feedback === "good" ? styles.feedbackBtnActive : ""}`}
                       aria-label="Good answer"
                       aria-pressed={msg.feedback === "good"}
-                      onClick={() => void submitFeedback(msg.sessionId!, "good")}
+                      onClick={() => void submitFeedback(msg.messageId!, "good")}
                     >
                       👍
                     </button>
@@ -395,7 +398,7 @@ export default function ChatDrawer({
                       className={`${styles.feedbackBtn} ${msg.feedback === "bad" ? styles.feedbackBtnActive : ""}`}
                       aria-label="Bad answer"
                       aria-pressed={msg.feedback === "bad"}
-                      onClick={() => void submitFeedback(msg.sessionId!, "bad")}
+                      onClick={() => void submitFeedback(msg.messageId!, "bad")}
                     >
                       👎
                     </button>
