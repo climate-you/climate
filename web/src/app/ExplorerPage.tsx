@@ -1444,6 +1444,7 @@ export default function ExplorerPage({
               : null
           }
           devMode={debugMode}
+          debugMode={debugMode}
         />
       )}
     </main>

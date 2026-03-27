@@ -667,8 +667,12 @@ def create_app() -> FastAPI:
             tools_called: list[str] = []
             tool_calls_detail: list[dict] = []
             tier_used: str | None = None
+            model_used: str | None = None
+            rejected_tiers: list[str] = []
+            model_override_used: str | None = None
             total_ms: int | None = None
             steps_timing: list[dict] | None = None
+            error_text: str | None = None
 
             for event in chat_orchestrator.run(
                 question=body.question,
@@ -687,9 +691,14 @@ def create_app() -> FastAPI:
                     })
                 elif event["type"] == "answer":
                     answer_text.append(event["text"])
+                elif event["type"] == "error":
+                    error_text = event.get("message")
                 elif event["type"] == "done":
                     step_count = event.get("step_count", 0)
                     tier_used = event.get("tier")
+                    model_used = event.get("model")
+                    rejected_tiers = event.get("rejected_tiers") or []
+                    model_override_used = event.get("model_override")
                     total_ms = event.get("total_ms")
                     steps_timing = event.get("steps_timing")
 
@@ -709,6 +718,10 @@ def create_app() -> FastAPI:
                     map_label=body.map_context.label if body.map_context else None,
                     total_ms=total_ms,
                     steps_timing=steps_timing,
+                    model=model_used,
+                    rejected_tiers=rejected_tiers or None,
+                    model_override=model_override_used,
+                    error=error_text,
                 )
 
         return StreamingResponse(

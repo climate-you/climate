@@ -49,7 +49,7 @@ type AdminStatus = {
 };
 
 type ToolCallDetail = { name: string; args: Record<string, unknown>; step: number };
-type StepTiming = { step: number; model_ms: number; tools_ms?: number };
+type StepTiming = { step: number; model_ms: number; tools_ms?: number; error?: boolean };
 type ChatMessage = {
   message_id: string;
   session_id: string;
@@ -60,10 +60,14 @@ type ChatMessage = {
   tools_called: string[];
   tool_calls_detail: ToolCallDetail[];
   tier: string | null;
+  model: string | null;
+  rejected_tiers: string[];
+  model_override: string | null;
   feedback: "good" | "bad" | null;
   feedback_status: string | null;
   total_ms: number | null;
   steps_timing: StepTiming[];
+  error: string | null;
 };
 type ChatStats = {
   total_messages: number;
@@ -431,7 +435,7 @@ export default function AdminPage() {
           {/* Bad answers inbox */}
           {badAnswers.length > 0 && (
             <section>
-              <SectionTitle>Bad answers inbox ({badAnswers.length} unreviewed)</SectionTitle>
+              <SectionTitle>To review ({badAnswers.length} unreviewed)</SectionTitle>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {badAnswers.map((m) => (
                   <MessageRow
@@ -478,7 +482,7 @@ export default function AdminPage() {
                           message={m}
                           expanded={expandedId === m.message_id}
                           onToggle={() => setExpandedId(expandedId === m.message_id ? null : m.message_id)}
-                          onMarkReviewed={m.feedback === "bad" && m.feedback_status === "new" ? () => void markReviewed(m.message_id) : undefined}
+                          onMarkReviewed={(m.feedback === "bad" || !!m.error) && m.feedback_status === "new" ? () => void markReviewed(m.message_id) : undefined}
                           indented
                         />
                       ))}
@@ -586,9 +590,13 @@ function MessageRow({
       >
         <span style={{ color: "#555", flexShrink: 0, width: 60 }}>{relativeTime(s.ts)}</span>
         <span style={{ flex: 1, minWidth: 0, color: "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {s.error && <span style={{ color: "#f66", marginRight: 5, fontSize: 10 }} title={s.error}>⬤</span>}
           {truncate(s.question, 80)}
         </span>
-        <span style={{ color: "#666", flexShrink: 0, width: 90, textAlign: "right" }}>{s.tier ?? "—"}</span>
+        <span style={{ color: "#666", flexShrink: 0, width: 130, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {s.model_override && <span style={{ color: "#e8a838", marginRight: 4, fontSize: 10 }}>user</span>}
+          {s.tier ?? "—"}{s.model ? ` · ${s.model}` : ""}
+        </span>
         <span style={{ color: "#666", flexShrink: 0, width: 50, textAlign: "right" }}>{s.step_count} steps</span>
         <span style={{ color: "#666", flexShrink: 0, width: 44, textAlign: "right" }}>{fmtMs(s.total_ms)}</span>
         <span style={{ color: feedbackColor, flexShrink: 0, width: 24, textAlign: "center" }}>{feedbackIcon}</span>
@@ -604,6 +612,19 @@ function MessageRow({
           <DetailSection label="Answer excerpt">
             <pre style={preStyle}>{s.answer_excerpt || "—"}</pre>
           </DetailSection>
+          <DetailSection label="Model selection">
+            <div style={{ display: "flex", gap: 6, fontSize: 12, fontFamily: "ui-monospace, monospace", alignItems: "center", flexWrap: "wrap" }}>
+              {s.rejected_tiers?.map((t) => (
+                <span key={t} style={{ color: "#555", textDecoration: "line-through" }}>{t}</span>
+              ))}
+              {s.rejected_tiers?.length > 0 && <span style={{ color: "#444" }}>→</span>}
+              <span style={{ color: "#7ec8e3" }}>{s.tier ?? "—"}</span>
+              {s.model && <span style={{ color: "#666" }}>({s.model})</span>}
+              {s.model_override && (
+                <span style={{ color: "#e8a838", fontSize: 11 }}>· user-selected</span>
+              )}
+            </div>
+          </DetailSection>
           {s.tool_calls_detail?.length > 0 && (
             <DetailSection label={`Tool calls (${s.tool_calls_detail.length})`}>
               {s.tool_calls_detail.map((t: ToolCallDetail, i: number) => (
@@ -616,6 +637,11 @@ function MessageRow({
                   </pre>
                 </div>
               ))}
+            </DetailSection>
+          )}
+          {s.error && (
+            <DetailSection label="Error">
+              <pre style={{ ...preStyle, color: "#f66" }}>{s.error}</pre>
             </DetailSection>
           )}
           {s.steps_timing?.length > 0 && (
@@ -631,7 +657,10 @@ function MessageRow({
                       {hasTools && (
                         <span style={{ color: "#888" }}>→ tools {fmtMs(t.tools_ms)}</span>
                       )}
-                      {isLast && !hasTools && (
+                      {t.error && (
+                        <span style={{ color: "#f66", fontSize: 11 }}>← error</span>
+                      )}
+                      {isLast && !hasTools && !t.error && (
                         <span style={{ color: "#4caf50", fontSize: 11 }}>← final answer</span>
                       )}
                     </div>

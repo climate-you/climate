@@ -21,6 +21,7 @@ type ChatMessage = {
   text: string;
   messageId?: string;
   notice?: string;       // degraded-model disclaimer
+  debugInfo?: string;    // shown only in debug mode
   feedback?: "good" | "bad" | null;
   error?: boolean;
   loading?: boolean;
@@ -30,6 +31,7 @@ type ChatDrawerProps = {
   apiBase: string;
   mapContext: MapContext;
   devMode?: boolean;     // shows the model toggle when true
+  debugMode?: boolean;   // shows per-reply model/tier/timing info
 };
 
 // ---------------------------------------------------------------------------
@@ -79,6 +81,7 @@ export default function ChatDrawer({
   apiBase,
   mapContext,
   devMode = false,
+  debugMode = false,
 }: ChatDrawerProps) {
   const [open, setOpen] = useState(false);
   const [conversationId] = useState(() => crypto.randomUUID());
@@ -197,6 +200,22 @@ export default function ChatDrawer({
                   : m,
               ),
             );
+          } else if (type === "done" && debugMode) {
+            const tier = event.tier as string | null;
+            const model = event.model as string | null;
+            const totalMs = event.total_ms as number | null;
+            const rejected = (event.rejected_tiers as string[] | null) ?? [];
+            const parts: string[] = [];
+            if (rejected.length > 0) parts.push(`~~${rejected.join(", ")}~~ →`);
+            if (tier) parts.push(tier);
+            if (model) parts.push(`(${model})`);
+            if (totalMs != null) parts.push(`· ${totalMs < 1000 ? `${totalMs}ms` : `${(totalMs / 1000).toFixed(1)}s`}`);
+            const debugInfo = parts.join(" ");
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.messageId === messageId ? { ...m, debugInfo } : m,
+              ),
+            );
           }
         },
       );
@@ -310,7 +329,14 @@ export default function ChatDrawer({
               <div className={styles.modelToggle} role="group" aria-label="Model">
                 <button
                   type="button"
-                  className={`${styles.modelToggleBtn} ${!modelOverride || modelOverride === "groq_8b" ? styles.modelToggleBtnActive : ""}`}
+                  className={`${styles.modelToggleBtn} ${!modelOverride ? styles.modelToggleBtnActive : ""}`}
+                  onClick={() => persistModelOverride(null)}
+                >
+                  auto
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.modelToggleBtn} ${modelOverride === "groq_8b" ? styles.modelToggleBtnActive : ""}`}
                   onClick={() => persistModelOverride("groq_8b")}
                 >
                   8b
@@ -364,6 +390,9 @@ export default function ChatDrawer({
                 key={i}
                 className={`${styles.message} ${msg.role === "user" ? styles.messageUser : styles.messageAssistant}`}
               >
+                {msg.debugInfo && (
+                  <div className={styles.debugBar}>{msg.debugInfo}</div>
+                )}
                 {msg.notice && (
                   <div className={styles.noticeBar}>{msg.notice}</div>
                 )}

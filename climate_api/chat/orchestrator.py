@@ -7,6 +7,7 @@ Event types yielded by ChatOrchestrator.run():
   {"type": "notice",     "text": "..."}            # degraded-model disclaimer, if applicable
   {"type": "answer",     "text": "..."}
   {"type": "done",       "session_id": "...", "step_count": N, "tools_called": [...], "tier": "...",
+                         "model": "...", "rejected_tiers": [...], "model_override": "...|null",
                          "total_ms": N, "steps_timing": [{"step": N, "model_ms": N, "tools_ms": N}, ...]}
   {"type": "error",      "message": "..."}
 
@@ -18,9 +19,12 @@ from __future__ import annotations
 
 import datetime
 import json
+import logging
 import re
 import time as _time
 import uuid
+
+logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
 from typing import Any, Iterator
 
@@ -98,9 +102,10 @@ def _is_quota_exhausted(exc: Exception) -> bool:
 
 
 def _is_tpm_error(exc: Exception) -> bool:
-    """Return True if the exception is a per-minute rate limit (retryable)."""
+    """Return True if the exception is a per-minute rate limit (retryable by waiting).
+    Excludes 'request too large' errors which can't be fixed by waiting."""
     msg = str(exc).lower()
-    return "tokens per minute" in msg or " tpm" in msg
+    return ("tokens per minute" in msg or " tpm" in msg) and "try again in" in msg
 
 
 def _parse_retry_after_s(exc: Exception) -> float:
@@ -457,6 +462,9 @@ class ChatOrchestrator:
                 )
                 step_model_ms += int((_time.monotonic() - model_t0) * 1000)
             except Exception as exc:
+                # Always accumulate model latency, even for failed calls
+                step_model_ms += int((_time.monotonic() - model_t0) * 1000)
+
                 # Quota exhaustion on the very first call (no events sent yet) →
                 # raise so the caller can fall through to the next tier silently.
                 if not events_yielded and _is_quota_exhausted(exc):
@@ -485,9 +493,15 @@ class ChatOrchestrator:
                     step -= 1
                     continue
 
+                logger.warning(
+                    "Chat API error (tier=%s, step=%d): %s",
+                    tier.name, step, error_msg,
+                    exc_info=True,
+                )
+                steps_timing.append({"step": step, "model_ms": step_model_ms, "error": True})
                 total_ms = int((_time.monotonic() - t_start) * 1000)
                 yield {"type": "error", "message": f"API error: {error_msg}"}
-                yield {"type": "done", "session_id": session_id, "step_count": step, "tools_called": tools_called, "tier": tier.name, "total_ms": total_ms, "steps_timing": steps_timing}
+                yield {"type": "done", "session_id": session_id, "step_count": step, "tools_called": tools_called, "tier": tier.name, "model": tier.model, "total_ms": total_ms, "steps_timing": steps_timing}
                 return
 
             message = response.choices[0].message
@@ -540,12 +554,12 @@ class ChatOrchestrator:
                 if tier.is_degraded:
                     yield {"type": "notice", "text": tier.degraded_notice}
                 yield {"type": "answer", "text": answer}
-                yield {"type": "done", "session_id": session_id, "step_count": step, "tools_called": tools_called, "tier": tier.name, "total_ms": total_ms, "steps_timing": steps_timing}
+                yield {"type": "done", "session_id": session_id, "step_count": step, "tools_called": tools_called, "tier": tier.name, "model": tier.model, "total_ms": total_ms, "steps_timing": steps_timing}
                 return
 
         total_ms = int((_time.monotonic() - t_start) * 1000)
         yield {"type": "error", "message": "Reached maximum steps without a final answer."}
-        yield {"type": "done", "session_id": session_id, "step_count": self.max_steps, "tools_called": tools_called, "tier": tier.name, "total_ms": total_ms, "steps_timing": steps_timing}
+        yield {"type": "done", "session_id": session_id, "step_count": self.max_steps, "tools_called": tools_called, "tier": tier.name, "model": tier.model, "total_ms": total_ms, "steps_timing": steps_timing}
 
     def run(
         self,
@@ -573,13 +587,20 @@ class ChatOrchestrator:
                 return
             tiers = tiers[idx:]
 
+        rejected_tiers: list[str] = []
+
         for tier in tiers:
             try:
-                yield from self._run_tier(tier, question, map_context, session_id)
+                for event in self._run_tier(tier, question, map_context, session_id):
+                    if event["type"] == "done":
+                        event = {**event, "rejected_tiers": rejected_tiers, "model_override": model_override}
+                    yield event
                 return
             except _QuotaExhaustedError:
+                rejected_tiers.append(tier.name)
                 continue
 
         # All tiers quota-exhausted
         yield {"type": "answer", "text": _BUDGET_EXHAUSTED_MSG}
-        yield {"type": "done", "session_id": session_id, "step_count": 0, "tools_called": [], "tier": None}
+        yield {"type": "done", "session_id": session_id, "step_count": 0, "tools_called": [], "tier": None,
+               "model": None, "rejected_tiers": rejected_tiers, "model_override": model_override}

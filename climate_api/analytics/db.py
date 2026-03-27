@@ -49,7 +49,11 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     map_lon           REAL,
     map_label         TEXT,
     total_ms          INTEGER,
-    steps_timing      TEXT
+    steps_timing      TEXT,
+    model             TEXT,
+    rejected_tiers    TEXT,
+    model_override    TEXT,
+    error             TEXT
 )
 """
 
@@ -77,7 +81,7 @@ class AnalyticsDB:
 
     def check_schema(self) -> None:
         """Call at startup. Logs an error and raises if required columns are missing."""
-        required = {"message_id", "session_id", "tool_calls_detail", "tier", "total_ms", "steps_timing"}
+        required = {"message_id", "session_id", "tool_calls_detail", "tier", "total_ms", "steps_timing", "model", "rejected_tiers", "model_override", "error"}
         try:
             with self._lock:
                 conn = self._connect()
@@ -195,6 +199,10 @@ class AnalyticsDB:
         map_label: str | None = None,
         total_ms: int | None = None,
         steps_timing: list[dict] | None = None,
+        model: str | None = None,
+        rejected_tiers: list[str] | None = None,
+        model_override: str | None = None,
+        error: str | None = None,
     ) -> None:
         import json as _json
         ts = int(time.time())
@@ -205,8 +213,9 @@ class AnalyticsDB:
                     """INSERT OR REPLACE INTO chat_messages
                        (message_id, session_id, ts, question, answer, step_count, tools_called,
                         tool_calls_detail, tier, opt_out, map_lat, map_lon, map_label,
-                        total_ms, steps_timing)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        total_ms, steps_timing, model, rejected_tiers, model_override, error,
+                        feedback_status)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         message_id, session_id, ts, question, answer, step_count,
                         _json.dumps(tools_called),
@@ -215,6 +224,11 @@ class AnalyticsDB:
                         map_lat, map_lon, map_label,
                         total_ms,
                         _json.dumps(steps_timing) if steps_timing is not None else None,
+                        model,
+                        _json.dumps(rejected_tiers) if rejected_tiers is not None else None,
+                        model_override,
+                        error,
+                        "new" if error else None,
                     ),
                 )
                 conn.commit()
@@ -264,7 +278,8 @@ class AnalyticsDB:
                 conn = self._connect()
                 cols = (
                     "message_id, session_id, ts, question, answer, step_count, tools_called, "
-                    "tool_calls_detail, tier, feedback, feedback_status, total_ms, steps_timing"
+                    "tool_calls_detail, tier, feedback, feedback_status, total_ms, steps_timing, "
+                    "model, rejected_tiers, model_override, error"
                 )
                 if feedback is not None:
                     rows = conn.execute(
@@ -289,6 +304,10 @@ class AnalyticsDB:
                     "feedback": r[9], "feedback_status": r[10],
                     "total_ms": r[11],
                     "steps_timing": _json.loads(r[12]) if r[12] else [],
+                    "model": r[13],
+                    "rejected_tiers": _json.loads(r[14]) if r[14] else [],
+                    "model_override": r[15],
+                    "error": r[16],
                 }
                 for r in rows
             ]
@@ -297,8 +316,42 @@ class AnalyticsDB:
             return []
 
     def get_chat_bad_answers(self, limit: int = 50) -> list[dict]:
-        """Return messages with feedback='bad' and feedback_status='new'."""
-        return self.get_chat_messages(limit=limit, feedback="bad")
+        """Return messages needing review: bad feedback or errors, with feedback_status='new'."""
+        import json as _json
+        try:
+            with self._lock:
+                conn = self._connect()
+                cols = (
+                    "message_id, session_id, ts, question, answer, step_count, tools_called, "
+                    "tool_calls_detail, tier, feedback, feedback_status, total_ms, steps_timing, "
+                    "model, rejected_tiers, model_override, error"
+                )
+                rows = conn.execute(
+                    f"SELECT {cols} FROM chat_messages"
+                    " WHERE feedback_status='new' ORDER BY ts DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            return [
+                {
+                    "message_id": r[0], "session_id": r[1], "ts": r[2], "question": r[3],
+                    "answer_excerpt": (r[4] or "")[:200],
+                    "step_count": r[5],
+                    "tools_called": _json.loads(r[6]) if r[6] else [],
+                    "tool_calls_detail": _json.loads(r[7]) if r[7] else [],
+                    "tier": r[8],
+                    "feedback": r[9], "feedback_status": r[10],
+                    "total_ms": r[11],
+                    "steps_timing": _json.loads(r[12]) if r[12] else [],
+                    "model": r[13],
+                    "rejected_tiers": _json.loads(r[14]) if r[14] else [],
+                    "model_override": r[15],
+                    "error": r[16],
+                }
+                for r in rows
+            ]
+        except Exception:
+            logger.exception("Failed to query bad answers")
+            return []
 
     def get_chat_stats(self) -> dict:
         try:
@@ -309,7 +362,7 @@ class AnalyticsDB:
                 good = conn.execute("SELECT COUNT(*) FROM chat_messages WHERE feedback='good'").fetchone()[0]
                 bad  = conn.execute("SELECT COUNT(*) FROM chat_messages WHERE feedback='bad'").fetchone()[0]
                 new_bad = conn.execute(
-                    "SELECT COUNT(*) FROM chat_messages WHERE feedback='bad' AND feedback_status='new'"
+                    "SELECT COUNT(*) FROM chat_messages WHERE feedback_status='new'"
                 ).fetchone()[0]
                 avg_steps = conn.execute("SELECT AVG(step_count) FROM chat_messages").fetchone()[0]
                 timing_rows = conn.execute(
