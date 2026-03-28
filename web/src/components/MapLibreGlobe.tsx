@@ -86,6 +86,7 @@ type Props = {
   textureVariantOverride?: TextureVariantOverride;
   onTextureDebugInfoChange?: (info: TextureDebugInfo | null) => void;
   autoRotate?: boolean;
+  chatLocations?: Array<{ lat: number; lon: number }> | null;
 };
 
 const initialView = {
@@ -340,11 +341,13 @@ export default function MapLibreGlobe({
   textureVariantOverride = "auto",
   onTextureDebugInfoChange,
   autoRotate = false,
+  chatLocations = null,
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const layerControlRef = useRef<{ refresh: () => void } | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const chatMarkersRef = useRef<maplibregl.Marker[]>([]);
   const onPickRef = useRef(onPick);
   const onHomeRef = useRef(onHome);
   const onLayerChangeRef = useRef(onLayerChange);
@@ -1327,6 +1330,29 @@ export default function MapLibreGlobe({
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelOpen]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    chatMarkersRef.current.forEach((m) => m.remove());
+    chatMarkersRef.current = [];
+    if (!map || !chatLocations || chatLocations.length < 2) return;
+    chatLocations.forEach((loc) => {
+      chatMarkersRef.current.push(
+        new maplibregl.Marker({ color: MARKER_COLOR })
+          .setLngLat([loc.lon, loc.lat])
+          .addTo(map),
+      );
+    });
+    const lons = chatLocations.map((l) => l.lon);
+    const lats = chatLocations.map((l) => l.lat);
+    map.fitBounds(
+      new maplibregl.LngLatBounds(
+        [Math.min(...lons), Math.min(...lats)],
+        [Math.max(...lons), Math.max(...lats)],
+      ),
+      { padding: 80, duration: FOCUS_FLY_DURATION_MS, essential: true },
+    );
+  }, [chatLocations]);
 
   useEffect(() => {
     const map = mapRef.current;

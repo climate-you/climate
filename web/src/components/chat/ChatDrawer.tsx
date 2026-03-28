@@ -35,6 +35,7 @@ type ChatDrawerProps = {
   devMode?: boolean;     // shows the model toggle when true
   debugMode?: boolean;   // shows per-reply model/tier/timing info
   onFlyTo?: (lat: number, lon: number) => void;
+  onLocations?: (locs: Array<{ lat: number; lon: number }> | null) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -86,6 +87,7 @@ export default function ChatDrawer({
   devMode = false,
   debugMode = false,
   onFlyTo,
+  onLocations,
 }: ChatDrawerProps) {
   const [open, setOpen] = useState(false);
   const [conversationId] = useState(() => crypto.randomUUID());
@@ -154,6 +156,7 @@ export default function ChatDrawer({
     if (!question.trim() || loading) return;
     setInput("");
     setLoading(true);
+    onLocations?.(null); // clear any previous chat markers
 
     const messageId = crypto.randomUUID();
     setMessages((prev) => [
@@ -212,6 +215,8 @@ export default function ChatDrawer({
             const locs = event.locations as Array<{label: string; lat: number; lon: number}> | undefined;
             if (locs && locs.length === 1) {
               onFlyTo?.(locs[0].lat, locs[0].lon);
+            } else if (locs && locs.length > 1) {
+              onLocations?.(locs);
             }
             const tier = event.tier as string | null;
             const isExhausted = tier === null && !event.error;

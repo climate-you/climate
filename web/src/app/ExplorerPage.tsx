@@ -213,6 +213,7 @@ export default function ExplorerPage({
   const [picked, setPicked] = useState<{ lat: number; lon: number } | null>(
     null,
   );
+  const [chatLocations, setChatLocations] = useState<Array<{ lat: number; lon: number }> | null>(null);
   const [selectedLocation, setSelectedLocation] =
     useState<SelectedLocationMeta | null>(null);
   const [selectedGeonameidForPanel, setSelectedGeonameidForPanel] = useState<
@@ -686,6 +687,7 @@ export default function ExplorerPage({
     setLat(item.lat);
     setLon(item.lon);
     setPicked({ lat: item.lat, lon: item.lon });
+    setChatLocations(null);
     setSelectedGeonameidForPanel(item.geonameid);
     setSelectedLocation({
       geonameid: item.geonameid,
@@ -707,6 +709,7 @@ export default function ExplorerPage({
     setLat(la);
     setLon(lo);
     setPicked({ lat: la, lon: lo });
+    setChatLocations(null);
     setSelectedGeonameidForPanel(null);
     setPanelOpen(true);
 
@@ -1079,9 +1082,11 @@ export default function ExplorerPage({
           onHome={() => {
             setPanelOpen(false);
             setPicked(null);
+            setChatLocations(null);
           }}
           enablePick={!introActive}
           autoRotate={coldOpenAutoRotate}
+          chatLocations={chatLocations}
         />
         {activeLayerLegend ? (
           <aside
@@ -1446,6 +1451,7 @@ export default function ExplorerPage({
           devMode={debugMode}
           debugMode={debugMode}
           onFlyTo={(flyLat, flyLon) => setPicked({ lat: flyLat, lon: flyLon })}
+          onLocations={(locs) => setChatLocations(locs)}
         />
       )}
     </main>
