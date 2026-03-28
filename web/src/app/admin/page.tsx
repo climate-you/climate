@@ -49,7 +49,7 @@ type AdminStatus = {
 };
 
 type ToolCallDetail = { name: string; args: Record<string, unknown>; step: number };
-type StepTiming = { step: number; model_ms: number; tools_ms?: number; error?: boolean };
+type StepTiming = { step: number; model_ms: number; tools_ms?: number; error?: boolean; prompt_tokens?: number; completion_tokens?: number };
 type ChatMessage = {
   message_id: string;
   session_id: string;
@@ -172,10 +172,14 @@ function buildCopyText(s: ChatMessage): string {
     for (const t of s.steps_timing) {
       let row = `- step ${t.step}: model ${fmtMs(t.model_ms)}`;
       if (t.tools_ms != null) row += ` → tools ${fmtMs(t.tools_ms)}`;
+      if (t.prompt_tokens != null) row += ` (${t.prompt_tokens.toLocaleString()}p + ${(t.completion_tokens ?? 0).toLocaleString()}c tokens)`;
       if (t.error) row += " ← error";
       lines.push(row);
     }
-    lines.push(`- total: ${fmtMs(s.total_ms)}`);
+    const totalP = s.steps_timing.reduce((a, t) => a + (t.prompt_tokens ?? 0), 0);
+    const totalC = s.steps_timing.reduce((a, t) => a + (t.completion_tokens ?? 0), 0);
+    const tokenStr = totalP > 0 ? ` ${totalP.toLocaleString()}p + ${totalC.toLocaleString()}c` : "";
+    lines.push(`- total: ${fmtMs(s.total_ms)}${tokenStr}`);
     lines.push("");
   }
 
@@ -722,6 +726,11 @@ function MessageRow({
                       {hasTools && (
                         <span style={{ color: "#888" }}>→ tools {fmtMs(t.tools_ms)}</span>
                       )}
+                      {t.prompt_tokens != null && (
+                        <span style={{ color: "#666", fontSize: 11 }}>
+                          {t.prompt_tokens.toLocaleString()}p + {(t.completion_tokens ?? 0).toLocaleString()}c
+                        </span>
+                      )}
                       {t.error && (
                         <span style={{ color: "#f66", fontSize: 11 }}>← error</span>
                       )}
@@ -731,11 +740,16 @@ function MessageRow({
                     </div>
                   );
                 })}
-                {s.total_ms != null && (
-                  <div style={{ marginTop: 4, fontSize: 12, color: "#666", fontFamily: "ui-monospace, monospace" }}>
-                    total: {fmtMs(s.total_ms)}
-                  </div>
-                )}
+                {s.total_ms != null && (() => {
+                  const totalP = s.steps_timing.reduce((a, t) => a + (t.prompt_tokens ?? 0), 0);
+                  const totalC = s.steps_timing.reduce((a, t) => a + (t.completion_tokens ?? 0), 0);
+                  return (
+                    <div style={{ marginTop: 4, fontSize: 12, color: "#666", fontFamily: "ui-monospace, monospace" }}>
+                      total: {fmtMs(s.total_ms)}
+                      {totalP > 0 && <span style={{ marginLeft: 8 }}>{totalP.toLocaleString()}p + {totalC.toLocaleString()}c</span>}
+                    </div>
+                  );
+                })()}
               </div>
             </DetailSection>
           )}

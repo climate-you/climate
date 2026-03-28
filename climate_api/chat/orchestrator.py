@@ -511,6 +511,7 @@ class ChatOrchestrator:
         t_start = _time.monotonic()
         steps_timing: list[dict] = []
         step_model_ms = 0  # accumulated model latency for current step (across retries)
+        step_usage: dict = {}  # token counts for current step (from latest API response)
         last_unique_step = 0  # last step that was newly entered (not a retry)
 
         step = 0
@@ -519,6 +520,7 @@ class ChatOrchestrator:
             if step > last_unique_step:
                 last_unique_step = step
                 step_model_ms = 0  # new step — reset accumulator
+                step_usage = {}
             try:
                 model_t0 = _time.monotonic()
                 response = tier.client.chat.completions.create(
@@ -580,7 +582,7 @@ class ChatOrchestrator:
                     exc_info=True,
                 )
                 steps_timing.append(
-                    {"step": step, "model_ms": step_model_ms, "error": True}
+                    {"step": step, "model_ms": step_model_ms, "error": True, **step_usage}
                 )
                 total_ms = int((_time.monotonic() - t_start) * 1000)
                 yield {"type": "error", "message": f"API error: {error_msg}"}
@@ -598,6 +600,11 @@ class ChatOrchestrator:
                 return
 
             message = response.choices[0].message
+            if response.usage:
+                step_usage = {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                }
 
             # Normalise tool calls: structured first, XML text fallback
             tool_calls = []
@@ -631,26 +638,32 @@ class ChatOrchestrator:
             if tool_calls:
                 messages.append({"role": "assistant", "tool_calls": tool_calls})
                 tools_t0 = _time.monotonic()
+                seen_calls: dict[str, str] = {}  # call_key → cached result
                 for tc in tool_calls:
                     args = json.loads(tc["function"]["arguments"])
                     name = tc["function"]["name"]
-                    yield {
-                        "type": "tool_call",
-                        "step": step,
-                        "name": name,
-                        "args": args,
-                    }
-                    events_yielded = True
-                    tools_called.append(name)
-                    result = self._dispatch(name, args)
-                    try:
-                        for loc in _extract_locations(name, args, json.loads(result)):
-                            key = (round(loc["lat"], 1), round(loc["lon"], 1))
-                            if key not in _location_keys:
-                                _location_keys.add(key)
-                                locations.append(loc)
-                    except Exception:
-                        pass
+                    call_key = f"{name}:{json.dumps(args, sort_keys=True)}"
+                    if call_key in seen_calls:
+                        result = json.dumps({"note": "Duplicate call — result identical to the previous call with the same arguments."})
+                    else:
+                        yield {
+                            "type": "tool_call",
+                            "step": step,
+                            "name": name,
+                            "args": args,
+                        }
+                        events_yielded = True
+                        tools_called.append(name)
+                        result = self._dispatch(name, args)
+                        seen_calls[call_key] = result
+                        try:
+                            for loc in _extract_locations(name, args, json.loads(result)):
+                                key = (round(loc["lat"], 1), round(loc["lon"], 1))
+                                if key not in _location_keys:
+                                    _location_keys.add(key)
+                                    locations.append(loc)
+                        except Exception:
+                            pass
                     messages.append(
                         {
                             "role": "tool",
@@ -660,11 +673,11 @@ class ChatOrchestrator:
                     )
                 tools_ms = int((_time.monotonic() - tools_t0) * 1000)
                 steps_timing.append(
-                    {"step": step, "model_ms": step_model_ms, "tools_ms": tools_ms}
+                    {"step": step, "model_ms": step_model_ms, "tools_ms": tools_ms, **step_usage}
                 )
             else:
                 # Final text response
-                steps_timing.append({"step": step, "model_ms": step_model_ms})
+                steps_timing.append({"step": step, "model_ms": step_model_ms, **step_usage})
                 total_ms = int((_time.monotonic() - t_start) * 1000)
                 answer = message.content or ""
                 if tier.is_degraded:

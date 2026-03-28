@@ -991,6 +991,7 @@ def run_agent(client, user_message: str, system_prompt: str) -> None:
 
     retried = False  # allow at most one retry per conversation
     retry_count = 0
+    step_usages: list[dict] = []
 
     for step in range(1, MAX_STEPS + 1):
         try:
@@ -1034,6 +1035,13 @@ def run_agent(client, user_message: str, system_prompt: str) -> None:
             return
 
         message = response.choices[0].message
+        usage = response.usage
+        if usage:
+            step_usages.append({
+                "step": step,
+                "prompt": usage.prompt_tokens,
+                "completion": usage.completion_tokens,
+            })
 
         # Normalise tool calls: prefer structured tool_calls, fall back to
         # parsing the text content for the XML-style format Llama sometimes emits.
@@ -1072,13 +1080,23 @@ def run_agent(client, user_message: str, system_prompt: str) -> None:
         if tool_calls:
             messages.append({"role": "assistant", "tool_calls": tool_calls})
 
+            tokens_str = (
+                f"  prompt={usage.prompt_tokens:,} completion={usage.completion_tokens:,}"
+                if usage else ""
+            )
+            print(f"  [step {step}{tokens_str}]", flush=True)
+            seen_calls: dict[str, str] = {}  # call_key → cached result
             for tc in tool_calls:
                 args = json.loads(tc["function"]["arguments"])
-                print(
-                    f"  [step {step}] {tc['function']['name']}({json.dumps(args)})",
-                    flush=True,
-                )
-                result = dispatch_tool(tc["function"]["name"], args)
+                name = tc["function"]["name"]
+                call_key = f"{name}:{json.dumps(args, sort_keys=True)}"
+                if call_key in seen_calls:
+                    result = json.dumps({"note": "Duplicate call — result identical to the previous call with the same arguments."})
+                    print(f"    {name}({json.dumps(args)})  [duplicate — placeholder sent]", flush=True)
+                else:
+                    print(f"    {name}({json.dumps(args)})", flush=True)
+                    result = dispatch_tool(name, args)
+                    seen_calls[call_key] = result
                 messages.append(
                     {
                         "role": "tool",
@@ -1093,6 +1111,12 @@ def run_agent(client, user_message: str, system_prompt: str) -> None:
             print(
                 f"  [{step} step(s) used, {step + retry_count} Groq request(s){retry_str}]"
             )
+            if step_usages:
+                for u in step_usages:
+                    print(f"  step {u['step']}: prompt={u['prompt']:,}  completion={u['completion']:,}")
+                total_p = sum(u["prompt"] for u in step_usages)
+                total_c = sum(u["completion"] for u in step_usages)
+                print(f"  total tokens: {total_p:,} prompt + {total_c:,} completion = {total_p + total_c:,}")
             return
 
     print("[error] Reached maximum steps without a final answer.")
