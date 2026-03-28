@@ -1445,6 +1445,7 @@ export default function ExplorerPage({
           }
           devMode={debugMode}
           debugMode={debugMode}
+          onFlyTo={(flyLat, flyLon) => setPicked({ lat: flyLat, lon: flyLon })}
         />
       )}
     </main>

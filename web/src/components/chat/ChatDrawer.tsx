@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import Markdown from "react-markdown";
 import styles from "./ChatDrawer.module.css";
 import {
   CHAT_EXAMPLE_QUESTIONS_GENERIC,
@@ -14,7 +15,7 @@ import {
 // ---------------------------------------------------------------------------
 
 type MapContext = { lat: number; lon: number; label: string } | null;
-type ModelOverride = "groq_8b" | "local" | null;
+type ModelOverride = "groq_8b" | "local" | "groq_70b" | "groq_scout" | null;
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -25,6 +26,7 @@ type ChatMessage = {
   feedback?: "good" | "bad" | null;
   error?: boolean;
   loading?: boolean;
+  exhausted?: boolean;   // daily budget exhausted — locks the input
 };
 
 type ChatDrawerProps = {
@@ -32,6 +34,7 @@ type ChatDrawerProps = {
   mapContext: MapContext;
   devMode?: boolean;     // shows the model toggle when true
   debugMode?: boolean;   // shows per-reply model/tier/timing info
+  onFlyTo?: (lat: number, lon: number) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -82,12 +85,14 @@ export default function ChatDrawer({
   mapContext,
   devMode = false,
   debugMode = false,
+  onFlyTo,
 }: ChatDrawerProps) {
   const [open, setOpen] = useState(false);
   const [conversationId] = useState(() => crypto.randomUUID());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [conversationExhausted, setConversationExhausted] = useState(false);
   const [optOut, setOptOut] = useState(false);
   const [modelOverride, setModelOverride] = useState<ModelOverride>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -97,10 +102,13 @@ export default function ChatDrawer({
   useEffect(() => {
     setOptOut(localStorage.getItem(CHAT_OPT_OUT_KEY) === "1");
     const stored = localStorage.getItem(CHAT_MODEL_OVERRIDE_KEY);
-    if (stored === "groq_8b" || stored === "local") {
+    if (!devMode) {
+      // Clear any override that may have been set during a debug session
+      localStorage.removeItem(CHAT_MODEL_OVERRIDE_KEY);
+    } else if (stored === "groq_8b" || stored === "local" || stored === "groq_70b" || stored === "groq_scout") {
       setModelOverride(stored);
     }
-  }, []);
+  }, [devMode]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -200,22 +208,37 @@ export default function ChatDrawer({
                   : m,
               ),
             );
-          } else if (type === "done" && debugMode) {
+          } else if (type === "done") {
+            const locs = event.locations as Array<{label: string; lat: number; lon: number}> | undefined;
+            if (locs && locs.length === 1) {
+              onFlyTo?.(locs[0].lat, locs[0].lon);
+            }
             const tier = event.tier as string | null;
-            const model = event.model as string | null;
-            const totalMs = event.total_ms as number | null;
-            const rejected = (event.rejected_tiers as string[] | null) ?? [];
-            const parts: string[] = [];
-            if (rejected.length > 0) parts.push(`~~${rejected.join(", ")}~~ →`);
-            if (tier) parts.push(tier);
-            if (model) parts.push(`(${model})`);
-            if (totalMs != null) parts.push(`· ${totalMs < 1000 ? `${totalMs}ms` : `${(totalMs / 1000).toFixed(1)}s`}`);
-            const debugInfo = parts.join(" ");
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.messageId === messageId ? { ...m, debugInfo } : m,
-              ),
-            );
+            const isExhausted = tier === null && !event.error;
+            if (isExhausted) {
+              setConversationExhausted(true);
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.messageId === messageId ? { ...m, exhausted: true } : m,
+                ),
+              );
+            }
+            if (debugMode) {
+              const model = event.model as string | null;
+              const totalMs = event.total_ms as number | null;
+              const rejected = (event.rejected_tiers as string[] | null) ?? [];
+              const parts: string[] = [];
+              if (rejected.length > 0) parts.push(`~~${rejected.join(", ")}~~ →`);
+              if (tier) parts.push(tier);
+              if (model) parts.push(`(${model})`);
+              if (totalMs != null) parts.push(`· ${totalMs < 1000 ? `${totalMs}ms` : `${(totalMs / 1000).toFixed(1)}s`}`);
+              const debugInfo = parts.join(" ");
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.messageId === messageId ? { ...m, debugInfo } : m,
+                ),
+              );
+            }
           }
         },
       );
@@ -276,14 +299,18 @@ export default function ChatDrawer({
     }
   }
 
-  const exampleQuestions =
-    mapContext?.label
-      ? [
-          `What was the hottest year on record in ${mapContext.label}?`,
-          `How have temperatures changed in ${mapContext.label} since 2000?`,
-          `What was the annual mean temperature in ${mapContext.label} in 2020?`,
-        ]
-      : CHAT_EXAMPLE_QUESTIONS_GENERIC;
+  const exampleQuestions = React.useMemo(() => {
+    if (mapContext?.label) {
+      return [
+        `What was the hottest year on record in ${mapContext.label}?`,
+        `How have temperatures changed in ${mapContext.label} since 2000?`,
+        `What was the annual mean temperature in ${mapContext.label} in 2020?`,
+      ];
+    }
+    const shuffled = [...CHAT_EXAMPLE_QUESTIONS_GENERIC].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, 3);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, mapContext?.label]);
 
   const isEmpty = messages.length === 0;
 
@@ -324,31 +351,24 @@ export default function ChatDrawer({
               Climate Assistant
             </div>
 
-            {/* Dev model toggle */}
+            {/* Dev model selector */}
             {devMode && (
-              <div className={styles.modelToggle} role="group" aria-label="Model">
-                <button
-                  type="button"
-                  className={`${styles.modelToggleBtn} ${!modelOverride ? styles.modelToggleBtnActive : ""}`}
-                  onClick={() => persistModelOverride(null)}
-                >
-                  auto
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.modelToggleBtn} ${modelOverride === "groq_8b" ? styles.modelToggleBtnActive : ""}`}
-                  onClick={() => persistModelOverride("groq_8b")}
-                >
-                  8b
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.modelToggleBtn} ${modelOverride === "local" ? styles.modelToggleBtnActive : ""}`}
-                  onClick={() => persistModelOverride("local")}
-                >
-                  local
-                </button>
-              </div>
+              <select
+                className={styles.modelSelect}
+                aria-label="Model override"
+                value={modelOverride ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  persistModelOverride((v || null) as ModelOverride);
+                }}
+              >
+                <option value="">auto</option>
+                <option value="groq_8b">groq · llama 8b</option>
+                <option value="local">local</option>
+                <option disabled>──────────</option>
+                <option value="groq_70b">groq · llama 70b</option>
+                <option value="groq_scout">groq · llama 4 scout</option>
+              </select>
             )}
 
             <button
@@ -405,13 +425,23 @@ export default function ChatDrawer({
                       <span />
                       <span />
                     </span>
+                  ) : msg.exhausted ? (
+                    <>
+                      The AI assistant&apos;s daily budget is exhausted. This project is provided
+                      for free and is self-funded. If you find it useful, please consider
+                      supporting it at{" "}
+                      <a href="https://ko-fi.com/climateyou" target="_blank" rel="noopener noreferrer" className={styles.exhaustedLink}>
+                        ko-fi.com/climateyou
+                      </a>
+                      .
+                    </>
                   ) : (
-                    msg.text
+                    <div className={styles.markdown}><Markdown>{msg.text}</Markdown></div>
                   )}
                 </div>
 
                 {/* Feedback buttons for assistant messages */}
-                {msg.role === "assistant" && msg.messageId && !msg.loading && !msg.error && (
+                {msg.role === "assistant" && msg.messageId && !msg.loading && !msg.error && !msg.exhausted && (
                   <div className={styles.feedback}>
                     <button
                       type="button"
@@ -456,18 +486,18 @@ export default function ChatDrawer({
               ref={inputRef}
               className={styles.input}
               rows={1}
-              placeholder="Ask about climate data…"
+              placeholder={conversationExhausted ? "Please try again later." : "Ask about climate data…"}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleInputKeyDown}
-              disabled={loading}
+              disabled={loading || conversationExhausted}
               aria-label="Chat input"
             />
             <button
               type="button"
               className={styles.sendBtn}
               aria-label="Send"
-              disabled={!input.trim() || loading}
+              disabled={!input.trim() || loading || conversationExhausted}
               onClick={() => void sendMessage(input)}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">

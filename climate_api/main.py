@@ -37,6 +37,7 @@ from .services.panels import (
     build_scored_panels_tiles_registry,
 )
 from .chat.orchestrator import ChatOrchestrator, ProviderTier
+from .chat.canned import lookup as _canned_lookup, stream_canned as _stream_canned
 from .store.country_classifier import CountryClassifier
 from .store.location_index import LocationIndex
 from .store.ocean_classifier import OceanClassifier
@@ -45,7 +46,6 @@ from .system_stats import current_rss_bytes, system_memory
 from .versioning import resolve_app_version
 
 logging.getLogger("uvicorn.access").disabled = True
-
 
 
 class _ClickBody(BaseModel):
@@ -63,8 +63,10 @@ class _ChatRequest(BaseModel):
     question: str
     map_context: _MapContext | None = None
     opt_out: bool = False
-    session_id: str | None = None   # browser-session UUID (groups all messages from one conversation)
-    message_id: str | None = None   # per-Q&A UUID (used for feedback/review endpoints)
+    session_id: str | None = (
+        None  # browser-session UUID (groups all messages from one conversation)
+    )
+    message_id: str | None = None  # per-Q&A UUID (used for feedback/review endpoints)
     # Optional tier override — used by the dev UI toggle.
     # Valid values are tier names configured on the server (e.g. "groq_8b", "local").
     model_override: str | None = None
@@ -117,46 +119,79 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
     if settings.chat_dev_mode:
         # Dev: 8b first (fast), local Ollama as fallback
         if settings.groq_api_key_free:
-            tiers.append(ProviderTier(
-                name="groq_8b",
-                client=Groq(api_key=settings.groq_api_key_free),
-                model=settings.groq_model_fallback,
-                is_degraded=False,
-            ))
+            tiers.append(
+                ProviderTier(
+                    name="groq_8b",
+                    client=Groq(api_key=settings.groq_api_key_free),
+                    model=settings.groq_model_fallback,
+                    is_degraded=False,
+                )
+            )
         if settings.ollama_base_url:
             try:
                 from openai import OpenAI
-                tiers.append(ProviderTier(
-                    name="local",
-                    client=OpenAI(base_url=settings.ollama_base_url, api_key="ollama"),
-                    model=settings.ollama_model,
-                    is_degraded=False,
-                ))
+
+                tiers.append(
+                    ProviderTier(
+                        name="local",
+                        client=OpenAI(
+                            base_url=settings.ollama_base_url, api_key="ollama"
+                        ),
+                        model=settings.ollama_model,
+                        is_degraded=False,
+                    )
+                )
             except ImportError:
-                logger.warning("openai package not installed — local Ollama tier unavailable.")
+                logger.warning(
+                    "openai package not installed — local Ollama tier unavailable."
+                )
+        # Extra dev-only tiers: available as explicit overrides (not in default chain)
+        if settings.groq_api_key_free:
+            tiers.append(
+                ProviderTier(
+                    name="groq_70b",
+                    client=Groq(api_key=settings.groq_api_key_free),
+                    model=settings.groq_model_primary,
+                    is_degraded=False,
+                )
+            )
+            tiers.append(
+                ProviderTier(
+                    name="groq_scout",
+                    client=Groq(api_key=settings.groq_api_key_free),
+                    model="meta-llama/llama-4-scout-17b-16e-instruct",
+                    is_degraded=False,
+                )
+            )
     else:
         # Prod: 70b free → 70b paid → 8b free (degraded)
         if settings.groq_api_key_free:
-            tiers.append(ProviderTier(
-                name="groq_70b_free",
-                client=Groq(api_key=settings.groq_api_key_free),
-                model=settings.groq_model_primary,
-                is_degraded=False,
-            ))
+            tiers.append(
+                ProviderTier(
+                    name="groq_70b_free",
+                    client=Groq(api_key=settings.groq_api_key_free),
+                    model=settings.groq_model_primary,
+                    is_degraded=False,
+                )
+            )
         if settings.groq_api_key_paid:
-            tiers.append(ProviderTier(
-                name="groq_70b_paid",
-                client=Groq(api_key=settings.groq_api_key_paid),
-                model=settings.groq_model_primary,
-                is_degraded=False,
-            ))
+            tiers.append(
+                ProviderTier(
+                    name="groq_70b_paid",
+                    client=Groq(api_key=settings.groq_api_key_paid),
+                    model=settings.groq_model_primary,
+                    is_degraded=False,
+                )
+            )
         if settings.groq_api_key_free:
-            tiers.append(ProviderTier(
-                name="groq_8b",
-                client=Groq(api_key=settings.groq_api_key_free),
-                model=settings.groq_model_fallback,
-                is_degraded=True,
-            ))
+            tiers.append(
+                ProviderTier(
+                    name="groq_8b",
+                    client=Groq(api_key=settings.groq_api_key_free),
+                    model=settings.groq_model_fallback,
+                    is_degraded=True,
+                )
+            )
 
     return tiers
 
@@ -272,9 +307,7 @@ def create_app() -> FastAPI:
             settings.geoip_cache_ttl_s,
         )
     else:
-        uvicorn_logger.info(
-            "Analytics disabled (set ANALYTICS_ENABLED=1 to enable)."
-        )
+        uvicorn_logger.info("Analytics disabled (set ANALYTICS_ENABLED=1 to enable).")
     if settings.analytics_enabled:
         blocklist_count = len(ip_blocklist)
         if blocklist_count:
@@ -318,7 +351,9 @@ def create_app() -> FastAPI:
                     tier_summary,
                 )
             except Exception as exc:
-                uvicorn_logger.warning("Chat orchestrator failed to initialise: %s", exc)
+                uvicorn_logger.warning(
+                    "Chat orchestrator failed to initialise: %s", exc
+                )
         else:
             uvicorn_logger.warning(
                 "CHAT_ENABLED=1 but no provider keys/URLs configured — chat disabled. "
@@ -465,13 +500,17 @@ def create_app() -> FastAPI:
                 "disk_free_bytes": disk.free,
                 "rss_bytes": current_rss_bytes(),
                 "cpu_1m_pct": cpu_1m_pct,
-                **({
-                    "mem_total_bytes": sys_mem["total"],
-                    "mem_available_bytes": sys_mem["available"],
-                } if (sys_mem := system_memory()) else {
-                    "mem_total_bytes": None,
-                    "mem_available_bytes": None,
-                }),
+                **(
+                    {
+                        "mem_total_bytes": sys_mem["total"],
+                        "mem_available_bytes": sys_mem["available"],
+                    }
+                    if (sys_mem := system_memory())
+                    else {
+                        "mem_total_bytes": None,
+                        "mem_available_bytes": None,
+                    }
+                ),
             },
         }
 
@@ -651,15 +690,23 @@ def create_app() -> FastAPI:
     @app.post("/api/chat")
     def chat(body: _ChatRequest, request: Request):
         if chat_orchestrator is None:
-            raise HTTPException(status_code=503, detail="Chat is not enabled on this server.")
+            raise HTTPException(
+                status_code=503, detail="Chat is not enabled on this server."
+            )
 
         map_ctx = (
-            {"lat": body.map_context.lat, "lon": body.map_context.lon, "label": body.map_context.label}
-            if body.map_context else None
+            {
+                "lat": body.map_context.lat,
+                "lon": body.map_context.lon,
+                "label": body.map_context.label,
+            }
+            if body.map_context
+            else None
         )
 
         def _event_stream():
             import json as _json
+
             answer_text: list[str] = []
             message_id = body.message_id or str(__import__("uuid").uuid4())
             session_id = body.session_id or message_id
@@ -674,21 +721,30 @@ def create_app() -> FastAPI:
             steps_timing: list[dict] | None = None
             error_text: str | None = None
 
-            for event in chat_orchestrator.run(
-                question=body.question,
-                map_context=map_ctx,
-                session_id=message_id,
-                model_override=body.model_override,
-            ):
+            canned = _canned_lookup(body.question) if not body.model_override else None
+            event_source = (
+                _stream_canned(canned[0], canned[1])
+                if canned is not None
+                else chat_orchestrator.run(
+                    question=body.question,
+                    map_context=map_ctx,
+                    session_id=message_id,
+                    model_override=body.model_override,
+                )
+            )
+
+            for event in event_source:
                 yield f"data: {_json.dumps(event)}\n\n"
 
                 if event["type"] == "tool_call":
                     tools_called.append(event["name"])
-                    tool_calls_detail.append({
-                        "name": event["name"],
-                        "args": event.get("args", {}),
-                        "step": event.get("step"),
-                    })
+                    tool_calls_detail.append(
+                        {
+                            "name": event["name"],
+                            "args": event.get("args", {}),
+                            "step": event.get("step"),
+                        }
+                    )
                 elif event["type"] == "answer":
                     answer_text.append(event["text"])
                 elif event["type"] == "error":
@@ -733,7 +789,9 @@ def create_app() -> FastAPI:
     @app.post("/api/chat/{message_id}/feedback", status_code=204)
     def chat_feedback(message_id: str, body: _FeedbackBody):
         if body.feedback not in ("good", "bad", None):
-            raise HTTPException(status_code=400, detail="feedback must be 'good', 'bad', or null.")
+            raise HTTPException(
+                status_code=400, detail="feedback must be 'good', 'bad', or null."
+            )
         if settings.chat_enabled:
             analytics_db.record_chat_feedback(message_id, body.feedback)
         return Response(status_code=204)
@@ -751,7 +809,9 @@ def create_app() -> FastAPI:
         feedback: str | None = Query(None),
     ):
         return {
-            "messages": analytics_db.get_chat_messages(limit=limit, offset=offset, feedback=feedback),
+            "messages": analytics_db.get_chat_messages(
+                limit=limit, offset=offset, feedback=feedback
+            ),
             "stats": analytics_db.get_chat_stats(),
         }
 

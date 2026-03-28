@@ -137,6 +137,55 @@ function fmtMs(ms: number | null | undefined): string {
   return `${ms}ms`;
 }
 
+function buildCopyText(s: ChatMessage): string {
+  const lines: string[] = [];
+
+  lines.push(`**Question:** ${s.question}`);
+  lines.push("");
+
+  if (s.answer_excerpt) {
+    lines.push(`**Answer:** ${s.answer_excerpt}`);
+    lines.push("");
+  }
+
+  const modelParts: string[] = [];
+  if (s.rejected_tiers?.length > 0) modelParts.push(`~~${s.rejected_tiers.join(", ")}~~ →`);
+  if (s.tier) modelParts.push(s.tier);
+  if (s.model) modelParts.push(`(${s.model})`);
+  if (s.model_override) modelParts.push("· user-selected");
+  lines.push(`**Model:** ${modelParts.join(" ") || "—"} | **Total:** ${fmtMs(s.total_ms)} | **Steps:** ${s.step_count}`);
+
+  if (s.feedback) lines.push(`**Feedback:** ${s.feedback}`);
+  lines.push("");
+
+  if (s.tool_calls_detail?.length > 0) {
+    lines.push("**Tool calls:**");
+    for (const t of s.tool_calls_detail) {
+      lines.push(`- step ${t.step}: \`${t.name}\``);
+      lines.push(`  \`\`\`json\n  ${JSON.stringify(t.args, null, 2).replace(/\n/g, "\n  ")}\n  \`\`\``);
+    }
+    lines.push("");
+  }
+
+  if (s.steps_timing?.length > 0) {
+    lines.push("**Timing:**");
+    for (const t of s.steps_timing) {
+      let row = `- step ${t.step}: model ${fmtMs(t.model_ms)}`;
+      if (t.tools_ms != null) row += ` → tools ${fmtMs(t.tools_ms)}`;
+      if (t.error) row += " ← error";
+      lines.push(row);
+    }
+    lines.push(`- total: ${fmtMs(s.total_ms)}`);
+    lines.push("");
+  }
+
+  if (s.error) {
+    lines.push(`**Error:** ${s.error}`);
+  }
+
+  return lines.join("\n").trim();
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -159,6 +208,7 @@ export default function AdminPage() {
   const [chatStats, setChatStats] = useState<ChatStats | null>(null);
   const [badAnswers, setBadAnswers] = useState<ChatMessage[]>([]);
   const [chatPage, setChatPage] = useState(0);
+  const [chatRefreshKey, setChatRefreshKey] = useState(0);
   const [chatLoading, setChatLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [highlightedSessionId, setHighlightedSessionId] = useState<string | null>(null);
@@ -236,7 +286,7 @@ export default function AdminPage() {
       })
       .catch(() => {})
       .finally(() => setChatLoading(false));
-  }, [apiBase, activeTab, chatPage]);
+  }, [apiBase, activeTab, chatPage, chatRefreshKey]);
 
   // Group messages by session_id, newest session first
   const groupedSessions = useMemo(() => {
@@ -361,6 +411,13 @@ export default function AdminPage() {
             )}
           </TabButton>
         </div>
+        <button
+          onClick={() => setChatRefreshKey((k) => k + 1)}
+          disabled={chatLoading}
+          style={{ marginLeft: "auto", background: "transparent", border: "1px solid #333", color: chatLoading ? "#444" : "#888", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: chatLoading ? "default" : "pointer" }}
+        >
+          {chatLoading ? "Loading…" : "↻ Refresh"}
+        </button>
       </div>
 
       {/* Map tab — kept mounted so MapLibre never needs to reinitialise */}
@@ -570,8 +627,16 @@ function MessageRow({
   highlight?: boolean;
   indented?: boolean;
 }) {
+  const [copied, setCopied] = useState(false);
   const feedbackIcon = s.feedback === "good" ? "👍" : s.feedback === "bad" ? "👎" : "—";
   const feedbackColor = s.feedback === "good" ? "#4caf50" : s.feedback === "bad" ? "#f66" : "#555";
+
+  function handleCopy() {
+    void navigator.clipboard.writeText(buildCopyText(s)).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   return (
     <div
@@ -674,20 +739,21 @@ function MessageRow({
               </div>
             </DetailSection>
           )}
-          {(onMarkReviewed || onViewSession) && (
-            <div style={{ display: "flex", gap: 8 }}>
-              {onMarkReviewed && (
-                <button onClick={onMarkReviewed} style={reviewBtnStyle}>
-                  ✓ Mark as reviewed
-                </button>
-              )}
-              {onViewSession && (
-                <button onClick={onViewSession} style={{ ...reviewBtnStyle, borderColor: "#7ec8e3", color: "#7ec8e3" }}>
-                  View session ↓
-                </button>
-              )}
-            </div>
-          )}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={handleCopy} style={{ ...reviewBtnStyle, borderColor: "#666", color: "#aaa" }}>
+              {copied ? "✓ Copied!" : "Copy"}
+            </button>
+            {onMarkReviewed && (
+              <button onClick={onMarkReviewed} style={reviewBtnStyle}>
+                ✓ Mark as reviewed
+              </button>
+            )}
+            {onViewSession && (
+              <button onClick={onViewSession} style={{ ...reviewBtnStyle, borderColor: "#7ec8e3", color: "#7ec8e3" }}>
+                View session ↓
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

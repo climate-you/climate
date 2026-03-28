@@ -15,6 +15,7 @@ Provider tiers are tried in order. If a tier's API call returns a daily-token-qu
 on its *first* call (before any events have been yielded for this question), the orchestrator
 silently falls through to the next tier. Any other error is surfaced as an "error" event.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -37,13 +38,15 @@ from climate_api.chat import tools as _tools
 # Provider tier
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ProviderTier:
     """One entry in the fallback chain."""
-    name: str           # e.g. "groq_70b_free", "groq_8b", "local"
-    client: Any         # groq.Groq or openai.OpenAI instance
+
+    name: str  # e.g. "groq_70b_free", "groq_8b", "local"
+    client: Any  # groq.Groq or openai.OpenAI instance
     model: str
-    is_degraded: bool = False   # True → emit disclaimer notice before answer
+    is_degraded: bool = False  # True → emit disclaimer notice before answer
     degraded_notice: str = field(default="")
 
     def __post_init__(self):
@@ -63,7 +66,7 @@ _DEGRADED_MODEL_NOTICE = (
 _BUDGET_EXHAUSTED_MSG = (
     "The AI assistant's daily budget is exhausted. This project is provided for "
     "free and is self-funded. If you find it useful, please consider supporting "
-    "it at ko-fi.com/climatearchive."
+    "it at ko-fi.com/climateyou."
 )
 
 
@@ -71,8 +74,34 @@ _BUDGET_EXHAUSTED_MSG = (
 # Quota detection
 # ---------------------------------------------------------------------------
 
+
 class _QuotaExhaustedError(Exception):
     """Raised when a tier's first API call hits a daily-token-quota limit."""
+
+
+def _extract_locations(name: str, args: dict, result_dict: dict) -> list[dict]:
+    """Extract {label, lat, lon} entries from a tool result dict."""
+    if "error" in result_dict:
+        return []
+    if name == "get_metric_series":
+        lat = result_dict.get("lat")
+        lon = result_dict.get("lon")
+        if lat is not None and lon is not None:
+            return [{"label": str(args.get("location", "")), "lat": lat, "lon": lon}]
+    elif name == "find_extreme_location":
+        if "lat" in result_dict:
+            return [{"label": result_dict.get("nearest_city", ""), "lat": result_dict["lat"], "lon": result_dict["lon"]}]
+        return [
+            {"label": r.get("nearest_city", ""), "lat": r["lat"], "lon": r["lon"]}
+            for r in result_dict.get("results", [])
+            if "lat" in r
+        ]
+    elif name == "find_similar_locations":
+        lat = result_dict.get("reference_lat")
+        lon = result_dict.get("reference_lon")
+        if lat is not None and lon is not None:
+            return [{"label": result_dict.get("reference", ""), "lat": lat, "lon": lon}]
+    return []
 
 
 def _is_quota_exhausted(exc: Exception) -> bool:
@@ -80,6 +109,7 @@ def _is_quota_exhausted(exc: Exception) -> bool:
     # Groq SDK raises RateLimitError for 429; check that first.
     try:
         from groq import RateLimitError
+
         if isinstance(exc, RateLimitError):
             # Distinguish TPD (daily) from TPM (per-minute).
             # TPM errors should be retried with a delay, not trigger tier fallback.
@@ -94,7 +124,7 @@ def _is_quota_exhausted(exc: Exception) -> bool:
     # Fallback: check status code + error body
     if getattr(exc, "status_code", None) == 429:
         body = getattr(exc, "body", {}) or {}
-        error_info = (body.get("error") or {})
+        error_info = body.get("error") or {}
         msg = error_info.get("message", "").lower()
         if "tokens per day" in msg or " tpd" in msg:
             return True
@@ -136,7 +166,10 @@ TOOL_SCHEMAS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "metric_id": {"type": "string", "description": "Metric ID from the catalogue"},
+                    "metric_id": {
+                        "type": "string",
+                        "description": "Metric ID from the catalogue",
+                    },
                     "aggregation": {
                         "type": "string",
                         "enum": ["mean", "max", "min", "trend_slope"],
@@ -150,8 +183,14 @@ TOOL_SCHEMAS = [
                         "enum": ["max", "min"],
                         "description": "Whether to find the location with the highest (max) or lowest (min) value.",
                     },
-                    "start_year": {"type": "integer", "description": "First year to include (inclusive)."},
-                    "end_year":   {"type": "integer", "description": "Last year to include (inclusive)."},
+                    "start_year": {
+                        "type": "integer",
+                        "description": "First year to include (inclusive).",
+                    },
+                    "end_year": {
+                        "type": "integer",
+                        "description": "Last year to include (inclusive).",
+                    },
                     "month_filter": {
                         "type": "array",
                         "items": {"type": "integer"},
@@ -161,7 +200,10 @@ TOOL_SCHEMAS = [
                         "type": "string",
                         "description": "Restrict to cities in this country (full English name, e.g. 'France').",
                     },
-                    "capital_only": {"type": "boolean", "description": "If true, only consider national capital cities."},
+                    "capital_only": {
+                        "type": "boolean",
+                        "description": "If true, only consider national capital cities.",
+                    },
                     "min_population": {
                         "type": "integer",
                         "description": "Only consider cities with at least this population. Use 1000000 for 'large cities'.",
@@ -195,7 +237,10 @@ TOOL_SCHEMAS = [
                         "type": "string",
                         "description": "Metric ID to use for comparison (e.g. t2m_yearly_mean_c).",
                     },
-                    "limit": {"type": "integer", "description": "Number of similar cities to return (default 5)."},
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of similar cities to return (default 5).",
+                    },
                 },
                 "required": ["reference_name", "metric_id"],
             },
@@ -221,9 +266,18 @@ TOOL_SCHEMAS = [
                             "from the map context exactly as provided."
                         ),
                     },
-                    "metric_id": {"type": "string", "description": "Metric ID from the catalogue"},
-                    "start_year": {"type": "integer", "description": "First year to include (inclusive)"},
-                    "end_year":   {"type": "integer", "description": "Last year to include (inclusive)"},
+                    "metric_id": {
+                        "type": "string",
+                        "description": "Metric ID from the catalogue",
+                    },
+                    "start_year": {
+                        "type": "integer",
+                        "description": "First year to include (inclusive)",
+                    },
+                    "end_year": {
+                        "type": "integer",
+                        "description": "Last year to include (inclusive)",
+                    },
                     "month_filter": {
                         "type": "array",
                         "items": {"type": "integer"},
@@ -266,6 +320,10 @@ region has the most extreme value across many locations — not for finding the 
 at a known location.
 - Never mention tool names, function names, or raw JSON in your final response. \
 Present findings as natural language only.
+- Round all temperatures to one decimal place (e.g. 29.6°C, not 29.576°C). \
+Round trend slopes to two decimal places (e.g. 1.21°C/decade).
+- Use markdown formatting in your response: bold (**text**) for location names and key \
+numerical values (temperatures, trends). Use numbered lists when ranking multiple items.
 
 Spatial precision: climate data is at 0.25 degree resolution (roughly 28 km per cell). \
 A data point covers a geographic area, not a precise city. Prefer phrasing like "in the \
@@ -313,11 +371,14 @@ def _build_system_prompt(
     current_date = datetime.date.today().strftime("%Y-%m-%d")
 
     if map_context:
-        label = map_context.get("label") or f"{map_context.get('lat', 0)}, {map_context.get('lon', 0)}"
+        label = (
+            map_context.get("label")
+            or f"{map_context.get('lat', 0)}, {map_context.get('lon', 0)}"
+        )
         map_context_block = (
             f"\nMap context: the user is currently viewing [{label}]. "
             "For questions about 'here', 'this location', or 'this place', "
-            f"pass \"{label}\" as the location parameter — do not use raw coordinates.\n"
+            f'pass "{label}" as the location parameter — do not use raw coordinates.\n'
         )
     else:
         map_context_block = "\n"
@@ -333,30 +394,34 @@ def _build_system_prompt(
 # XML text tool call fallback parser
 # ---------------------------------------------------------------------------
 
+
 def _parse_text_tool_calls(text: str) -> list[dict]:
     """
     Llama models sometimes emit tool calls as XML-ish text instead of structured
     tool_calls. This extracts them as a fallback.
     """
-    matches = re.findall(r'<function[^>]*>(.*?)</function>', text, re.DOTALL)
+    matches = re.findall(r"<function[^>]*>(.*?)</function>", text, re.DOTALL)
     calls = []
     for raw in matches:
-        raw = raw.strip().rstrip(')')
-        brace = raw.find('{')
+        raw = raw.strip().rstrip(")")
+        brace = raw.find("{")
         if brace == -1:
             continue
-        name = raw[:brace].lstrip('=(\"').rstrip('=(\"" ')
+        name = raw[:brace].lstrip('=("').rstrip('=("" ')
         try:
             arguments = json.loads(raw[brace:])
         except json.JSONDecodeError:
             continue
-        calls.append({"id": f"parsed_{name}_{len(calls)}", "name": name, "arguments": arguments})
+        calls.append(
+            {"id": f"parsed_{name}_{len(calls)}", "name": name, "arguments": arguments}
+        )
     return calls
 
 
 # ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
+
 
 class ChatOrchestrator:
     def __init__(
@@ -372,7 +437,9 @@ class ChatOrchestrator:
         self.location_index = location_index
         self.country_name_to_code: dict[str, str] = {}
         if country_names:
-            self.country_name_to_code = {v.casefold(): k for k, v in country_names.items()}
+            self.country_name_to_code = {
+                v.casefold(): k for k, v in country_names.items()
+            }
         self.max_steps = max_steps
 
     def _dispatch(self, name: str, args: dict) -> str:
@@ -431,17 +498,19 @@ class ChatOrchestrator:
         system_prompt = _build_system_prompt(self.tile_store, map_context)
         messages: list[dict] = [
             {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": question},
+            {"role": "user", "content": question},
         ]
 
         tools_called: list[str] = []
+        locations: list[dict] = []
+        _location_keys: set[tuple] = set()
         retried = False
         tpm_retries = 0
         events_yielded = False  # True once we've emitted at least one tool_call event
 
         t_start = _time.monotonic()
         steps_timing: list[dict] = []
-        step_model_ms = 0     # accumulated model latency for current step (across retries)
+        step_model_ms = 0  # accumulated model latency for current step (across retries)
         last_unique_step = 0  # last step that was newly entered (not a retry)
 
         step = 0
@@ -471,22 +540,32 @@ class ChatOrchestrator:
                     raise _QuotaExhaustedError() from exc
 
                 error_body = getattr(exc, "body", {}) or {}
-                error_info = (error_body.get("error") or {})
+                error_info = error_body.get("error") or {}
                 error_code = error_info.get("code", "")
                 error_msg = error_info.get("message", str(exc))
 
-                if error_code == "tool_use_failed" and not retried:
+                is_tool_error = (
+                    error_code == "tool_use_failed"
+                    or "tool call validation" in error_msg.lower()
+                )
+                if is_tool_error and not retried:
                     retried = True
-                    messages.append({
-                        "role": "user",
-                        "content": "Your previous tool call was malformed. Please call the tool again using the correct JSON format.",
-                    })
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Your previous tool call was rejected due to a schema error: {error_msg}. "
+                                "Please fix the argument types and call the tool again."
+                            ),
+                        }
+                    )
                     step -= 1
                     continue
 
                 # Per-minute rate limit — sleep briefly and retry (up to 3 times)
                 if _is_tpm_error(exc) and tpm_retries < 3:
                     import time
+
                     wait = min(_parse_retry_after_s(exc) + 2.0, 30.0)
                     time.sleep(wait)
                     tpm_retries += 1
@@ -495,13 +574,27 @@ class ChatOrchestrator:
 
                 logger.warning(
                     "Chat API error (tier=%s, step=%d): %s",
-                    tier.name, step, error_msg,
+                    tier.name,
+                    step,
+                    error_msg,
                     exc_info=True,
                 )
-                steps_timing.append({"step": step, "model_ms": step_model_ms, "error": True})
+                steps_timing.append(
+                    {"step": step, "model_ms": step_model_ms, "error": True}
+                )
                 total_ms = int((_time.monotonic() - t_start) * 1000)
                 yield {"type": "error", "message": f"API error: {error_msg}"}
-                yield {"type": "done", "session_id": session_id, "step_count": step, "tools_called": tools_called, "tier": tier.name, "model": tier.model, "total_ms": total_ms, "steps_timing": steps_timing}
+                yield {
+                    "type": "done",
+                    "session_id": session_id,
+                    "step_count": step,
+                    "tools_called": tools_called,
+                    "tier": tier.name,
+                    "model": tier.model,
+                    "total_ms": total_ms,
+                    "steps_timing": steps_timing,
+                    "locations": locations,
+                }
                 return
 
             message = response.choices[0].message
@@ -513,7 +606,10 @@ class ChatOrchestrator:
                     {
                         "id": tc.id,
                         "type": "function",
-                        "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
                     }
                     for tc in message.tool_calls
                 ]
@@ -524,7 +620,10 @@ class ChatOrchestrator:
                         {
                             "id": tc["id"],
                             "type": "function",
-                            "function": {"name": tc["name"], "arguments": json.dumps(tc["arguments"])},
+                            "function": {
+                                "name": tc["name"],
+                                "arguments": json.dumps(tc["arguments"]),
+                            },
                         }
                         for tc in parsed
                     ]
@@ -535,17 +634,34 @@ class ChatOrchestrator:
                 for tc in tool_calls:
                     args = json.loads(tc["function"]["arguments"])
                     name = tc["function"]["name"]
-                    yield {"type": "tool_call", "step": step, "name": name, "args": args}
+                    yield {
+                        "type": "tool_call",
+                        "step": step,
+                        "name": name,
+                        "args": args,
+                    }
                     events_yielded = True
                     tools_called.append(name)
                     result = self._dispatch(name, args)
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc["id"],
-                        "content": result,
-                    })
+                    try:
+                        for loc in _extract_locations(name, args, json.loads(result)):
+                            key = (round(loc["lat"], 1), round(loc["lon"], 1))
+                            if key not in _location_keys:
+                                _location_keys.add(key)
+                                locations.append(loc)
+                    except Exception:
+                        pass
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc["id"],
+                            "content": result,
+                        }
+                    )
                 tools_ms = int((_time.monotonic() - tools_t0) * 1000)
-                steps_timing.append({"step": step, "model_ms": step_model_ms, "tools_ms": tools_ms})
+                steps_timing.append(
+                    {"step": step, "model_ms": step_model_ms, "tools_ms": tools_ms}
+                )
             else:
                 # Final text response
                 steps_timing.append({"step": step, "model_ms": step_model_ms})
@@ -554,12 +670,35 @@ class ChatOrchestrator:
                 if tier.is_degraded:
                     yield {"type": "notice", "text": tier.degraded_notice}
                 yield {"type": "answer", "text": answer}
-                yield {"type": "done", "session_id": session_id, "step_count": step, "tools_called": tools_called, "tier": tier.name, "model": tier.model, "total_ms": total_ms, "steps_timing": steps_timing}
+                yield {
+                    "type": "done",
+                    "session_id": session_id,
+                    "step_count": step,
+                    "tools_called": tools_called,
+                    "tier": tier.name,
+                    "model": tier.model,
+                    "total_ms": total_ms,
+                    "steps_timing": steps_timing,
+                    "locations": locations,
+                }
                 return
 
         total_ms = int((_time.monotonic() - t_start) * 1000)
-        yield {"type": "error", "message": "Reached maximum steps without a final answer."}
-        yield {"type": "done", "session_id": session_id, "step_count": self.max_steps, "tools_called": tools_called, "tier": tier.name, "model": tier.model, "total_ms": total_ms, "steps_timing": steps_timing}
+        yield {
+            "type": "error",
+            "message": "Reached maximum steps without a final answer.",
+        }
+        yield {
+            "type": "done",
+            "session_id": session_id,
+            "step_count": self.max_steps,
+            "tools_called": tools_called,
+            "tier": tier.name,
+            "model": tier.model,
+            "total_ms": total_ms,
+            "steps_timing": steps_timing,
+            "locations": locations,
+        }
 
     def run(
         self,
@@ -580,20 +719,41 @@ class ChatOrchestrator:
         tiers = self.tiers
 
         if model_override:
-            idx = next((i for i, t in enumerate(tiers) if t.name == model_override), None)
+            idx = next(
+                (i for i, t in enumerate(tiers) if t.name == model_override), None
+            )
             if idx is None:
-                yield {"type": "error", "message": f"Requested model '{model_override}' is not available on this server."}
-                yield {"type": "done", "session_id": session_id, "step_count": 0, "tools_called": [], "tier": None}
+                yield {
+                    "type": "error",
+                    "message": f"Requested model '{model_override}' is not available on this server.",
+                }
+                yield {
+                    "type": "done",
+                    "session_id": session_id,
+                    "step_count": 0,
+                    "tools_called": [],
+                    "tier": None,
+                    "locations": [],
+                }
                 return
             tiers = tiers[idx:]
 
         rejected_tiers: list[str] = []
 
+        import os as _os
+
+        if _os.environ.get("CHAT_TEST_EXHAUSTED") == "1":
+            tiers = []
+
         for tier in tiers:
             try:
                 for event in self._run_tier(tier, question, map_context, session_id):
                     if event["type"] == "done":
-                        event = {**event, "rejected_tiers": rejected_tiers, "model_override": model_override}
+                        event = {
+                            **event,
+                            "rejected_tiers": rejected_tiers,
+                            "model_override": model_override,
+                        }
                     yield event
                 return
             except _QuotaExhaustedError:
@@ -602,5 +762,14 @@ class ChatOrchestrator:
 
         # All tiers quota-exhausted
         yield {"type": "answer", "text": _BUDGET_EXHAUSTED_MSG}
-        yield {"type": "done", "session_id": session_id, "step_count": 0, "tools_called": [], "tier": None,
-               "model": None, "rejected_tiers": rejected_tiers, "model_override": model_override}
+        yield {
+            "type": "done",
+            "session_id": session_id,
+            "step_count": 0,
+            "tools_called": [],
+            "tier": None,
+            "model": None,
+            "rejected_tiers": rejected_tiers,
+            "model_override": model_override,
+            "locations": [],
+        }

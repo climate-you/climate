@@ -1319,13 +1319,14 @@ export default function MapLibreGlobe({
     const map = mapRef.current;
     if (!map) return;
     if (panelOpen) return;
-    if (!focusLocation) return;
+    if (!focusLocationRef.current) return;
     map.easeTo({
       padding: { top: 0, right: 0, bottom: 0, left: 0 },
       duration: PANEL_TRANSITION_MS,
       essential: true,
     });
-  }, [panelOpen, focusLocation]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelOpen]);
 
   useEffect(() => {
     const map = mapRef.current;

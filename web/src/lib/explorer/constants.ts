@@ -86,6 +86,14 @@ export const CHAT_EXAMPLE_QUESTIONS_GENERIC = [
   "What is the hottest capital city in the world?",
   "What are the top 5 warmest large cities in the world?",
   "How have winters changed in Tokyo since 2000?",
+  "Which city has warmed the fastest in the last 50 years?",
+  "What is the coldest major city in the world?",
+  "How does the temperature in Dubai compare to 20 years ago?",
+  "Which city sees more rain: London or Paris?",
+  // Disabled until continent/region averaging is supported:
+  // "Is it getting hotter in Europe?",
+  // Disabled until precipitation metrics are available:
+  // "Has rainfall changed in London over the last 30 years?",
 ];
 export const CHAT_PRIVACY_NOTICE =
   "Your questions may be reviewed to improve the assistant.";

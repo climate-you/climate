@@ -148,34 +148,19 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Dev model toggle
+   Dev model selector
    --------------------------------------------------------------------------- */
 
-.modelToggle {
-  display: inline-flex;
+.modelSelect {
   border: 1px solid var(--surface-border, rgba(17, 17, 17, 0.18));
-  border-radius: 999px;
-  overflow: hidden;
+  border-radius: 6px;
   background: var(--surface, #ffffff);
-  flex-shrink: 0;
-}
-
-.modelToggleBtn {
-  border: none;
-  background: transparent;
   color: var(--text-primary, #111827);
-  padding: 3px 10px;
+  padding: 3px 6px;
   font-size: 12px;
   cursor: pointer;
-}
-
-.modelToggleBtn + .modelToggleBtn {
-  border-left: 1px solid var(--surface-border, rgba(17, 17, 17, 0.18));
-}
-
-.modelToggleBtnActive {
-  background: var(--control-active-bg, #111111);
-  color: var(--control-active-fg, #ffffff);
+  flex-shrink: 0;
+  max-width: 140px;
 }
 
 /* ---------------------------------------------------------------------------
@@ -257,8 +242,18 @@
   border-radius: 12px;
   line-height: 1.45;
   word-break: break-word;
-  white-space: pre-wrap;
 }
+
+.markdown {
+  display: block;
+}
+
+.markdown p { margin: 0 0 0.4em; }
+.markdown p:last-child { margin-bottom: 0; }
+.markdown ol,
+.markdown ul { margin: 0.3em 0 0.4em 1.2em; padding: 0; }
+.markdown li { margin-bottom: 0.15em; }
+.markdown strong { font-weight: 600; }
 
 .messageUser .messageBubble {
   background: var(--cta, #0000ff);
@@ -276,6 +271,15 @@
   background: #fff1f1 !important;
   border-color: #fca5a5 !important;
   color: var(--danger, #b91c1c);
+}
+
+.exhaustedLink {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.exhaustedLink:hover {
+  opacity: 0.8;
 }
 
 /* Debug info bar */

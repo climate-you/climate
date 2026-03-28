@@ -259,7 +259,7 @@ class AnalyticsDB:
             with self._lock:
                 conn = self._connect()
                 conn.execute(
-                    "UPDATE chat_messages SET feedback_status='reviewed' WHERE message_id=? AND feedback='bad'",
+                    "UPDATE chat_messages SET feedback_status='reviewed' WHERE message_id=?",
                     (message_id,),
                 )
                 conn.commit()
