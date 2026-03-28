@@ -283,6 +283,14 @@ TOOL_SCHEMAS = [
                         "items": {"type": "integer"},
                         "description": "Months to include, e.g. [12, 1, 2] for winter. Only valid for monthly metrics.",
                     },
+                    "aggregate_by_year": {
+                        "type": "boolean",
+                        "description": (
+                            "When true and month_filter is set, return one annual mean per year "
+                            "instead of individual monthly records. Use for trend questions "
+                            "spanning multiple years. Omit when per-month detail is needed."
+                        ),
+                    },
                 },
                 "required": ["location", "metric_id"],
             },
@@ -310,6 +318,11 @@ locations, call get_metric_series for all of them in one parallel step.
 end_year to get_metric_series so the result is focused. For example, to get the 2020 \
 value, pass start_year=2020, end_year=2020. Only omit year bounds when you need the full \
 historical series (e.g. to find the hottest year across all years).
+- For seasonal trend questions spanning multiple years (e.g. "how have winters changed"), \
+pass month_filter for the season and aggregate_by_year=true. This returns one annual mean \
+per year instead of one record per month, which is far more efficient. Only omit \
+aggregate_by_year when per-month detail is needed (e.g. "which month of winter 2020 was \
+coldest?").
 - Before calling any tool that takes a year, check whether the requested year is in the \
 future (beyond today's date). If it is a future year, do not retry — instead explain that \
 our dataset only covers historical data up to the date shown in the metric catalogue above.
@@ -452,6 +465,7 @@ class ChatOrchestrator:
                 start_year=args.get("start_year"),
                 end_year=args.get("end_year"),
                 month_filter=args.get("month_filter"),
+                aggregate_by_year=bool(args.get("aggregate_by_year", False)),
             )
         elif name == "find_extreme_location":
             result = _tools.find_extreme_location(

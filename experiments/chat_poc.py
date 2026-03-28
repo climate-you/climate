@@ -285,6 +285,14 @@ TOOL_SCHEMAS = [
                             "Only valid for monthly metrics. Omit for annual metrics."
                         ),
                     },
+                    "aggregate_by_year": {
+                        "type": "boolean",
+                        "description": (
+                            "When true and month_filter is set, return one annual mean per year "
+                            "instead of individual monthly records. Use for trend questions "
+                            "spanning multiple years. Omit when per-month detail is needed."
+                        ),
+                    },
                 },
                 "required": ["location", "metric_id"],
             },
@@ -509,6 +517,7 @@ def _real_get_metric_series(
     start_year: int | None = None,
     end_year: int | None = None,
     month_filter: list[int] | None = None,
+    aggregate_by_year: bool = False,
 ) -> dict:
     spec = _real_store.metrics.get(metric_id)
     if spec is None:
@@ -552,6 +561,20 @@ def _real_get_metric_series(
                     f"No data for requested range. "
                     f"Available for '{metric_id}': {axis[0]} to {axis[-1]}."
                 )
+            }
+
+        if aggregate_by_year and month_filter:
+            year_vals: dict[int, list[float]] = {}
+            for entry in data:
+                year_vals.setdefault(entry["year"], []).append(entry["value"])
+            data = [
+                {"year": y, "value": round(sum(vs) / len(vs), 3)}
+                for y, vs in sorted(year_vals.items())
+            ]
+            return {
+                "metric_id": metric_id, "lat": lat, "lon": lon, "unit": unit,
+                "data": data,
+                "note": f"Annual means for months {month_filter}.",
             }
 
         return {
@@ -601,6 +624,7 @@ def _real_get_metric_series_by_location(
     start_year: int | None = None,
     end_year: int | None = None,
     month_filter: list[int] | None = None,
+    aggregate_by_year: bool = False,
 ) -> dict:
     """Tool-facing wrapper: resolves location name then fetches the metric series."""
     loc = _real_resolve_location(location)
@@ -609,6 +633,7 @@ def _real_get_metric_series_by_location(
     result = _real_get_metric_series(
         loc["lat"], loc["lon"], metric_id,
         start_year=start_year, end_year=end_year, month_filter=month_filter,
+        aggregate_by_year=aggregate_by_year,
     )
     if "error" not in result:
         result["location"] = loc["label"]
@@ -850,6 +875,7 @@ _TOOL_ARGUMENT_CASTS = {
         "start_year": int,
         "end_year": int,
         "month_filter": lambda values: [int(v) for v in values],
+        "aggregate_by_year": bool,
     },
     "find_extreme_location": {
         "start_year": int,

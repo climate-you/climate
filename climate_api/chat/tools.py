@@ -52,6 +52,7 @@ def _get_metric_series(
     start_year: int | None = None,
     end_year: int | None = None,
     month_filter: list[int] | None = None,
+    aggregate_by_year: bool = False,
 ) -> dict:
     """Fetch metric series by coordinates. Internal — called by get_metric_series and scan tools."""
     spec = tile_store.metrics.get(metric_id)
@@ -94,6 +95,21 @@ def _get_metric_series(
                     f"Available for '{metric_id}': {axis[0]} to {axis[-1]}."
                 )
             }
+
+        if aggregate_by_year and month_filter:
+            year_vals: dict[int, list[float]] = {}
+            for entry in data:
+                year_vals.setdefault(entry["year"], []).append(entry["value"])
+            data = [
+                {"year": y, "value": round(sum(vs) / len(vs), 3)}
+                for y, vs in sorted(year_vals.items())
+            ]
+            return {
+                "metric_id": metric_id, "lat": lat, "lon": lon, "unit": unit,
+                "data": data,
+                "note": f"Annual means for months {month_filter}.",
+            }
+
         return {"metric_id": metric_id, "lat": lat, "lon": lon, "unit": unit, "data": data}
 
     else:
@@ -139,6 +155,7 @@ def get_metric_series(
     start_year: int | None = None,
     end_year: int | None = None,
     month_filter: list[int] | None = None,
+    aggregate_by_year: bool = False,
 ) -> dict:
     """Tool-facing wrapper: resolves location name then fetches the metric series."""
     loc = resolve_location(location, location_index)
@@ -147,6 +164,7 @@ def get_metric_series(
     result = _get_metric_series(
         loc["lat"], loc["lon"], metric_id, tile_store,
         start_year=start_year, end_year=end_year, month_filter=month_filter,
+        aggregate_by_year=aggregate_by_year,
     )
     if "error" not in result:
         result["location"] = loc["label"]
