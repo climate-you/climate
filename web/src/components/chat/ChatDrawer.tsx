@@ -16,6 +16,9 @@ import {
 
 type MapContext = { lat: number; lon: number; label: string } | null;
 type ModelOverride = "groq_8b" | "local" | "groq_70b" | "groq_scout" | null;
+type ConversationTurn = { role: "user" | "assistant"; text: string };
+
+const MAX_HISTORY_TURNS = 3; // keep last N user+assistant pairs
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -92,6 +95,7 @@ export default function ChatDrawer({
   const [open, setOpen] = useState(false);
   const [conversationId] = useState(() => crypto.randomUUID());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [conversationExhausted, setConversationExhausted] = useState(false);
@@ -152,6 +156,12 @@ export default function ChatDrawer({
     }
   }
 
+  function clearSession() {
+    setMessages([]);
+    setConversationHistory([]);
+    setConversationExhausted(false);
+  }
+
   async function sendMessage(question: string) {
     if (!question.trim() || loading) return;
     setInput("");
@@ -168,12 +178,14 @@ export default function ChatDrawer({
 
     let pendingNotice: string | undefined;
     let answered = false;
+    let finalAnswerText = "";
 
     try {
       await streamChatRequest(
         apiBase,
         {
           question,
+          history: conversationHistory.length > 0 ? conversationHistory : undefined,
           map_context: mapContext,
           opt_out: optOut,
           session_id: conversationId,
@@ -186,12 +198,13 @@ export default function ChatDrawer({
             pendingNotice = event.text as string;
           } else if (type === "answer") {
             answered = true;
+            finalAnswerText = event.text as string;
             setMessages((prev) =>
               prev.map((m) =>
                 m.messageId === messageId
                   ? {
                       ...m,
-                      text: event.text as string,
+                      text: finalAnswerText,
                       notice: pendingNotice,
                       loading: false,
                     }
@@ -257,6 +270,15 @@ export default function ChatDrawer({
               : m,
           ),
         );
+      } else if (finalAnswerText) {
+        setConversationHistory((prev) => {
+          const updated: ConversationTurn[] = [
+            ...prev,
+            { role: "user", text: question },
+            { role: "assistant", text: finalAnswerText },
+          ];
+          return updated.slice(-(MAX_HISTORY_TURNS * 2));
+        });
       }
     } catch {
       setMessages((prev) =>
@@ -374,6 +396,21 @@ export default function ChatDrawer({
                 <option value="groq_70b">groq · llama 70b</option>
                 <option value="groq_scout">groq · llama 4 scout</option>
               </select>
+            )}
+
+            {!isEmpty && (
+              <button
+                type="button"
+                className={styles.drawerClose}
+                aria-label="New conversation"
+                title="New conversation"
+                onClick={clearSession}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                  <path d="M3 3v5h5" />
+                </svg>
+              </button>
             )}
 
             <button

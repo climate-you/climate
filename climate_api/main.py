@@ -59,8 +59,14 @@ class _MapContext(BaseModel):
     label: str
 
 
+class _ConversationTurn(BaseModel):
+    role: str   # "user" or "assistant"
+    text: str
+
+
 class _ChatRequest(BaseModel):
     question: str
+    history: list[_ConversationTurn] | None = None  # prior turns (user+assistant pairs)
     map_context: _MapContext | None = None
     opt_out: bool = False
     session_id: str | None = (
@@ -727,6 +733,7 @@ def create_app() -> FastAPI:
                 if canned is not None
                 else chat_orchestrator.run(
                     question=body.question,
+                    history=[(t.role, t.text) for t in body.history] if body.history else None,
                     map_context=map_ctx,
                     session_id=message_id,
                     model_override=body.model_override,

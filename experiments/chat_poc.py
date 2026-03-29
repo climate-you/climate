@@ -39,6 +39,7 @@ else:
 
 MAX_STEPS = 5
 MOCK_TOOLS = False  # Set False to use real TileDataStore + LocationIndex
+MAX_HISTORY_TURNS = 3  # keep last N user+assistant pairs in multi-turn mode
 
 
 def _make_client(api_key: str | None = None):
@@ -1009,11 +1010,17 @@ def _parse_text_tool_calls(text: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def run_agent(client, user_message: str, system_prompt: str) -> None:
-    messages: list[dict] = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_message},
-    ]
+def run_agent(
+    client,
+    user_message: str,
+    system_prompt: str,
+    history: list[tuple[str, str]] | None = None,
+) -> str | None:
+    """Run the agentic loop and return the final answer text, or None on error."""
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
+    for role, text in (history or []):
+        messages.append({"role": role, "content": text})
+    messages.append({"role": "user", "content": user_message})
 
     retried = False  # allow at most one retry per conversation
     retry_count = 0
@@ -1132,7 +1139,8 @@ def run_agent(client, user_message: str, system_prompt: str) -> None:
                 )
         else:
             # Final text response
-            print(f"\nAssistant: {message.content}\n")
+            answer = message.content or ""
+            print(f"\nAssistant: {answer}\n")
             retry_str = f", {retry_count} retry" if retry_count else ""
             print(
                 f"  [{step} step(s) used, {step + retry_count} Groq request(s){retry_str}]"
@@ -1143,9 +1151,10 @@ def run_agent(client, user_message: str, system_prompt: str) -> None:
                 total_p = sum(u["prompt"] for u in step_usages)
                 total_c = sum(u["completion"] for u in step_usages)
                 print(f"  total tokens: {total_p:,} prompt + {total_c:,} completion = {total_p + total_c:,}")
-            return
+            return answer
 
     print("[error] Reached maximum steps without a final answer.")
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -1194,6 +1203,7 @@ def main() -> None:
 
     # Interactive mode
     print("Type a question and press Enter. Ctrl-C or Ctrl-D to exit.\n")
+    conversation_history: list[tuple[str, str]] = []
     while True:
         try:
             question = input("You: ").strip()
@@ -1204,7 +1214,11 @@ def main() -> None:
         if not question:
             continue
 
-        run_agent(client, question, system_prompt)
+        answer = run_agent(client, question, system_prompt, history=conversation_history)
+        if answer:
+            conversation_history.append(("user", question))
+            conversation_history.append(("assistant", answer))
+            conversation_history = conversation_history[-(MAX_HISTORY_TURNS * 2):]
 
 
 if __name__ == "__main__":

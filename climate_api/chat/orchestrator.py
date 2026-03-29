@@ -184,12 +184,10 @@ TOOL_SCHEMAS = [
                         "description": "Whether to find the location with the highest (max) or lowest (min) value.",
                     },
                     "start_year": {
-                        "type": "integer",
-                        "description": "First year to include (inclusive).",
+                        "description": "First year to include (inclusive). Must be a number, e.g. 2020.",
                     },
                     "end_year": {
-                        "type": "integer",
-                        "description": "Last year to include (inclusive).",
+                        "description": "Last year to include (inclusive). Must be a number, e.g. 2024.",
                     },
                     "month_filter": {
                         "type": "array",
@@ -271,12 +269,10 @@ TOOL_SCHEMAS = [
                         "description": "Metric ID from the catalogue",
                     },
                     "start_year": {
-                        "type": "integer",
-                        "description": "First year to include (inclusive)",
+                        "description": "First year to include (inclusive). Must be a number, e.g. 2020.",
                     },
                     "end_year": {
-                        "type": "integer",
-                        "description": "Last year to include (inclusive)",
+                        "description": "Last year to include (inclusive). Must be a number, e.g. 2024.",
                     },
                     "month_filter": {
                         "type": "array",
@@ -331,6 +327,10 @@ find_extreme_location) to retrieve the full series for that location, then ident
 extremum year from the returned data. find_extreme_location is for finding which city or \
 region has the most extreme value across many locations — not for finding the extreme year \
 at a known location.
+- You have at most {max_steps} tool-call steps. Use them efficiently — group independent \
+lookups into one parallel step where possible. If after a few steps the available data \
+does not fully answer the question, stop calling tools and give the best answer you can \
+from what you have, clearly stating what data is and is not available in our dataset.
 - Never mention tool names, function names, or raw JSON in your final response. \
 Present findings as natural language only.
 - Round all temperatures to one decimal place (e.g. 29.6°C, not 29.576°C). \
@@ -355,7 +355,7 @@ Reporting time periods: always state the explicit year or date from the data you
 not "last year". If the year or month you fetched is the last one listed in the metric \
 catalogue, add "(most recent available in our dataset)" after the year.
 
-Respond in English only. Be concise and always include specific numbers from the data.
+Respond in the same language as the user's question. Be concise and always include specific numbers from the data.
 
 Today's date: {current_date}. Use this to interpret relative time expressions like \
 "last year" or "this decade".
@@ -378,6 +378,7 @@ def _format_metric_catalogue(metrics: list[dict]) -> str:
 def _build_system_prompt(
     tile_store: TileDataStore,
     map_context: dict[str, Any] | None,
+    max_steps: int = 5,
 ) -> str:
     metrics_result = _tools.list_available_metrics(tile_store)
     catalogue = _format_metric_catalogue(metrics_result.get("metrics", []))
@@ -400,6 +401,7 @@ def _build_system_prompt(
         current_date=current_date,
         map_context_block=map_context_block,
         metric_catalogue=catalogue,
+        max_steps=max_steps,
     )
 
 
@@ -456,14 +458,17 @@ class ChatOrchestrator:
         self.max_steps = max_steps
 
     def _dispatch(self, name: str, args: dict) -> str:
+        def _int_or_none(v: Any) -> int | None:
+            return int(v) if v is not None else None
+
         if name == "get_metric_series":
             result = _tools.get_metric_series(
                 location=str(args["location"]),
                 metric_id=str(args["metric_id"]),
                 tile_store=self.tile_store,
                 location_index=self.location_index,
-                start_year=args.get("start_year"),
-                end_year=args.get("end_year"),
+                start_year=_int_or_none(args.get("start_year")),
+                end_year=_int_or_none(args.get("end_year")),
                 month_filter=args.get("month_filter"),
                 aggregate_by_year=bool(args.get("aggregate_by_year", False)),
             )
@@ -475,8 +480,8 @@ class ChatOrchestrator:
                 tile_store=self.tile_store,
                 location_index=self.location_index,
                 country_name_to_code=self.country_name_to_code,
-                start_year=args.get("start_year"),
-                end_year=args.get("end_year"),
+                start_year=_int_or_none(args.get("start_year")),
+                end_year=_int_or_none(args.get("end_year")),
                 month_filter=args.get("month_filter"),
                 country=args.get("country"),
                 capital_only=bool(args.get("capital_only", False)),
@@ -501,6 +506,7 @@ class ChatOrchestrator:
         question: str,
         map_context: dict[str, Any] | None,
         session_id: str,
+        history: list[tuple[str, str]] | None = None,
     ) -> Iterator[dict]:
         """
         Run the agentic loop for one tier. Yields SSE event dicts.
@@ -509,11 +515,11 @@ class ChatOrchestrator:
         quota limit (before any events have been yielded for this question).
         Any other error is yielded as an "error" event and the generator returns.
         """
-        system_prompt = _build_system_prompt(self.tile_store, map_context)
-        messages: list[dict] = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": question},
-        ]
+        system_prompt = _build_system_prompt(self.tile_store, map_context, self.max_steps)
+        messages: list[dict] = [{"role": "system", "content": system_prompt}]
+        for role, text in (history or []):
+            messages.append({"role": role, "content": text})
+        messages.append({"role": "user", "content": question})
 
         tools_called: list[str] = []
         locations: list[dict] = []
@@ -730,6 +736,7 @@ class ChatOrchestrator:
     def run(
         self,
         question: str,
+        history: list[tuple[str, str]] | None = None,
         map_context: dict[str, Any] | None = None,
         session_id: str | None = None,
         model_override: str | None = None,
@@ -774,7 +781,7 @@ class ChatOrchestrator:
 
         for tier in tiers:
             try:
-                for event in self._run_tier(tier, question, map_context, session_id):
+                for event in self._run_tier(tier, question, map_context, session_id, history):
                     if event["type"] == "done":
                         event = {
                             **event,
