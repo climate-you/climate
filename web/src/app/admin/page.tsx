@@ -526,12 +526,13 @@ export default function AdminPage() {
                   <div
                     key={session_id}
                     style={{
-                      border: "1px solid " + (isHighlighted ? "#7ec8e3" : "#2a2a2a"),
+                      border: "1px solid " + (isHighlighted ? "#7ec8e3" : "#333"),
                       borderRadius: 8,
                       overflow: "hidden",
+                      background: "#1a1a1a",
                     }}
                   >
-                    <div style={{ padding: "6px 12px", background: "#161616", display: "flex", gap: 10, fontSize: 11, color: "#555", alignItems: "center" }}>
+                    <div style={{ padding: "6px 12px", background: "#1d1d1d", display: "flex", gap: 10, fontSize: 11, color: "#777", alignItems: "center", borderBottom: "1px solid #333" }}>
                       <span style={{ fontFamily: "ui-monospace, monospace" }}>{session_id.slice(0, 8)}…</span>
                       <span>{messages.length} message{messages.length !== 1 ? "s" : ""}</span>
                       <span>{relativeTime(latest_ts)}</span>
@@ -608,7 +609,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 11, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+    <div style={{ fontSize: 11, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
       {children}
     </div>
   );
@@ -648,33 +649,33 @@ function MessageRow({
         background: highlight ? "rgba(229,62,62,0.08)" : indented ? "transparent" : "#1a1a1a",
         border: indented ? "none" : "1px solid " + (highlight ? "rgba(229,62,62,0.3)" : "#2a2a2a"),
         borderRadius: indented ? 0 : 7,
-        borderBottom: indented ? "1px solid #1f1f1f" : undefined,
+        borderBottom: indented ? "1px solid #2a2a2a" : undefined,
         overflow: "hidden",
       }}
     >
       {/* Summary row */}
       <div
         onClick={onToggle}
-        style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer", fontSize: 12, background: expanded ? "#2a2a2a" : "transparent", transition: "background 120ms ease" }}
+        style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer", fontSize: 12, background: expanded ? "#252525" : "transparent", transition: "background 120ms ease" }}
       >
-        <span style={{ color: "#555", flexShrink: 0, width: 60 }}>{relativeTime(s.ts)}</span>
+        <span style={{ color: "#777", flexShrink: 0, width: 60 }}>{relativeTime(s.ts)}</span>
         <span style={{ flex: 1, minWidth: 0, color: "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {s.error && <span style={{ color: "#f66", marginRight: 5, fontSize: 10 }} title={s.error}>⬤</span>}
           {truncate(s.question, 80)}
         </span>
-        <span style={{ color: "#666", flexShrink: 0, width: 130, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span style={{ color: "#888", flexShrink: 0, width: 130, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {s.model_override && <span style={{ color: "#e8a838", marginRight: 4, fontSize: 10 }}>user</span>}
           {s.tier ?? "—"}{s.model ? ` · ${s.model}` : ""}
         </span>
-        <span style={{ color: "#666", flexShrink: 0, width: 50, textAlign: "right" }}>{s.step_count} steps</span>
-        <span style={{ color: "#666", flexShrink: 0, width: 44, textAlign: "right" }}>{fmtMs(s.total_ms)}</span>
+        <span style={{ color: "#888", flexShrink: 0, width: 50, textAlign: "right" }}>{s.step_count} steps</span>
+        <span style={{ color: "#888", flexShrink: 0, width: 44, textAlign: "right" }}>{fmtMs(s.total_ms)}</span>
         <span style={{ color: feedbackColor, flexShrink: 0, width: 24, textAlign: "center" }}>{feedbackIcon}</span>
-        <span style={{ color: "#444", flexShrink: 0 }}>{expanded ? "▲" : "▼"}</span>
+        <span style={{ color: "#666", flexShrink: 0 }}>{expanded ? "▲" : "▼"}</span>
       </div>
 
       {/* Expanded detail */}
       {expanded && (
-        <div style={{ padding: "0 12px 12px", borderTop: "1px solid #2a2a2a", display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ padding: "0 12px 12px", borderTop: "1px solid #333", display: "flex", flexDirection: "column", gap: 10 }}>
           <DetailSection label="Question">
             <pre style={preStyle}>{s.question}</pre>
           </DetailSection>
@@ -777,7 +778,7 @@ function MessageRow({
 function DetailSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize: 10, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "#777", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
         {label}
       </div>
       {children}
@@ -788,13 +789,13 @@ function DetailSection({ label, children }: { label: string; children: React.Rea
 const preStyle: React.CSSProperties = {
   margin: 0,
   padding: "6px 8px",
-  background: "#141414",
+  background: "#222",
   borderRadius: 5,
   fontSize: 12,
   lineHeight: 1.45,
   whiteSpace: "pre-wrap",
   wordBreak: "break-word",
-  color: "#bbb",
+  color: "#ccc",
   fontFamily: "ui-monospace, monospace",
 };
 
@@ -822,8 +823,8 @@ function paginationBtnStyle(disabled: boolean): React.CSSProperties {
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: 8, padding: "10px 14px", minWidth: 160, flex: "1 1 160px" }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+    <div style={{ background: "#1a1a1a", border: "1px solid #333", borderRadius: 8, padding: "10px 14px", minWidth: 160, flex: "1 1 160px" }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
         {title}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>{children}</div>
