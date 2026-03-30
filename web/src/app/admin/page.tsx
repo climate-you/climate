@@ -55,7 +55,7 @@ type ChatMessage = {
   session_id: string;
   ts: number;
   question: string;
-  answer_excerpt: string;
+  answer: string;
   step_count: number;
   tools_called: string[];
   tool_calls_detail: ToolCallDetail[];
@@ -143,8 +143,8 @@ function buildCopyText(s: ChatMessage): string {
   lines.push(`**Question:** ${s.question}`);
   lines.push("");
 
-  if (s.answer_excerpt) {
-    lines.push(`**Answer:** ${s.answer_excerpt}`);
+  if (s.answer) {
+    lines.push(`**Answer:** ${s.answer}`);
     lines.push("");
   }
 
@@ -679,8 +679,8 @@ function MessageRow({
           <DetailSection label="Question">
             <pre style={preStyle}>{s.question}</pre>
           </DetailSection>
-          <DetailSection label="Answer excerpt">
-            <pre style={preStyle}>{s.answer_excerpt || "—"}</pre>
+          <DetailSection label="Answer">
+            <pre style={preStyle}>{s.answer || "—"}</pre>
           </DetailSection>
           <DetailSection label="Model selection">
             <div style={{ display: "flex", gap: 6, fontSize: 12, fontFamily: "ui-monospace, monospace", alignItems: "center", flexWrap: "wrap" }}>

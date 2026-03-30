@@ -296,7 +296,7 @@ class AnalyticsDB:
             return [
                 {
                     "message_id": r[0], "session_id": r[1], "ts": r[2], "question": r[3],
-                    "answer_excerpt": (r[4] or "")[:200],
+                    "answer": r[4] or "",
                     "step_count": r[5],
                     "tools_called": _json.loads(r[6]) if r[6] else [],
                     "tool_calls_detail": _json.loads(r[7]) if r[7] else [],
@@ -334,7 +334,7 @@ class AnalyticsDB:
             return [
                 {
                     "message_id": r[0], "session_id": r[1], "ts": r[2], "question": r[3],
-                    "answer_excerpt": (r[4] or "")[:200],
+                    "answer": r[4] or "",
                     "step_count": r[5],
                     "tools_called": _json.loads(r[6]) if r[6] else [],
                     "tool_calls_detail": _json.loads(r[7]) if r[7] else [],
