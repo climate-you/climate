@@ -402,8 +402,10 @@ export default function ExplorerPage({
     ? (effectiveTitleActionTextNonPositive?.trim() ?? effectiveTitleActionText)
     : effectiveTitleActionText;
   useEffect(() => {
-    if (defaultTemperatureUnitForLocale() !== "F") return;
-    setUnit("F");
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("unit") === "F" || defaultTemperatureUnitForLocale() === "F") {
+      setUnit("F");
+    }
   }, []);
 
   const panelData = useMemo(() => {
