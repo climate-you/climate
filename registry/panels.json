@@ -26,7 +26,8 @@
       "title_mode": "preindustrial",
       "title_metric_key": "t2m_vs_preindustrial_local",
       "title_suffix": "since 1850-1900.",
-      "title_action_text": "the air has warmed by"
+      "title_action_text": "the air has warmed by",
+      "title_action_text_non_positive": "the air has not warmed"
     },
     "warming_sst": {
       "default_graph_ids": [
