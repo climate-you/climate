@@ -23,10 +23,10 @@ def list_available_metrics(tile_store: TileDataStore) -> dict:
         date_range = f"{axis[0]}-{axis[-1]}" if axis else "unknown"
         metrics.append({
             "metric_id": metric_id,
-            "description": spec.get("label", metric_id),
+            "description": spec.get("title", metric_id),
             "unit": spec.get("unit", "unknown"),
             "available_range": date_range,
-            "source": spec.get("dataset_id", "unknown"),
+            "source": spec.get("source", {}).get("_dataset_ref", "unknown"),
         })
     return {"metrics": metrics}
 
