@@ -141,6 +141,7 @@ export default function SearchOverlay({
         <input
           className={styles.searchInput}
           placeholder="Type a city name..."
+          suppressHydrationWarning
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onFocus={() => {

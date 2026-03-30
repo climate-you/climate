@@ -24,19 +24,19 @@ type ChatMessage = {
   role: "user" | "assistant";
   text: string;
   messageId?: string;
-  notice?: string;       // degraded-model disclaimer
-  debugInfo?: string;    // shown only in debug mode
+  notice?: string; // degraded-model disclaimer
+  debugInfo?: string; // shown only in debug mode
   feedback?: "good" | "bad" | null;
   error?: boolean;
   loading?: boolean;
-  exhausted?: boolean;   // daily budget exhausted — locks the input
+  exhausted?: boolean; // daily budget exhausted — locks the input
 };
 
 type ChatDrawerProps = {
   apiBase: string;
   mapContext: MapContext;
-  devMode?: boolean;     // shows the model toggle when true
-  debugMode?: boolean;   // shows per-reply model/tier/timing info
+  devMode?: boolean; // shows the model toggle when true
+  debugMode?: boolean; // shows per-reply model/tier/timing info
   onFlyTo?: (lat: number, lon: number) => void;
   onLocations?: (locs: Array<{ lat: number; lon: number }> | null) => void;
 };
@@ -81,6 +81,24 @@ async function streamChatRequest(
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const cryptoAvailable =
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function";
+
+function generateUUID(): string {
+  if (cryptoAvailable) {
+    return crypto.randomUUID();
+  }
+  // Dev-only fallback for non-secure contexts (e.g. mobile via local IP)
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -93,9 +111,11 @@ export default function ChatDrawer({
   onLocations,
 }: ChatDrawerProps) {
   const [open, setOpen] = useState(false);
-  const [conversationId] = useState(() => crypto.randomUUID());
+  const [conversationId] = useState(() => generateUUID());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>([]);
+  const [conversationHistory, setConversationHistory] = useState<
+    ConversationTurn[]
+  >([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [conversationExhausted, setConversationExhausted] = useState(false);
@@ -111,7 +131,12 @@ export default function ChatDrawer({
     if (!devMode) {
       // Clear any override that may have been set during a debug session
       localStorage.removeItem(CHAT_MODEL_OVERRIDE_KEY);
-    } else if (stored === "groq_8b" || stored === "local" || stored === "groq_70b" || stored === "groq_scout") {
+    } else if (
+      stored === "groq_8b" ||
+      stored === "local" ||
+      stored === "groq_70b" ||
+      stored === "groq_scout"
+    ) {
       setModelOverride(stored);
     }
   }, [devMode]);
@@ -164,17 +189,28 @@ export default function ChatDrawer({
 
   async function sendMessage(question: string) {
     if (!question.trim() || loading) return;
+    if (!cryptoAvailable && process.env.NODE_ENV !== "development") {
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", text: question },
+        {
+          role: "assistant",
+          text: "This feature requires a secure connection (HTTPS).",
+          error: true,
+        },
+      ]);
+      return;
+    }
     setInput("");
     setLoading(true);
     onLocations?.(null); // clear any previous chat markers
 
-    const messageId = crypto.randomUUID();
+    const messageId = generateUUID();
     setMessages((prev) => [
       ...prev,
       { role: "user", text: question },
       { role: "assistant", text: "", messageId, loading: true },
     ]);
-
 
     let pendingNotice: string | undefined;
     let answered = false;
@@ -185,7 +221,8 @@ export default function ChatDrawer({
         apiBase,
         {
           question,
-          history: conversationHistory.length > 0 ? conversationHistory : undefined,
+          history:
+            conversationHistory.length > 0 ? conversationHistory : undefined,
           map_context: mapContext,
           opt_out: optOut,
           session_id: conversationId,
@@ -225,7 +262,9 @@ export default function ChatDrawer({
               ),
             );
           } else if (type === "done") {
-            const locs = event.locations as Array<{label: string; lat: number; lon: number}> | undefined;
+            const locs = event.locations as
+              | Array<{ label: string; lat: number; lon: number }>
+              | undefined;
             if (locs && locs.length === 1) {
               onFlyTo?.(locs[0].lat, locs[0].lon);
             } else if (locs && locs.length > 1) {
@@ -246,10 +285,14 @@ export default function ChatDrawer({
               const totalMs = event.total_ms as number | null;
               const rejected = (event.rejected_tiers as string[] | null) ?? [];
               const parts: string[] = [];
-              if (rejected.length > 0) parts.push(`~~${rejected.join(", ")}~~ →`);
+              if (rejected.length > 0)
+                parts.push(`~~${rejected.join(", ")}~~ →`);
               if (tier) parts.push(tier);
               if (model) parts.push(`(${model})`);
-              if (totalMs != null) parts.push(`· ${totalMs < 1000 ? `${totalMs}ms` : `${(totalMs / 1000).toFixed(1)}s`}`);
+              if (totalMs != null)
+                parts.push(
+                  `· ${totalMs < 1000 ? `${totalMs}ms` : `${(totalMs / 1000).toFixed(1)}s`}`,
+                );
               const debugInfo = parts.join(" ");
               setMessages((prev) =>
                 prev.map((m) =>
@@ -266,7 +309,12 @@ export default function ChatDrawer({
         setMessages((prev) =>
           prev.map((m) =>
             m.messageId === messageId
-              ? { ...m, text: "No response received.", loading: false, error: true }
+              ? {
+                  ...m,
+                  text: "No response received.",
+                  loading: false,
+                  error: true,
+                }
               : m,
           ),
         );
@@ -306,7 +354,9 @@ export default function ChatDrawer({
     const current = messages.find((m) => m.messageId === messageId)?.feedback;
     const next = current === feedback ? null : feedback;
     setMessages((prev) =>
-      prev.map((m) => (m.messageId === messageId ? { ...m, feedback: next } : m)),
+      prev.map((m) =>
+        m.messageId === messageId ? { ...m, feedback: next } : m,
+      ),
     );
     try {
       await fetch(`${apiBase}/api/chat/${messageId}/feedback`, {
@@ -334,9 +384,11 @@ export default function ChatDrawer({
         `What was the annual mean temperature in ${mapContext.label} in 2020?`,
       ];
     }
-    const shuffled = [...CHAT_EXAMPLE_QUESTIONS_GENERIC].sort(() => Math.random() - 0.5);
+    const shuffled = [...CHAT_EXAMPLE_QUESTIONS_GENERIC].sort(
+      () => Math.random() - 0.5,
+    );
     return shuffled.slice(0, 3);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, mapContext?.label]);
 
   const isEmpty = messages.length === 0;
@@ -351,11 +403,19 @@ export default function ChatDrawer({
         onClick={() => setOpen((v) => !v)}
       >
         {open ? (
-          <svg viewBox="0 0 24 24" aria-hidden="true" className={styles.chatButtonIcon}>
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            className={styles.chatButtonIcon}
+          >
             <path d="M6 6L18 18M18 6L6 18" />
           </svg>
         ) : (
-          <svg viewBox="0 0 24 24" aria-hidden="true" className={styles.chatButtonIcon}>
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            className={styles.chatButtonIcon}
+          >
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
         )}
@@ -372,7 +432,11 @@ export default function ChatDrawer({
           {/* Header */}
           <div className={styles.drawerHeader}>
             <div className={styles.drawerTitle}>
-              <svg viewBox="0 0 24 24" aria-hidden="true" className={styles.drawerTitleIcon}>
+              <svg
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                className={styles.drawerTitleIcon}
+              >
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
               Climate Assistant
@@ -469,42 +533,57 @@ export default function ChatDrawer({
                     </span>
                   ) : msg.exhausted ? (
                     <>
-                      The AI assistant&apos;s daily budget is exhausted. This project is provided
-                      for free and is self-funded. If you find it useful, please consider
-                      supporting it at{" "}
-                      <a href="https://ko-fi.com/climateyou" target="_blank" rel="noopener noreferrer" className={styles.exhaustedLink}>
+                      The AI assistant&apos;s daily budget is exhausted. This
+                      project is provided for free and is self-funded. If you
+                      find it useful, please consider supporting it at{" "}
+                      <a
+                        href="https://ko-fi.com/climateyou"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.exhaustedLink}
+                      >
                         ko-fi.com/climateyou
                       </a>
                       .
                     </>
                   ) : (
-                    <div className={styles.markdown}><Markdown>{msg.text}</Markdown></div>
+                    <div className={styles.markdown}>
+                      <Markdown>{msg.text}</Markdown>
+                    </div>
                   )}
                 </div>
 
                 {/* Feedback buttons for assistant messages */}
-                {msg.role === "assistant" && msg.messageId && !msg.loading && !msg.error && !msg.exhausted && (
-                  <div className={styles.feedback}>
-                    <button
-                      type="button"
-                      className={`${styles.feedbackBtn} ${msg.feedback === "good" ? styles.feedbackBtnActive : ""}`}
-                      aria-label="Good answer"
-                      aria-pressed={msg.feedback === "good"}
-                      onClick={() => void submitFeedback(msg.messageId!, "good")}
-                    >
-                      👍
-                    </button>
-                    <button
-                      type="button"
-                      className={`${styles.feedbackBtn} ${msg.feedback === "bad" ? styles.feedbackBtnActive : ""}`}
-                      aria-label="Bad answer"
-                      aria-pressed={msg.feedback === "bad"}
-                      onClick={() => void submitFeedback(msg.messageId!, "bad")}
-                    >
-                      👎
-                    </button>
-                  </div>
-                )}
+                {msg.role === "assistant" &&
+                  msg.messageId &&
+                  !msg.loading &&
+                  !msg.error &&
+                  !msg.exhausted && (
+                    <div className={styles.feedback}>
+                      <button
+                        type="button"
+                        className={`${styles.feedbackBtn} ${msg.feedback === "good" ? styles.feedbackBtnActive : ""}`}
+                        aria-label="Good answer"
+                        aria-pressed={msg.feedback === "good"}
+                        onClick={() =>
+                          void submitFeedback(msg.messageId!, "good")
+                        }
+                      >
+                        👍
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.feedbackBtn} ${msg.feedback === "bad" ? styles.feedbackBtnActive : ""}`}
+                        aria-label="Bad answer"
+                        aria-pressed={msg.feedback === "bad"}
+                        onClick={() =>
+                          void submitFeedback(msg.messageId!, "bad")
+                        }
+                      >
+                        👎
+                      </button>
+                    </div>
+                  )}
               </div>
             ))}
             <div ref={messagesEndRef} />
@@ -528,7 +607,11 @@ export default function ChatDrawer({
               ref={inputRef}
               className={styles.input}
               rows={1}
-              placeholder={conversationExhausted ? "Please try again later." : "Ask about climate data…"}
+              placeholder={
+                conversationExhausted
+                  ? "Please try again later."
+                  : "Ask about climate data…"
+              }
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleInputKeyDown}
