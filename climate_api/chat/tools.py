@@ -16,6 +16,41 @@ from climate_api.store.location_index import LocationIndex
 from climate_api.store.tile_data_store import TileDataStore
 
 
+# ---------------------------------------------------------------------------
+# Temperature unit conversion helpers
+# ---------------------------------------------------------------------------
+
+
+def _is_delta_metric(spec: dict) -> bool:
+    """Return True if the metric measures a temperature change rather than an absolute value.
+
+    Inferred from the aggregator name — offset/anomaly aggregators produce deltas.
+    """
+    agg = spec.get("source", {}).get("agg", "")
+    return any(kw in agg for kw in ("offset", "anomaly", "delta"))
+
+
+def _convert_temp(value: float, spec: dict, *, is_delta: bool, target: str) -> float:
+    """Convert a Celsius value to the target unit.
+
+    is_delta=True  → multiply by 9/5 only (no +32 offset), for trends/anomalies.
+    is_delta=False → full absolute conversion (×9/5 + 32).
+    Non-temperature metrics (unit != "C") are returned unchanged.
+    """
+    if target != "F" or spec.get("unit") != "C":
+        return value
+    if is_delta:
+        return round(value * 9 / 5, 3)
+    return round(value * 9 / 5 + 32, 3)
+
+
+def _output_unit(spec: dict, target: str) -> str:
+    """Return the unit label to include in tool results."""
+    if target == "F" and spec.get("unit") == "C":
+        return "F"
+    return spec.get("unit", "unknown")
+
+
 def list_available_metrics(tile_store: TileDataStore) -> dict:
     metrics = []
     for metric_id, spec in tile_store.metrics.items():
@@ -156,6 +191,7 @@ def get_metric_series(
     end_year: int | None = None,
     month_filter: list[int] | None = None,
     aggregate_by_year: bool = False,
+    temperature_unit: str = "C",
 ) -> dict:
     """Tool-facing wrapper: resolves location name then fetches the metric series."""
     loc = resolve_location(location, location_index)
@@ -168,6 +204,14 @@ def get_metric_series(
     )
     if "error" not in result:
         result["location"] = loc["label"]
+        spec = tile_store.metrics.get(metric_id, {})
+        if temperature_unit == "F" and spec.get("unit") == "C":
+            is_delta = _is_delta_metric(spec)
+            result["data"] = [
+                {**entry, "value": _convert_temp(entry["value"], spec, is_delta=is_delta, target="F")}
+                for entry in result["data"]
+            ]
+            result["unit"] = _output_unit(spec, "F")
     return result
 
 
@@ -185,6 +229,7 @@ def find_extreme_location(
     capital_only: bool = False,
     min_population: int = 0,
     limit: int = 1,
+    temperature_unit: str = "C",
 ) -> dict:
     """
     Scan candidate cities, compute an aggregation for each, return the
@@ -272,14 +317,19 @@ def find_extreme_location(
     scored.sort(key=lambda t: t[0], reverse=(extremum == "max"))
     top = scored[:limit]
 
+    # trend_slope values are deltas (°C/decade); all other aggregations on a
+    # delta metric are also deltas; absolute metrics with mean/max/min are absolute.
+    is_delta = _is_delta_metric(spec) or aggregation == "trend_slope"
+    out_unit = _output_unit(spec, temperature_unit)
+
     if limit == 1:
         score, year_of_extreme, city = top[0]
         result: dict = {
             "nearest_city": city.label,
             "lat": city.lat,
             "lon": city.lon,
-            "value": round(score, 3),
-            "unit": unit,
+            "value": _convert_temp(round(score, 3), spec, is_delta=is_delta, target=temperature_unit),
+            "unit": out_unit,
         }
         if year_of_extreme is not None:
             result["year"] = year_of_extreme
@@ -291,8 +341,8 @@ def find_extreme_location(
                 "nearest_city": city.label,
                 "lat": city.lat,
                 "lon": city.lon,
-                "value": round(score, 3),
-                "unit": unit,
+                "value": _convert_temp(round(score, 3), spec, is_delta=is_delta, target=temperature_unit),
+                "unit": out_unit,
                 **({"year": year_of_extreme} if year_of_extreme is not None else {}),
             }
             for i, (score, year_of_extreme, city) in enumerate(top)
@@ -306,6 +356,7 @@ def find_similar_locations(
     tile_store: TileDataStore,
     location_index: LocationIndex,
     limit: int = 5,
+    temperature_unit: str = "C",
 ) -> dict:
     """
     Find cities whose long-term metric mean is closest to the reference city.
@@ -348,19 +399,23 @@ def find_similar_locations(
         return {"error": "Could not compute similarity — no data for candidate cities."}
 
     scored.sort(key=lambda t: t[0])
+    # similarity compares long-term means — always absolute temperatures
+    is_delta = _is_delta_metric(spec)
+    out_unit = _output_unit(spec, temperature_unit)
     return {
         "reference": ref["label"],
         "reference_lat": ref["lat"],
         "reference_lon": ref["lon"],
-        "reference_mean": round(ref_mean, 3),
-        "unit": unit,
+        "reference_mean": _convert_temp(round(ref_mean, 3), spec, is_delta=is_delta, target=temperature_unit),
+        "unit": out_unit,
         "similar_locations": [
             {
                 "city": city.label,
                 "lat": city.lat,
                 "lon": city.lon,
-                "value": round(mean, 3),
-                "delta": round(delta, 3),
+                "value": _convert_temp(round(mean, 3), spec, is_delta=is_delta, target=temperature_unit),
+                # delta between cities is always a difference (no +32 offset)
+                "delta": _convert_temp(round(delta, 3), spec, is_delta=True, target=temperature_unit),
             }
             for delta, mean, city in scored[:limit]
         ],

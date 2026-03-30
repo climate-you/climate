@@ -76,6 +76,8 @@ class _ChatRequest(BaseModel):
     # Optional tier override — used by the dev UI toggle.
     # Valid values are tier names configured on the server (e.g. "groq_8b", "local").
     model_override: str | None = None
+    # Temperature unit preference set by the frontend ("C" or "F").
+    temperature_unit: str = "C"
 
 
 class _FeedbackBody(BaseModel):
@@ -729,7 +731,7 @@ def create_app() -> FastAPI:
 
             canned = _canned_lookup(body.question) if not body.model_override else None
             event_source = (
-                _stream_canned(canned[0], canned[1])
+                _stream_canned(canned[0], canned[1], temperature_unit=body.temperature_unit)
                 if canned is not None
                 else chat_orchestrator.run(
                     question=body.question,
@@ -737,6 +739,7 @@ def create_app() -> FastAPI:
                     map_context=map_ctx,
                     session_id=message_id,
                     model_override=body.model_override,
+                    temperature_unit=body.temperature_unit,
                 )
             )
 

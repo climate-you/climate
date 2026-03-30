@@ -35,6 +35,7 @@ type ChatMessage = {
 type ChatDrawerProps = {
   apiBase: string;
   mapContext: MapContext;
+  unit?: "C" | "F";
   devMode?: boolean; // shows the model toggle when true
   debugMode?: boolean; // shows per-reply model/tier/timing info
   onFlyTo?: (lat: number, lon: number) => void;
@@ -105,6 +106,7 @@ function generateUUID(): string {
 export default function ChatDrawer({
   apiBase,
   mapContext,
+  unit = "C",
   devMode = false,
   debugMode = false,
   onFlyTo,
@@ -228,6 +230,7 @@ export default function ChatDrawer({
           session_id: conversationId,
           message_id: messageId,
           model_override: modelOverride ?? undefined,
+          temperature_unit: unit,
         },
         (event) => {
           const type = event.type as string;

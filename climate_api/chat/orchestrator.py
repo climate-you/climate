@@ -333,8 +333,8 @@ does not fully answer the question, stop calling tools and give the best answer 
 from what you have, clearly stating what data is and is not available in our dataset.
 - Never mention tool names, function names, or raw JSON in your final response. \
 Present findings as natural language only.
-- Round all temperatures to one decimal place (e.g. 29.6°C, not 29.576°C). \
-Round trend slopes to two decimal places (e.g. 1.21°C/decade).
+- Round all temperatures to one decimal place (e.g. {temp_example}). \
+Round trend slopes to two decimal places (e.g. {trend_example}).
 - Use markdown formatting in your response: bold (**text**) for location names and key \
 numerical values (temperatures, trends). Use numbered lists when ranking multiple items.
 
@@ -359,7 +359,7 @@ Respond in the same language as the user's question. Be concise and always inclu
 
 Today's date: {current_date}. Use this to interpret relative time expressions like \
 "last year" or "this decade".
-{map_context_block}
+{map_context_block}{unit_block}\
 Available metrics:
 {metric_catalogue}
 """
@@ -379,6 +379,7 @@ def _build_system_prompt(
     tile_store: TileDataStore,
     map_context: dict[str, Any] | None,
     max_steps: int = 5,
+    temperature_unit: str = "C",
 ) -> str:
     metrics_result = _tools.list_available_metrics(tile_store)
     catalogue = _format_metric_catalogue(metrics_result.get("metrics", []))
@@ -397,11 +398,27 @@ def _build_system_prompt(
     else:
         map_context_block = "\n"
 
+    if temperature_unit == "F":
+        temp_example = "85.3°F, not 85.28°F"
+        trend_example = "2.18°F/decade"
+        unit_block = (
+            "Temperature unit: the user's preference is Fahrenheit (°F). "
+            "All temperature values in tool results are already in °F. "
+            "Always express temperatures as °F in your answer.\n"
+        )
+    else:
+        temp_example = "29.6°C, not 29.576°C"
+        trend_example = "1.21°C/decade"
+        unit_block = ""
+
     return _SYSTEM_PROMPT_TEMPLATE.format(
         current_date=current_date,
         map_context_block=map_context_block,
         metric_catalogue=catalogue,
         max_steps=max_steps,
+        temp_example=temp_example,
+        trend_example=trend_example,
+        unit_block=unit_block,
     )
 
 
@@ -457,7 +474,7 @@ class ChatOrchestrator:
             }
         self.max_steps = max_steps
 
-    def _dispatch(self, name: str, args: dict) -> str:
+    def _dispatch(self, name: str, args: dict, temperature_unit: str = "C") -> str:
         def _int_or_none(v: Any) -> int | None:
             return int(v) if v is not None else None
 
@@ -471,6 +488,7 @@ class ChatOrchestrator:
                 end_year=_int_or_none(args.get("end_year")),
                 month_filter=args.get("month_filter"),
                 aggregate_by_year=bool(args.get("aggregate_by_year", False)),
+                temperature_unit=temperature_unit,
             )
         elif name == "find_extreme_location":
             result = _tools.find_extreme_location(
@@ -487,6 +505,7 @@ class ChatOrchestrator:
                 capital_only=bool(args.get("capital_only", False)),
                 min_population=int(args.get("min_population", 0)),
                 limit=int(args.get("limit", 1)),
+                temperature_unit=temperature_unit,
             )
         elif name == "find_similar_locations":
             result = _tools.find_similar_locations(
@@ -495,6 +514,7 @@ class ChatOrchestrator:
                 tile_store=self.tile_store,
                 location_index=self.location_index,
                 limit=int(args.get("limit", 5)),
+                temperature_unit=temperature_unit,
             )
         else:
             result = {"error": f"Unknown tool: '{name}'"}
@@ -507,6 +527,7 @@ class ChatOrchestrator:
         map_context: dict[str, Any] | None,
         session_id: str,
         history: list[tuple[str, str]] | None = None,
+        temperature_unit: str = "C",
     ) -> Iterator[dict]:
         """
         Run the agentic loop for one tier. Yields SSE event dicts.
@@ -515,7 +536,7 @@ class ChatOrchestrator:
         quota limit (before any events have been yielded for this question).
         Any other error is yielded as an "error" event and the generator returns.
         """
-        system_prompt = _build_system_prompt(self.tile_store, map_context, self.max_steps)
+        system_prompt = _build_system_prompt(self.tile_store, map_context, self.max_steps, temperature_unit)
         messages: list[dict] = [{"role": "system", "content": system_prompt}]
         for role, text in (history or []):
             messages.append({"role": role, "content": text})
@@ -674,7 +695,7 @@ class ChatOrchestrator:
                         }
                         events_yielded = True
                         tools_called.append(name)
-                        result = self._dispatch(name, args)
+                        result = self._dispatch(name, args, temperature_unit)
                         seen_calls[call_key] = result
                         try:
                             for loc in _extract_locations(name, args, json.loads(result)):
@@ -740,6 +761,7 @@ class ChatOrchestrator:
         map_context: dict[str, Any] | None = None,
         session_id: str | None = None,
         model_override: str | None = None,
+        temperature_unit: str = "C",
     ) -> Iterator[dict]:
         """
         Run the agentic loop, trying each tier in order on quota exhaustion.
@@ -781,7 +803,7 @@ class ChatOrchestrator:
 
         for tier in tiers:
             try:
-                for event in self._run_tier(tier, question, map_context, session_id, history):
+                for event in self._run_tier(tier, question, map_context, session_id, history, temperature_unit):
                     if event["type"] == "done":
                         event = {
                             **event,
