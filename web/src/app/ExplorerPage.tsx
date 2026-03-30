@@ -213,7 +213,7 @@ export default function ExplorerPage({
   const [picked, setPicked] = useState<{ lat: number; lon: number } | null>(
     null,
   );
-  const [chatLocations, setChatLocations] = useState<Array<{ lat: number; lon: number }> | null>(null);
+  const [chatLocations, setChatLocations] = useState<Array<{ label: string; rank?: number; lat: number; lon: number }> | null>(null);
   const [selectedLocation, setSelectedLocation] =
     useState<SelectedLocationMeta | null>(null);
   const [selectedGeonameidForPanel, setSelectedGeonameidForPanel] = useState<

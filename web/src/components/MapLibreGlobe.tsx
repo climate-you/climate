@@ -86,7 +86,7 @@ type Props = {
   textureVariantOverride?: TextureVariantOverride;
   onTextureDebugInfoChange?: (info: TextureDebugInfo | null) => void;
   autoRotate?: boolean;
-  chatLocations?: Array<{ lat: number; lon: number }> | null;
+  chatLocations?: Array<{ label: string; rank?: number; lat: number; lon: number }> | null;
 };
 
 const initialView = {
@@ -1336,9 +1336,56 @@ export default function MapLibreGlobe({
     chatMarkersRef.current.forEach((m) => m.remove());
     chatMarkersRef.current = [];
     if (!map || !chatLocations || chatLocations.length < 2) return;
-    chatLocations.forEach((loc) => {
+    // Geographic threshold for collision detection (~50km)
+    const GEO_THRESHOLD = 0.5;
+    chatLocations.forEach((loc, i) => {
+      // Place label above pin if a nearby city exists to the south, to avoid overlap
+      const labelAbove = chatLocations.some(
+        (other, j) =>
+          i !== j &&
+          Math.abs(loc.lat - other.lat) < GEO_THRESHOLD &&
+          Math.abs(loc.lon - other.lon) < GEO_THRESHOLD &&
+          loc.lat > other.lat,
+      );
+      const cityName = loc.label.split(",")[0].trim();
+      const displayName = loc.rank !== undefined ? `${loc.rank}. ${cityName}` : cityName;
+      const el = document.createElement("div");
+      el.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer";
+      const pin = document.createElement("div");
+      pin.style.cssText = `width:12px;height:12px;border-radius:50%;background:${MARKER_COLOR};border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.5);flex-shrink:0`;
+      const labelEl = document.createElement("span");
+      labelEl.textContent = displayName;
+      labelEl.style.cssText = "background:rgba(0,0,0,0.65);color:white;font-size:11px;font-weight:600;padding:1px 5px;border-radius:3px;white-space:nowrap";
+      if (labelAbove) {
+        el.appendChild(labelEl);
+        el.appendChild(pin);
+      } else {
+        el.appendChild(pin);
+        el.appendChild(labelEl);
+      }
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!markerRef.current) {
+          markerRef.current = new maplibregl.Marker({ color: MARKER_COLOR })
+            .setLngLat([loc.lon, loc.lat])
+            .addTo(map);
+        } else {
+          markerRef.current.setLngLat([loc.lon, loc.lat]);
+        }
+        onPickRef.current(loc.lat, loc.lon);
+        map.flyTo({
+          center: [loc.lon, loc.lat],
+          zoom: focusZoomTarget(map),
+          pitch: 0,
+          bearing: 0,
+          padding: panelPaddingForViewport(map, panelOpenRef.current),
+          duration: FOCUS_FLY_DURATION_MS,
+          easing: cubicOut,
+          essential: true,
+        });
+      });
       chatMarkersRef.current.push(
-        new maplibregl.Marker({ color: MARKER_COLOR })
+        new maplibregl.Marker({ element: el, anchor: labelAbove ? "bottom" : "top" })
           .setLngLat([loc.lon, loc.lat])
           .addTo(map),
       );

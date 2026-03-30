@@ -39,7 +39,7 @@ type ChatDrawerProps = {
   devMode?: boolean; // shows the model toggle when true
   debugMode?: boolean; // shows per-reply model/tier/timing info
   onFlyTo?: (lat: number, lon: number) => void;
-  onLocations?: (locs: Array<{ lat: number; lon: number }> | null) => void;
+  onLocations?: (locs: Array<{ label: string; rank?: number; lat: number; lon: number }> | null) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -268,10 +268,29 @@ export default function ChatDrawer({
             const locs = event.locations as
               | Array<{ label: string; lat: number; lon: number }>
               | undefined;
-            if (locs && locs.length === 1) {
-              onFlyTo?.(locs[0].lat, locs[0].lon);
-            } else if (locs && locs.length > 1) {
-              onLocations?.(locs);
+            const answerLower = finalAnswerText.toLowerCase();
+            // Extract rank from ordered list items (e.g. "1. Khartoum, Sudan — 29.6°C")
+            const rankMap = new Map<string, number>();
+            const orderedListRegex = /^(\d+)\.\s+(.+?)(?=[,\u2014\u2013]|$)/gm;
+            let rankMatch;
+            while ((rankMatch = orderedListRegex.exec(finalAnswerText)) !== null) {
+              rankMap.set(rankMatch[2].replace(/\*/g, "").trim().toLowerCase(), parseInt(rankMatch[1], 10));
+            }
+            const filteredLocs = locs
+              ?.filter((loc) => {
+                const cityName = loc.label.split(",")[0].trim().toLowerCase();
+                return answerLower.includes(cityName);
+              })
+              .map((loc) => {
+                const cityName = loc.label.split(",")[0].trim().toLowerCase();
+                const rank = rankMap.get(cityName);
+                return rank !== undefined ? { ...loc, rank } : loc;
+              });
+            const locsToShow = filteredLocs && filteredLocs.length > 0 ? filteredLocs : locs;
+            if (locsToShow && locsToShow.length === 1) {
+              onFlyTo?.(locsToShow[0].lat, locsToShow[0].lon);
+            } else if (locsToShow && locsToShow.length > 1) {
+              onLocations?.(locsToShow);
             }
             const tier = event.tier as string | null;
             const isExhausted = tier === null && !event.error;
