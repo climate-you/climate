@@ -1085,6 +1085,7 @@ export default function ExplorerPage({
             setPanelOpen(false);
             setPicked(null);
             setChatLocations(null);
+            setSelectedLocation(null);
           }}
           enablePick={!introActive}
           autoRotate={coldOpenAutoRotate}

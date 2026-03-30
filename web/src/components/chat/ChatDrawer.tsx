@@ -399,16 +399,18 @@ export default function ChatDrawer({
   }
 
   const exampleQuestions = React.useMemo(() => {
-    if (mapContext?.label) {
-      return [
-        `What was the hottest year on record in ${mapContext.label}?`,
-        `How have temperatures changed in ${mapContext.label} since 2000?`,
-        `What was the annual mean temperature in ${mapContext.label} in 2020?`,
-      ];
-    }
     const shuffled = [...CHAT_EXAMPLE_QUESTIONS_GENERIC].sort(
       () => Math.random() - 0.5,
     );
+    if (mapContext?.label) {
+      const cityName = mapContext.label.split(",")[0];
+      return [
+        `What was the hottest year on record in ${cityName}?`,
+        `How have temperatures changed in ${cityName} since 2000?`,
+        `What was the annual mean temperature in ${cityName} in 2020?`,
+        ...shuffled.slice(0, 2),
+      ];
+    }
     return shuffled.slice(0, 3);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, mapContext?.label]);
