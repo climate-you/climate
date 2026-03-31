@@ -273,6 +273,17 @@
   color: var(--danger, #b91c1c);
 }
 
+.locationLink {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: pointer;
+}
+
+.locationLink:hover {
+  text-decoration-style: solid;
+}
+
 .exhaustedLink {
   color: inherit;
   text-decoration: underline;

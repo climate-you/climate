@@ -20,6 +20,8 @@ type ConversationTurn = { role: "user" | "assistant"; text: string };
 
 const MAX_HISTORY_TURNS = 3; // keep last N user+assistant pairs
 
+type ChatLocation = { label: string; rank?: number; lat: number; lon: number };
+
 type ChatMessage = {
   role: "user" | "assistant";
   text: string;
@@ -30,6 +32,7 @@ type ChatMessage = {
   error?: boolean;
   loading?: boolean;
   exhausted?: boolean; // daily budget exhausted — locks the input
+  locations?: ChatLocation[]; // locations mentioned in this answer
 };
 
 type ChatDrawerProps = {
@@ -39,7 +42,8 @@ type ChatDrawerProps = {
   devMode?: boolean; // shows the model toggle when true
   debugMode?: boolean; // shows per-reply model/tier/timing info
   onFlyTo?: (lat: number, lon: number) => void;
-  onLocations?: (locs: Array<{ label: string; rank?: number; lat: number; lon: number }> | null) => void;
+  onLocations?: (locs: ChatLocation[] | null) => void;
+  onPickLocation?: (lat: number, lon: number) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -88,6 +92,19 @@ async function streamChatRequest(
 const cryptoAvailable =
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function";
 
+function linkifyCities(text: string, locs: ChatLocation[]): string {
+  let result = text;
+  for (const loc of locs) {
+    const city = loc.label.split(",")[0].trim();
+    const escaped = city.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    result = result.replace(
+      new RegExp(`(?<!\\[)\\b${escaped}\\b`, "gi"),
+      `[${city}](#loc:${loc.lat}:${loc.lon})`,
+    );
+  }
+  return result;
+}
+
 function generateUUID(): string {
   if (cryptoAvailable) {
     return crypto.randomUUID();
@@ -111,6 +128,7 @@ export default function ChatDrawer({
   debugMode = false,
   onFlyTo,
   onLocations,
+  onPickLocation,
 }: ChatDrawerProps) {
   const [open, setOpen] = useState(false);
   const [conversationId] = useState(() => generateUUID());
@@ -287,6 +305,13 @@ export default function ChatDrawer({
                 return rank !== undefined ? { ...loc, rank } : loc;
               });
             const locsToShow = filteredLocs && filteredLocs.length > 0 ? filteredLocs : locs;
+            if (locsToShow && locsToShow.length > 0) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.messageId === messageId ? { ...m, locations: locsToShow } : m,
+                ),
+              );
+            }
             if (locsToShow && locsToShow.length === 1) {
               onFlyTo?.(locsToShow[0].lat, locsToShow[0].lon);
             } else if (locsToShow && locsToShow.length > 1) {
@@ -572,7 +597,36 @@ export default function ChatDrawer({
                     </>
                   ) : (
                     <div className={styles.markdown}>
-                      <Markdown>{msg.text}</Markdown>
+                      <Markdown
+                        components={
+                          msg.locations && msg.locations.length > 0
+                            ? {
+                                a({ href, children }) {
+                                  if (href?.startsWith("#loc:")) {
+                                    const [, lat, lon] = href.split(":");
+                                    return (
+                                      <a
+                                        href="#"
+                                        className={styles.locationLink}
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          onPickLocation?.(parseFloat(lat), parseFloat(lon));
+                                        }}
+                                      >
+                                        {children}
+                                      </a>
+                                    );
+                                  }
+                                  return <a href={href}>{children}</a>;
+                                },
+                              }
+                            : undefined
+                        }
+                      >
+                        {msg.locations && msg.locations.length > 0
+                          ? linkifyCities(msg.text, msg.locations)
+                          : msg.text}
+                      </Markdown>
                     </div>
                   )}
                 </div>

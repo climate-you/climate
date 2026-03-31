@@ -701,7 +701,7 @@ export default function ExplorerPage({
     void loadPanel(item.lat, item.lon, unit, item.geonameid);
   }
 
-  async function handlePick(la: number, lo: number) {
+  async function handlePick(la: number, lo: number, keepChatLocations = false) {
     fetch(`${apiBase}/api/events/click`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -711,7 +711,7 @@ export default function ExplorerPage({
     setLat(la);
     setLon(lo);
     setPicked({ lat: la, lon: lo });
-    setChatLocations(null);
+    if (!keepChatLocations) setChatLocations(null);
     setSelectedGeonameidForPanel(null);
     setPanelOpen(true);
 
@@ -1090,6 +1090,7 @@ export default function ExplorerPage({
           enablePick={!introActive}
           autoRotate={coldOpenAutoRotate}
           chatLocations={chatLocations}
+          onPickChatMarker={(la, lo) => void handlePick(la, lo, true)}
         />
         {activeLayerLegend ? (
           <aside
@@ -1456,6 +1457,7 @@ export default function ExplorerPage({
           debugMode={debugMode}
           onFlyTo={(flyLat, flyLon) => setPicked({ lat: flyLat, lon: flyLon })}
           onLocations={(locs) => setChatLocations(locs)}
+          onPickLocation={(la, lo) => void handlePick(la, lo, true)}
         />
       )}
     </main>

@@ -87,6 +87,7 @@ type Props = {
   onTextureDebugInfoChange?: (info: TextureDebugInfo | null) => void;
   autoRotate?: boolean;
   chatLocations?: Array<{ label: string; rank?: number; lat: number; lon: number }> | null;
+  onPickChatMarker?: (lat: number, lon: number) => void;
 };
 
 const initialView = {
@@ -342,6 +343,7 @@ export default function MapLibreGlobe({
   onTextureDebugInfoChange,
   autoRotate = false,
   chatLocations = null,
+  onPickChatMarker,
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -349,6 +351,7 @@ export default function MapLibreGlobe({
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const chatMarkersRef = useRef<maplibregl.Marker[]>([]);
   const onPickRef = useRef(onPick);
+  const onPickChatMarkerRef = useRef(onPickChatMarker);
   const onHomeRef = useRef(onHome);
   const onLayerChangeRef = useRef(onLayerChange);
   const onLayerMenuOpenRef = useRef(onLayerMenuOpen);
@@ -377,6 +380,10 @@ export default function MapLibreGlobe({
   useEffect(() => {
     onPickRef.current = onPick;
   }, [onPick]);
+
+  useEffect(() => {
+    onPickChatMarkerRef.current = onPickChatMarker;
+  }, [onPickChatMarker]);
 
   useEffect(() => {
     onHomeRef.current = onHome;
@@ -1372,7 +1379,7 @@ export default function MapLibreGlobe({
         } else {
           markerRef.current.setLngLat([loc.lon, loc.lat]);
         }
-        onPickRef.current(loc.lat, loc.lon);
+        (onPickChatMarkerRef.current ?? onPickRef.current)(loc.lat, loc.lon);
         map.flyTo({
           center: [loc.lon, loc.lat],
           zoom: focusZoomTarget(map),
