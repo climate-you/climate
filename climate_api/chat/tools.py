@@ -68,6 +68,7 @@ def list_available_metrics(tile_store: TileDataStore) -> dict:
 
 def resolve_location(name: str, location_index: LocationIndex) -> dict:
     """Resolve a place name to coordinates. Internal helper — not exposed as a tool."""
+    name = name.strip().strip("*")
     hits = location_index.autocomplete(name, limit=1)
     if not hits and "," in name:
         # Retry with just the city part — handles "London, UK", "New York City, USA", etc.

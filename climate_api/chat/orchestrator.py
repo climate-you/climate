@@ -335,8 +335,9 @@ from what you have, clearly stating what data is and is not available in our dat
 Present findings as natural language only.
 - Round all temperatures to one decimal place (e.g. {temp_example}). \
 Round trend slopes to two decimal places (e.g. {trend_example}).
-- Use markdown formatting in your response: bold (**text**) for location names and key \
-numerical values (temperatures, trends). Use numbered lists when ranking multiple items.
+- Use markdown formatting in your final text response only (never inside tool arguments): \
+bold (**text**) for location names and key numerical values (temperatures, trends). \
+Use numbered lists when ranking multiple items.
 
 Spatial precision: climate data is at 0.25 degree resolution (roughly 28 km per cell). \
 A data point covers a geographic area, not a precise city. Prefer phrasing like "in the \
