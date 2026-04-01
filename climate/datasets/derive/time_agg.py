@@ -57,6 +57,22 @@ def annual_mean_from_daily(da: xr.DataArray) -> xr.DataArray:
     return monthly.groupby(f"{tname}.year").mean(tname, keep_attrs=False)
 
 
+def monthly_max_from_daily(da: xr.DataArray) -> xr.DataArray:
+    """Monthly maximum of daily values (e.g. hottest day of each month)."""
+    tname = find_time_dim(da)
+    if not np.issubdtype(da[tname].dtype, np.datetime64):
+        da = xr.decode_cf(da.to_dataset(name="v"))["v"]
+    return da.resample({tname: "1MS"}).max(keep_attrs=False)
+
+
+def monthly_min_from_daily(da: xr.DataArray) -> xr.DataArray:
+    """Monthly minimum of daily values (e.g. coldest day of each month)."""
+    tname = find_time_dim(da)
+    if not np.issubdtype(da[tname].dtype, np.datetime64):
+        da = xr.decode_cf(da.to_dataset(name="v"))["v"]
+    return da.resample({tname: "1MS"}).min(keep_attrs=False)
+
+
 def climatology_mean_from_monthly(
     da: xr.DataArray,
     *,

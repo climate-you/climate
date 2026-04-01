@@ -83,6 +83,46 @@
       "compression": { "codec": "zstd", "level": 10 }
     }
   },
+  "t2m_monthly_max_c": {
+    "id": "t2m_monthly_max_c",
+    "title": "2m temperature monthly maximum",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "monthly",
+    "source": {
+      "type": "cds",
+      "dataset_ref": "era5_daily_t2m_max",
+      "batch_tiles_override": 4,
+      "agg": "monthly_max_from_daily",
+      "time_range": { "start_year": 1979, "end_year": 2025 }
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
+  "t2m_monthly_min_c": {
+    "id": "t2m_monthly_min_c",
+    "title": "2m temperature monthly minimum",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "monthly",
+    "source": {
+      "type": "cds",
+      "dataset_ref": "era5_daily_t2m_min",
+      "batch_tiles_override": 4,
+      "agg": "monthly_min_from_daily",
+      "time_range": { "start_year": 1979, "end_year": 2025 }
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
   "t2m_daily_mean_c": {
     "id": "t2m_daily_mean_c",
     "title": "2m temperature daily mean",

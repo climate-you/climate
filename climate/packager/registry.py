@@ -75,6 +75,8 @@ from climate.datasets.derive.time_agg import (
     find_time_dim,
     annual_mean_from_monthly,
     annual_mean_from_daily,
+    monthly_max_from_daily,
+    monthly_min_from_daily,
     monthly_mean_from_daily,
     climatology_mean_from_monthly,
 )
@@ -1004,6 +1006,8 @@ def _agg_map() -> dict[str, callable]:
         "annual_mean_from_monthly": lambda da, _params: annual_mean_from_monthly(da),
         "monthly_mean_from_daily": lambda da, _params: monthly_mean_from_daily(da),
         "annual_mean_from_daily": lambda da, _params: annual_mean_from_daily(da),
+        "monthly_max_from_daily": lambda da, _params: monthly_max_from_daily(da),
+        "monthly_min_from_daily": lambda da, _params: monthly_min_from_daily(da),
         "cmip_multi_model_offset_from_monthly": lambda da, params: _cmip_multi_model_offset_from_monthly(
             da,
             params,
@@ -1596,9 +1600,16 @@ def _download_batch_daily_stats(
         tile_range.tile_c1,
     )
 
+    # Include daily_statistic in the cache path so that era5_daily_t2m,
+    # era5_daily_t2m_max, and era5_daily_t2m_min do not collide inside the
+    # shared cache/cds/ directory. The mean omits the suffix to stay
+    # backward-compatible with existing cache files.
+    _daily_stat = (params or {}).get("daily_statistic", "daily_mean")
+    _stat_tag = f"_{_daily_stat}" if _daily_stat != "daily_mean" else ""
+
     batch_dir = (
         cache_dir
-        / f"era5_daily_{variable}_{grid.grid_id}_r{tile_range.tile_r0:03d}-{tile_range.tile_r1:03d}_c{tile_range.tile_c0:03d}-{tile_range.tile_c1:03d}"
+        / f"era5_daily_{variable}{_stat_tag}_{grid.grid_id}_r{tile_range.tile_r0:03d}-{tile_range.tile_r1:03d}_c{tile_range.tile_c0:03d}-{tile_range.tile_c1:03d}"
     )
     batch_dir.mkdir(parents=True, exist_ok=True)
     month_tag = ""
@@ -1606,7 +1617,7 @@ def _download_batch_daily_stats(
         month_tag = f"_m{months[0]}-{months[-1]}"
 
     dl_path = batch_dir / (
-        f"era5_daily_{variable}_{grid.grid_id}_r{tile_range.tile_r0:03d}-{tile_range.tile_r1:03d}_c{tile_range.tile_c0:03d}-{tile_range.tile_c1:03d}_{start_year}-{end_year}{month_tag}.nc"
+        f"era5_daily_{variable}{_stat_tag}_{grid.grid_id}_r{tile_range.tile_r0:03d}-{tile_range.tile_r1:03d}_c{tile_range.tile_c0:03d}-{tile_range.tile_c1:03d}_{start_year}-{end_year}{month_tag}.nc"
     )
 
     if dl_path.exists() and not overwrite_download:
@@ -1627,6 +1638,7 @@ def _download_batch_daily_stats(
         covering = _find_covering_daily_cache(
             cache_dir=cache_dir,
             variable=variable,
+            stat_tag=_stat_tag,
             grid_id=grid.grid_id,
             tile_range=tile_range,
             start_year=start_year,
@@ -1692,6 +1704,7 @@ def _find_covering_daily_cache(
     *,
     cache_dir: Path,
     variable: str,
+    stat_tag: str,
     grid_id: str,
     tile_range: TileRange,
     start_year: int,
@@ -1699,8 +1712,8 @@ def _find_covering_daily_cache(
     month_tag: str,
 ) -> Path | None:
     pattern = (
-        f"era5_daily_{variable}_{grid_id}_r*-*_c*-*"
-        f"/era5_daily_{variable}_{grid_id}_r*-*_c*-*_{start_year}-{end_year}{month_tag}.nc"
+        f"era5_daily_{variable}{stat_tag}_{grid_id}_r*-*_c*-*"
+        f"/era5_daily_{variable}{stat_tag}_{grid_id}_r*-*_c*-*_{start_year}-{end_year}{month_tag}.nc"
     )
     best: tuple[int, Path] | None = None
     for candidate in cache_dir.glob(pattern):

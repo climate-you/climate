@@ -16,6 +16,44 @@
       "batch_tiles": 24
     }
   },
+  "era5_daily_t2m_max": {
+    "id": "era5_daily_t2m_max",
+    "title": "ERA5 daily 2m temperature (daily maximum)",
+    "grid_id": "global_0p25",
+    "tile_size": 64,
+    "source": {
+      "type": "cds",
+      "dataset": "derived-era5-single-levels-daily-statistics",
+      "variable": "2m_temperature",
+      "postprocess": [{ "fn": "k_to_c" }],
+      "time_range": { "start_year": 1979, "end_year": 2025 },
+      "block_years": 1,
+      "block_months": 1,
+      "batch_tiles": 24,
+      "params": {
+        "daily_statistic": "daily_maximum"
+      }
+    }
+  },
+  "era5_daily_t2m_min": {
+    "id": "era5_daily_t2m_min",
+    "title": "ERA5 daily 2m temperature (daily minimum)",
+    "grid_id": "global_0p25",
+    "tile_size": 64,
+    "source": {
+      "type": "cds",
+      "dataset": "derived-era5-single-levels-daily-statistics",
+      "variable": "2m_temperature",
+      "postprocess": [{ "fn": "k_to_c" }],
+      "time_range": { "start_year": 1979, "end_year": 2025 },
+      "block_years": 1,
+      "block_months": 1,
+      "batch_tiles": 24,
+      "params": {
+        "daily_statistic": "daily_minimum"
+      }
+    }
+  },
   "era5_monthly_t2m": {
     "id": "era5_monthly_t2m",
     "title": "ERA5 monthly 2m temperature",
