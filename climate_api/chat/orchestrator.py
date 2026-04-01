@@ -8,7 +8,8 @@ Event types yielded by ChatOrchestrator.run():
   {"type": "answer",     "text": "..."}
   {"type": "done",       "session_id": "...", "step_count": N, "tools_called": [...], "tier": "...",
                          "model": "...", "rejected_tiers": [...], "model_override": "...|null",
-                         "total_ms": N, "steps_timing": [{"step": N, "model_ms": N, "tools_ms": N}, ...]}
+                         "total_ms": N, "steps_timing": [{"step": N, "model_ms": N, "tools_ms": N}, ...],
+                         "charts": [{"title": "...", "unit": "...", "series": [{"label": "...", "x": [...], "y": [...]}]}]}
   {"type": "error",      "message": "..."}
 
 Provider tiers are tried in order. If a tier's API call returns a daily-token-quota error
@@ -24,6 +25,8 @@ import logging
 import re
 import time as _time
 import uuid
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
@@ -102,6 +105,149 @@ def _extract_locations(name: str, args: dict, result_dict: dict) -> list[dict]:
         if lat is not None and lon is not None:
             return [{"label": result_dict.get("reference", ""), "lat": lat, "lon": lon}]
     return []
+
+
+def _collect_series_for_extreme(
+    extreme_result: dict,
+    args: dict,
+    tile_store: Any,
+    temperature_unit: str,
+    series_results: list[dict],
+) -> None:
+    """Fetch get_metric_series for each city returned by find_extreme_location
+    and append to series_results so a chart is shown alongside the answer."""
+    metric_id = args.get("metric_id")
+    if not metric_id:
+        return
+    start_year = args.get("start_year")
+    end_year = args.get("end_year")
+    month_filter = args.get("month_filter")
+    aggregate_by_year = bool(args.get("aggregate_by_year", False))
+    aggregation = str(args.get("aggregation", ""))
+
+    # Normalise to a flat list of {label, lat, lon} entries, capped at 5
+    _MAX_CHART_LOCATIONS = 5
+    if "results" in extreme_result:
+        cities = [
+            {"label": r["nearest_city"], "lat": r["lat"], "lon": r["lon"]}
+            for r in extreme_result["results"]
+            if "lat" in r
+        ][:_MAX_CHART_LOCATIONS]
+    elif "lat" in extreme_result:
+        cities = [{"label": extreme_result.get("nearest_city", ""), "lat": extreme_result["lat"], "lon": extreme_result["lon"]}]
+    else:
+        return
+
+    spec = tile_store.metrics.get(metric_id, {})
+
+    for city in cities:
+        # Use coordinates directly — location is already resolved by find_extreme_location
+        series_result = _tools._get_metric_series(
+            lat=city["lat"],
+            lon=city["lon"],
+            metric_id=metric_id,
+            tile_store=tile_store,
+            start_year=int(start_year) if start_year is not None else None,
+            end_year=int(end_year) if end_year is not None else None,
+            month_filter=month_filter,
+            aggregate_by_year=aggregate_by_year,
+        )
+        if "error" in series_result or "data" not in series_result:
+            continue
+        # Apply temperature unit conversion (mirrors get_metric_series)
+        if temperature_unit == "F" and spec.get("unit") == "C":
+            is_delta = _tools._is_delta_metric(spec)
+            series_result["data"] = [
+                {**entry, "value": _tools._convert_temp(entry["value"], spec, is_delta=is_delta, target="F")}
+                for entry in series_result["data"]
+            ]
+            series_result["unit"] = _tools._output_unit(spec, "F")
+        series_result["location"] = city["label"]
+        dedup_key = (series_result.get("metric_id"), series_result.get("location"), "raw")
+        series_results[:] = [
+            r for r in series_results
+            if (r.get("metric_id"), r.get("location"), r.get("role", "raw")) != dedup_key
+        ]
+        series_results.append(series_result)
+
+        # For trend_slope queries with a single location, append a linear regression series
+        if aggregation == "trend_slope" and len(cities) == 1:
+            data_pts = series_result.get("data", [])
+            years = [d["year"] for d in data_pts]
+            values = [d["value"] for d in data_pts]
+            if len(years) >= 2:
+                coeffs = np.polyfit(years, values, 1)
+                trend_values = [round(float(np.polyval(coeffs, y)), 3) for y in years]
+                trend_series: dict = {
+                    "metric_id": metric_id,
+                    "unit": series_result.get("unit", ""),
+                    "location": city["label"],
+                    "role": "trend",
+                    "data": [{"year": y, "value": v} for y, v in zip(years, trend_values)],
+                }
+                trend_dedup_key = (metric_id, city["label"], "trend")
+                series_results[:] = [
+                    r for r in series_results
+                    if (r.get("metric_id"), r.get("location"), r.get("role", "raw")) != trend_dedup_key
+                ]
+                series_results.append(trend_series)
+
+
+def _build_chart_payloads(series_results: list[dict], tile_store: Any) -> list[dict]:
+    """Build chart payload(s) from accumulated get_metric_series results.
+
+    Groups results by metric_id, producing one chart per distinct metric.
+    Each chart has the shape:
+      {"title": str, "unit": str, "series": [{"label": str, "x": [...], "y": [...]}]}
+    """
+    if not series_results:
+        return []
+
+    groups: dict[str, list[dict]] = {}
+    for r in series_results:
+        groups.setdefault(r["metric_id"], []).append(r)
+
+    charts = []
+    for metric_id, results in groups.items():
+        spec = tile_store.metrics.get(metric_id, {})
+        metric_title = spec.get("title", metric_id)
+
+        series = []
+        for r in results:
+            # Use city name only (drop country) to keep legend labels short
+            label = r.get("location", metric_id).split(",")[0].strip() or metric_id
+            x: list = []
+            y: list = []
+            for entry in r.get("data", []):
+                if "month" in entry:
+                    x.append(f"{entry['year']:04d}-{entry['month']:02d}")
+                else:
+                    x.append(entry["year"])
+                y.append(entry.get("value"))
+            series_entry: dict = {"label": label, "x": x, "y": y}
+            if "role" in r:
+                series_entry["role"] = r["role"]
+            series.append(series_entry)
+
+        # Build title from raw (non-trend) locations only, deduplicated
+        seen_locs: set[str] = set()
+        title_locations: list[str] = []
+        for r in results:
+            if r.get("role", "raw") == "trend":
+                continue
+            loc = r.get("location", "").split(",")[0].strip()
+            if loc and loc not in seen_locs:
+                seen_locs.add(loc)
+                title_locations.append(loc)
+        if len(title_locations) > 2:
+            location_label = "Multiple cities"
+        else:
+            location_label = " & ".join(title_locations)
+        title = f"{metric_title} \u2014 {location_label}" if location_label else metric_title
+        unit = results[0].get("unit", "")
+        charts.append({"title": title, "unit": unit, "series": series})
+
+    return charts
 
 
 def _is_quota_exhausted(exc: Exception) -> bool:
@@ -546,6 +692,7 @@ class ChatOrchestrator:
         tools_called: list[str] = []
         locations: list[dict] = []
         _location_keys: set[tuple] = set()
+        series_results: list[dict] = []  # successful get_metric_series results for charting
         retried = False
         tpm_retries = 0
         events_yielded = False  # True once we've emitted at least one tool_call event
@@ -698,6 +845,23 @@ class ChatOrchestrator:
                         tools_called.append(name)
                         result = self._dispatch(name, args, temperature_unit)
                         seen_calls[call_key] = result
+                        if name == "get_metric_series":
+                            parsed_result = json.loads(result)
+                            if "error" not in parsed_result and "data" in parsed_result:
+                                # Deduplicate by (metric_id, location) — keep the latest call
+                                dedup_key = (parsed_result.get("metric_id"), parsed_result.get("location"))
+                                series_results = [
+                                    r for r in series_results
+                                    if (r.get("metric_id"), r.get("location")) != dedup_key
+                                ]
+                                series_results.append(parsed_result)
+                        elif name == "find_extreme_location":
+                            parsed_result = json.loads(result)
+                            if "error" not in parsed_result:
+                                _collect_series_for_extreme(
+                                    parsed_result, args, self.tile_store,
+                                    temperature_unit, series_results,
+                                )
                         try:
                             for loc in _extract_locations(name, args, json.loads(result)):
                                 key = (round(loc["lat"], 1), round(loc["lon"], 1))
@@ -735,6 +899,7 @@ class ChatOrchestrator:
                     "total_ms": total_ms,
                     "steps_timing": steps_timing,
                     "locations": locations,
+                    "charts": _build_chart_payloads(series_results, self.tile_store),
                 }
                 return
 

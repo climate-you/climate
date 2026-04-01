@@ -9,6 +9,7 @@ import {
   CHAT_OPT_OUT_KEY,
   CHAT_PRIVACY_NOTICE,
 } from "@/lib/explorer/constants";
+import ChatChart, { type ChatChartPayload } from "./ChatChart";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,6 +34,7 @@ type ChatMessage = {
   loading?: boolean;
   exhausted?: boolean; // daily budget exhausted — locks the input
   locations?: ChatLocation[]; // locations mentioned in this answer
+  charts?: ChatChartPayload[]; // optional charts from get_metric_series calls
 };
 
 type ChatDrawerProps = {
@@ -283,9 +285,19 @@ export default function ChatDrawer({
               ),
             );
           } else if (type === "done") {
-            const locs = event.locations as
-              | Array<{ label: string; lat: number; lon: number }>
-              | undefined;
+            const charts = event.charts as ChatChartPayload[] | undefined;
+            if (charts && charts.length > 0) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.messageId === messageId ? { ...m, charts } : m,
+                ),
+              );
+            }
+            const locs = (
+              event.locations as
+                | Array<{ label: string; lat: number; lon: number }>
+                | undefined
+            )?.map((loc) => ({ ...loc, label: loc.label.replace(/\*/g, "") }));
             const answerLower = finalAnswerText.toLowerCase();
             // Extract rank from ordered list items (e.g. "1. Khartoum, Sudan — 29.6°C")
             const rankMap = new Map<string, number>();
@@ -630,6 +642,19 @@ export default function ChatDrawer({
                     </div>
                   )}
                 </div>
+
+                {/* Charts from get_metric_series tool calls */}
+                {msg.charts && msg.charts.length > 0 && !msg.loading && (
+                  <div className={styles.charts}>
+                    {msg.charts.map((chart, i) => (
+                      <ChatChart
+                        key={i}
+                        chart={chart}
+                        temperatureUnit={unit}
+                      />
+                    ))}
+                  </div>
+                )}
 
                 {/* Feedback buttons for assistant messages */}
                 {msg.role === "assistant" &&

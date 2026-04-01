@@ -51,7 +51,7 @@ type GraphCardProps = {
   onStepIndexChange: (graphId: string, nextStepIndex: number) => void;
 };
 
-function EChartCanvas({
+export function EChartCanvas({
   option,
   height = 420,
 }: {
@@ -103,6 +103,17 @@ export default function GraphCard({
 }: GraphCardProps) {
   const chartHostRef = useRef<HTMLDivElement | null>(null);
   const [chartHeight, setChartHeight] = useState(260);
+  const [colorScheme, setColorScheme] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    setColorScheme(mq.matches ? "dark" : "light");
+    const handler = (e: MediaQueryListEvent) =>
+      setColorScheme(e.matches ? "dark" : "light");
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
   const steps = graph.animation?.steps ?? [];
   const hasAnimation = steps.length >= 2;
   const chartMaxHeight = 260;
@@ -230,6 +241,7 @@ export default function GraphCard({
     });
   }, [
     allVisibleData,
+    colorScheme,
     filteredData,
     graph,
     isHotDaysChart,

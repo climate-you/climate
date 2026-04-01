@@ -37,7 +37,7 @@ from .services.panels import (
     build_scored_panels_tiles_registry,
 )
 from .chat.orchestrator import ChatOrchestrator, ProviderTier
-from .chat.canned import lookup as _canned_lookup, stream_canned as _stream_canned
+from .chat.canned import lookup as _canned_lookup, stream_canned as _stream_canned, build_canned_charts as _build_canned_charts
 from .store.country_classifier import CountryClassifier
 from .store.location_index import LocationIndex
 from .store.ocean_classifier import OceanClassifier
@@ -730,10 +730,18 @@ def create_app() -> FastAPI:
             error_text: str | None = None
 
             canned = _canned_lookup(body.question) if not body.model_override else None
-            event_source = (
-                _stream_canned(canned[0], canned[1], temperature_unit=body.temperature_unit)
-                if canned is not None
-                else chat_orchestrator.run(
+            if canned is not None:
+                canned_answer, canned_locs, canned_chart_spec = canned
+                canned_charts = (
+                    _build_canned_charts(canned_locs, canned_chart_spec, chat_orchestrator.tile_store, body.temperature_unit)
+                    if canned_chart_spec
+                    else []
+                )
+                event_source = _stream_canned(
+                    canned_answer, canned_locs, charts=canned_charts, temperature_unit=body.temperature_unit
+                )
+            else:
+                event_source = chat_orchestrator.run(
                     question=body.question,
                     history=[(t.role, t.text) for t in body.history] if body.history else None,
                     map_context=map_ctx,
@@ -741,7 +749,6 @@ def create_app() -> FastAPI:
                     model_override=body.model_override,
                     temperature_unit=body.temperature_unit,
                 )
-            )
 
             for event in event_source:
                 yield f"data: {_json.dumps(event)}\n\n"
