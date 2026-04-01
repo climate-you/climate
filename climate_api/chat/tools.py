@@ -151,8 +151,12 @@ def _get_metric_series(
         return {"metric_id": metric_id, "lat": lat, "lon": lon, "unit": unit, "data": data}
 
     else:
-        # yearly axis — int years
-        years = [int(a) for a in axis]
+        # yearly axis — int years (also catches any unknown time_axis_type)
+        try:
+            years = [int(a) for a in axis]
+        except (ValueError, TypeError):
+            return {"error": f"Unsupported time axis format for metric '{metric_id}' (type: {time_axis_type!r})."}
+
         pairs = [(y, float(v)) for y, v in zip(years, vec)]
         available_min, available_max = years[0], years[-1]
 
