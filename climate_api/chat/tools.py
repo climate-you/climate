@@ -54,6 +54,8 @@ def _output_unit(spec: dict, target: str) -> str:
 def list_available_metrics(tile_store: TileDataStore) -> dict:
     metrics = []
     for metric_id, spec in tile_store.metrics.items():
+        if spec.get("llm_hidden"):
+            continue
         axis = tile_store.axis(metric_id)
         date_range = f"{axis[0]}-{axis[-1]}" if axis else "unknown"
         metrics.append({

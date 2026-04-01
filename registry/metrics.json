@@ -91,6 +91,7 @@
     "missing": "nan",
     "domain": "global",
     "time_axis": "daily",
+    "llm_hidden": true,
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_t2m",

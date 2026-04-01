@@ -59,7 +59,11 @@
           "description": "Placement hint for derived metrics; defaults to on_packager for tiled metrics."
         },
         "overrides": { "$ref": "#/$defs/overrides" },
-        "deprecated": { "type": "boolean" }
+        "deprecated": { "type": "boolean" },
+        "llm_hidden": {
+          "type": "boolean",
+          "description": "If true, this metric is excluded from the LLM tool catalogue."
+        }
       },
       "required": ["time_axis", "dtype", "missing", "source"],
       "additionalProperties": false
