@@ -8,6 +8,11 @@ import {
   BACKDROP_BLUE,
   BACKDROP_DARK_MODE,
   BACKDROP_WHITE,
+  CHAT_DRAWER_BREAKPOINT_PX,
+  CHAT_DRAWER_DESKTOP_RIGHT_PX,
+  CHAT_DRAWER_MOBILE_BOTTOM_PX,
+  CHAT_DRAWER_MOBILE_HEIGHT_MAX_PX,
+  CHAT_DRAWER_MOBILE_HEIGHT_RATIO,
   CITY_SNAP_LAYER_IDS,
   CITY_SNAP_MAX_ZOOM,
   CITY_SNAP_RADIUS_PX,
@@ -134,6 +139,23 @@ function panelPaddingForViewport(map: maplibregl.Map, panelOpen: boolean) {
     bottom: 0,
     left: 0,
   };
+}
+
+function chatDrawerPaddingForViewport(map: maplibregl.Map) {
+  const BASE_PAD = 80;
+  const mapRect = map.getContainer().getBoundingClientRect();
+  const isMobile = window.matchMedia(
+    `(max-width: ${CHAT_DRAWER_BREAKPOINT_PX}px)`,
+  ).matches;
+  if (isMobile) {
+    const drawerH =
+      Math.min(window.innerHeight * CHAT_DRAWER_MOBILE_HEIGHT_RATIO, CHAT_DRAWER_MOBILE_HEIGHT_MAX_PX) +
+      CHAT_DRAWER_MOBILE_BOTTOM_PX;
+    const bottomPad = Math.min(BASE_PAD + drawerH, mapRect.height * 0.85);
+    return { top: BASE_PAD, bottom: bottomPad, left: BASE_PAD, right: BASE_PAD };
+  }
+  const rightPad = Math.min(BASE_PAD + CHAT_DRAWER_DESKTOP_RIGHT_PX, mapRect.width * 0.6);
+  return { top: BASE_PAD, bottom: BASE_PAD, left: BASE_PAD, right: rightPad };
 }
 
 function setBackdropColor(map: maplibregl.Map, color: string) {
@@ -1374,7 +1396,7 @@ export default function MapLibreGlobe({
     const map = mapRef.current;
     chatMarkersRef.current.forEach((m) => m.remove());
     chatMarkersRef.current = [];
-    if (!map || !chatLocations || chatLocations.length < 2) return;
+    if (!map || !chatLocations || chatLocations.length === 0) return;
     // Geographic threshold for collision detection (~50km)
     const GEO_THRESHOLD = 0.5;
     chatLocations.forEach((loc, i) => {
@@ -1431,13 +1453,26 @@ export default function MapLibreGlobe({
     });
     const lons = chatLocations.map((l) => l.lon);
     const lats = chatLocations.map((l) => l.lat);
-    map.fitBounds(
-      new maplibregl.LngLatBounds(
-        [Math.min(...lons), Math.min(...lats)],
-        [Math.max(...lons), Math.max(...lats)],
-      ),
-      { padding: 80, duration: FOCUS_FLY_DURATION_MS, essential: true },
-    );
+    if (chatLocations.length === 1) {
+      map.flyTo({
+        center: [lons[0], lats[0]],
+        zoom: focusZoomTarget(map),
+        pitch: 0,
+        bearing: 0,
+        padding: chatDrawerPaddingForViewport(map),
+        duration: FOCUS_FLY_DURATION_MS,
+        easing: cubicOut,
+        essential: true,
+      });
+    } else {
+      map.fitBounds(
+        new maplibregl.LngLatBounds(
+          [Math.min(...lons), Math.min(...lats)],
+          [Math.max(...lons), Math.max(...lats)],
+        ),
+        { padding: chatDrawerPaddingForViewport(map), duration: FOCUS_FLY_DURATION_MS, essential: true },
+      );
+    }
   }, [chatLocations]);
 
   useEffect(() => {

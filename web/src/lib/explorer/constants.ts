@@ -36,6 +36,13 @@ export const PANEL_BREAKPOINT_PX = 900;
 export const DESKTOP_PANEL_WIDTH_RATIO = 0.62;
 export const MOBILE_PANEL_HEIGHT_RATIO = 0.6;
 
+// Chat drawer — layout (must match ChatDrawer.module.css)
+export const CHAT_DRAWER_BREAKPOINT_PX = 768;
+export const CHAT_DRAWER_DESKTOP_RIGHT_PX = 380; // 360px width + 20px right offset
+export const CHAT_DRAWER_MOBILE_HEIGHT_RATIO = 0.75; // min(75vh, 600px)
+export const CHAT_DRAWER_MOBILE_HEIGHT_MAX_PX = 600;
+export const CHAT_DRAWER_MOBILE_BOTTOM_PX = 14;
+
 // MapLibreGlobe — zoom / navigation
 export const DEFAULT_BASE_ZOOM = 2.5;
 export const FOCUS_LOCATION_ZOOM = 5.5;

@@ -1456,7 +1456,6 @@ export default function ExplorerPage({
           unit={unit}
           devMode={debugMode}
           debugMode={debugMode}
-          onFlyTo={(flyLat, flyLon) => setPicked({ lat: flyLat, lon: flyLon })}
           onLocations={(locs) => setChatLocations(locs)}
           onPickLocation={(la, lo) => void handlePick(la, lo, true)}
         />

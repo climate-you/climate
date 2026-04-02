@@ -44,7 +44,6 @@ type ChatDrawerProps = {
   unit?: "C" | "F";
   devMode?: boolean; // shows the model toggle when true
   debugMode?: boolean; // shows per-reply model/tier/timing info
-  onFlyTo?: (lat: number, lon: number) => void;
   onLocations?: (locs: ChatLocation[] | null) => void;
   onPickLocation?: (lat: number, lon: number) => void;
 };
@@ -131,7 +130,6 @@ export default function ChatDrawer({
   unit = "C",
   devMode = false,
   debugMode = false,
-  onFlyTo,
   onLocations,
   onPickLocation,
 }: ChatDrawerProps) {
@@ -327,17 +325,18 @@ export default function ChatDrawer({
                 const rank = rankMap.get(cityName);
                 return rank !== undefined ? { ...loc, rank } : loc;
               });
-            const locsToShow = filteredLocs && filteredLocs.length > 0 ? filteredLocs : locs;
+            const locsToShow =
+              filteredLocs && filteredLocs.length > 0 ? filteredLocs : locs;
             if (locsToShow && locsToShow.length > 0) {
               setMessages((prev) =>
                 prev.map((m) =>
-                  m.messageId === messageId ? { ...m, locations: locsToShow } : m,
+                  m.messageId === messageId
+                    ? { ...m, locations: locsToShow }
+                    : m,
                 ),
               );
             }
-            if (locsToShow && locsToShow.length === 1) {
-              onFlyTo?.(locsToShow[0].lat, locsToShow[0].lon);
-            } else if (locsToShow && locsToShow.length > 1) {
+            if (locsToShow && locsToShow.length >= 1) {
               onLocations?.(locsToShow);
             }
             const tier = event.tier as string | null;
@@ -647,7 +646,10 @@ export default function ChatDrawer({
                                         className={styles.locationLink}
                                         onClick={(e) => {
                                           e.preventDefault();
-                                          onPickLocation?.(parseFloat(lat), parseFloat(lon));
+                                          onPickLocation?.(
+                                            parseFloat(lat),
+                                            parseFloat(lon),
+                                          );
                                         }}
                                       >
                                         {children}
@@ -672,11 +674,7 @@ export default function ChatDrawer({
                 {msg.charts && msg.charts.length > 0 && !msg.loading && (
                   <div className={styles.charts}>
                     {msg.charts.map((chart, i) => (
-                      <ChatChart
-                        key={i}
-                        chart={chart}
-                        temperatureUnit={unit}
-                      />
+                      <ChatChart key={i} chart={chart} temperatureUnit={unit} />
                     ))}
                   </div>
                 )}
