@@ -32,6 +32,7 @@ type ChatMessage = {
   feedback?: "good" | "bad" | null;
   error?: boolean;
   loading?: boolean;
+  aborted?: boolean;
   exhausted?: boolean; // daily budget exhausted — locks the input
   locations?: ChatLocation[]; // locations mentioned in this answer
   charts?: ChatChartPayload[]; // optional charts from get_metric_series calls
@@ -56,11 +57,13 @@ async function streamChatRequest(
   apiBase: string,
   payload: object,
   onEvent: (event: Record<string, unknown>) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   const res = await fetch(`${apiBase}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    signal,
   });
   if (!res.ok || !res.body) {
     throw new Error(`HTTP ${res.status}`);
@@ -145,6 +148,7 @@ export default function ChatDrawer({
   const [modelOverride, setModelOverride] = useState<ModelOverride>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Read persisted preferences from localStorage (client-side only)
   useEffect(() => {
@@ -209,6 +213,10 @@ export default function ChatDrawer({
     setConversationExhausted(false);
   }
 
+  function abortMessage() {
+    abortControllerRef.current?.abort();
+  }
+
   async function sendMessage(question: string) {
     if (!question.trim() || loading) return;
     if (!cryptoAvailable && process.env.NODE_ENV !== "development") {
@@ -226,6 +234,9 @@ export default function ChatDrawer({
     setInput("");
     setLoading(true);
     onLocations?.(null); // clear any previous chat markers
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     const messageId = generateUUID();
     setMessages((prev) => [
@@ -361,6 +372,7 @@ export default function ChatDrawer({
             }
           }
         },
+        controller.signal,
       );
 
       if (!answered) {
@@ -387,7 +399,16 @@ export default function ChatDrawer({
           return updated.slice(-(MAX_HISTORY_TURNS * 2));
         });
       }
-    } catch {
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.messageId === messageId
+              ? { ...m, text: "", loading: false, aborted: true }
+              : m,
+          ),
+        );
+      } else {
       setMessages((prev) =>
         prev.map((m) =>
           m.messageId === messageId
@@ -400,7 +421,9 @@ export default function ChatDrawer({
             : m,
         ),
       );
+      }
     } finally {
+      abortControllerRef.current = null;
       setLoading(false);
     }
   }
@@ -592,6 +615,8 @@ export default function ChatDrawer({
                       <span />
                       <span />
                     </span>
+                  ) : msg.aborted ? (
+                    <em className={styles.abortedText}>Message was aborted.</em>
                   ) : msg.exhausted ? (
                     <>
                       The AI assistant&apos;s daily budget is exhausted. This
@@ -721,17 +746,37 @@ export default function ChatDrawer({
               disabled={loading || conversationExhausted}
               aria-label="Chat input"
             />
+            {loading ? (
+              <button
+                type="button"
+                className={styles.stopBtn}
+                aria-label="Stop"
+                onClick={abortMessage}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect
+                    x="7"
+                    y="7"
+                    width="10"
+                    height="10"
+                    rx="1.5"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+            ) : (
             <button
               type="button"
               className={styles.sendBtn}
               aria-label="Send"
-              disabled={!input.trim() || loading || conversationExhausted}
+                disabled={!input.trim() || conversationExhausted}
               onClick={() => void sendMessage(input)}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" />
               </svg>
             </button>
+            )}
           </div>
         </aside>
       )}

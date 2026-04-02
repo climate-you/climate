@@ -521,6 +521,41 @@
   pointer-events: none;
 }
 
+.stopBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: none;
+  background: var(--cta, #0000ff);
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 120ms ease;
+}
+
+.stopBtn:hover {
+  background: var(--cta-hover, #001dff);
+}
+
+.stopBtn:focus-visible {
+  outline: 2px solid var(--cta, #0000ff);
+  outline-offset: 2px;
+}
+
+.stopBtn svg {
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+
+.abortedText {
+  font-size: 13px;
+  color: var(--muted-text, rgba(17, 17, 17, 0.55));
+}
+
 /* ---------------------------------------------------------------------------
    Dark mode overrides
    --------------------------------------------------------------------------- */
