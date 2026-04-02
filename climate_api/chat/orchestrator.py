@@ -712,14 +712,49 @@ class ChatOrchestrator:
                 step_usage = {}
             try:
                 model_t0 = _time.monotonic()
-                response = tier.client.chat.completions.create(
+                stream = tier.client.chat.completions.create(
                     model=tier.model,
                     messages=messages,
                     tools=TOOL_SCHEMAS,
                     tool_choice="auto",
                     parallel_tool_calls=True,
                     temperature=0,
+                    stream=True,
                 )
+
+                streamed_text = ""
+                raw_tool_calls: dict[int, dict] = {}  # index → assembled tool call
+
+                for chunk in stream:
+                    if chunk.usage:
+                        step_usage = {
+                            "prompt_tokens": chunk.usage.prompt_tokens,
+                            "completion_tokens": chunk.usage.completion_tokens,
+                        }
+                    if not chunk.choices:
+                        continue
+                    delta = chunk.choices[0].delta
+                    if delta.content:
+                        streamed_text += delta.content
+                        yield {"type": "chunk", "text": delta.content}
+                    if delta.tool_calls:
+                        for tc_delta in delta.tool_calls:
+                            idx = tc_delta.index
+                            if idx not in raw_tool_calls:
+                                raw_tool_calls[idx] = {
+                                    "id": "",
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""},
+                                }
+                            entry = raw_tool_calls[idx]
+                            if tc_delta.id:
+                                entry["id"] = tc_delta.id
+                            if tc_delta.function:
+                                if tc_delta.function.name:
+                                    entry["function"]["name"] += tc_delta.function.name
+                                if tc_delta.function.arguments:
+                                    entry["function"]["arguments"] += tc_delta.function.arguments
+
                 step_model_ms += int((_time.monotonic() - model_t0) * 1000)
             except Exception as exc:
                 # Always accumulate model latency, even for failed calls
@@ -788,29 +823,10 @@ class ChatOrchestrator:
                 }
                 return
 
-            message = response.choices[0].message
-            if response.usage:
-                step_usage = {
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                }
-
-            # Normalise tool calls: structured first, XML text fallback
-            tool_calls = []
-            if message.tool_calls:
-                tool_calls = [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments,
-                        },
-                    }
-                    for tc in message.tool_calls
-                ]
-            elif message.content and "<function" in message.content:
-                parsed = _parse_text_tool_calls(message.content)
+            # Normalise tool calls: structured (from stream), XML text fallback
+            tool_calls = [raw_tool_calls[i] for i in sorted(raw_tool_calls)]
+            if not tool_calls and streamed_text and "<function" in streamed_text:
+                parsed = _parse_text_tool_calls(streamed_text)
                 if parsed:
                     tool_calls = [
                         {
@@ -885,7 +901,7 @@ class ChatOrchestrator:
                 # Final text response
                 steps_timing.append({"step": step, "model_ms": step_model_ms, **step_usage})
                 total_ms = int((_time.monotonic() - t_start) * 1000)
-                answer = message.content or ""
+                answer = streamed_text
                 if tier.is_degraded:
                     yield {"type": "notice", "text": tier.degraded_notice}
                 yield {"type": "answer", "text": answer}

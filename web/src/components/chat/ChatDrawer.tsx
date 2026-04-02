@@ -263,7 +263,16 @@ export default function ChatDrawer({
         },
         (event) => {
           const type = event.type as string;
-          if (type === "notice") {
+          if (type === "chunk") {
+            finalAnswerText += event.text as string;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.messageId === messageId
+                  ? { ...m, text: finalAnswerText, loading: false }
+                  : m,
+              ),
+            );
+          } else if (type === "notice") {
             pendingNotice = event.text as string;
           } else if (type === "answer") {
             answered = true;

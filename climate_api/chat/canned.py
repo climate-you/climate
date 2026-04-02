@@ -174,11 +174,23 @@ def stream_canned(
     temperature_unit: str = "C",
 ):
     """
-    Yield SSE event dicts that mimic a real orchestrator response,
-    with an artificial delay before the answer.
+    Yield SSE event dicts that mimic a real orchestrator response.
+    Streams the answer word-by-word as chunk events, then emits the
+    full answer event at the end for consistency with the live path.
     """
-    time.sleep(delay_s)
-    yield {"type": "answer", "text": _apply_unit(answer, temperature_unit)}
+    resolved = _apply_unit(answer, temperature_unit)
+
+    # Short initial delay to simulate model "thinking"
+    time.sleep(min(delay_s, 0.3))
+
+    # Stream word-by-word
+    words = resolved.split(" ")
+    for i, word in enumerate(words):
+        chunk = word if i == 0 else " " + word
+        yield {"type": "chunk", "text": chunk}
+        time.sleep(0.02)  # ~50 words/second
+
+    yield {"type": "answer", "text": resolved}
     yield {
         "type": "done",
         "session_id": None,
