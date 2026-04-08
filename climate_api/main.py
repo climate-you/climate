@@ -133,6 +133,7 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
                     client=Groq(api_key=settings.groq_api_key_free),
                     model=settings.groq_model_fallback,
                     is_degraded=False,
+                    max_request_tokens=5500,
                 )
             )
         if settings.ollama_base_url:
@@ -161,6 +162,7 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
                     client=Groq(api_key=settings.groq_api_key_free),
                     model=settings.groq_model_primary,
                     is_degraded=False,
+                    max_request_tokens=11000,
                 )
             )
             tiers.append(
@@ -169,6 +171,7 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
                     client=Groq(api_key=settings.groq_api_key_free),
                     model="meta-llama/llama-4-scout-17b-16e-instruct",
                     is_degraded=False,
+                    max_request_tokens=27500,
                 )
             )
     else:
@@ -180,6 +183,7 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
                     client=Groq(api_key=settings.groq_api_key_free),
                     model=settings.groq_model_primary,
                     is_degraded=False,
+                    max_request_tokens=11000,
                 )
             )
         if settings.groq_api_key_paid:
@@ -189,6 +193,7 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
                     client=Groq(api_key=settings.groq_api_key_paid),
                     model=settings.groq_model_primary,
                     is_degraded=False,
+                    max_request_tokens=11000,
                 )
             )
         if settings.groq_api_key_free:
@@ -198,6 +203,7 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
                     client=Groq(api_key=settings.groq_api_key_free),
                     model=settings.groq_model_fallback,
                     is_degraded=True,
+                    max_request_tokens=5500,
                 )
             )
 
@@ -765,7 +771,7 @@ def create_app() -> FastAPI:
                 elif event["type"] == "answer":
                     answer_text.append(event["text"])
                 elif event["type"] == "error":
-                    error_text = event.get("message")
+                    error_text = event.get("detail") or event.get("message")
                 elif event["type"] == "done":
                     step_count = event.get("step_count", 0)
                     tier_used = event.get("tier")

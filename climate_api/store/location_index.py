@@ -17,6 +17,7 @@ class LocationHit:
     country_code: str
     population: int
     capital: bool = False
+    alt_names: str = ""
 
 
 def _norm(s: str) -> str:
@@ -50,8 +51,10 @@ class LocationIndex:
         self._country_codes: List[str] = []
         self._populations: List[int] = []
         self._capitals: List[bool] = []
+        self._alt_names: List[str] = []
         self._by_id: Dict[int, int] = {}
         self._prefix_map: Dict[str, List[int]] = {}
+        self._name_to_idx: Dict[str, int] = {}
 
         self._load()
 
@@ -71,6 +74,7 @@ class LocationIndex:
                 capital = (row.get("capital") or "").strip().lower() == "true"
                 norm_label = row.get("norm_label") or _norm(label)
                 norm_city = row.get("norm_city") or _norm(row.get("city_name") or "")
+                alt_names = (row.get("alt_names") or "").strip()
 
                 i = len(self._labels)
                 self._labels.append(label)
@@ -82,12 +86,26 @@ class LocationIndex:
                 self._country_codes.append(cc)
                 self._populations.append(pop)
                 self._capitals.append(capital)
+                self._alt_names.append(alt_names)
 
                 if geonameid:
                     self._by_id[geonameid] = i
 
                 self._add_prefixes(i, norm_label)
                 self._add_prefixes(i, norm_city)
+
+                # Build name→index hash map (highest population wins per name)
+                for norm_name in (norm_label, norm_city):
+                    if norm_name and len(norm_name) >= self.min_query_len:
+                        existing = self._name_to_idx.get(norm_name)
+                        if existing is None or pop > self._populations[existing]:
+                            self._name_to_idx[norm_name] = i
+                for raw_alt in alt_names.split(","):
+                    norm_alt = _norm(raw_alt)
+                    if norm_alt and len(norm_alt) >= self.min_query_len:
+                        existing = self._name_to_idx.get(norm_alt)
+                        if existing is None or pop > self._populations[existing]:
+                            self._name_to_idx[norm_alt] = i
 
     def _add_prefixes(self, i: int, s: str) -> None:
         if not s:
@@ -108,6 +126,7 @@ class LocationIndex:
             country_code=self._country_codes[i],
             population=self._populations[i],
             capital=self._capitals[i],
+            alt_names=self._alt_names[i] if i < len(self._alt_names) else "",
         )
 
     def autocomplete(self, query: str, *, limit: int = 10) -> List[LocationHit]:
@@ -147,6 +166,18 @@ class LocationIndex:
             if nl == q:
                 return self._hit(i)
         return None
+
+    def resolve_by_any_name(self, name: str) -> Optional[LocationHit]:
+        """Resolve a city name by checking label, city_name, and alt_names.
+
+        Returns the highest-population match, or None if not found.
+        Uses a pre-built hash map for O(1) lookup.
+        """
+        q = _norm(name)
+        if not q or len(q) < self.min_query_len:
+            return None
+        i = self._name_to_idx.get(q)
+        return self._hit(i) if i is not None else None
 
     def iter_all(self, *, min_population: int = 0, capitals_only: bool = False) -> List[LocationHit]:
         """Return all locations matching the given filters, sorted by population descending."""

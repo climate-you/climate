@@ -288,6 +288,7 @@ def _run_validate_suite(repo_root: Path) -> bool:
         "--skip-smoke",
         "--skip-pytest",
         "--tile-summary-only",
+        "--check-rankings",
     ]
     print(f"  $ {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=repo_root, check=False)

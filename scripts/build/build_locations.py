@@ -62,6 +62,7 @@ OUT_COLS = [
     "label",
     "geonameid",
     "capital",
+    "alt_names",
 ]
 
 
@@ -100,6 +101,7 @@ class _LocationRow(TypedDict):
     population: str
     alias_count: int
     feature_code: str
+    alt_names: str
 
 
 class _IndexCandidate(TypedDict):
@@ -113,6 +115,7 @@ class _IndexCandidate(TypedDict):
     population: str
     alias_count: int
     feature_code: str
+    alt_names: str
 
 
 class _MarineNameAggregate(TypedDict):
@@ -192,7 +195,7 @@ def parse_admin1_codes(path_txt: Path) -> Dict[str, str]:
 
 def _iter_geonames_rows(
     zip_path: Path, *, excluded_feature_codes: set[str]
-) -> Iterable[Tuple[str, str, str, str, str, str, str, str, str, int, str]]:
+) -> Iterable[Tuple[str, str, str, str, str, str, str, str, str, int, str, str]]:
     """
     Yield minimal fields for populated places from a GeoNames dump.
 
@@ -209,6 +212,7 @@ def _iter_geonames_rows(
         population,
         alias_count,
         feature_code,
+        alt_names,
       )
     """
     with zipfile.ZipFile(zip_path, "r") as z:
@@ -237,10 +241,10 @@ def _iter_geonames_rows(
                     lon = parts[IDX_LON]
                     timezone = parts[IDX_TIMEZONE] or ""
                     population = parts[IDX_POPULATION] or "0"
-                    alt_names = parts[IDX_ALTERNATE_NAMES] if len(parts) > 3 else ""
+                    alt_names_raw = parts[IDX_ALTERNATE_NAMES] if len(parts) > 3 else ""
                     alias_count = (
-                        len([n for n in alt_names.split(",") if n.strip()])
-                        if alt_names
+                        len([n for n in alt_names_raw.split(",") if n.strip()])
+                        if alt_names_raw
                         else 0
                     )
                 except Exception:
@@ -257,6 +261,7 @@ def _iter_geonames_rows(
                     population,
                     alias_count,
                     feature_code,
+                    alt_names_raw,
                 )
 
 
@@ -420,6 +425,7 @@ def load_marine_index_rows(
                 "population": "0",
                 "alias_count": 0,
                 "feature_code": "MARINE",
+                "alt_names": "",
             }
         )
     return out
@@ -510,6 +516,7 @@ def write_locations_csv(
                 "norm_label",
                 "norm_city",
                 "capital",
+                "alt_names",
             ],
         )
         index_writer.writeheader()
@@ -528,6 +535,7 @@ def write_locations_csv(
         pop,
         alias_count,
         feature_code,
+        alt_names_raw,
     ) in _iter_geonames_rows(
         zip_path, excluded_feature_codes=excluded_feature_codes
     ):
@@ -547,6 +555,7 @@ def write_locations_csv(
             "population": str(int(float(pop) or 0)),
             "alias_count": int(alias_count),
             "feature_code": feature_code,
+            "alt_names": alt_names_raw,
         }
         current = dedupe_map.get(key)
         if current is None or _is_better_row(candidate, current):
@@ -629,6 +638,7 @@ def write_locations_csv(
                     "kind": "city",
                     "label": label,
                     "capital": "true" if row["feature_code"] == "PPLC" else "false",
+                    "alt_names": row["alt_names"],
                 }
             )
             if points is not None:
@@ -646,6 +656,7 @@ def write_locations_csv(
                     "population": str(pop_i),
                     "alias_count": int(row["alias_count"]),
                     "feature_code": row["feature_code"],
+                    "alt_names": row["alt_names"],
                 }
             )
 
@@ -673,6 +684,7 @@ def write_locations_csv(
                     "population": marine_row["population"],
                     "alias_count": marine_row["alias_count"],
                     "feature_code": marine_row["feature_code"],
+                    "alt_names": marine_row.get("alt_names", ""),
                 }
                 used_ids.add(next_id)
                 next_id += 1
@@ -698,6 +710,7 @@ def write_locations_csv(
                     "norm_label": _norm_index(row["label"]),
                     "norm_city": _norm_index(row["city_name"]),
                     "capital": "true" if row.get("feature_code") == "PPLC" else "false",
+                    "alt_names": row.get("alt_names", ""),
                 }
             )
 

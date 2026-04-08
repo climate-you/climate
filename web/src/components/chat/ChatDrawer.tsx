@@ -6,8 +6,6 @@ import styles from "./ChatDrawer.module.css";
 import {
   CHAT_EXAMPLE_QUESTIONS_GENERIC,
   CHAT_MODEL_OVERRIDE_KEY,
-  CHAT_OPT_OUT_KEY,
-  CHAT_PRIVACY_NOTICE,
 } from "@/lib/explorer/constants";
 import ChatChart, { type ChatChartPayload } from "./ChatChart";
 
@@ -21,7 +19,9 @@ type ConversationTurn = { role: "user" | "assistant"; text: string };
 
 const MAX_HISTORY_TURNS = 3; // keep last N user+assistant pairs
 
-type ChatLocation = { label: string; rank?: number; lat: number; lon: number };
+type ChatLocation = { label: string; rank?: number; lat: number; lon: number; alt_names?: string };
+
+type ToolCallInfo = { name: string; args: Record<string, unknown> };
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -36,6 +36,7 @@ type ChatMessage = {
   exhausted?: boolean; // daily budget exhausted — locks the input
   locations?: ChatLocation[]; // locations mentioned in this answer
   charts?: ChatChartPayload[]; // optional charts from get_metric_series calls
+  toolCalls?: ToolCallInfo[]; // tool calls made during this response
 };
 
 type ChatDrawerProps = {
@@ -100,13 +101,51 @@ function linkifyCities(text: string, locs: ChatLocation[]): string {
   let result = text;
   for (const loc of locs) {
     const city = loc.label.split(",")[0].trim();
-    const escaped = city.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    result = result.replace(
-      new RegExp(`(?<!\\[)\\b${escaped}\\b`, "gi"),
-      `[${city}](#loc:${loc.lat}:${loc.lon})`,
-    );
+    // Build a list of name variants to linkify: local name + any comma-separated alt names
+    const variants = [city];
+    if (loc.alt_names) {
+      for (const alt of loc.alt_names.split(",")) {
+        const t = alt.trim();
+        if (t && t.toLowerCase() !== city.toLowerCase()) variants.push(t);
+      }
+    }
+    for (const variant of variants) {
+      const escaped = variant.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      result = result.replace(
+        new RegExp(`(?<!\\[)\\b${escaped}\\b`, "gi"),
+        `[${city}](#loc:${loc.lat}:${loc.lon})`,
+      );
+    }
   }
   return result;
+}
+
+function addSummaryLineLink(text: string): string {
+  // Match a line ending with ':' that is immediately followed (with optional blank lines)
+  // by a numbered or bulleted list — this is the summary line for a location list.
+  const match = text.match(/^([^\n]+):([ \t]*\n(?:[ \t]*\n)*[ \t]*)(?=\d+\.|- )/m);
+  if (!match || match.index === undefined) return text;
+
+  const lineContent = match[1];
+
+  // Try to extract the meaningful anchor: strip leading article ("The/A/An")
+  // and trailing linking verb ("are/is/were/include/contain/…")
+  const anchorMatch = lineContent.match(
+    /^(?:(?:the|a|an)\s+)?(.+?)(?:\s+(?:are|is|were|was|have been|includes?|contains?))?$/i,
+  );
+  const anchor = anchorMatch ? anchorMatch[1].trim() : lineContent.trim();
+
+  // Wrap the anchor in a #locs link
+  const anchorIdx = lineContent.indexOf(anchor);
+  const before = lineContent.slice(0, anchorIdx);
+  const after = lineContent.slice(anchorIdx + anchor.length);
+  const newLine = `${before}[${anchor}](#locs)${after}:${match[2]}`;
+
+  return (
+    text.slice(0, match.index) +
+    newLine +
+    text.slice(match.index + match[0].length)
+  );
 }
 
 function generateUUID(): string {
@@ -118,6 +157,32 @@ function generateUUID(): string {
     const r = (Math.random() * 16) | 0;
     return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
   });
+}
+
+function describeToolCall(name: string, args: Record<string, unknown>): string {
+  const metricLabel = (id: string) =>
+    id.replace(/_[cf]$/, "").replace(/_/g, " ");
+  switch (name) {
+    case "get_metric_series": {
+      const location = args.location as string | undefined;
+      const metricId = args.metric_id as string | undefined;
+      const metric = metricId ? metricLabel(metricId) : "data";
+      return location ? `Querying ${metric} for ${location}` : `Querying ${metric}`;
+    }
+    case "find_extreme_location": {
+      const extreme = args.extreme as string | undefined;
+      const metricId = args.metric_id as string | undefined;
+      const metric = metricId ? metricLabel(metricId) : "climate";
+      const adj = extreme === "max" ? "highest" : extreme === "min" ? "lowest" : "extreme";
+      return `Finding ${adj} ${metric} locations`;
+    }
+    case "find_similar_locations": {
+      const ref = args.reference_location as string | undefined;
+      return ref ? `Finding locations similar to ${ref}` : "Finding similar locations";
+    }
+    default:
+      return name.replace(/_/g, " ");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +199,7 @@ export default function ChatDrawer({
   onPickLocation,
 }: ChatDrawerProps) {
   const [open, setOpen] = useState(false);
-  const [conversationId] = useState(() => generateUUID());
+  const [conversationId, setConversationId] = useState(() => generateUUID());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [conversationHistory, setConversationHistory] = useState<
     ConversationTurn[]
@@ -142,7 +207,6 @@ export default function ChatDrawer({
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [conversationExhausted, setConversationExhausted] = useState(false);
-  const [optOut, setOptOut] = useState(false);
   const [modelOverride, setModelOverride] = useState<ModelOverride>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -150,7 +214,6 @@ export default function ChatDrawer({
 
   // Read persisted preferences from localStorage (client-side only)
   useEffect(() => {
-    setOptOut(localStorage.getItem(CHAT_OPT_OUT_KEY) === "1");
     const stored = localStorage.getItem(CHAT_MODEL_OVERRIDE_KEY);
     if (!devMode) {
       // Clear any override that may have been set during a debug session
@@ -187,15 +250,6 @@ export default function ChatDrawer({
     return () => window.removeEventListener("keydown", handler);
   }, [open]);
 
-  function persistOptOut(value: boolean) {
-    setOptOut(value);
-    if (value) {
-      localStorage.setItem(CHAT_OPT_OUT_KEY, "1");
-    } else {
-      localStorage.removeItem(CHAT_OPT_OUT_KEY);
-    }
-  }
-
   function persistModelOverride(value: ModelOverride) {
     setModelOverride(value);
     if (value) {
@@ -209,6 +263,8 @@ export default function ChatDrawer({
     setMessages([]);
     setConversationHistory([]);
     setConversationExhausted(false);
+    setConversationId(generateUUID());
+    onLocations?.(null);
   }
 
   function abortMessage() {
@@ -245,6 +301,7 @@ export default function ChatDrawer({
 
     let pendingNotice: string | undefined;
     let answered = false;
+    let errorReceived = false;
     let finalAnswerText = "";
 
     try {
@@ -255,7 +312,6 @@ export default function ChatDrawer({
           history:
             conversationHistory.length > 0 ? conversationHistory : undefined,
           map_context: mapContext,
-          opt_out: optOut,
           session_id: conversationId,
           message_id: messageId,
           model_override: modelOverride ?? undefined,
@@ -269,6 +325,18 @@ export default function ChatDrawer({
               prev.map((m) =>
                 m.messageId === messageId
                   ? { ...m, text: finalAnswerText, loading: false }
+                  : m,
+              ),
+            );
+          } else if (type === "tool_call") {
+            const tc: ToolCallInfo = {
+              name: event.name as string,
+              args: (event.args ?? {}) as Record<string, unknown>,
+            };
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.messageId === messageId
+                  ? { ...m, toolCalls: [...(m.toolCalls ?? []), tc] }
                   : m,
               ),
             );
@@ -290,6 +358,7 @@ export default function ChatDrawer({
               ),
             );
           } else if (type === "error") {
+            errorReceived = true;
             setMessages((prev) =>
               prev.map((m) =>
                 m.messageId === messageId
@@ -313,7 +382,7 @@ export default function ChatDrawer({
             }
             const locs = (
               event.locations as
-                | Array<{ label: string; lat: number; lon: number }>
+                | Array<{ label: string; lat: number; lon: number; alt_names?: string }>
                 | undefined
             )?.map((loc) => ({ ...loc, label: loc.label.replace(/\*/g, "") }));
             const answerLower = finalAnswerText.toLowerCase();
@@ -321,17 +390,35 @@ export default function ChatDrawer({
             const rankMap = new Map<string, number>();
             const orderedListRegex = /^(\d+)\.\s+(.+?)(?=[,\u2014\u2013]|$)/gm;
             let rankMatch;
-            while ((rankMatch = orderedListRegex.exec(finalAnswerText)) !== null) {
-              rankMap.set(rankMatch[2].replace(/\*/g, "").trim().toLowerCase(), parseInt(rankMatch[1], 10));
+            while (
+              (rankMatch = orderedListRegex.exec(finalAnswerText)) !== null
+            ) {
+              rankMap.set(
+                rankMatch[2].replace(/\*/g, "").trim().toLowerCase(),
+                parseInt(rankMatch[1], 10),
+              );
             }
             const filteredLocs = locs
               ?.filter((loc) => {
                 const cityName = loc.label.split(",")[0].trim().toLowerCase();
-                return answerLower.includes(cityName);
+                if (answerLower.includes(cityName)) return true;
+                if (loc.alt_names) {
+                  return loc.alt_names
+                    .split(",")
+                    .some((a) => answerLower.includes(a.trim().toLowerCase()));
+                }
+                return false;
               })
               .map((loc) => {
                 const cityName = loc.label.split(",")[0].trim().toLowerCase();
-                const rank = rankMap.get(cityName);
+                // Try local name first, then alt names for rank lookup
+                let rank = rankMap.get(cityName);
+                if (rank === undefined && loc.alt_names) {
+                  for (const alt of loc.alt_names.split(",")) {
+                    rank = rankMap.get(alt.trim().toLowerCase());
+                    if (rank !== undefined) break;
+                  }
+                }
                 return rank !== undefined ? { ...loc, rank } : loc;
               });
             const locsToShow =
@@ -383,8 +470,8 @@ export default function ChatDrawer({
         controller.signal,
       );
 
-      if (!answered) {
-        // Stream ended without an answer event
+      if (!answered && !errorReceived) {
+        // Stream ended without an answer or error event
         setMessages((prev) =>
           prev.map((m) =>
             m.messageId === messageId
@@ -417,18 +504,18 @@ export default function ChatDrawer({
           ),
         );
       } else {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.messageId === messageId
-            ? {
-                ...m,
-                text: "Failed to connect to the assistant. Please try again.",
-                loading: false,
-                error: true,
-              }
-            : m,
-        ),
-      );
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.messageId === messageId
+              ? {
+                  ...m,
+                  text: "Failed to connect to the assistant. Please try again.",
+                  loading: false,
+                  error: true,
+                }
+              : m,
+          ),
+        );
       }
     } finally {
       abortControllerRef.current = null;
@@ -491,26 +578,16 @@ export default function ChatDrawer({
       <button
         type="button"
         className={`${styles.chatButton} ${open ? styles.chatButtonOpen : ""}`}
-        aria-label={open ? "Close chat" : "Open climate data assistant"}
+        aria-label="Open climate data assistant"
         onClick={() => setOpen((v) => !v)}
       >
-        {open ? (
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            className={styles.chatButtonIcon}
-          >
-            <path d="M6 6L18 18M18 6L6 18" />
-          </svg>
-        ) : (
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            className={styles.chatButtonIcon}
-          >
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-        )}
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          className={styles.chatButtonIcon}
+        >
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
       </button>
 
       {/* Drawer */}
@@ -554,20 +631,18 @@ export default function ChatDrawer({
               </select>
             )}
 
-            {!isEmpty && (
-              <button
-                type="button"
-                className={styles.drawerClose}
-                aria-label="New conversation"
-                title="New conversation"
-                onClick={clearSession}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                  <path d="M3 3v5h5" />
-                </svg>
-              </button>
-            )}
+            <button
+              type="button"
+              className={styles.drawerClose}
+              aria-label="New conversation"
+              title="New conversation"
+              onClick={clearSession}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+              </svg>
+            </button>
 
             <button
               type="button"
@@ -613,6 +688,15 @@ export default function ChatDrawer({
                 )}
                 {msg.notice && (
                   <div className={styles.noticeBar}>{msg.notice}</div>
+                )}
+                {msg.toolCalls && msg.toolCalls.length > 0 && (
+                  <div className={styles.toolCalls}>
+                    {msg.toolCalls.map((tc, j) => (
+                      <div key={j} className={styles.toolCallItem}>
+                        <em>{describeToolCall(tc.name, tc.args)}</em>
+                      </div>
+                    ))}
+                  </div>
                 )}
                 <div
                   className={`${styles.messageBubble} ${msg.error ? styles.messageBubbleError : ""}`}
@@ -665,6 +749,20 @@ export default function ChatDrawer({
                                       </a>
                                     );
                                   }
+                                  if (href === "#locs") {
+                                    return (
+                                      <a
+                                        href="#"
+                                        className={styles.locationLink}
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          onLocations?.(msg.locations!);
+                                        }}
+                                      >
+                                        {children}
+                                      </a>
+                                    );
+                                  }
                                   return <a href={href}>{children}</a>;
                                 },
                               }
@@ -672,7 +770,7 @@ export default function ChatDrawer({
                         }
                       >
                         {msg.locations && msg.locations.length > 0
-                          ? linkifyCities(msg.text, msg.locations)
+                          ? addSummaryLineLink(linkifyCities(msg.text, msg.locations))
                           : msg.text}
                       </Markdown>
                     </div>
@@ -704,7 +802,7 @@ export default function ChatDrawer({
                           void submitFeedback(msg.messageId!, "good")
                         }
                       >
-                        👍
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
                       </button>
                       <button
                         type="button"
@@ -715,25 +813,13 @@ export default function ChatDrawer({
                           void submitFeedback(msg.messageId!, "bad")
                         }
                       >
-                        👎
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>
                       </button>
                     </div>
                   )}
               </div>
             ))}
             <div ref={messagesEndRef} />
-          </div>
-
-          {/* Privacy notice */}
-          <div className={styles.privacyBar}>
-            <span>{CHAT_PRIVACY_NOTICE}</span>
-            <button
-              type="button"
-              className={`${styles.optOutBtn} ${optOut ? styles.optOutBtnActive : ""}`}
-              onClick={() => persistOptOut(!optOut)}
-            >
-              {optOut ? "Opted out" : "Opt out"}
-            </button>
           </div>
 
           {/* Input */}
@@ -772,17 +858,17 @@ export default function ChatDrawer({
                 </svg>
               </button>
             ) : (
-            <button
-              type="button"
-              className={styles.sendBtn}
-              aria-label="Send"
+              <button
+                type="button"
+                className={styles.sendBtn}
+                aria-label="Send"
                 disabled={!input.trim() || conversationExhausted}
-              onClick={() => void sendMessage(input)}
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" />
-              </svg>
-            </button>
+                onClick={() => void sendMessage(input)}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" />
+                </svg>
+              </button>
             )}
           </div>
         </aside>

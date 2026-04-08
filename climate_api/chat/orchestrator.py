@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
 from typing import Any, Iterator
 
-from climate_api.store.location_index import LocationIndex
+from climate_api.store.location_index import LocationIndex, _norm as _norm_location
 from climate_api.store.tile_data_store import TileDataStore
 from climate_api.chat import tools as _tools
 
@@ -51,6 +51,7 @@ class ProviderTier:
     model: str
     is_degraded: bool = False  # True → emit disclaimer notice before answer
     degraded_notice: str = field(default="")
+    max_request_tokens: int | None = None  # If set, skip tier when estimated request exceeds this
 
     def __post_init__(self):
         if self.is_degraded and not self.degraded_notice:
@@ -82,6 +83,143 @@ class _QuotaExhaustedError(Exception):
     """Raised when a tier's first API call hits a daily-token-quota limit."""
 
 
+_INTERNAL_FIELDS = {"alt_names"}
+
+
+_MONTHLY_COMPRESS_THRESHOLD = 60  # data points; below this, send raw
+
+
+def _compress_series_for_context(result_json: str) -> str:
+    """Replace large monthly data arrays with a compact statistical summary.
+
+    The full data is already saved in series_results for chart rendering.
+    The model only needs statistics to write its answer, so replace long
+    monthly arrays with 12 climatological averages + overall stats.
+    Yearly series (≤60 points) are kept as-is.
+    """
+    try:
+        d = json.loads(result_json)
+    except Exception:
+        return result_json
+    if not isinstance(d, dict) or "data" not in d:
+        return result_json
+    data = d["data"]
+    if not isinstance(data, list) or len(data) <= _MONTHLY_COMPRESS_THRESHOLD:
+        return result_json
+
+    # Monthly series: entries have "year", "month", "value"
+    if not data or "month" not in data[0]:
+        return result_json
+
+    from collections import defaultdict
+
+    month_values: dict[int, list[float]] = defaultdict(list)
+    all_values: list[float] = []
+    min_val, min_entry = float("inf"), data[0]
+    max_val, max_entry = float("-inf"), data[0]
+    for entry in data:
+        v = entry.get("value")
+        if v is None:
+            continue
+        m = entry["month"]
+        month_values[m].append(v)
+        all_values.append(v)
+        if v < min_val:
+            min_val, min_entry = v, entry
+        if v > max_val:
+            max_val, max_entry = v, entry
+
+    _MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    climatology = {
+        _MONTH_NAMES[m - 1]: round(sum(vs) / len(vs), 2)
+        for m, vs in sorted(month_values.items())
+    }
+    years = sorted({e["year"] for e in data})
+    summary = {
+        "period": f"{years[0]}-{years[-1]}",
+        "n_records": len(data),
+        "monthly_climatology": climatology,
+        "overall_mean": round(sum(all_values) / len(all_values), 2),
+        "record_low": {"year": min_entry["year"], "month": min_entry["month"], "value": round(min_val, 2)},
+        "record_high": {"year": max_entry["year"], "month": max_entry["month"], "value": round(max_val, 2)},
+    }
+    d = {k: v for k, v in d.items() if k != "data"}
+    d["summary"] = summary
+    return json.dumps(d)
+
+
+def _strip_internal_fields(result_json: str) -> str:
+    """Remove backend-only fields from a tool result before sending to the LLM."""
+    try:
+        d = json.loads(result_json)
+    except Exception:
+        return result_json
+    if isinstance(d, dict):
+        for key in _INTERNAL_FIELDS:
+            d.pop(key, None)
+        if "results" in d and isinstance(d["results"], list):
+            for r in d["results"]:
+                if isinstance(r, dict):
+                    for key in _INTERNAL_FIELDS:
+                        r.pop(key, None)
+    return json.dumps(d)
+
+
+_BOLD_CITY_RE = re.compile(r"\*\*([^*,\n]+?)\*\*")
+
+
+def _supplement_locations_from_answer(
+    answer: str,
+    locations: list[dict],
+    location_index: Any,
+) -> list[dict]:
+    """Resolve city names mentioned in bold in the answer that weren't returned by any tool.
+
+    This handles hallucinated or paraphrased city names (e.g. the LLM writes
+    "Cologne" but the tool only returned cities with pop >= 1 000 000, so Köln
+    was never in the results).
+
+    Existing tool-returned locations take precedence: if a bold name matches any
+    city already in the locations list (by label or alt_name), it is skipped so
+    that less-populated but contextually correct entries (e.g. London, Ontario)
+    are never shadowed by a higher-population city with the same name.
+    """
+    existing_keys = {(round(loc["lat"], 1), round(loc["lon"], 1)) for loc in locations}
+
+    # Build a set of normalized names that are already covered by tool results.
+    # Any bold name matching one of these is skipped — the correct location is
+    # already present.
+    existing_norm_names: set[str] = set()
+    for loc in locations:
+        city = loc["label"].split(",")[0].strip()
+        n = _norm_location(city)
+        if n:
+            existing_norm_names.add(n)
+        for alt in (loc.get("alt_names") or "").split(","):
+            n = _norm_location(alt.strip())
+            if n:
+                existing_norm_names.add(n)
+
+    extra: list[dict] = []
+    seen_keys = set(existing_keys)
+    for m in _BOLD_CITY_RE.finditer(answer):
+        candidate = m.group(1).strip().split(",")[0].strip()
+        if not candidate:
+            continue
+        if _norm_location(candidate) in existing_norm_names:
+            continue
+        hit = location_index.resolve_by_any_name(candidate)
+        if hit is None:
+            continue
+        key = (round(hit.lat, 1), round(hit.lon, 1))
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        extra.append({"label": hit.label, "alt_names": hit.alt_names, "lat": hit.lat, "lon": hit.lon})
+    return locations + extra
+
+
 def _extract_locations(name: str, args: dict, result_dict: dict) -> list[dict]:
     """Extract {label, lat, lon} entries from a tool result dict."""
     if "error" in result_dict:
@@ -93,9 +231,9 @@ def _extract_locations(name: str, args: dict, result_dict: dict) -> list[dict]:
             return [{"label": str(args.get("location", "")), "lat": lat, "lon": lon}]
     elif name == "find_extreme_location":
         if "lat" in result_dict:
-            return [{"label": result_dict.get("nearest_city", ""), "lat": result_dict["lat"], "lon": result_dict["lon"]}]
+            return [{"label": result_dict.get("nearest_city", ""), "alt_names": result_dict.get("alt_names", ""), "lat": result_dict["lat"], "lon": result_dict["lon"]}]
         return [
-            {"label": r.get("nearest_city", ""), "lat": r["lat"], "lon": r["lon"]}
+            {"label": r.get("nearest_city", ""), "alt_names": r.get("alt_names", ""), "lat": r["lat"], "lon": r["lon"]}
             for r in result_dict.get("results", [])
             if "lat" in r
         ]
@@ -163,6 +301,7 @@ def _collect_series_for_extreme(
             ]
             series_result["unit"] = _tools._output_unit(spec, "F")
         series_result["location"] = city["label"]
+        series_result["_source"] = "auto"
         dedup_key = (series_result.get("metric_id"), series_result.get("location"), "raw")
         series_results[:] = [
             r for r in series_results
@@ -193,6 +332,28 @@ def _collect_series_for_extreme(
                 series_results.append(trend_series)
 
 
+def _filter_series_results(series_results: list[dict]) -> list[dict]:
+    """Drop auto-collected series for metrics that have explicit get_metric_series results.
+
+    When the LLM explicitly calls get_metric_series, those results should take
+    precedence over series auto-fetched by _collect_series_for_extreme.  This
+    prevents phantom cities (e.g. the global hottest city found by
+    find_extreme_location) from appearing in charts when the question is really
+    comparing specific named cities.
+    """
+    metrics_with_explicit = {
+        r["metric_id"]
+        for r in series_results
+        if r.get("_source") == "explicit" and "metric_id" in r
+    }
+    if not metrics_with_explicit:
+        return series_results
+    return [
+        r for r in series_results
+        if r.get("_source") != "auto" or r.get("metric_id") not in metrics_with_explicit
+    ]
+
+
 def _build_chart_payloads(series_results: list[dict], tile_store: Any) -> list[dict]:
     """Build chart payload(s) from accumulated get_metric_series results.
 
@@ -200,6 +361,7 @@ def _build_chart_payloads(series_results: list[dict], tile_store: Any) -> list[d
     Each chart has the shape:
       {"title": str, "unit": str, "series": [{"label": str, "x": [...], "y": [...]}]}
     """
+    series_results = _filter_series_results(series_results)
     if not series_results:
         return []
 
@@ -228,6 +390,62 @@ def _build_chart_payloads(series_results: list[dict], tile_store: Any) -> list[d
             if "role" in r:
                 series_entry["role"] = r["role"]
             series.append(series_entry)
+
+        # If a yearly series has fewer than 3 data points, re-fetch with an
+        # extended range so the chart renders a proper curve rather than a dot.
+        all_x_ints = sorted({xi for s in series for xi in s["x"] if isinstance(xi, int)})
+        if 0 < len(all_x_ints) < 3:
+            axis = tile_store.axis(metric_id)
+            valid_min: int | None = None
+            valid_max: int | None = None
+            if axis:
+                try:
+                    valid_min = int(axis[0])
+                    valid_max = int(axis[-1])
+                except (ValueError, TypeError):
+                    pass
+            target: set[int] = set(all_x_ints)
+            while len(target) < 3:
+                lo, hi = min(target), max(target)
+                can_before = valid_min is None or lo - 1 >= valid_min
+                can_after = valid_max is None or hi + 1 <= valid_max
+                if not can_before and not can_after:
+                    break
+                if can_before:
+                    target.add(lo - 1)
+                if len(target) < 3 and can_after:
+                    target.add(hi + 1)
+            new_start, new_end = min(target), max(target)
+            spec = tile_store.metrics.get(metric_id, {})
+            new_series = []
+            for r, s in zip(results, series):
+                if r.get("role") == "trend":
+                    new_series.append(s)
+                    continue
+                lat, lon = r.get("lat"), r.get("lon")
+                if lat is None or lon is None:
+                    new_series.append(s)
+                    continue
+                extended = _tools._get_metric_series(
+                    lat=lat, lon=lon, metric_id=metric_id, tile_store=tile_store,
+                    start_year=new_start, end_year=new_end,
+                )
+                if "error" in extended or "data" not in extended:
+                    new_series.append(s)
+                    continue
+                if temperature_unit == "F" and spec.get("unit") == "C":
+                    is_delta = _tools._is_delta_metric(spec)
+                    extended["data"] = [
+                        {**entry, "value": _tools._convert_temp(entry["value"], spec, is_delta=is_delta, target="F")}
+                        for entry in extended["data"]
+                    ]
+                new_x = [entry["year"] for entry in extended["data"]]
+                new_y = [entry.get("value") for entry in extended["data"]]
+                new_entry: dict = {"label": s["label"], "x": new_x, "y": new_y}
+                if "role" in s:
+                    new_entry["role"] = s["role"]
+                new_series.append(new_entry)
+            series = new_series
 
         # Build title from raw (non-trend) locations only, deduplicated
         seen_locs: set[str] = set()
@@ -277,9 +495,19 @@ def _is_quota_exhausted(exc: Exception) -> bool:
     return False
 
 
+def _is_context_too_large(exc: Exception) -> bool:
+    """Return True if the exception signals that the request is too large for the model."""
+    if getattr(exc, "status_code", None) == 413:
+        return True
+    msg = str(exc).lower()
+    return "request too large" in msg or "please reduce your message size" in msg
+
+
 def _is_tpm_error(exc: Exception) -> bool:
     """Return True if the exception is a per-minute rate limit (retryable by waiting).
     Excludes 'request too large' errors which can't be fixed by waiting."""
+    if _is_context_too_large(exc):
+        return False
     msg = str(exc).lower()
     return ("tokens per minute" in msg or " tpm" in msg) and "try again in" in msg
 
@@ -303,11 +531,12 @@ TOOL_SCHEMAS = [
             "description": (
                 "Find the location(s) with the highest or lowest value of a climate metric. "
                 "Use for questions like 'which city is the hottest?', 'top 10 warmest large cities', "
-                "'hottest capital', 'warmest city in France'. "
+                "'hottest capital', 'warmest city in France', 'warmest cities in South America'. "
                 "Returns a single result when limit=1, or a ranked list when limit>1. "
                 "Use min_population to restrict to large cities (e.g. 1000000 for megacities). "
                 "Use capital_only=true to restrict to national capital cities. "
-                "Use country to restrict to a specific country (full English name, e.g. 'France')."
+                "Use country to restrict to a specific country (full English name, e.g. 'France'). "
+                "Use continent to restrict to an entire continent instead of querying per-country."
             ),
             "parameters": {
                 "type": "object",
@@ -342,7 +571,17 @@ TOOL_SCHEMAS = [
                     },
                     "country": {
                         "type": "string",
-                        "description": "Restrict to cities in this country (full English name, e.g. 'France').",
+                        "description": "Restrict to cities in this country (full English name, e.g. 'France'). Takes precedence over continent.",
+                    },
+                    "continent": {
+                        "type": "string",
+                        "description": (
+                            "Restrict to cities on this continent. "
+                            "Accepted values: Africa, Antarctica, Asia, Europe, "
+                            "North America, Oceania, South America. "
+                            "Also accepts common aliases like 'Latin America', 'Middle East', 'Australasia'. "
+                            "Use this instead of making separate per-country calls when the question covers a whole continent."
+                        ),
                     },
                     "capital_only": {
                         "type": "boolean",
@@ -456,6 +695,11 @@ Rules:
 Never guess or supply your own coordinates.
 - Multiple independent tool calls can be made in a single step. When comparing multiple \
 locations, call get_metric_series for all of them in one parallel step.
+- Be selective with metrics: fetch only what the question requires. For a general \
+temperature overview, t2m_yearly_mean_c alone is sufficient. Only add monthly metrics \
+(t2m_monthly_mean_c, t2m_monthly_max_c, t2m_monthly_min_c) if the user explicitly asks \
+about seasonal patterns, monthly variation, or temperature range. Never call multiple \
+overlapping temperature metrics unless each one is specifically needed.
 - When the question asks for a specific year or time range, always pass start_year and \
 end_year to get_metric_series so the result is focused. For example, to get the 2020 \
 value, pass start_year=2020, end_year=2020. Only omit year bounds when you need the full \
@@ -479,6 +723,9 @@ does not fully answer the question, stop calling tools and give the best answer 
 from what you have, clearly stating what data is and is not available in our dataset.
 - Never mention tool names, function names, or raw JSON in your final response. \
 Present findings as natural language only.
+- When a tool returns fewer results than requested (e.g. find_extreme_location returns 3 \
+cities instead of 5), report only those results — never invent additional cities or values \
+to pad the list.
 - Round all temperatures to one decimal place (e.g. {temp_example}). \
 Round trend slopes to two decimal places (e.g. {trend_example}).
 - Use markdown formatting in your final text response only (never inside tool arguments): \
@@ -490,9 +737,9 @@ A data point covers a geographic area, not a precise city. Prefer phrasing like 
 Tokyo area" rather than "in Tokyo specifically".
 
 Two-tier answers: for questions about why something is happening, you may draw on \
-general climate science knowledge — but clearly label it: "Beyond what our dataset shows, \
-climate science suggests..." and hedge appropriately. Never state general knowledge with \
-the same certainty as a tool result.
+general climate science knowledge — but clearly label it with an equivalent phrase in the \
+user's language (e.g. in English: "Beyond what our dataset shows, climate science suggests...") \
+and hedge appropriately. Never state general knowledge with the same certainty as a tool result.
 
 Data availability: if the tool returns an error saying the requested time period is not \
 available, retry with the most recent available period.
@@ -649,6 +896,7 @@ class ChatOrchestrator:
                 end_year=_int_or_none(args.get("end_year")),
                 month_filter=args.get("month_filter"),
                 country=args.get("country"),
+                continent=args.get("continent"),
                 capital_only=bool(args.get("capital_only", False)),
                 min_population=int(args.get("min_population", 0)),
                 limit=int(args.get("limit", 1)),
@@ -711,6 +959,38 @@ class ChatOrchestrator:
                 step_model_ms = 0  # new step — reset accumulator
                 step_usage = {}
             try:
+                # Pre-flight token estimate: chars / 4 is a standard approximation.
+                # Include tool schemas in the estimate since they count against the limit.
+                if tier.max_request_tokens is not None:
+                    messages_chars = sum(
+                        len(json.dumps(m)) for m in messages
+                    )
+                    tools_chars = sum(len(json.dumps(t)) for t in TOOL_SCHEMAS)
+                    estimated_tokens = (messages_chars + tools_chars) // 4
+                    if estimated_tokens > tier.max_request_tokens:
+                        if not events_yielded:
+                            raise _QuotaExhaustedError()
+                        # Mid-conversation: can't fall back, surface a clear error
+                        steps_timing.append({"step": step, "model_ms": 0, "error": True, **step_usage})
+                        total_ms = int((_time.monotonic() - t_start) * 1000)
+                        yield {
+                            "type": "error",
+                            "message": "The conversation has grown too long for this model. Please start a new chat.",
+                            "detail": f"Pre-flight estimate: ~{estimated_tokens:,} tokens exceeds tier limit of {tier.max_request_tokens:,}.",
+                        }
+                        yield {
+                            "type": "done",
+                            "session_id": session_id,
+                            "step_count": step,
+                            "tools_called": tools_called,
+                            "tier": tier.name,
+                            "model": tier.model,
+                            "total_ms": total_ms,
+                            "steps_timing": steps_timing,
+                            "locations": locations,
+                        }
+                        return
+
                 model_t0 = _time.monotonic()
                 stream = tier.client.chat.completions.create(
                     model=tier.model,
@@ -760,9 +1040,12 @@ class ChatOrchestrator:
                 # Always accumulate model latency, even for failed calls
                 step_model_ms += int((_time.monotonic() - model_t0) * 1000)
 
-                # Quota exhaustion on the very first call (no events sent yet) →
-                # raise so the caller can fall through to the next tier silently.
-                if not events_yielded and _is_quota_exhausted(exc):
+                # Quota exhaustion or request-too-large on the very first call
+                # (no events sent yet) → raise so the caller can fall through to
+                # the next tier silently.
+                if not events_yielded and (
+                    _is_quota_exhausted(exc) or _is_context_too_large(exc)
+                ):
                     raise _QuotaExhaustedError() from exc
 
                 error_body = getattr(exc, "body", {}) or {}
@@ -809,7 +1092,11 @@ class ChatOrchestrator:
                     {"step": step, "model_ms": step_model_ms, "error": True, **step_usage}
                 )
                 total_ms = int((_time.monotonic() - t_start) * 1000)
-                yield {"type": "error", "message": f"API error: {error_msg}"}
+                if _is_context_too_large(exc):
+                    user_msg = "The conversation has grown too long for this model. Please start a new chat."
+                else:
+                    user_msg = f"API error: {error_msg}"
+                yield {"type": "error", "message": user_msg, "detail": error_msg}
                 yield {
                     "type": "done",
                     "session_id": session_id,
@@ -864,6 +1151,7 @@ class ChatOrchestrator:
                         if name == "get_metric_series":
                             parsed_result = json.loads(result)
                             if "error" not in parsed_result and "data" in parsed_result:
+                                parsed_result["_source"] = "explicit"
                                 # Deduplicate by (metric_id, location) — keep the latest call
                                 dedup_key = (parsed_result.get("metric_id"), parsed_result.get("location"))
                                 series_results = [
@@ -890,7 +1178,9 @@ class ChatOrchestrator:
                         {
                             "role": "tool",
                             "tool_call_id": tc["id"],
-                            "content": result,
+                            "content": _compress_series_for_context(
+                                _strip_internal_fields(result)
+                            ),
                         }
                     )
                 tools_ms = int((_time.monotonic() - tools_t0) * 1000)
@@ -902,6 +1192,7 @@ class ChatOrchestrator:
                 steps_timing.append({"step": step, "model_ms": step_model_ms, **step_usage})
                 total_ms = int((_time.monotonic() - t_start) * 1000)
                 answer = streamed_text
+                locations = _supplement_locations_from_answer(answer, locations, self.location_index)
                 if tier.is_degraded:
                     yield {"type": "notice", "text": tier.degraded_notice}
                 yield {"type": "answer", "text": answer}

@@ -137,6 +137,13 @@ function fmtMs(ms: number | null | undefined): string {
   return `${ms}ms`;
 }
 
+function tierColor(tier: string | null): string {
+  if (!tier) return "#888";
+  if (tier.includes("_paid")) return "#b8860b";
+  if (tier.includes("_free")) return "#888";
+  return "#888";
+}
+
 function buildCopyText(s: ChatMessage): string {
   const lines: string[] = [];
 
@@ -665,7 +672,7 @@ function MessageRow({
         </span>
         <span style={{ color: "#888", flexShrink: 0, width: 130, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {s.model_override && <span style={{ color: "#e8a838", marginRight: 4, fontSize: 10 }}>user</span>}
-          {s.tier ?? "—"}{s.model ? ` · ${s.model}` : ""}
+          <span style={{ color: tierColor(s.tier) }}>{s.tier ?? "—"}</span>
         </span>
         <span style={{ color: "#888", flexShrink: 0, width: 50, textAlign: "right" }}>{s.step_count} steps</span>
         <span style={{ color: "#888", flexShrink: 0, width: 44, textAlign: "right" }}>{fmtMs(s.total_ms)}</span>
@@ -688,7 +695,7 @@ function MessageRow({
                 <span key={t} style={{ color: "#555", textDecoration: "line-through" }}>{t}</span>
               ))}
               {s.rejected_tiers?.length > 0 && <span style={{ color: "#444" }}>→</span>}
-              <span style={{ color: "#7ec8e3" }}>{s.tier ?? "—"}</span>
+              <span style={{ color: tierColor(s.tier) }}>{s.tier ?? "—"}</span>
               {s.model && <span style={{ color: "#666" }}>({s.model})</span>}
               {s.model_override && (
                 <span style={{ color: "#e8a838", fontSize: 11 }}>· user-selected</span>

@@ -10,37 +10,52 @@
   width: 52px;
   height: 52px;
   border-radius: 999px;
-  border: none;
-  background: var(--cta, #0000ff);
-  color: #ffffff;
+  border: 1px solid rgba(17, 17, 17, 0.18);
+  background: #ffffff;
+  color: #111111;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 16px rgba(0, 0, 30, 0.25);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   transition:
     background 140ms ease,
+    border-color 140ms ease,
     transform 140ms ease,
     box-shadow 140ms ease;
 }
 
 .chatButton:hover {
-  background: var(--cta-hover, #001dff);
+  background: #f4f4f4;
   transform: scale(1.06);
-  box-shadow: 0 6px 20px rgba(0, 0, 30, 0.32);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
 }
 
 .chatButton:focus-visible {
-  outline: 2px solid var(--cta, #0000ff);
+  outline: 2px solid rgba(17, 17, 17, 0.5);
   outline-offset: 3px;
 }
 
-.chatButtonOpen {
-  background: var(--text-primary, #111827);
+@media (prefers-color-scheme: dark) {
+  .chatButton {
+    background: var(--map-ui-dark-control-bg, #2a2a2a);
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  .chatButton:hover {
+    background: #383838;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  }
+
+  .chatButton:focus-visible {
+    outline-color: rgba(255, 255, 255, 0.5);
+  }
 }
 
-.chatButtonOpen:hover {
-  background: var(--text-primary, #111827);
+.chatButtonOpen {
+  display: none;
 }
 
 .chatButtonIcon {
@@ -60,7 +75,7 @@
 
 .drawer {
   position: fixed;
-  bottom: 84px;
+  bottom: 14px;
   right: 20px;
   z-index: 999;
   width: 360px;
@@ -318,6 +333,27 @@
   max-width: 88%;
 }
 
+/* Tool call status lines */
+
+.toolCalls {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 88%;
+}
+
+.toolCallItem {
+  font-size: 12px;
+  color: var(--muted-text, rgba(17, 17, 17, 0.5));
+  padding: 1px 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .toolCallItem {
+    color: rgba(255, 255, 255, 0.4);
+  }
+}
+
 /* Charts */
 
 .charts {
@@ -357,11 +393,11 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  padding: 2px 5px;
-  font-size: 15px;
+  padding: 4px 6px;
   cursor: pointer;
-  line-height: 1;
-  transition: background 120ms ease, border-color 120ms ease;
+  line-height: 0;
+  color: #333;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .feedbackBtn:hover {
@@ -589,8 +625,5 @@
     bottom: 14px;
     right: 14px;
   }
-
-  .chatButtonOpen {
-    display: none;
-  }
 }
+

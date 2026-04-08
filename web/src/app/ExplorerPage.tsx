@@ -701,7 +701,7 @@ export default function ExplorerPage({
     void loadPanel(item.lat, item.lon, unit, item.geonameid);
   }
 
-  async function handlePick(la: number, lo: number, keepChatLocations = false) {
+  async function handlePick(la: number, lo: number, keepChatLocations = false, openPanel = true) {
     fetch(`${apiBase}/api/events/click`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -713,7 +713,7 @@ export default function ExplorerPage({
     setPicked({ lat: la, lon: lo });
     if (!keepChatLocations) setChatLocations(null);
     setSelectedGeonameidForPanel(null);
-    setPanelOpen(true);
+    if (openPanel) setPanelOpen(true);
 
     try {
       const bbox = resp?.location?.panel_valid_bbox;
@@ -1456,8 +1456,8 @@ export default function ExplorerPage({
           unit={unit}
           devMode={debugMode}
           debugMode={debugMode}
-          onLocations={(locs) => setChatLocations(locs)}
-          onPickLocation={(la, lo) => void handlePick(la, lo, true)}
+          onLocations={(locs) => setChatLocations(locs && locs.length > 0 ? [...locs] : null)}
+          onPickLocation={(la, lo) => void handlePick(la, lo, true, false)}
         />
       )}
     </main>

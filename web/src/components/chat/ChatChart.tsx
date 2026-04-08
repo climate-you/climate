@@ -34,14 +34,14 @@ type ChatChartProps = {
 
 const CHART_HEIGHT = 200;
 
-// Distinct colours for multi-series charts, readable in both light and dark mode
+// Bauhaus colours: primaries first, then secondaries
 const MULTI_SERIES_COLORS = [
-  "#e05c3a", // red-orange
-  "#3a7de0", // blue
-  "#2ab06f", // green
-  "#c45ecb", // purple
-  "#e0ac3a", // amber
-  "#3ab8d4", // teal
+  "#0000FF", // blue
+  "#FF0000", // red
+  "#FFCC00", // yellow
+  "#000000", // black
+  "#FF6600", // orange
+  "#007700", // green
 ];
 
 // ---------------------------------------------------------------------------
@@ -200,31 +200,50 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
           data: [
             {
               type: "min",
-              itemStyle: { color: "#3a7de0" },
+              itemStyle: { color: "#0000FF" },
               label: {
                 show: true,
                 position: "bottom" as const,
                 formatter: (p: { value: number }) =>
                   `${p.value.toFixed(1)}°${temperatureUnit}`,
                 fontSize: 10,
-                color: "#3a7de0",
+                color: "#0000FF",
               },
             },
             {
               type: "max",
-              itemStyle: { color: "#e05c3a" },
+              itemStyle: { color: "#FF0000" },
               label: {
                 show: true,
                 position: "top" as const,
                 formatter: (p: { value: number }) =>
                   `${p.value.toFixed(1)}°${temperatureUnit}`,
                 fontSize: 10,
-                color: "#e05c3a",
+                color: "#FF0000",
               },
             },
           ],
         } };
       });
+    }
+
+    // Force symbols visible when series have ≤1 real data point — a line needs
+    // ≥2 points to render, so the dot is the only visual indicator.
+    if (Array.isArray(option.series)) {
+      const maxRawPoints = Math.max(
+        0,
+        ...chart.series
+          .filter((s) => s.role !== "trend")
+          .map((s) => s.y.filter((v) => v !== null).length),
+      );
+      if (maxRawPoints <= 1) {
+        option.series = option.series.map((s) => {
+          const echartsS = s as { id?: string };
+          if (typeof echartsS.id === "string" && echartsS.id.endsWith(":trend"))
+            return s;
+          return { ...s, showSymbol: true, symbolSize: 8 };
+        });
+      }
     }
 
     chartRef.current.setOption(option, {

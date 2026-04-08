@@ -12,6 +12,71 @@ from typing import Any
 
 import numpy as np
 
+# ---------------------------------------------------------------------------
+# Continent → country-code mapping (GeoNames continent codes)
+# ---------------------------------------------------------------------------
+
+# Maps canonical continent names (lower-cased) to ISO 3166-1 alpha-2 country codes.
+_CONTINENT_TO_CC: dict[str, frozenset[str]] = {
+    "africa": frozenset({
+        "AO", "BF", "BI", "BJ", "BW", "CD", "CF", "CG", "CI", "CM", "CV",
+        "DJ", "DZ", "EG", "EH", "ER", "ET", "GA", "GH", "GM", "GN", "GQ",
+        "GW", "KE", "KM", "LR", "LS", "LY", "MA", "MG", "ML", "MR", "MU",
+        "MW", "MZ", "NA", "NE", "NG", "RE", "RW", "SC", "SD", "SH", "SL",
+        "SN", "SO", "SS", "ST", "SZ", "TD", "TG", "TN", "TZ", "UG", "YT",
+        "ZA", "ZM", "ZW",
+    }),
+    "antarctica": frozenset({"AQ", "BV", "GS", "HM", "TF"}),
+    "asia": frozenset({
+        "AE", "AF", "AM", "AZ", "BD", "BH", "BN", "BT", "CC", "CN", "CX",
+        "CY", "GE", "HK", "ID", "IL", "IN", "IO", "IQ", "IR", "JO", "JP",
+        "KG", "KH", "KP", "KR", "KW", "KZ", "LA", "LB", "LK", "MM", "MN",
+        "MO", "MV", "MY", "NP", "OM", "PH", "PK", "PS", "QA", "SA", "SG",
+        "SY", "TH", "TJ", "TL", "TM", "TR", "TW", "UZ", "VN", "YE",
+    }),
+    "europe": frozenset({
+        "AD", "AL", "AT", "BA", "BE", "BG", "BY", "CH", "CZ", "DE", "DK",
+        "EE", "ES", "FI", "FO", "FR", "GB", "GG", "GI", "GR", "HR", "HU",
+        "IE", "IM", "IS", "IT", "JE", "LI", "LT", "LU", "LV", "MC", "MD",
+        "ME", "MK", "MT", "NL", "NO", "PL", "PT", "RO", "RS", "RU", "SE",
+        "SI", "SJ", "SK", "SM", "UA", "VA", "XK",
+    }),
+    "north america": frozenset({
+        "AG", "AI", "AW", "BB", "BL", "BM", "BS", "BZ", "CA", "CR", "CU",
+        "DM", "DO", "GD", "GL", "GP", "GT", "HN", "HT", "JM", "KN", "KY",
+        "LC", "MF", "MQ", "MS", "MX", "NI", "PA", "PM", "PR", "SV", "TC",
+        "TT", "US", "VC", "VG", "VI",
+    }),
+    "oceania": frozenset({
+        "AS", "AU", "CK", "FJ", "FM", "GU", "KI", "MH", "MP", "NC", "NF",
+        "NR", "NU", "NZ", "PF", "PG", "PW", "SB", "TK", "TO", "TV", "UM",
+        "VU", "WF", "WS",
+    }),
+    "south america": frozenset({
+        "AR", "BO", "BR", "CL", "CO", "EC", "FK", "GF", "GY", "PE", "PY",
+        "SR", "UY", "VE",
+    }),
+}
+
+# Common aliases → canonical key in _CONTINENT_TO_CC
+_CONTINENT_ALIASES: dict[str, str] = {
+    "southern america": "south america",
+    "latin america": "south america",
+    "central america": "north america",
+    "caribbean": "north america",
+    "middle east": "asia",
+    "australasia": "oceania",
+    "australia": "oceania",
+    "pacific": "oceania",
+}
+
+
+def _resolve_continent(name: str) -> frozenset[str] | None:
+    """Return the set of country codes for the given continent name, or None if unknown."""
+    key = name.strip().casefold()
+    key = _CONTINENT_ALIASES.get(key, key)
+    return _CONTINENT_TO_CC.get(key)
+
 from climate_api.store.location_index import LocationIndex
 from climate_api.store.tile_data_store import TileDataStore
 
@@ -160,6 +225,25 @@ def _get_metric_series(
         pairs = [(y, float(v)) for y, v in zip(years, vec)]
         available_min, available_max = years[0], years[-1]
 
+        # Expand a narrow year range to at least 3 years so charts render a
+        # curve rather than a dot.  Only applies when both bounds are set and
+        # the range covers fewer than 3 distinct years.  Alternates extending
+        # end then start so the result stays centred (e.g. 2024 → 2023-2025).
+        if start_year is not None and end_year is not None:
+            extend_end = True
+            while end_year - start_year < 2:
+                if extend_end and end_year + 1 <= available_max:
+                    end_year += 1
+                elif not extend_end and start_year - 1 >= available_min:
+                    start_year -= 1
+                elif end_year + 1 <= available_max:
+                    end_year += 1
+                elif start_year - 1 >= available_min:
+                    start_year -= 1
+                else:
+                    break
+                extend_end = not extend_end
+
         if start_year is not None:
             pairs = [(y, v) for y, v in pairs if y >= start_year]
         if end_year is not None:
@@ -233,6 +317,7 @@ def find_extreme_location(
     end_year: int | None = None,
     month_filter: list[int] | None = None,
     country: str | None = None,
+    continent: str | None = None,
     capital_only: bool = False,
     min_population: int = 0,
     limit: int = 1,
@@ -265,6 +350,19 @@ def find_extreme_location(
         if country_code is None:
             return {"error": f"Country not recognised: '{country}'. Use the full English country name."}
 
+    # Resolve continent filter
+    continent_codes: frozenset[str] | None = None
+    if continent:
+        continent_codes = _resolve_continent(continent)
+        if continent_codes is None:
+            return {
+                "error": (
+                    f"Continent not recognised: '{continent}'. "
+                    "Use one of: Africa, Antarctica, Asia, Europe, "
+                    "North America, Oceania, South America."
+                )
+            }
+
     effective_min_pop = max(min_population, 1000)
     candidates = location_index.iter_all(
         min_population=effective_min_pop,
@@ -272,6 +370,8 @@ def find_extreme_location(
     )
     if country_code:
         candidates = [c for c in candidates if c.country_code == country_code]
+    elif continent_codes:
+        candidates = [c for c in candidates if c.country_code in continent_codes]
 
     if not candidates:
         return {"error": "No locations match the given filters."}
@@ -333,6 +433,7 @@ def find_extreme_location(
         score, year_of_extreme, city = top[0]
         result: dict = {
             "nearest_city": city.label,
+            "alt_names": city.alt_names,
             "lat": city.lat,
             "lon": city.lon,
             "value": _convert_temp(round(score, 3), spec, is_delta=is_delta, target=temperature_unit),
@@ -346,6 +447,7 @@ def find_extreme_location(
             {
                 "rank": i + 1,
                 "nearest_city": city.label,
+                "alt_names": city.alt_names,
                 "lat": city.lat,
                 "lon": city.lon,
                 "value": _convert_temp(round(score, 3), spec, is_delta=is_delta, target=temperature_unit),
