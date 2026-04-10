@@ -1091,6 +1091,7 @@ export default function ExplorerPage({
           autoRotate={coldOpenAutoRotate}
           chatLocations={chatLocations}
           onPickChatMarker={(la, lo) => void handlePick(la, lo, true)}
+          backgroundImageUrl="/bg.jpg"
         />
         {activeLayerLegend ? (
           <aside

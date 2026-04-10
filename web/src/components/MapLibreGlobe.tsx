@@ -88,6 +88,7 @@ type Props = {
   autoRotate?: boolean;
   chatLocations?: Array<{ label: string; rank?: number; lat: number; lon: number }> | null;
   onPickChatMarker?: (lat: number, lon: number) => void;
+  backgroundImageUrl?: string;
 };
 
 const initialView = {
@@ -344,6 +345,7 @@ export default function MapLibreGlobe({
   autoRotate = false,
   chatLocations = null,
   onPickChatMarker,
+  backgroundImageUrl,
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -367,6 +369,8 @@ export default function MapLibreGlobe({
   const textureVariantOverrideRef = useRef(textureVariantOverride);
   const onTextureDebugInfoChangeRef = useRef(onTextureDebugInfoChange);
   const autoRotateRef = useRef(autoRotate);
+  const backgroundImageUrlRef = useRef(backgroundImageUrl);
+  const applyGlobeBackgroundRef = useRef<(() => void) | null>(null);
   const maxTextureSizeRef = useRef<number | null>(null);
   const textureBackdropRef = useRef<string>(BACKDROP_WHITE);
   const styleReadyRef = useRef(false);
@@ -446,6 +450,11 @@ export default function MapLibreGlobe({
   }, [autoRotate]);
 
   useEffect(() => {
+    backgroundImageUrlRef.current = backgroundImageUrl;
+    applyGlobeBackgroundRef.current?.();
+  }, [backgroundImageUrl]);
+
+  useEffect(() => {
     textureBackdropRef.current = textureBackdrop;
   }, [textureBackdrop]);
 
@@ -479,6 +488,26 @@ export default function MapLibreGlobe({
       map.setProjection({ type: "globe" });
       setBackdropColor(map, BACKDROP_BLUE);
     }
+
+    function applyGlobeBackground() {
+      const url = backgroundImageUrlRef.current;
+      const container = map.getContainer();
+      const canvas = map.getCanvas();
+      if (url) {
+        container.style.backgroundImage = `url('${url}')`;
+        container.style.backgroundSize = "cover";
+        container.style.backgroundPosition = "center";
+        container.style.backgroundColor = "transparent";
+        // The WebGL canvas has transparent pixels outside the globe sphere.
+        // Setting backgroundColor to transparent lets the container image show through.
+        canvas.style.backgroundColor = "transparent";
+      } else {
+        container.style.backgroundImage = "";
+        container.style.backgroundColor = BACKDROP_BLUE;
+        canvas.style.backgroundColor = BACKDROP_BLUE;
+      }
+    }
+    applyGlobeBackgroundRef.current = applyGlobeBackground;
 
     function applyTextureLayer() {
       const selected = layerOptionsRef.current.find(
@@ -982,9 +1011,11 @@ export default function MapLibreGlobe({
     map.on("style.load", applyTextureLayer);
     map.on("style.load", ensureHillshadeLayer);
     map.on("style.load", applyDebugBboxLayer);
+    map.on("style.load", applyGlobeBackground);
     map.on("load", applyMapSettings);
     map.on("load", applyTextureLayer);
     map.on("load", applyDebugBboxLayer);
+    map.on("load", applyGlobeBackground);
     if (showControlsRef.current) {
       map.addControl(createHomeControl(), "top-left");
       map.addControl(new maplibregl.NavigationControl(), "top-left");
@@ -1048,6 +1079,7 @@ export default function MapLibreGlobe({
       markerRef.current = null;
       layerControlRef.current = null;
       styleReadyRef.current = false;
+      applyGlobeBackgroundRef.current = null;
       onTextureDebugInfoChangeRef.current?.(null);
       map.remove();
       mapRef.current = null;
