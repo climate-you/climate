@@ -24,7 +24,13 @@ from climate.datasets.products.era5 import (
     build_daily_stats_request,
 )
 from climate.datasets.sources.cds import retrieve
-from climate.packager.maps import package_maps
+from climate.packager.maps import (
+    package_maps,
+    load_series_grid_from_metric,
+    compute_trend_slope_per_decade,
+    _compute_blended_preindustrial_values,
+    _load_scalar_grid_from_metric,
+)
 from climate.packager.tiles import normalize_missing_value, write_axis_json
 from climate.registry.layers import (
     DEFAULT_LAYERS_PATH,
@@ -2108,6 +2114,96 @@ def _copy_sparse_risk_aux_mask_if_needed(
     print(f"DONE: wrote sparse-risk aux mask: {dst}")
 
 
+def _package_derived_metrics(
+    *,
+    manifest: dict[str, Any],
+    out_root: Path,
+    resume: bool = False,
+    debug: bool = False,
+) -> None:
+    """Package all tiled derived metrics whose inputs are already written to out_root."""
+    series_root = out_root
+
+    for metric_id, spec in manifest.items():
+        if metric_id == "version":
+            continue
+        source = spec.get("source", {})
+        storage = spec.get("storage", {})
+        if source.get("type") != "derived":
+            continue
+        if not storage.get("tiled", True):
+            continue
+        if spec.get("materialize") not in (None, "on_packager"):
+            continue
+
+        steps = source.get("steps", [])
+        if not steps:
+            raise ValueError(f"Derived metric {metric_id} has no steps")
+        step = steps[0]
+        fn = step if isinstance(step, str) else step.get("fn", "")
+        params = {} if isinstance(step, str) else step.get("params", {})
+
+        dtype = np.dtype(spec.get("dtype", "float32"))
+        missing = spec.get("missing", "nan")
+        compression = storage.get("compression")
+        label_year = int(params.get("label_year", 2025))
+
+        print(f"[derived] packaging metric={metric_id} fn={fn} label_year={label_year}")
+
+        if fn == "trend_slope_per_decade":
+            inputs = source.get("inputs", [])
+            if len(inputs) != 1:
+                raise ValueError(f"{metric_id}: trend_slope_per_decade requires exactly 1 input")
+            input_id = inputs[0]
+            input_spec = manifest[input_id]
+            series, grid, axis = load_series_grid_from_metric(
+                series_root=series_root, metric_id=input_id, metric_spec=input_spec
+            )
+            scalar = compute_trend_slope_per_decade(series, axis)
+            scalar_grid = scalar[:, :, np.newaxis]  # (nlat, nlon, 1)
+
+        elif fn == "blended_preindustrial_anomaly":
+            inputs = source.get("inputs", [])
+            if len(inputs) != 2:
+                raise ValueError(f"{metric_id}: blended_preindustrial_anomaly requires exactly 2 inputs")
+            reducer = {
+                "recent_start_year": params["recent_start_year"],
+                "recent_end_year": params["recent_end_year"],
+                "era5_ref_start_year": params["era5_ref_start_year"],
+                "era5_ref_end_year": params["era5_ref_end_year"],
+                "cmip_offset_metric": inputs[1],
+            }
+            source_metric_id = inputs[0]
+            source_metric_spec = manifest[source_metric_id]
+            scalar, grid, _ = _compute_blended_preindustrial_values(
+                series_root=series_root,
+                source_metric=source_metric_id,
+                source_metric_spec=source_metric_spec,
+                reducer=reducer,
+                metrics_manifest=manifest,
+            )
+            scalar_grid = scalar[:, :, np.newaxis]  # (nlat, nlon, 1)
+
+        else:
+            print(f"[derived] skip metric={metric_id} fn={fn} reason=unsupported derivation fn")
+            continue
+
+        from climate.packager.tiles import write_series_tiles, write_axis_json
+        write_axis_json(series_root, grid, metric_id, "yearly", [label_year])
+        written = write_series_tiles(
+            out_root=series_root,
+            grid=grid,
+            metric_id=metric_id,
+            axis_values=[label_year],
+            series=scalar_grid,
+            dtype=dtype,
+            missing=missing,
+            compression=compression,
+            resume=resume,
+        )
+        print(f"[derived] done metric={metric_id} tiles_written={written}")
+
+
 def package_registry(
     *,
     out_root: Path,
@@ -2286,10 +2382,8 @@ def package_registry(
         source_type = source.get("type")
 
         if source_type == "derived":
-            print(
-                f"[metric] skip metric={metric_id} source=derived "
-                "reason=derived packaging is not supported by packager"
-            )
+            # Tiled derived metrics are packaged after all CDS/ERDDAP metrics
+            # via _package_derived_metrics(); skip here.
             continue
 
         agg = source.get("agg")
@@ -3199,6 +3293,14 @@ def package_registry(
     maps_out_root_eff = (
         Path(maps_out_root) if maps_out_root is not None else out_root.parent / "maps"
     )
+    if not download_only:
+        _package_derived_metrics(
+            manifest=manifest,
+            out_root=out_root,
+            resume=resume,
+            debug=debug,
+        )
+
     if not download_only and not skip_maps and maps_manifest is not None:
         maps_written = package_maps(
             series_root=out_root,

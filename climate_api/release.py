@@ -522,7 +522,31 @@ class ReleaseResolver:
                 metrics_path=metrics_path,
                 datasets_path=datasets_path,
             )
-            # Attach per_metric_roots by rebuilding with the same fields
+            # Attach per_metric_roots and load rankings from artifact dirs
+            _expected = [
+                (_m_id, _agg)
+                for _m_id, _spec in tile_store.metrics.items()
+                for _agg in _spec.get("rankings", [])
+            ]
+            rankings: dict[tuple[str, str], list[dict]] = {}
+            for _m_id, _artifact_root in per_metric_roots.items():
+                _rankings_dir = _artifact_root / "rankings"
+                if not _rankings_dir.is_dir():
+                    continue
+                for _p in sorted(_rankings_dir.glob("*.json")):
+                    try:
+                        _data = json.loads(_p.read_text(encoding="utf-8"))
+                        _cities = _data.get("cities", [])
+                        if _cities:
+                            rankings[(_m_id, _p.stem)] = _cities
+                    except Exception:
+                        pass
+            _missing = [key for key in _expected if key not in rankings]
+            self._logger.info(
+                "Loaded %d/%d metric ranking(s)%s",
+                len(rankings), len(_expected),
+                f"; missing: {', '.join(f'{m}/{a}' for m, a in _missing)}" if _missing else "",
+            )
             tile_store = TileDataStore(
                 tiles_root=tile_store.tiles_root,
                 grid=tile_store.grid,
@@ -530,6 +554,7 @@ class ReleaseResolver:
                 metrics=tile_store.metrics,
                 grids=tile_store.grids,
                 per_metric_roots=per_metric_roots,
+                rankings=rankings,
             )
         else:
             tile_store = TileDataStore.discover(

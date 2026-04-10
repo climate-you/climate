@@ -354,7 +354,7 @@ def _filter_series_results(series_results: list[dict]) -> list[dict]:
     ]
 
 
-def _build_chart_payloads(series_results: list[dict], tile_store: Any) -> list[dict]:
+def _build_chart_payloads(series_results: list[dict], tile_store: Any, temperature_unit: str = "C") -> list[dict]:
     """Build chart payload(s) from accumulated get_metric_series results.
 
     Groups results by metric_id, producing one chart per distinct metric.
@@ -717,6 +717,11 @@ find_extreme_location) to retrieve the full series for that location, then ident
 extremum year from the returned data. find_extreme_location is for finding which city or \
 region has the most extreme value across many locations — not for finding the extreme year \
 at a known location.
+- Prefer pre-derived scalar metrics over on-the-fly aggregation: when a dedicated metric \
+exists for a concept (e.g. t2m_trend_1979_2025_c_per_decade for warming trends, \
+t2m_total_warming_vs_preindustrial_c for total warming since pre-industrial), use it with \
+aggregation="mean" rather than computing trend_slope on t2m_yearly_mean_c. Check metric \
+notes in the catalogue for guidance.
 - You have at most {max_steps} tool-call steps. Use them efficiently — group independent \
 lookups into one parallel step where possible. If after a few steps the available data \
 does not fully answer the question, stop calling tools and give the best answer you can \
@@ -1206,7 +1211,7 @@ class ChatOrchestrator:
                     "total_ms": total_ms,
                     "steps_timing": steps_timing,
                     "locations": locations,
-                    "charts": _build_chart_payloads(series_results, self.tile_store),
+                    "charts": _build_chart_payloads(series_results, self.tile_store, temperature_unit),
                 }
                 return
 

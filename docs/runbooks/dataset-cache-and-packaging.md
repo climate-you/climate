@@ -4,7 +4,8 @@ Use this runbook to materialize release assets from source datasets and registri
 
 What you are building:
 
-- time-series tiles for registry metrics
+- time-series tiles for registry metrics (including derived tiled metrics)
+- precomputed city ranking JSON files for fast extreme-location queries
 - map/layer assets consumed by the web application
 - release-structured outputs under `data/releases/<release>/`
 
@@ -69,9 +70,24 @@ Recommended sequence:
 
 Outputs under:
 
-- `data/releases/dev/series/` (metric tile binaries and time-axis artifacts used by API graph/panel reads)
+- `data/releases/dev/series/` (metric tile binaries, time-axis artifacts, and ranking JSON files)
 - `data/releases/dev/maps/` (generated map/layer assets used by frontend map rendering)
 - `data/releases/dev/registry/` (release-pinned registry snapshots for non-`dev` release workflows)
+
+Series layout within a metric folder:
+
+```
+data/releases/dev/series/<grid_id>/<metric_id>/
+  z64/                          ← tile binaries (r000_c000.bin.zst …)
+  time/yearly.json              ← time axis
+  rankings/                     ← precomputed city rankings (generated separately, see below)
+    mean.json
+    trend_slope.json
+```
+
+### Derived tiled metrics
+
+Metrics declared with `"source": {"type": "derived"}` and `"storage": {"tiled": true}` in `registry/metrics.json` are computed automatically by the packager at the end of each run — no extra flags needed. The packager reads already-materialized input tiles and writes output tiles using the declared derivation function (e.g. OLS warming trend, blended pre-industrial anomaly). Re-run with `--resume` to skip tiles already written.
 
 ## Useful variants
 
@@ -99,6 +115,37 @@ Download-only prefill:
 python scripts/build/packager.py --release dev --all --all-maps --download-only
 ```
 
+## Post-packaging: Precompute city rankings
+
+After the packager completes, run this script to generate precomputed ranking files for all metrics that declare a `rankings` field in `registry/metrics.json`:
+
+```bash
+python scripts/precompute_city_rankings.py --release dev
+```
+
+This scans all cities (population ≥ 1 000) against the tile data and writes one sorted JSON file per declared aggregation under each metric's `rankings/` folder. The API loads these at startup and uses them as a fast path for the chat `find_extreme_location` tool.
+
+To regenerate rankings for a specific metric only:
+
+```bash
+python scripts/precompute_city_rankings.py --release dev --metrics t2m_yearly_mean_c
+```
+
+For non-`dev` releases, pass `--releases-root` and `--metrics-path` explicitly:
+
+```bash
+python scripts/precompute_city_rankings.py \
+  --release 2026_04_10 \
+  --releases-root data/releases \
+  --metrics-path data/releases/2026_04_10/registry/metrics.json
+```
+
+Validate that all expected ranking files are present:
+
+```bash
+python scripts/validate/rankings.py
+```
+
 ## Cache location
 
 Default cache directory:
@@ -117,7 +164,7 @@ python scripts/build/packager.py --release dev --all --all-maps --cache-dir /pat
 
 ### How it works
 
-1. Runs `validate_suite.py` on the local dev release as a pre-flight check
+1. Runs `validate_suite.py` on the local dev release as a pre-flight check (includes `--check-rankings` to verify all declared ranking files are present)
 2. Scans `data/releases/dev/series/` and `data/releases/dev/maps/`
 3. Computes a `tree_sha256` checksum for each metric and map
 4. Fetches the current prod release state via SSH and shows a diff (new / changed / unchanged / removed)

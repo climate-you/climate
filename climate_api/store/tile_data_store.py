@@ -5,7 +5,10 @@ from pathlib import Path
 from typing import Any
 
 import json
+import logging
 import numpy as np
+
+logger = logging.getLogger("uvicorn.error")
 
 from climate.registry.metrics import (
     DEFAULT_DATASETS_PATH,
@@ -71,6 +74,42 @@ def _load_registry_metrics(
     return metrics, grids
 
 
+def _load_rankings(
+    tiles_root: Path,
+    metrics: dict[str, dict[str, Any]],
+) -> dict[tuple[str, str], list[dict[str, Any]]]:
+    """Load all precomputed city ranking JSON files found under tiles_root."""
+    expected = [
+        (metric_id, agg)
+        for metric_id, spec in metrics.items()
+        for agg in spec.get("rankings", [])
+    ]
+    loaded: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for metric_id, spec in metrics.items():
+        grid_id = spec.get("grid_id")
+        if not grid_id:
+            continue
+        rankings_dir = tiles_root / grid_id / metric_id / "rankings"
+        if not rankings_dir.is_dir():
+            continue
+        for p in sorted(rankings_dir.glob("*.json")):
+            aggregation = p.stem  # e.g. "mean", "trend_slope"
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+                cities = data.get("cities", [])
+                if cities:
+                    loaded[(metric_id, aggregation)] = cities
+            except Exception as exc:
+                logger.warning("Failed to load ranking file %s: %s", p, exc)
+    missing = [key for key in expected if key not in loaded]
+    logger.info(
+        "Loaded %d/%d metric ranking(s)%s",
+        len(loaded), len(expected),
+        f"; missing: {', '.join(f'{m}/{a}' for m, a in missing)}" if missing else "",
+    )
+    return loaded
+
+
 @dataclass(frozen=True)
 class TileDataStore:
     """
@@ -91,6 +130,8 @@ class TileDataStore:
     metrics: dict[str, dict[str, Any]] = field(default_factory=dict)
     grids: dict[str, GridSpec] = field(default_factory=dict)
     per_metric_roots: dict[str, Path] = field(default_factory=dict)
+    # Precomputed city rankings: (metric_id, aggregation) -> sorted list of city dicts
+    rankings: dict[tuple[str, str], list[dict[str, Any]]] = field(default_factory=dict)
 
     @classmethod
     def discover(
@@ -116,12 +157,14 @@ class TileDataStore:
         )
         if grids:
             grid = grids.get("global_0p25") or next(iter(grids.values()))
+            rankings = _load_rankings(tiles_root, metrics)
             return cls(
                 tiles_root=tiles_root,
                 grid=grid,
                 start_year_fallback=int(start_year_fallback),
                 metrics=metrics,
                 grids=grids,
+                rankings=rankings,
             )
 
         # pick first grid directory (or prefer global_0p25 if present)

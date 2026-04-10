@@ -63,6 +63,18 @@
         "llm_hidden": {
           "type": "boolean",
           "description": "If true, this metric is excluded from the LLM tool catalogue."
+        },
+        "llm_note": {
+          "type": "string",
+          "description": "Hint shown to the LLM in the metric catalogue to guide tool selection."
+        },
+        "rankings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["mean", "trend_slope", "max", "min"]
+          },
+          "description": "Aggregations for which a precomputed city ranking file should be generated."
         }
       },
       "required": ["time_axis", "dtype", "missing", "source"],

@@ -139,6 +139,11 @@ def main() -> int:
         default=None,
         help="Release id for API e2e tests (defaults to --release).",
     )
+    ap.add_argument(
+        "--check-rankings",
+        action="store_true",
+        help="Check that precomputed ranking files exist for all metrics that declare them.",
+    )
     ap.add_argument("--skip-smoke", action="store_true", help="Skip API smoke checks.")
     ap.add_argument(
         "--smoke-only",
@@ -288,6 +293,19 @@ def main() -> int:
                 ]
             )
         steps.append(tile_cmd)
+    if args.check_rankings:
+        rankings_cmd = [
+            sys.executable,
+            "scripts/validate/rankings.py",
+            "--series-root",
+            str(tiles_root / "series"),
+        ]
+        if effective_registry_release:
+            rankings_cmd.extend([
+                "--metrics",
+                str(args.releases_root / effective_registry_release / "registry" / "metrics.json"),
+            ])
+        steps.append(rankings_cmd)
     if not args.skip_pytest:
         steps.append([sys.executable, "-m", "pytest", "-q"])
     if args.run_api_e2e:

@@ -81,6 +81,30 @@ RATE_LIMIT_ENABLED=0 ./scripts/api_backend.sh
 python scripts/bench_api_endpoints.py --base-url http://127.0.0.1:8001 --release dev --smoke --smoke-only --n 1 --timeout-s 5
 ```
 
+## Ranking files validation
+
+Verify that all precomputed ranking JSON files declared in `registry/metrics.json` are present on disk:
+
+```bash
+python scripts/validate/rankings.py
+```
+
+For a non-`dev` release, pass explicit paths:
+
+```bash
+python scripts/validate/rankings.py \
+  --series-root data/releases/2026_04_10/series \
+  --metrics data/releases/2026_04_10/registry/metrics.json
+```
+
+This check is also available as a flag in the one-pass suite:
+
+```bash
+python scripts/validate_suite.py --release dev --check-rankings --skip-smoke
+```
+
+`publish_release.py` always passes `--check-rankings` in its pre-flight validation, so a missing ranking file will block a production deploy.
+
 ## One-pass validation suite
 
 When running suite smoke checks against a local backend, start the API with rate limiting disabled:

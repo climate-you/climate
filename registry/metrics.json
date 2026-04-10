@@ -8,12 +8,69 @@
     "missing": "nan",
     "domain": "global",
     "time_axis": "yearly",
+    "rankings": ["mean", "trend_slope"],
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_t2m",
       "batch_tiles_override": 4,
       "agg": "annual_mean_from_daily",
       "time_range": { "start_year": 1979, "end_year": 2025 }
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
+  "t2m_trend_1979_2025_c_per_decade": {
+    "id": "t2m_trend_1979_2025_c_per_decade",
+    "title": "2m temperature warming trend 1979–2025",
+    "unit": "C/decade",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_note": "Use this for 'fastest warming', 'most warming since 1979', or 'warming trend' ranking questions. Prefer this over t2m_yearly_mean_c with aggregation=trend_slope.",
+    "rankings": ["mean"],
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_yearly_mean_c"],
+      "steps": [
+        {
+          "fn": "trend_slope_per_decade",
+          "params": { "label_year": 2025 }
+        }
+      ]
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
+  "t2m_total_warming_vs_preindustrial_c": {
+    "id": "t2m_total_warming_vs_preindustrial_c",
+    "title": "2m temperature total warming since pre-industrial (1850–1900) to 2021–2025",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_note": "Use this for 'warmed most since pre-industrial times' or 'total warming since 1850' questions.",
+    "rankings": ["mean"],
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_yearly_mean_c", "t2m_cmip_offset_1979_2000_vs_1850_1900_mean_5models_c"],
+      "steps": [
+        {
+          "fn": "blended_preindustrial_anomaly",
+          "params": {
+            "recent_start_year": 2021,
+            "recent_end_year": 2025,
+            "era5_ref_start_year": 1979,
+            "era5_ref_end_year": 2000,
+            "label_year": 2025
+          }
+        }
+      ]
     },
     "storage": {
       "tiled": true,
@@ -45,6 +102,7 @@
     "missing": "nan",
     "domain": "global",
     "time_axis": "yearly",
+    "llm_hidden": true,
     "source": {
       "type": "cds",
       "dataset_ref": "cmip6_historical_tas_monthly_5model_mean",

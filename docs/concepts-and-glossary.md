@@ -61,6 +61,22 @@ A metric is a computed climate variable published to the release artifacts, for 
 
 In this project, metrics are defined in registries and materialized by the packager into tile-based outputs under `data/releases/<release>/series/`.
 
+#### Derived metrics
+
+A metric can be declared with `"source": {"type": "derived"}` and `"storage": {"tiled": true}` in `registry/metrics.json`. The packager computes these automatically from already-packaged input tiles after the main download loop, without fetching any external data. Supported derivation functions include `trend_slope_per_decade` (OLS warming trend) and `blended_preindustrial_anomaly` (total warming since pre-industrial baseline).
+
+Derived metrics can declare their own `rankings` field (see below) and appear in the LLM metric catalogue like any other metric. An optional `llm_note` string in the metric spec is surfaced as a hint to guide the model toward the right metric for a given question.
+
+#### Rankings
+
+A metric can declare a `rankings` field in `registry/metrics.json` listing one or more aggregations (e.g. `["mean", "trend_slope"]`). After the packager runs, `scripts/precompute_city_rankings.py` computes those aggregations across all cities and writes sorted JSON files:
+
+```
+data/releases/<release>/series/<grid_id>/<metric_id>/rankings/<aggregation>.json
+```
+
+These files are loaded into memory at API startup and used by the `find_extreme_location` chat tool as a fast path (sub-50 ms) for unfiltered global and continent-scoped queries, avoiding the otherwise 30-second live tile scan.
+
 ### Maps and Layers
 
 - A layer is a spatial raster asset (or mask) with visual styling and metadata.

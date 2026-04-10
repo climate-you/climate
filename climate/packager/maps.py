@@ -172,6 +172,88 @@ def _compute_blended_preindustrial_values(
     return values, grid, axis
 
 
+def load_series_grid_from_metric(
+    *,
+    series_root: Path,
+    metric_id: str,
+    metric_spec: dict[str, Any],
+) -> tuple[np.ndarray, GridSpec, list[int]]:
+    """Load the full time-series grid for a metric.
+
+    Returns (arr, grid, axis) where arr has shape (nlat, nlon, nyears).
+    """
+    storage = metric_spec.get("storage", {})
+    compression = storage.get("compression")
+    ext = _compression_ext(compression)
+    tile_size = int(storage.get("tile_size", 64))
+    grid = grid_from_id(str(metric_spec["grid_id"]), tile_size=tile_size)
+    axis = _load_metric_axis(
+        series_root, grid, metric_id, str(metric_spec.get("time_axis", "yearly"))
+    )
+    nyears = len(axis)
+
+    ntr, ntc = tile_counts(grid)
+    out = np.full((grid.nlat, grid.nlon, nyears), np.nan, dtype=np.float64)
+
+    for tr in range(ntr):
+        i_lat0 = tr * grid.tile_size
+        valid_h = min(grid.tile_size, grid.nlat - i_lat0)
+        for tc in range(ntc):
+            i_lon0 = tc * grid.tile_size
+            valid_w = min(grid.tile_size, grid.nlon - i_lon0)
+            p = tile_path(series_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext)
+            if not p.exists():
+                raise FileNotFoundError(f"Missing source tile: {p}")
+            _hdr, arr = read_tile_array(p)
+            tile_series = np.asarray(arr, dtype=np.float64)
+            if tile_series.ndim != 3:
+                raise ValueError(f"Expected 3-D tile for {p}: {tile_series.shape}")
+            out[i_lat0 : i_lat0 + valid_h, i_lon0 : i_lon0 + valid_w, :] = (
+                tile_series[:valid_h, :valid_w, :]
+            )
+
+    return out, grid, axis
+
+
+def compute_trend_slope_per_decade(
+    series: np.ndarray,
+    axis: list[int],
+) -> np.ndarray:
+    """Compute OLS trend slope in units/decade for every grid cell.
+
+    Args:
+        series: shape (nlat, nlon, nyears)
+        axis: list of integer years, length == nyears
+
+    Returns:
+        scalar grid shape (nlat, nlon) with slope in units/decade.
+        Cells where all values are NaN are returned as NaN.
+    """
+    years = np.asarray(axis, dtype=np.float64)
+    decades = (years - years[0]) / 10.0  # normalise to decades
+    n = len(decades)
+    # Precompute OLS components (valid across all cells)
+    xm = decades - decades.mean()
+    xm2 = float((xm**2).sum())
+
+    nlat, nlon, _ = series.shape
+    out = np.full((nlat, nlon), np.nan, dtype=np.float64)
+    flat = series.reshape(-1, n)
+    for i, row in enumerate(flat):
+        if np.all(np.isnan(row)):
+            continue
+        # Use only non-NaN pairs
+        mask = ~np.isnan(row)
+        if mask.sum() < 2:
+            continue
+        xm_i = xm[mask]
+        ym_i = row[mask] - np.nanmean(row)
+        slope = float((xm_i * ym_i).sum() / (xm_i**2).sum())
+        out.flat[i] = slope
+
+    return out
+
+
 def _load_scalar_grid_from_metric(
     *,
     series_root: Path,

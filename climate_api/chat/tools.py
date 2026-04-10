@@ -123,13 +123,16 @@ def list_available_metrics(tile_store: TileDataStore) -> dict:
             continue
         axis = tile_store.axis(metric_id)
         date_range = f"{axis[0]}-{axis[-1]}" if axis else "unknown"
-        metrics.append({
+        entry: dict = {
             "metric_id": metric_id,
             "description": spec.get("title", metric_id),
             "unit": spec.get("unit", "unknown"),
             "available_range": date_range,
             "source": spec.get("source", {}).get("_dataset_ref", "unknown"),
-        })
+        }
+        if spec.get("llm_note"):
+            entry["note"] = spec["llm_note"]
+        metrics.append(entry)
     return {"metrics": metrics}
 
 
@@ -361,6 +364,46 @@ def find_extreme_location(
                     "Use one of: Africa, Antarctica, Asia, Europe, "
                     "North America, Oceania, South America."
                 )
+            }
+
+    # Fast-path: use precomputed ranking if available and no time-range/month filters.
+    if start_year is None and end_year is None and month_filter is None:
+        ranking = tile_store.rankings.get((metric_id, aggregation))
+        if ranking is not None:
+            effective_min_pop = max(min_population, 1000)
+            filtered = [
+                c for c in ranking
+                if c["population"] >= effective_min_pop
+                and (not capital_only or c.get("capital"))
+                and (not country_code or c.get("country") == country_code)
+                and (not continent_codes or c.get("country") in continent_codes)
+            ]
+            if not filtered:
+                return {"error": "No locations match the given filters."}
+            top = filtered[:limit] if extremum == "max" else list(reversed(filtered))[:limit]
+            is_delta = _is_delta_metric(spec) or aggregation == "trend_slope"
+            out_unit = _output_unit(spec, temperature_unit)
+            if limit == 1:
+                c = top[0]
+                return {
+                    "nearest_city": c["name"],
+                    "lat": c["lat"],
+                    "lon": c["lon"],
+                    "value": _convert_temp(round(c["value"], 3), spec, is_delta=is_delta, target=temperature_unit),
+                    "unit": out_unit,
+                }
+            return {
+                "results": [
+                    {
+                        "rank": i + 1,
+                        "nearest_city": c["name"],
+                        "lat": c["lat"],
+                        "lon": c["lon"],
+                        "value": _convert_temp(round(c["value"], 3), spec, is_delta=is_delta, target=temperature_unit),
+                        "unit": out_unit,
+                    }
+                    for i, c in enumerate(top)
+                ]
             }
 
     effective_min_pop = max(min_population, 1000)
