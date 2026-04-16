@@ -97,6 +97,11 @@ export const CHAT_EXAMPLE_QUESTIONS_GENERIC = [
   "What is the coldest major city in the world?",
   "How does the temperature in Dubai compare to 20 years ago?",
   "Which city sees more rain: London or Paris?",
+  "Which continent is warming fastest?",
+  "How has the sea surface temperature in the Indian Ocean changed?",
+  "How are global temperatures changing?",
+  "Is Germany warming faster than France?",
+  "How has the mean temperature in Norway changed in recent years?",
   // Disabled until continent/region averaging is supported:
   // "Is it getting hotter in Europe?",
   // Disabled until precipitation metrics are available:

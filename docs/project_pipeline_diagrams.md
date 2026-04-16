@@ -48,6 +48,7 @@ flowchart LR
   PKGS["<b>Packager script</b><br/>scripts/build/packager.py<br/><sub>(incl. derived tiled metrics pass)</sub>"]
   T["<b>Series tiles</b><br/>data/releases/&lt;release&gt;/series/*"]
   RANK["<b>precompute_city_rankings.py</b><br/><sub>reads tiles → writes rankings/*.json</sub>"]
+  AGG["<b>precompute_regional_aggregates.py</b><br/><sub>reads tiles → writes aggregates/*.json</sub>"]
   MAPS["<b>Map assets</b><br/>data/releases/&lt;release&gt;/maps/*"]
   REG["<b>Release registry snapshots</b><br/>data/releases/&lt;release&gt;/registry/*.json"]
   PKG["<b>Packaged release</b><br/>data/releases/&lt;release&gt;/"]
@@ -59,9 +60,11 @@ flowchart LR
   PKGS --> MAPS
   PKGS --> REG
   T --> RANK
+  T --> AGG
 
   T --> PKG
   RANK --> PKG
+  AGG --> PKG
   MAPS --> PKG
   REG --> PKG
 
@@ -73,7 +76,7 @@ flowchart LR
   classDef app fill:#FFF1E6,stroke:#C7702B,color:#4A2308,stroke-width:1.5px;
 
   class C,T,MAPS,REG,PKG data;
-  class PKGS,RANK,API,WEB app;
+  class PKGS,RANK,AGG,API,WEB app;
 
   linkStyle default stroke:#9FB3C8,stroke-width:2px;
 ```
@@ -155,6 +158,7 @@ flowchart LR
     B3["scripts/build/build_reef_mask.py / build_dataset_mask.py / combine_masks.py"]
     B4["scripts/build/packager.py<br/><sub>(incl. derived tiled metrics pass)</sub>"]
     B5["scripts/precompute_city_rankings.py"]
+    B6["scripts/precompute_regional_aggregates.py"]
     STORE["data/releases/* + data/locations/* + data/cache/*"]
   end
 
@@ -170,7 +174,9 @@ flowchart LR
   B3 --> STORE
   B4 --> B5
   B4 --> STORE
+  B4 --> B6
   B5 --> STORE
+  B6 --> STORE
 
   STORE --> U
   RC <--> U
@@ -181,7 +187,7 @@ flowchart LR
   classDef app fill:#FFF0E6,stroke:#C46F2B,color:#4A2308,stroke-width:1.5px;
 
   class STORE,RC data;
-  class B1,B2,B3,B4,B5,U,N,C app;
+  class B1,B2,B3,B4,B5,B6,U,N,C app;
 
   style OFF fill:#F3F8FF,stroke:#6D9EEB,stroke-width:1.5px;
   style ON fill:#FFF7EF,stroke:#E3A36E,stroke-width:1.5px;

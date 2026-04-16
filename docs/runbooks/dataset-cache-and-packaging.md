@@ -83,6 +83,10 @@ data/releases/dev/series/<grid_id>/<metric_id>/
   rankings/                     ← precomputed city rankings (generated separately, see below)
     mean.json
     trend_slope.json
+  aggregates/                   ← precomputed regional aggregates (generated separately, see below)
+    mean.json
+    min.json
+    max.json
 ```
 
 ### Derived tiled metrics
@@ -144,6 +148,37 @@ Validate that all expected ranking files are present:
 
 ```bash
 python scripts/validate/rankings.py
+```
+
+## Post-packaging: Precompute regional aggregates
+
+After rankings are generated, run this script to generate precomputed regional aggregate time series for all metrics that declare an `aggregates` field in `registry/metrics.json`:
+
+```bash
+python scripts/precompute_regional_aggregates.py --release dev
+```
+
+This loads the full metric tile grid into memory (~200 MB for a global 0.25° metric), builds fractional region weights from the country and ocean masks, then computes area-weighted mean and min/max time series for each country, continent, ocean, and the globe. Outputs one JSON file per aggregation under each metric's `aggregates/` folder. The API loads these at startup and uses them as a fast path for the chat `get_region_metric_series` tool.
+
+To regenerate aggregates for a specific metric only:
+
+```bash
+python scripts/precompute_regional_aggregates.py --release dev --metrics t2m_yearly_mean_c
+```
+
+For non-`dev` releases, pass `--releases-root` and `--metrics-path` explicitly:
+
+```bash
+python scripts/precompute_regional_aggregates.py \
+  --release 2026_04_10 \
+  --releases-root data/releases \
+  --metrics-path data/releases/2026_04_10/registry/metrics.json
+```
+
+Validate that all expected aggregate files are present and structurally correct:
+
+```bash
+python scripts/validate/aggregates.py
 ```
 
 ## Cache location

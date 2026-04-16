@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
-import { buildTemperatureOption } from "@/lib/explorer/chartOptions";
+import { buildComparisonBarOption, buildStackedBarOption, buildTemperatureOption } from "@/lib/explorer/chartOptions";
 import {
   mergeSeries,
   type GraphPayload,
@@ -19,11 +19,13 @@ export type ChatChartSeries = {
   x: (number | string)[];
   y: (number | null)[];
   role?: string;
+  style?: { type?: "line" | "bar"; color?: string; stack?: string };
 };
 
 export type ChatChartPayload = {
   title: string;
   unit: string; // "C" or "F" or other
+  chart_mode?: string; // "temperature_line" | "stacked_bar" | "hot_days_combo"
   series: ChatChartSeries[];
 };
 
@@ -58,19 +60,28 @@ function buildSeriesRecord(
   const record: Record<string, SeriesPayload> = {};
   const rawCount = chart.series.filter((s) => s.role !== "trend").length;
   const multiSeries = rawCount > 1;
+  const isStackedBar = chart.chart_mode === "stacked_bar";
   let rawIndex = 0;
   chart.series.forEach((s) => {
     const isTrend = s.role === "trend";
     const key = seriesKey(s);
+    // For stacked bar, use the per-series style from the payload.
+    // For multi-series line charts, use an explicit per-series colour if provided
+    // (e.g. aggregation-based colours from the backend), otherwise cycle Bauhaus palette.
+    const styleOverride =
+      isStackedBar && s.style
+        ? s.style
+        : multiSeries && !isTrend && !isStackedBar
+          ? { color: s.style?.color ?? MULTI_SERIES_COLORS[rawIndex % MULTI_SERIES_COLORS.length] }
+          : s.style?.color
+            ? { color: s.style.color }
+            : undefined;
     record[key] = {
       x: s.x,
       y: s.y,
       label: s.label,
       ui: { role: isTrend ? "trend" : "raw" },
-      // Assign distinct colours for multi-series (raw only)
-      ...(multiSeries && !isTrend
-        ? { style: { color: MULTI_SERIES_COLORS[rawIndex % MULTI_SERIES_COLORS.length] } }
-        : {}),
+      ...(styleOverride ? { style: styleOverride } : {}),
     };
     if (!isTrend) rawIndex++;
   });
@@ -83,11 +94,27 @@ function buildGraphPayload(chart: ChatChartPayload): GraphPayload {
   const series_keys = chart.series
     .map(seriesKey)
     .filter((k) => (seen.has(k) ? false : (seen.add(k), true)));
+  const chartMode = (
+    chart.chart_mode === "stacked_bar" ||
+    chart.chart_mode === "hot_days_combo" ||
+    chart.chart_mode === "temperature_line" ||
+    chart.chart_mode === "comparison_bar"
+      ? chart.chart_mode
+      : "temperature_line"
+  ) as "temperature_line" | "hot_days_combo" | "stacked_bar" | "comparison_bar";
   return {
     id: "chat-chart",
     title: chart.title,
     series_keys,
-    ui: { chart_mode: "temperature_line" },
+    ui: { chart_mode: chartMode },
+    // Stacked bar charts show days on the y-axis, not temperature.
+    // For other non-temperature units (e.g. "score"), pass the unit as the y-axis label
+    // so buildTemperatureOption doesn't default to "°C".
+    ...(chart.chart_mode === "stacked_bar"
+      ? { y_axis_label: "Number of days" }
+      : chart.unit && !["C", "F"].includes(chart.unit)
+        ? { y_axis_label: chart.unit.charAt(0).toUpperCase() + chart.unit.slice(1) }
+        : {}),
   };
 }
 
@@ -130,21 +157,58 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
   // Build and apply chart option whenever chart data or unit changes
   useEffect(() => {
     if (!chartRef.current) return;
+
+    // Comparison bar: scalar region-vs-region (e.g. Germany vs France trend)
+    if (chart.chart_mode === "comparison_bar" && chart.series.length > 0) {
+      const s = chart.series[0];
+      const xLabels = s.x as string[];
+      const manyBars = xLabels.length >= 5;
+      const option = buildComparisonBarOption({
+        xLabels,
+        yValues: s.y,
+        unit: temperatureUnit === "F" && chart.unit === "C" ? "F" : chart.unit,
+      });
+      (option as Record<string, unknown>).grid = {
+        left: 8,
+        right: 12,
+        top: 28,
+        // Extra bottom room when x labels are rotated to avoid clipping.
+        bottom: manyBars ? 48 : 12,
+        containLabel: true,
+      };
+      chartRef.current.setOption(option, { notMerge: true, lazyUpdate: false });
+      return;
+    }
+
     const seriesRecord = buildSeriesRecord(chart);
     const graph = buildGraphPayload(chart);
     const visibleKeys = graph.series_keys;
     const data = mergeSeries(seriesRecord, visibleKeys);
     const rawCount = chart.series.filter((s) => s.role !== "trend").length;
     const multiSeries = rawCount > 1;
+    const isStackedBar = chart.chart_mode === "stacked_bar";
+    // For non-temperature units (e.g. "score", "days"), pass the raw unit string
+    // so the chart library doesn't format values as °C/°F.
+    const isTemp = ["C", "F"].includes(chart.unit);
+    const effectiveUnit = isTemp ? temperatureUnit : chart.unit;
 
-    const option = buildTemperatureOption({
-      graph,
-      series: seriesRecord,
-      data,
-      visibleKeys,
-      transitionMs: 0,
-      unit: temperatureUnit,
-    });
+    const option = isStackedBar
+      ? buildStackedBarOption({
+          graph,
+          series: seriesRecord,
+          data,
+          visibleKeys,
+          transitionMs: 0,
+          unit: temperatureUnit,
+        })
+      : buildTemperatureOption({
+          graph,
+          series: seriesRecord,
+          data,
+          visibleKeys,
+          transitionMs: 0,
+          unit: effectiveUnit,
+        });
 
     const dark = colorScheme === "dark";
 
@@ -155,10 +219,10 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
     (option as Record<string, unknown>).grid = {
       left: 8,
       right: 12,
-      top: rawCount > 3 ? 72 : multiSeries ? 44 : 28,
+      top: isStackedBar || rawCount > 3 ? 72 : multiSeries ? 44 : 28,
       bottom: 12,
       containLabel: true,
-      show: true,
+      show: !isStackedBar,
       backgroundColor: plotBg,
       borderColor: "transparent",
     };
@@ -166,13 +230,15 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
     if (option.tooltip && !Array.isArray(option.tooltip)) {
       (option.tooltip as Record<string, unknown>).appendToBody = true;
     }
-    // Trend series don't count as a legend-worthy entry; hide legend for single-location charts
-    if (!multiSeries) {
+    // Trend series don't count as a legend-worthy entry; hide legend for single-location charts.
+    // Always show legend for stacked bar charts (colour = category meaning).
+    if (!multiSeries && !isStackedBar) {
       (option as Record<string, unknown>).legend = { show: false };
     }
 
-    // Min/max markPoints — when there is a single raw series (trend doesn't count)
-    if (rawCount === 1 && Array.isArray(option.series)) {
+    // Min/max markPoints — when there is a single raw series (trend doesn't count).
+    // Not applicable to stacked bar charts.
+    if (rawCount === 1 && !isStackedBar && Array.isArray(option.series)) {
       // Expand y-axis bounds so markPoint labels don't overlap axes or legend.
       // Compute from raw series only; pad by at least 1° or 10% of range.
       const allYValues = chart.series
@@ -190,46 +256,53 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
         }
       }
 
-      option.series = option.series.map((s) => {
+      option.series = (option.series as unknown[]).map((s) => {
         // Skip trend series — markPoints only belong on the raw data line
         const echartsS = s as { id?: string };
         if (typeof echartsS.id === "string" && echartsS.id.endsWith(":trend")) return s;
-        return { ...s, markPoint: {
+        return { ...(s as object), markPoint: {
           symbol: "circle",
           symbolSize: 7,
           data: [
             {
-              type: "min",
+              name: "min",
+              type: "min" as const,
               itemStyle: { color: "#0000FF" },
               label: {
                 show: true,
                 position: "bottom" as const,
                 formatter: (p: { value: number }) =>
-                  `${p.value.toFixed(1)}°${temperatureUnit}`,
+                  isTemp
+                    ? `${p.value.toFixed(1)}°${temperatureUnit}`
+                    : `${p.value.toFixed(1)} ${chart.unit}`,
                 fontSize: 10,
                 color: "#0000FF",
               },
             },
             {
-              type: "max",
+              name: "max",
+              type: "max" as const,
               itemStyle: { color: "#FF0000" },
               label: {
                 show: true,
                 position: "top" as const,
                 formatter: (p: { value: number }) =>
-                  `${p.value.toFixed(1)}°${temperatureUnit}`,
+                  isTemp
+                    ? `${p.value.toFixed(1)}°${temperatureUnit}`
+                    : `${p.value.toFixed(1)} ${chart.unit}`,
                 fontSize: 10,
                 color: "#FF0000",
               },
             },
           ],
         } };
-      });
+      }) as typeof option.series;
     }
 
     // Force symbols visible when series have ≤1 real data point — a line needs
     // ≥2 points to render, so the dot is the only visual indicator.
-    if (Array.isArray(option.series)) {
+    // Not applicable to stacked bar charts.
+    if (!isStackedBar && Array.isArray(option.series)) {
       const maxRawPoints = Math.max(
         0,
         ...chart.series

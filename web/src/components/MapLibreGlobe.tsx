@@ -92,6 +92,7 @@ type Props = {
   onTextureDebugInfoChange?: (info: TextureDebugInfo | null) => void;
   autoRotate?: boolean;
   chatLocations?: Array<{ label: string; rank?: number; lat: number; lon: number }> | null;
+  chatFlyToBbox?: [number, number, number, number] | null;
   onPickChatMarker?: (lat: number, lon: number) => void;
   backgroundImageUrl?: string;
 };
@@ -366,6 +367,7 @@ export default function MapLibreGlobe({
   onTextureDebugInfoChange,
   autoRotate = false,
   chatLocations = null,
+  chatFlyToBbox = null,
   onPickChatMarker,
   backgroundImageUrl,
 }: Props) {
@@ -1474,6 +1476,17 @@ export default function MapLibreGlobe({
       );
     }
   }, [chatLocations]);
+
+  // Fly to a continent bounding box when the chat answer is about a single region.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !chatFlyToBbox) return;
+    const [west, south, east, north] = chatFlyToBbox;
+    map.fitBounds(
+      new maplibregl.LngLatBounds([west, south], [east, north]),
+      { padding: chatDrawerPaddingForViewport(map), duration: FOCUS_FLY_DURATION_MS, essential: true },
+    );
+  }, [chatFlyToBbox]);
 
   useEffect(() => {
     const map = mapRef.current;

@@ -133,7 +133,7 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
                     client=Groq(api_key=settings.groq_api_key_free),
                     model=settings.groq_model_fallback,
                     is_degraded=False,
-                    max_request_tokens=5500,
+                    max_request_tokens=8000,
                 )
             )
         if settings.ollama_base_url:
@@ -203,7 +203,7 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
                     client=Groq(api_key=settings.groq_api_key_free),
                     model=settings.groq_model_fallback,
                     is_degraded=True,
-                    max_request_tokens=5500,
+                    max_request_tokens=8000,
                 )
             )
 

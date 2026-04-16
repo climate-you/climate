@@ -77,6 +77,18 @@ data/releases/<release>/series/<grid_id>/<metric_id>/rankings/<aggregation>.json
 
 These files are loaded into memory at API startup and used by the `find_extreme_location` chat tool as a fast path (sub-50 ms) for unfiltered global and continent-scoped queries, avoiding the otherwise 30-second live tile scan.
 
+#### Regional aggregates
+
+A metric can declare an `aggregates` field in `registry/metrics.json` listing one or more aggregations (e.g. `["mean", "min", "max"]`). After city rankings are generated, `scripts/precompute_regional_aggregates.py` computes those aggregations across all countries, continents, oceans, and the globe, and writes one JSON file per aggregation:
+
+```
+data/releases/<release>/series/<grid_id>/<metric_id>/aggregates/<aggregation>.json
+```
+
+Each file contains a time series (not a scalar) for every region — country, continent, ocean, or globe. Weights are derived by sub-cell counting against the 0.05° country and ocean masks, giving fractional coverage per 0.25° metric cell. Country means are area-weighted by `cos(lat)`; min/max are unweighted cell extremes.
+
+These files are loaded into memory at API startup and used by the `get_region_metric_series` chat tool to answer regional questions like "How is temperature changing in France?" or "What is the mean temperature across the Indian Ocean?" in a single lookup.
+
 ### Maps and Layers
 
 - A layer is a spatial raster asset (or mask) with visual styling and metadata.

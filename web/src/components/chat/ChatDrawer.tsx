@@ -47,6 +47,7 @@ type ChatDrawerProps = {
   debugMode?: boolean; // shows per-reply model/tier/timing info
   onLocations?: (locs: ChatLocation[] | null) => void;
   onPickLocation?: (lat: number, lon: number) => void;
+  onFlyToBbox?: (bbox: [number, number, number, number]) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -197,6 +198,7 @@ export default function ChatDrawer({
   debugMode = false,
   onLocations,
   onPickLocation,
+  onFlyToBbox,
 }: ChatDrawerProps) {
   const [open, setOpen] = useState(false);
   const [conversationId, setConversationId] = useState(() => generateUUID());
@@ -434,6 +436,11 @@ export default function ChatDrawer({
             }
             if (locsToShow && locsToShow.length >= 1) {
               onLocations?.(locsToShow);
+            } else if (event.fly_to_bbox) {
+              const raw = event.fly_to_bbox as number[];
+              if (raw.length === 4) {
+                onFlyToBbox?.(raw as [number, number, number, number]);
+              }
             }
             const tier = event.tier as string | null;
             const isExhausted = tier === null && !event.error;
@@ -566,7 +573,7 @@ export default function ChatDrawer({
         ...shuffled.slice(0, 2),
       ];
     }
-    return shuffled.slice(0, 3);
+    return shuffled.slice(0, 5);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, mapContext?.label]);
 

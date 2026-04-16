@@ -144,6 +144,11 @@ def main() -> int:
         action="store_true",
         help="Check that precomputed ranking files exist for all metrics that declare them.",
     )
+    ap.add_argument(
+        "--check-aggregates",
+        action="store_true",
+        help="Check that precomputed regional aggregate files exist for all metrics that declare them.",
+    )
     ap.add_argument("--skip-smoke", action="store_true", help="Skip API smoke checks.")
     ap.add_argument(
         "--smoke-only",
@@ -306,6 +311,19 @@ def main() -> int:
                 str(args.releases_root / effective_registry_release / "registry" / "metrics.json"),
             ])
         steps.append(rankings_cmd)
+    if args.check_aggregates:
+        aggregates_cmd = [
+            sys.executable,
+            "scripts/validate/aggregates.py",
+            "--series-root",
+            str(tiles_root / "series"),
+        ]
+        if effective_registry_release:
+            aggregates_cmd.extend([
+                "--metrics",
+                str(args.releases_root / effective_registry_release / "registry" / "metrics.json"),
+            ])
+        steps.append(aggregates_cmd)
     if not args.skip_pytest:
         steps.append([sys.executable, "-m", "pytest", "-q"])
     if args.run_api_e2e:

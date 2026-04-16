@@ -105,6 +105,28 @@ python scripts/validate_suite.py --release dev --check-rankings --skip-smoke
 
 `publish_release.py` always passes `--check-rankings` in its pre-flight validation, so a missing ranking file will block a production deploy.
 
+## Regional aggregate files validation
+
+Verify that all precomputed regional aggregate JSON files declared in `registry/metrics.json` are present and structurally correct (non-empty regions, time-axis length matches value count):
+
+```bash
+python scripts/validate/aggregates.py
+```
+
+For a non-`dev` release, pass explicit paths:
+
+```bash
+python scripts/validate/aggregates.py \
+  --series-root data/releases/2026_04_10/series \
+  --metrics data/releases/2026_04_10/registry/metrics.json
+```
+
+This check is also available as a flag in the one-pass suite:
+
+```bash
+python scripts/validate_suite.py --release dev --check-aggregates --skip-smoke
+```
+
 ## One-pass validation suite
 
 When running suite smoke checks against a local backend, start the API with rate limiting disabled:

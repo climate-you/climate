@@ -60,7 +60,7 @@ By default, when `--write-index` is enabled, marine polygons are read from Natur
 By default, when `--write-country-mask` is enabled, country polygons are downloaded from Natural Earth (50m). You can override with:
 
 - `--country-input` (local GeoJSON/Shapefile/zip)
-- `--country-mask-deg` (grid resolution in degrees, default `0.1`)
+- `--country-mask-deg` (grid resolution in degrees, default `0.05`)
 - `--country-cache-dir`
 - `--country-code-field`
 

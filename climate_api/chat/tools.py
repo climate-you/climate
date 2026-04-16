@@ -16,66 +16,9 @@ import numpy as np
 # Continent → country-code mapping (GeoNames continent codes)
 # ---------------------------------------------------------------------------
 
-# Maps canonical continent names (lower-cased) to ISO 3166-1 alpha-2 country codes.
-_CONTINENT_TO_CC: dict[str, frozenset[str]] = {
-    "africa": frozenset({
-        "AO", "BF", "BI", "BJ", "BW", "CD", "CF", "CG", "CI", "CM", "CV",
-        "DJ", "DZ", "EG", "EH", "ER", "ET", "GA", "GH", "GM", "GN", "GQ",
-        "GW", "KE", "KM", "LR", "LS", "LY", "MA", "MG", "ML", "MR", "MU",
-        "MW", "MZ", "NA", "NE", "NG", "RE", "RW", "SC", "SD", "SH", "SL",
-        "SN", "SO", "SS", "ST", "SZ", "TD", "TG", "TN", "TZ", "UG", "YT",
-        "ZA", "ZM", "ZW",
-    }),
-    "antarctica": frozenset({"AQ", "BV", "GS", "HM", "TF"}),
-    "asia": frozenset({
-        "AE", "AF", "AM", "AZ", "BD", "BH", "BN", "BT", "CC", "CN", "CX",
-        "CY", "GE", "HK", "ID", "IL", "IN", "IO", "IQ", "IR", "JO", "JP",
-        "KG", "KH", "KP", "KR", "KW", "KZ", "LA", "LB", "LK", "MM", "MN",
-        "MO", "MV", "MY", "NP", "OM", "PH", "PK", "PS", "QA", "SA", "SG",
-        "SY", "TH", "TJ", "TL", "TM", "TR", "TW", "UZ", "VN", "YE",
-    }),
-    "europe": frozenset({
-        "AD", "AL", "AT", "BA", "BE", "BG", "BY", "CH", "CZ", "DE", "DK",
-        "EE", "ES", "FI", "FO", "FR", "GB", "GG", "GI", "GR", "HR", "HU",
-        "IE", "IM", "IS", "IT", "JE", "LI", "LT", "LU", "LV", "MC", "MD",
-        "ME", "MK", "MT", "NL", "NO", "PL", "PT", "RO", "RS", "RU", "SE",
-        "SI", "SJ", "SK", "SM", "UA", "VA", "XK",
-    }),
-    "north america": frozenset({
-        "AG", "AI", "AW", "BB", "BL", "BM", "BS", "BZ", "CA", "CR", "CU",
-        "DM", "DO", "GD", "GL", "GP", "GT", "HN", "HT", "JM", "KN", "KY",
-        "LC", "MF", "MQ", "MS", "MX", "NI", "PA", "PM", "PR", "SV", "TC",
-        "TT", "US", "VC", "VG", "VI",
-    }),
-    "oceania": frozenset({
-        "AS", "AU", "CK", "FJ", "FM", "GU", "KI", "MH", "MP", "NC", "NF",
-        "NR", "NU", "NZ", "PF", "PG", "PW", "SB", "TK", "TO", "TV", "UM",
-        "VU", "WF", "WS",
-    }),
-    "south america": frozenset({
-        "AR", "BO", "BR", "CL", "CO", "EC", "FK", "GF", "GY", "PE", "PY",
-        "SR", "UY", "VE",
-    }),
-}
-
-# Common aliases → canonical key in _CONTINENT_TO_CC
-_CONTINENT_ALIASES: dict[str, str] = {
-    "southern america": "south america",
-    "latin america": "south america",
-    "central america": "north america",
-    "caribbean": "north america",
-    "middle east": "asia",
-    "australasia": "oceania",
-    "australia": "oceania",
-    "pacific": "oceania",
-}
-
-
-def _resolve_continent(name: str) -> frozenset[str] | None:
-    """Return the set of country codes for the given continent name, or None if unknown."""
-    key = name.strip().casefold()
-    key = _CONTINENT_ALIASES.get(key, key)
-    return _CONTINENT_TO_CC.get(key)
+from climate.geo.continents import CONTINENT_TO_CC as _CONTINENT_TO_CC
+from climate.geo.continents import CONTINENT_ALIASES as _CONTINENT_ALIASES
+from climate.geo.continents import resolve_continent as _resolve_continent
 
 from climate_api.store.location_index import LocationIndex
 from climate_api.store.tile_data_store import TileDataStore
@@ -148,6 +91,58 @@ def resolve_location(name: str, location_index: LocationIndex) -> dict:
         return {"error": f"Location not found: '{name}'"}
     h = hits[0]
     return {"lat": h.lat, "lon": h.lon, "label": h.label, "country": h.country_code}
+
+
+def _resolve_region_id(
+    region_id: str,
+    tile_store: TileDataStore,
+    metric_id: str,
+    aggregation: str,
+) -> str | None:
+    """
+    Try to resolve a human-readable region name or region_id to the canonical
+    region_id key as stored in the aggregate data.
+
+    Accepts:
+    - Direct region_id: "country:FR", "continent:europe", "ocean:indian_ocean", "globe"
+    - Country name: "France" → "country:FR"
+    - Continent name: "Europe" → "continent:europe"
+    - Ocean name: "Indian Ocean" → "ocean:indian_ocean"
+    """
+    agg_data = tile_store.aggregates.get((metric_id, aggregation))
+    if agg_data is None:
+        return None
+    regions = agg_data.get("regions", {})
+
+    # Direct lookup
+    if region_id in regions:
+        return region_id
+
+    # Normalise for fuzzy lookup
+    norm = region_id.strip().casefold()
+
+    # Try "globe" alias
+    if norm in ("global", "worldwide", "world", "globe"):
+        if "globe" in regions:
+            return "globe"
+
+    # Try continent slug: "north america" → "continent:north_america"
+    slug = norm.replace(" ", "_")
+    for prefix in ("continent:", "country:", "ocean:"):
+        candidate = f"{prefix}{slug}"
+        if candidate in regions:
+            return candidate
+    # Also try upper case for country codes (e.g. "fr" → "country:FR")
+    candidate_upper = f"country:{norm.upper()}"
+    if candidate_upper in regions:
+        return candidate_upper
+
+    # Scan region names for a case-insensitive match
+    for rid, info in regions.items():
+        if info.get("name", "").casefold() == norm:
+            return rid
+
+    return None
 
 
 def _get_metric_series(
@@ -570,5 +565,112 @@ def find_similar_locations(
                 "delta": _convert_temp(round(delta, 3), spec, is_delta=True, target=temperature_unit),
             }
             for delta, mean, city in scored[:limit]
+        ],
+    }
+
+
+def get_region_metric_series(
+    region_id: str,
+    metric_id: str,
+    aggregation: str,
+    tile_store: TileDataStore,
+    start_year: int | None = None,
+    end_year: int | None = None,
+    temperature_unit: str = "C",
+) -> dict:
+    """
+    Return the precomputed time series of a climate metric aggregated over a
+    country, continent, ocean, or the whole globe.
+
+    region_id: "country:FR", "continent:europe", "ocean:indian_ocean", "globe",
+               or a human-readable name like "France", "Europe", "Indian Ocean".
+    aggregation: "mean" (area-weighted), "min", or "max" across the region's cells.
+    """
+    spec = tile_store.metrics.get(metric_id)
+    if spec is None:
+        return {"error": f"Unknown metric_id: '{metric_id}'."}
+    if aggregation not in ("mean", "min", "max"):
+        return {"error": f"Unknown aggregation: '{aggregation}'. Use: mean, min, or max."}
+
+    agg_data = tile_store.aggregates.get((metric_id, aggregation))
+    if agg_data is None:
+        supported = sorted(
+            {agg for (m, agg) in tile_store.aggregates if m == metric_id}
+        )
+        if supported:
+            return {
+                "error": (
+                    f"Regional aggregates for '{metric_id}' with aggregation '{aggregation}' "
+                    f"are not available. Supported aggregations: {supported}."
+                )
+            }
+        return {
+            "error": (
+                f"Regional aggregates are not available for metric '{metric_id}'. "
+                f"Use get_metric_series for a specific location instead."
+            )
+        }
+
+    # Resolve region_id (accept human-readable names)
+    resolved = _resolve_region_id(region_id, tile_store, metric_id, aggregation)
+    if resolved is None:
+        available_types = sorted({
+            info["type"]
+            for info in agg_data["regions"].values()
+        })
+        return {
+            "error": (
+                f"Region not found: '{region_id}'. "
+                f"Available region types: {available_types}. "
+                "For countries use ISO 3166-1 alpha-2 code or full English name "
+                "(e.g. 'country:FR' or 'France'). "
+                "For continents: africa, antarctica, asia, europe, north_america, oceania, south_america. "
+                "For oceans use the natural name (e.g. 'ocean:indian_ocean' or 'Indian Ocean'). "
+                "For global use 'globe'."
+            )
+        }
+
+    region_info = agg_data["regions"][resolved]
+    time_axis = agg_data["time_axis"]
+    values = region_info["values"]
+
+    # Apply year filter
+    if start_year is not None or end_year is not None:
+        filtered = [
+            (y, v)
+            for y, v in zip(time_axis, values)
+            if (start_year is None or int(y) >= start_year)
+            and (end_year is None or int(y) <= end_year)
+        ]
+        if filtered:
+            time_axis, values = zip(*filtered)
+            time_axis = list(time_axis)
+            values = list(values)
+        else:
+            time_axis, values = [], []
+
+    # Unit conversion
+    is_delta = _is_delta_metric(spec)
+    out_unit = _output_unit(spec, temperature_unit)
+    if temperature_unit == "F" and spec.get("unit") == "C":
+        values = [
+            _convert_temp(v, spec, is_delta=is_delta, target="F") if v is not None else None
+            for v in values
+        ]
+
+    region_name = region_info["name"]
+    return {
+        "region_id": resolved,
+        "region_name": region_name,
+        # "location" mirrors get_metric_series so chart builders can use the same field
+        "location": region_name,
+        "region_type": region_info["type"],
+        "metric_id": metric_id,
+        "aggregation": aggregation,
+        "unit": out_unit,
+        "cell_count": region_info["cell_count"],
+        "data": [
+            {"year": y, "value": v}
+            for y, v in zip(time_axis, values)
         ],
     }

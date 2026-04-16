@@ -9,7 +9,8 @@ Event types yielded by ChatOrchestrator.run():
   {"type": "done",       "session_id": "...", "step_count": N, "tools_called": [...], "tier": "...",
                          "model": "...", "rejected_tiers": [...], "model_override": "...|null",
                          "total_ms": N, "steps_timing": [{"step": N, "model_ms": N, "tools_ms": N}, ...],
-                         "charts": [{"title": "...", "unit": "...", "series": [{"label": "...", "x": [...], "y": [...]}]}]}
+                         "charts": [{"title": "...", "unit": "...", "series": [{"label": "...", "x": [...], "y": [...]}]}],
+                         "fly_to_bbox": [west, south, east, north] | absent}
   {"type": "error",      "message": "..."}
 
 Provider tiers are tried in order. If a tier's API call returns a daily-token-quota error
@@ -358,8 +359,12 @@ def _build_chart_payloads(series_results: list[dict], tile_store: Any, temperatu
     """Build chart payload(s) from accumulated get_metric_series results.
 
     Groups results by metric_id, producing one chart per distinct metric.
+    Metrics that share a chart_group in the registry are merged into a single
+    combined chart (e.g. the three DHW risk-day metrics become one stacked bar).
+
     Each chart has the shape:
-      {"title": str, "unit": str, "series": [{"label": str, "x": [...], "y": [...]}]}
+      {"title": str, "unit": str, "series": [{"label": str, "x": [...], "y": [...]}],
+       "chart_mode": str}   # chart_mode omitted when "temperature_line"
     """
     series_results = _filter_series_results(series_results)
     if not series_results:
@@ -369,15 +374,127 @@ def _build_chart_payloads(series_results: list[dict], tile_store: Any, temperatu
     for r in series_results:
         groups.setdefault(r["metric_id"], []).append(r)
 
-    charts = []
+    # --- Phase 1: Build merged charts for chart_group metrics ---
+    # chart_group_map: (group_id, location) → [(metric_id, result, cg_spec)]
+    chart_group_map: dict[tuple[str, str], list[tuple[str, dict, dict]]] = {}
+    for metric_id, results in groups.items():
+        spec = tile_store.metrics.get(metric_id, {})
+        cg = spec.get("chart_group")
+        if not cg:
+            continue
+        group_id = cg["id"]
+        for r in results:
+            loc = r.get("location", "")
+            key = (group_id, loc)
+            chart_group_map.setdefault(key, []).append((metric_id, r, cg))
+
+    # Track (metric_id, location) pairs consumed by a merged chart group
+    consumed: set[tuple[str, str]] = set()
+    charts: list[dict] = []
+
+    # Pre-build a map of all chart_group siblings from the registry
+    # group_id → [(metric_id, cg_spec)] sorted by order
+    _registry_groups: dict[str, list[tuple[str, dict]]] = {}
+    for mid, spec in tile_store.metrics.items():
+        cg = spec.get("chart_group")
+        if cg:
+            _registry_groups.setdefault(cg["id"], []).append((mid, cg))
+    for siblings in _registry_groups.values():
+        siblings.sort(key=lambda t: t[1].get("order", 0))
+
+    for (group_id, loc), entries in chart_group_map.items():
+        # Deduplicate by metric_id, keeping first occurrence
+        seen_metrics: set[str] = set()
+        unique: list[tuple[str, dict, dict]] = []
+        for e in entries:
+            if e[0] not in seen_metrics:
+                seen_metrics.add(e[0])
+                unique.append(e)
+
+        # If fewer siblings than the registry defines, auto-fetch the missing ones
+        # so the combined chart always shows the full breakdown.
+        all_siblings = _registry_groups.get(group_id, [])
+        if len(unique) < len(all_siblings) and unique:
+            first_result = unique[0][1]
+            lat, lon = first_result.get("lat"), first_result.get("lon")
+            if lat is not None and lon is not None:
+                # Match the year range already fetched
+                years_fetched = [d["year"] for d in first_result.get("data", []) if "year" in d]
+                sy = min(years_fetched) if years_fetched else None
+                ey = max(years_fetched) if years_fetched else None
+                for sib_mid, sib_cg in all_siblings:
+                    if sib_mid in seen_metrics:
+                        continue
+                    sibling = _tools._get_metric_series(
+                        lat=lat, lon=lon, metric_id=sib_mid, tile_store=tile_store,
+                        start_year=sy, end_year=ey,
+                    )
+                    if "error" not in sibling and "data" in sibling:
+                        sibling["location"] = loc
+                        sibling["lat"] = lat
+                        sibling["lon"] = lon
+                        unique.append((sib_mid, sibling, sib_cg))
+                        seen_metrics.add(sib_mid)
+
+        if len(unique) < 2:
+            continue  # need ≥ 2 metrics to warrant a merged chart
+
+        unique.sort(key=lambda t: t[2].get("order", 0))
+        first_cg = unique[0][2]
+        chart_mode = first_cg.get("chart_mode", "stacked_bar")
+        chart_title_base = first_cg.get("chart_title", group_id)
+        location_label = loc.split(",")[0].strip() if loc else ""
+        title = f"{chart_title_base} \u2014 {location_label}" if location_label else chart_title_base
+
+        series: list[dict] = []
+        unit = ""
+        for metric_id, r, cg in unique:
+            consumed.add((metric_id, loc))
+            spec = tile_store.metrics.get(metric_id, {})
+            label = cg.get("label", metric_id)
+            style = cg.get("style", {})
+            x: list = []
+            y: list = []
+            for entry in r.get("data", []):
+                if "month" in entry:
+                    x.append(f"{entry['year']:04d}-{entry['month']:02d}")
+                else:
+                    x.append(entry["year"])
+                y.append(entry.get("value"))
+            series.append({"label": label, "x": x, "y": y, "style": style})
+            unit = r.get("unit", spec.get("unit", unit))
+
+        payload: dict = {"title": title, "unit": unit, "series": series}
+        if chart_mode != "temperature_line":
+            payload["chart_mode"] = chart_mode
+        charts.append(payload)
+
+    # --- Phase 2: Build individual charts for non-consumed metrics ---
     for metric_id, results in groups.items():
         spec = tile_store.metrics.get(metric_id, {})
         metric_title = spec.get("title", metric_id)
 
+        # Skip results already merged into a chart group
+        results = [r for r in results if (metric_id, r.get("location", "")) not in consumed]
+        if not results:
+            continue
+
+        # Detect multi-aggregation on the same region (e.g. min/mean/max for globe).
+        # When all results share the same region_id but differ only in aggregation,
+        # use the aggregation name as the series label and assign fixed Bauhaus colours.
+        _AGG_COLORS = {"min": "#0000FF", "mean": "#000000", "max": "#FF0000"}
+        unique_region_ids = {r.get("region_id") for r in results if r.get("region_id")}
+        unique_aggs = {r.get("aggregation", "mean") for r in results}
+        multi_agg_same_region = len(unique_region_ids) == 1 and len(unique_aggs) > 1
+
         series = []
         for r in results:
-            # Use city name only (drop country) to keep legend labels short
-            label = r.get("location", metric_id).split(",")[0].strip() or metric_id
+            if multi_agg_same_region:
+                agg = r.get("aggregation", "mean")
+                label = agg.capitalize()
+            else:
+                # Use city/region name only (drop country) to keep legend labels short
+                label = r.get("location", metric_id).split(",")[0].strip() or metric_id
             x: list = []
             y: list = []
             for entry in r.get("data", []):
@@ -387,9 +504,46 @@ def _build_chart_payloads(series_results: list[dict], tile_store: Any, temperatu
                     x.append(entry["year"])
                 y.append(entry.get("value"))
             series_entry: dict = {"label": label, "x": x, "y": y}
+            if multi_agg_same_region:
+                agg = r.get("aggregation", "mean")
+                color = _AGG_COLORS.get(agg)
+                if color:
+                    series_entry["style"] = {"color": color}
             if "role" in r:
                 series_entry["role"] = r["role"]
             series.append(series_entry)
+
+        # Single scalar region result: one region, one data point — a lone dot
+        # or bar is not meaningful on its own. Suppress the chart entirely.
+        if (
+            len(series) == 1
+            and len(series[0]["y"]) == 1
+            and any(r.get("region_id") for r in results)
+        ):
+            continue
+
+        # Scalar region comparison: ≥2 region results each with 1 data point
+        # (e.g. "Is Germany warming faster than France?" on a trend metric).
+        # Render as a comparison bar chart with region names on the x-axis.
+        is_scalar_region = (
+            len(series) >= 2
+            and all(len(s["y"]) == 1 for s in series)
+            and any(r.get("region_id") for r in results)
+        )
+        if is_scalar_region:
+            unit = results[0].get("unit", "")
+            comparison_series: dict = {
+                "label": metric_title,
+                "x": [s["label"] for s in series],
+                "y": [s["y"][0] if s["y"] else None for s in series],
+            }
+            charts.append({
+                "title": metric_title,
+                "unit": unit,
+                "series": [comparison_series],
+                "chart_mode": "comparison_bar",
+            })
+            continue
 
         # If a yearly series has fewer than 3 data points, re-fetch with an
         # extended range so the chart renders a proper curve rather than a dot.
@@ -466,6 +620,27 @@ def _build_chart_payloads(series_results: list[dict], tile_store: Any, temperatu
         charts.append({"title": title, "unit": unit, "series": series})
 
     return charts
+
+
+def _compute_fly_to_bbox(series_results: list[dict]) -> list[float] | None:
+    """Return [west, south, east, north] when results contain exactly one continent.
+
+    When a question is about a single continent (e.g. "How is Africa warming?") the
+    map should fly to that continent.  When multiple continents are involved (e.g.
+    "Which continent is warming fastest?") we leave the camera where it is — there
+    is no useful zoom target for the entire globe.
+    """
+    from climate.geo.continents import CONTINENT_BBOXES
+
+    continent_ids = {
+        r["region_id"][len("continent:"):]
+        for r in series_results
+        if r.get("region_id", "").startswith("continent:")
+    }
+    if len(continent_ids) != 1:
+        return None
+    bbox = CONTINENT_BBOXES.get(next(iter(continent_ids)))
+    return list(bbox) if bbox else None
 
 
 def _is_quota_exhausted(exc: Exception) -> bool:
@@ -677,6 +852,56 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_region_metric_series",
+            "description": (
+                "Return the time series of a climate metric aggregated over a country, "
+                "continent, ocean, or the whole globe. Use this when the user asks about "
+                "a metric for a geographic region rather than a specific city or location."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "region_id": {
+                        "type": "string",
+                        "description": (
+                            "The region identifier. Accepted formats: "
+                            "'country:<ISO2>' (e.g. 'country:FR' for France), "
+                            "'continent:<name>' (e.g. 'continent:europe', "
+                            "choices: africa, antarctica, asia, europe, north_america, oceania, south_america), "
+                            "'ocean:<name>' (e.g. 'ocean:indian_ocean', 'ocean:north_atlantic_ocean'), "
+                            "or 'globe' for the global average. "
+                            "Human-readable names like 'France', 'Europe', 'Indian Ocean' are also accepted."
+                        ),
+                    },
+                    "metric_id": {
+                        "type": "string",
+                        "description": "Metric ID from the catalogue.",
+                    },
+                    "aggregation": {
+                        "type": "string",
+                        "enum": ["mean", "min", "max"],
+                        "description": (
+                            "'mean' for the area-weighted mean over all cells in the region "
+                            "(use for typical temperature/trend questions), "
+                            "'min' for the minimum cell value, "
+                            "'max' for the maximum cell value "
+                            "(use min/max when the user asks about range or extremes within the region)."
+                        ),
+                    },
+                    "start_year": {
+                        "description": "First year to include (inclusive). Must be a number, e.g. 2000.",
+                    },
+                    "end_year": {
+                        "description": "Last year to include (inclusive). Must be a number, e.g. 2024.",
+                    },
+                },
+                "required": ["region_id", "metric_id", "aggregation"],
+            },
+        },
+    },
 ]
 
 
@@ -717,11 +942,34 @@ find_extreme_location) to retrieve the full series for that location, then ident
 extremum year from the returned data. find_extreme_location is for finding which city or \
 region has the most extreme value across many locations — not for finding the extreme year \
 at a known location.
+- Use get_region_metric_series when the user asks about a country, continent, ocean, or the \
+whole globe — not a specific city or location. For example: "How is temperature changing in \
+France?" → get_region_metric_series(region_id="country:FR", ...), "mean temperature in \
+Africa" → get_region_metric_series(region_id="continent:africa", ...), "global temperature" \
+→ get_region_metric_series(region_id="globe", ...). Use aggregation="mean" for typical \
+questions; use "min"/"max" only when the user asks about extremes or range across the region.
+- For questions about temperature extremes, spread, or range shifting at a regional or global \
+scale (e.g. "how are global temperature extremes shifting?", "is the temperature range \
+widening across Africa?", "how are the hottest and coldest parts of Europe changing?"), \
+call get_region_metric_series three times in one parallel step: aggregation="min", \
+aggregation="mean", and aggregation="max" on t2m_yearly_mean_c for the relevant region. \
+The min/max give the coldest and hottest grid cells within that region each year. \
+This rule applies to country/continent/ocean/globe questions only. For local questions \
+about a specific city or place, use get_metric_series as usual.
+- Do NOT use get_metric_series for country/continent/ocean/globe questions. get_metric_series \
+always reads a single grid cell; it cannot represent the average for an entire region. \
+Always prefer get_region_metric_series for regional questions.
 - Prefer pre-derived scalar metrics over on-the-fly aggregation: when a dedicated metric \
 exists for a concept (e.g. t2m_trend_1979_2025_c_per_decade for warming trends, \
 t2m_total_warming_vs_preindustrial_c for total warming since pre-industrial), use it with \
 aggregation="mean" rather than computing trend_slope on t2m_yearly_mean_c. Check metric \
 notes in the catalogue for guidance.
+- For comparative questions across continents or oceans (e.g. "Which continent is warming \
+fastest?", "Compare oceans by temperature"), call get_region_metric_series in parallel for \
+each continent/ocean using the appropriate scalar metric (e.g. t2m_trend_1979_2025_c_per_decade). \
+Do NOT use find_extreme_location for region-level comparisons — it only ranks cities. \
+Do NOT fetch full yearly series (t2m_yearly_mean_c) and derive the trend yourself when a \
+pre-computed trend metric exists.
 - You have at most {max_steps} tool-call steps. Use them efficiently — group independent \
 lookups into one parallel step where possible. If after a few steps the available data \
 does not fully answer the question, stop calling tools and give the best answer you can \
@@ -879,7 +1127,7 @@ class ChatOrchestrator:
 
         if name == "get_metric_series":
             result = _tools.get_metric_series(
-                location=str(args["location"]),
+                location=re.sub(r"\*+", "", str(args["location"])).strip(),
                 metric_id=str(args["metric_id"]),
                 tile_store=self.tile_store,
                 location_index=self.location_index,
@@ -914,6 +1162,16 @@ class ChatOrchestrator:
                 tile_store=self.tile_store,
                 location_index=self.location_index,
                 limit=int(args.get("limit", 5)),
+                temperature_unit=temperature_unit,
+            )
+        elif name == "get_region_metric_series":
+            result = _tools.get_region_metric_series(
+                region_id=str(args["region_id"]),
+                metric_id=str(args["metric_id"]),
+                aggregation=str(args["aggregation"]),
+                tile_store=self.tile_store,
+                start_year=_int_or_none(args.get("start_year")),
+                end_year=_int_or_none(args.get("end_year")),
                 temperature_unit=temperature_unit,
             )
         else:
@@ -1164,6 +1422,26 @@ class ChatOrchestrator:
                                     if (r.get("metric_id"), r.get("location")) != dedup_key
                                 ]
                                 series_results.append(parsed_result)
+                        elif name == "get_region_metric_series":
+                            parsed_result = json.loads(result)
+                            if "error" not in parsed_result and "data" in parsed_result:
+                                parsed_result["_source"] = "explicit"
+                                # Deduplicate by (metric_id, region_id, aggregation) — keep the latest call.
+                                # Aggregation is included so min/mean/max on the same region are all retained.
+                                dedup_key = (
+                                    parsed_result.get("metric_id"),
+                                    parsed_result.get("region_id"),
+                                    parsed_result.get("aggregation", "mean"),
+                                )
+                                series_results = [
+                                    r for r in series_results
+                                    if (
+                                        r.get("metric_id"),
+                                        r.get("region_id"),
+                                        r.get("aggregation", "mean"),
+                                    ) != dedup_key
+                                ]
+                                series_results.append(parsed_result)
                         elif name == "find_extreme_location":
                             parsed_result = json.loads(result)
                             if "error" not in parsed_result:
@@ -1201,7 +1479,7 @@ class ChatOrchestrator:
                 if tier.is_degraded:
                     yield {"type": "notice", "text": tier.degraded_notice}
                 yield {"type": "answer", "text": answer}
-                yield {
+                done_event: dict = {
                     "type": "done",
                     "session_id": session_id,
                     "step_count": step,
@@ -1213,6 +1491,13 @@ class ChatOrchestrator:
                     "locations": locations,
                     "charts": _build_chart_payloads(series_results, self.tile_store, temperature_unit),
                 }
+                # Fly to continent bbox when the answer is about a single continent
+                # and there are no city-level pins that already handle camera.
+                if not locations:
+                    fly_bbox = _compute_fly_to_bbox(series_results)
+                    if fly_bbox:
+                        done_event["fly_to_bbox"] = fly_bbox
+                yield done_event
                 return
 
         total_ms = int((_time.monotonic() - t_start) * 1000)

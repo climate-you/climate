@@ -214,6 +214,7 @@ export default function ExplorerPage({
     null,
   );
   const [chatLocations, setChatLocations] = useState<Array<{ label: string; rank?: number; lat: number; lon: number }> | null>(null);
+  const [chatFlyToBbox, setChatFlyToBbox] = useState<[number, number, number, number] | null>(null);
   const [selectedLocation, setSelectedLocation] =
     useState<SelectedLocationMeta | null>(null);
   const [selectedGeonameidForPanel, setSelectedGeonameidForPanel] = useState<
@@ -690,6 +691,7 @@ export default function ExplorerPage({
     setLon(item.lon);
     setPicked({ lat: item.lat, lon: item.lon });
     setChatLocations(null);
+    setChatFlyToBbox(null);
     setSelectedGeonameidForPanel(item.geonameid);
     setSelectedLocation({
       geonameid: item.geonameid,
@@ -711,7 +713,7 @@ export default function ExplorerPage({
     setLat(la);
     setLon(lo);
     setPicked({ lat: la, lon: lo });
-    if (!keepChatLocations) setChatLocations(null);
+    if (!keepChatLocations) { setChatLocations(null); setChatFlyToBbox(null); }
     setSelectedGeonameidForPanel(null);
     if (openPanel) setPanelOpen(true);
 
@@ -1085,11 +1087,13 @@ export default function ExplorerPage({
             setPanelOpen(false);
             setPicked(null);
             setChatLocations(null);
+            setChatFlyToBbox(null);
             setSelectedLocation(null);
           }}
           enablePick={!introActive}
           autoRotate={coldOpenAutoRotate}
           chatLocations={chatLocations}
+          chatFlyToBbox={chatFlyToBbox}
           onPickChatMarker={(la, lo) => void handlePick(la, lo, true)}
           backgroundImageUrl="/bg.jpg"
         />
@@ -1456,8 +1460,9 @@ export default function ExplorerPage({
           unit={unit}
           devMode={debugMode}
           debugMode={debugMode}
-          onLocations={(locs) => setChatLocations(locs && locs.length > 0 ? [...locs] : null)}
+          onLocations={(locs) => { setChatLocations(locs && locs.length > 0 ? [...locs] : null); setChatFlyToBbox(null); }}
           onPickLocation={(la, lo) => void handlePick(la, lo, true, false)}
+          onFlyToBbox={(bbox) => { setChatFlyToBbox(bbox); setChatLocations(null); }}
         />
       )}
     </main>

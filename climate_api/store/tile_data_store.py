@@ -110,6 +110,47 @@ def _load_rankings(
     return loaded
 
 
+def _load_aggregates(
+    tiles_root: Path,
+    metrics: dict[str, dict[str, Any]],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Load all precomputed regional aggregate JSON files found under tiles_root.
+
+    Returns a dict keyed by (metric_id, aggregation) → {time_axis, regions}.
+    """
+    expected = [
+        (metric_id, agg)
+        for metric_id, spec in metrics.items()
+        for agg in spec.get("aggregates", [])
+    ]
+    loaded: dict[tuple[str, str], dict[str, Any]] = {}
+    for metric_id, spec in metrics.items():
+        grid_id = spec.get("grid_id")
+        if not grid_id:
+            continue
+        agg_dir = tiles_root / grid_id / metric_id / "aggregates"
+        if not agg_dir.is_dir():
+            continue
+        for p in sorted(agg_dir.glob("*.json")):
+            aggregation = p.stem  # e.g. "mean", "min", "max"
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+                if data.get("regions"):
+                    loaded[(metric_id, aggregation)] = {
+                        "time_axis": data.get("time_axis", []),
+                        "regions": data["regions"],
+                    }
+            except Exception as exc:
+                logger.warning("Failed to load aggregate file %s: %s", p, exc)
+    missing = [key for key in expected if key not in loaded]
+    logger.info(
+        "Loaded %d/%d metric aggregate(s)%s",
+        len(loaded), len(expected),
+        f"; missing: {', '.join(f'{m}/{a}' for m, a in missing)}" if missing else "",
+    )
+    return loaded
+
+
 @dataclass(frozen=True)
 class TileDataStore:
     """
@@ -132,6 +173,8 @@ class TileDataStore:
     per_metric_roots: dict[str, Path] = field(default_factory=dict)
     # Precomputed city rankings: (metric_id, aggregation) -> sorted list of city dicts
     rankings: dict[tuple[str, str], list[dict[str, Any]]] = field(default_factory=dict)
+    # Precomputed regional aggregates: (metric_id, aggregation) -> {time_axis, regions}
+    aggregates: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
 
     @classmethod
     def discover(
@@ -158,6 +201,7 @@ class TileDataStore:
         if grids:
             grid = grids.get("global_0p25") or next(iter(grids.values()))
             rankings = _load_rankings(tiles_root, metrics)
+            aggregates = _load_aggregates(tiles_root, metrics)
             return cls(
                 tiles_root=tiles_root,
                 grid=grid,
@@ -165,6 +209,7 @@ class TileDataStore:
                 metrics=metrics,
                 grids=grids,
                 rankings=rankings,
+                aggregates=aggregates,
             )
 
         # pick first grid directory (or prefer global_0p25 if present)

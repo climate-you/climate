@@ -13,7 +13,7 @@ import {
   type SeriesPayload,
 } from "@/lib/explorer/chartData";
 
-function yAxisTitle(graph: GraphPayload, unit: "C" | "F"): string {
+function yAxisTitle(graph: GraphPayload, unit: string): string {
   const unitLabel = unit === "F" ? "°F" : "°C";
   if (graph.y_axis_label) {
     if (graph.y_axis_label.includes("{unit}")) {
@@ -154,7 +154,7 @@ function trendLegendLabel(
   data: ChartRow[],
   trendKey: string,
   series: Record<string, SeriesPayload>,
-  unit: "C" | "F",
+  unit: string,
   preferShort = false,
 ): string {
   const samples = data
@@ -290,7 +290,8 @@ type BuildOptionArgs = {
   data: ChartRow[];
   visibleKeys: string[];
   transitionMs: number;
-  unit: "C" | "F";
+  /** "C" | "F" for temperature charts; arbitrary unit string for non-temperature charts. */
+  unit: string;
 };
 
 export function buildHotDaysOption({
@@ -712,7 +713,8 @@ export function buildTemperatureOption({
           const label = key
             ? seriesLabel(series, key, { preferShort: isMobile })
             : String(r.seriesName ?? "");
-          return `${label}: ${Number((r.value as unknown[])[1]).toFixed(1)}${unit === "F" ? "°F" : "°C"}`;
+          const unitSuffix = unit === "F" ? "°F" : unit === "C" ? "°C" : ` ${unit}`;
+          return `${label}: ${Number((r.value as unknown[])[1]).toFixed(1)}${unitSuffix}`;
         });
         return [title, ...lines].join("<br/>");
       },
@@ -740,4 +742,103 @@ export function buildTemperatureOption({
     },
     series: chartSeries,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Comparison bar chart (scalar region-vs-region comparisons)
+// ---------------------------------------------------------------------------
+// Input: a single series with x: string[] (region labels) and y: number|null[]
+// Output: a categorical bar chart with per-bar colours.
+export function buildComparisonBarOption({
+  xLabels,
+  yValues,
+  unit,
+}: {
+  xLabels: string[];
+  yValues: (number | null)[];
+  unit: string;
+}): EChartsOption {
+  const theme = chartThemeTokens();
+
+  // Normalise unit for display ("C/decade" → "°C/decade", "C" → "°C", etc.)
+  const unitDisplay =
+    unit === "C" || unit === "°C"
+      ? "°C"
+      : unit === "F" || unit === "°F"
+        ? "°F"
+        : unit.replace(/^C(\/|$)/, "°C$1").replace(/^F(\/|$)/, "°F$1");
+  const isTemp = unit === "C" || unit === "°C" || unit === "F" || unit === "°F";
+  const decimalPlaces = isTemp ? 1 : 2;
+
+  // Start y-axis from 0 when all values are non-negative (standard for bar charts
+  // showing magnitudes like trends or totals). Use auto-scale for mixed-sign data.
+  const numericValues = yValues.filter((v): v is number => v != null);
+  const yMin = numericValues.length > 0 && numericValues.every((v) => v >= 0) ? 0 : undefined;
+
+  // Layout adapts for many bars: rotate x labels, hide per-bar value labels.
+  const manyBars = xLabels.length >= 5;
+
+  return {
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      backgroundColor: theme.tooltipBg,
+      borderColor: theme.tooltipBorder,
+      textStyle: { color: theme.tooltipText, fontSize: 12 },
+      appendToBody: true,
+      formatter: (params: unknown) => {
+        const p = (params as Array<{ name: string; value: number | null; color: string }>)[0];
+        if (p.value == null) return `${p.name}: n/a`;
+        return `${p.name}: <b>${p.value.toFixed(decimalPlaces)} ${unitDisplay}</b>`;
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: xLabels,
+      axisLabel: {
+        color: theme.axisLabelColor,
+        fontSize: manyBars ? 10 : 12,
+        rotate: manyBars ? 30 : 0,
+        overflow: "truncate" as const,
+        width: manyBars ? 64 : 120,
+      },
+      axisLine: { lineStyle: { color: theme.axisLineColor } },
+      splitLine: { show: false },
+    },
+    yAxis: {
+      type: "value",
+      // Show only the number on axis ticks; unit appears in the axis name.
+      axisLabel: {
+        color: theme.axisLabelColor,
+        formatter: (v: number) => formatIntegerOnlyAxisTick(v) || v.toFixed(decimalPlaces),
+      },
+      name: unitDisplay,
+      nameLocation: "end" as const,
+      nameTextStyle: { color: theme.axisLabelColor, fontSize: 10, align: "left" as const },
+      nameGap: 6,
+      splitLine: { lineStyle: { color: theme.splitLineColor } },
+      ...(yMin !== undefined ? { min: yMin } : { scale: true }),
+    },
+    series: [
+      {
+        type: "bar",
+        data: yValues,
+        colorBy: "data",
+        // Hide individual bar labels when there are many bars — the tooltip handles hover.
+        label: manyBars
+          ? { show: false }
+          : {
+              show: true,
+              position: "top",
+              formatter: (params: { value: number | null }) =>
+                params.value != null ? `${params.value.toFixed(decimalPlaces)} ${unitDisplay}` : "",
+              fontSize: 11,
+              color: theme.axisLabelColor,
+            },
+        barMaxWidth: 80,
+      },
+    ],
+    // Bauhaus palette — same order as MULTI_SERIES_COLORS in ChatChart.tsx
+    color: ["#0000FF", "#FF0000", "#FFCC00", "#000000", "#FF6600", "#007700"],
+  } as EChartsOption;
 }

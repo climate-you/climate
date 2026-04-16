@@ -9,6 +9,7 @@
     "domain": "global",
     "time_axis": "yearly",
     "rankings": ["mean", "trend_slope"],
+    "aggregates": ["mean", "min", "max"],
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_t2m",
@@ -31,6 +32,7 @@
     "time_axis": "yearly",
     "llm_note": "Use this for 'fastest warming', 'most warming since 1979', or 'warming trend' ranking questions. Prefer this over t2m_yearly_mean_c with aggregation=trend_slope.",
     "rankings": ["mean"],
+    "aggregates": ["mean"],
     "source": {
       "type": "derived",
       "inputs": ["t2m_yearly_mean_c"],
@@ -56,9 +58,13 @@
     "time_axis": "yearly",
     "llm_note": "Use this for 'warmed most since pre-industrial times' or 'total warming since 1850' questions.",
     "rankings": ["mean"],
+    "aggregates": ["mean"],
     "source": {
       "type": "derived",
-      "inputs": ["t2m_yearly_mean_c", "t2m_cmip_offset_1979_2000_vs_1850_1900_mean_5models_c"],
+      "inputs": [
+        "t2m_yearly_mean_c",
+        "t2m_cmip_offset_1979_2000_vs_1850_1900_mean_5models_c"
+      ],
       "steps": [
         {
           "fn": "blended_preindustrial_anomaly",
@@ -237,6 +243,7 @@
     "missing": "nan",
     "domain": "ocean",
     "time_axis": "yearly",
+    "aggregates": ["mean"],
     "source": {
       "type": "erddap",
       "dataset_ref": "oisst_sst_v21_daily",
@@ -274,6 +281,7 @@
     "missing": "nan",
     "domain": "dataset_mask",
     "time_axis": "yearly",
+    "llm_note": "Always fetch all three DHW risk-day metrics together (no_risk, moderate_risk, severe_risk) for any location query so the chart shows the full breakdown. Data is indexed by nearest city — use a nearby city name, not a reef name.",
     "source": {
       "type": "erddap",
       "dataset_ref": "crw_dhw_daily",
@@ -282,6 +290,15 @@
     "storage": {
       "tiled": true,
       "compression": { "codec": "zstd", "level": 10 }
+    },
+    "chart_group": {
+      "id": "dhw_risk_days",
+      "chart_mode": "stacked_bar",
+      "chart_title": "Coral reef DHW risk days",
+      "label": "No risk (DHW < 4)",
+      "short_label": "No risk",
+      "order": 0,
+      "style": { "type": "bar", "color": "#ccccff", "stack": "dhw_risk_days" }
     }
   },
   "dhw_moderate_risk_days_per_year": {
@@ -292,6 +309,7 @@
     "missing": "nan",
     "domain": "dataset_mask",
     "time_axis": "yearly",
+    "llm_note": "Always fetch all three DHW risk-day metrics together (no_risk, moderate_risk, severe_risk) for any location query so the chart shows the full breakdown. Data is indexed by nearest city — use a nearby city name, not a reef name.",
     "source": {
       "type": "erddap",
       "dataset_ref": "crw_dhw_daily",
@@ -300,6 +318,15 @@
     "storage": {
       "tiled": true,
       "compression": { "codec": "zstd", "level": 10 }
+    },
+    "chart_group": {
+      "id": "dhw_risk_days",
+      "chart_mode": "stacked_bar",
+      "chart_title": "Coral reef DHW risk days",
+      "label": "Moderate risk (4 \u2264 DHW < 8)",
+      "short_label": "Moderate risk",
+      "order": 1,
+      "style": { "type": "bar", "color": "#fdd835", "stack": "dhw_risk_days" }
     }
   },
   "dhw_severe_risk_days_per_year": {
@@ -310,6 +337,7 @@
     "missing": "nan",
     "domain": "dataset_mask",
     "time_axis": "yearly",
+    "llm_note": "Always fetch all three DHW risk-day metrics together (no_risk, moderate_risk, severe_risk) for any location query so the chart shows the full breakdown. Data is indexed by nearest city — use a nearby city name, not a reef name.",
     "source": {
       "type": "erddap",
       "dataset_ref": "crw_dhw_daily",
@@ -318,6 +346,15 @@
     "storage": {
       "tiled": true,
       "compression": { "codec": "zstd", "level": 10 }
+    },
+    "chart_group": {
+      "id": "dhw_risk_days",
+      "chart_mode": "stacked_bar",
+      "chart_title": "Coral reef DHW risk days",
+      "label": "Severe risk (DHW \u2265 8)",
+      "short_label": "Severe risk",
+      "order": 2,
+      "style": { "type": "bar", "color": "#ff0000", "stack": "dhw_risk_days" }
     }
   },
   "dhw_risk_score_per_year": {
@@ -328,6 +365,7 @@
     "missing": "nan",
     "domain": "dataset_mask",
     "time_axis": "yearly",
+    "llm_note": "Combined heat-stress score (weighted sum of risk days). For 'which location has the largest increase in bleaching events', use find_extreme_location with aggregation=trend_slope and extremum=max. Do NOT use get_region_metric_series for this. Data is indexed by nearest city — do not pass reef names.",
     "source": {
       "type": "erddap",
       "dataset_ref": "crw_dhw_daily",

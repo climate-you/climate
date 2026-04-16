@@ -77,6 +77,66 @@ CANNED: dict[str, tuple[str, list[dict], dict | None]] = {
         [{"label": "Dubai", "lat": 25.20, "lon": 55.27}],
         {"metric_id": "t2m_yearly_mean_c"},
     ),
+    "which continent is warming fastest?": (
+        "The continent that is warming the fastest is **Europe**, with a warming trend of "
+        "**[[0.51°C|0.92°F]] per decade**.",
+        [],
+        {
+            "metric_id": "t2m_trend_1979_2025_c_per_decade",
+            "region_ids": [
+                "continent:africa",
+                "continent:antarctica",
+                "continent:asia",
+                "continent:europe",
+                "continent:north america",
+                "continent:south america",
+                "continent:oceania",
+            ],
+        },
+    ),
+    "how has the sea surface temperature in the indian ocean changed?": (
+        "The sea surface temperature in the Indian Ocean has been increasing over the years, "
+        "with a mean temperature of **[[17.3°C|63.1°F]]** in 1982 and **[[18.1°C|64.6°F]]** in 2025.",
+        [],
+        {
+            "metric_id": "sst_yearly_mean_c",
+            "start_year": 1982,
+            "end_year": 2025,
+            "region_ids": ["ocean:indian_ocean"],
+        },
+    ),
+    "how are global temperatures changing?": (
+        "Global mean temperature has been increasing steadily, rising from **[[13.9°C|57.0°F]]** "
+        "in 1979 to **[[15.0°C|59.0°F]]** in 2025 — an increase of **[[1.1°C|2.0°F]]** over 46 years.",
+        [],
+        {
+            "metric_id": "t2m_yearly_mean_c",
+            "start_year": 1979,
+            "end_year": 2025,
+            "region_ids": ["globe"],
+        },
+    ),
+    "how has the mean temperature in norway changed in recent years?": (
+        "The mean temperature in Norway has been increasing in recent years. "
+        "In 2025, the mean temperature was **[[2.6°C|36.7°F]]**, which is higher than "
+        "the mean temperature in 2000, which was **[[1.4°C|34.5°F]]**.",
+        [],
+        {
+            "metric_id": "t2m_yearly_mean_c",
+            "start_year": 2000,
+            "end_year": 2025,
+            "region_ids": ["country:NO"],
+        },
+    ),
+    "is germany warming faster than france?": (
+        "Yes, Germany is warming faster than France. Germany has a warming trend of "
+        "**[[0.50°C|0.90°F]] per decade**, compared to France's **[[0.41°C|0.74°F]] per decade**.",
+        [],
+        {
+            "metric_id": "t2m_trend_1979_2025_c_per_decade",
+            "region_ids": ["country:DE", "country:FR"],
+        },
+    ),
     # Disabled — requires continent/region averaging which is not yet supported:
     # "is it getting hotter in europe?": ("...", [], None),
     # Disabled — requires precipitation metrics which are not yet in the catalogue:
@@ -123,45 +183,65 @@ def build_canned_charts(
     spec = tile_store.metrics.get(metric_id, {})
 
     series_results: list[dict] = []
-    for loc in locations:
-        result = _tools._get_metric_series(
-            lat=loc["lat"],
-            lon=loc["lon"],
-            metric_id=metric_id,
-            tile_store=tile_store,
-            start_year=start_year,
-            end_year=end_year,
-            month_filter=month_filter,
-            aggregate_by_year=aggregate_by_year,
-        )
-        if "error" in result or "data" not in result:
-            continue
-        if temperature_unit == "F" and spec.get("unit") == "C":
-            is_delta = _tools._is_delta_metric(spec)
-            result["data"] = [
-                {**entry, "value": _tools._convert_temp(
-                    entry["value"], spec, is_delta=is_delta, target="F"
-                )}
-                for entry in result["data"]
-            ]
-            result["unit"] = _tools._output_unit(spec, "F")
-        result["location"] = loc["label"]
-        series_results.append(result)
 
-        if show_trend:
-            data_pts = result.get("data", [])
-            years = [d["year"] for d in data_pts]
-            values = [d["value"] for d in data_pts]
-            if len(years) >= 2:
-                coeffs = np.polyfit(years, values, 1)
-                trend_values = [round(float(np.polyval(coeffs, y)), 3) for y in years]
-                series_results.append({
-                    "metric_id": metric_id,
-                    "unit": result.get("unit", ""),
-                    "location": loc["label"],
-                    "role": "trend",
-                    "data": [{"year": y, "value": v} for y, v in zip(years, trend_values)],
-                })
+    region_ids = chart_spec.get("region_ids")
+    if region_ids:
+        # Region-based chart (continent, ocean, globe, country)
+        aggregation = chart_spec.get("aggregation", "mean")
+        for region_id in region_ids:
+            result = _tools.get_region_metric_series(
+                region_id=region_id,
+                metric_id=metric_id,
+                aggregation=aggregation,
+                tile_store=tile_store,
+                start_year=start_year,
+                end_year=end_year,
+                temperature_unit=temperature_unit,
+            )
+            if "error" in result or "data" not in result:
+                continue
+            series_results.append(result)
+    else:
+        # Point-based chart (lat/lon locations)
+        for loc in locations:
+            result = _tools._get_metric_series(
+                lat=loc["lat"],
+                lon=loc["lon"],
+                metric_id=metric_id,
+                tile_store=tile_store,
+                start_year=start_year,
+                end_year=end_year,
+                month_filter=month_filter,
+                aggregate_by_year=aggregate_by_year,
+            )
+            if "error" in result or "data" not in result:
+                continue
+            if temperature_unit == "F" and spec.get("unit") == "C":
+                is_delta = _tools._is_delta_metric(spec)
+                result["data"] = [
+                    {**entry, "value": _tools._convert_temp(
+                        entry["value"], spec, is_delta=is_delta, target="F"
+                    )}
+                    for entry in result["data"]
+                ]
+                result["unit"] = _tools._output_unit(spec, "F")
+            result["location"] = loc["label"]
+            series_results.append(result)
+
+            if show_trend:
+                data_pts = result.get("data", [])
+                years = [d["year"] for d in data_pts]
+                values = [d["value"] for d in data_pts]
+                if len(years) >= 2:
+                    coeffs = np.polyfit(years, values, 1)
+                    trend_values = [round(float(np.polyval(coeffs, y)), 3) for y in years]
+                    series_results.append({
+                        "metric_id": metric_id,
+                        "unit": result.get("unit", ""),
+                        "location": loc["label"],
+                        "role": "trend",
+                        "data": [{"year": y, "value": v} for y, v in zip(years, trend_values)],
+                    })
 
     return _build_chart_payloads(series_results, tile_store)
 

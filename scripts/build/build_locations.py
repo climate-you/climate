@@ -732,7 +732,7 @@ def build_country_mask(
     *,
     output_npz: Path,
     output_codes_json: Path,
-    deg: float = 0.1,
+    deg: float = 0.05,
     cache_dir: Path,
     input_path: Optional[Path] = None,
     code_field: str = COUNTRY_CODE_FIELD,
@@ -794,6 +794,10 @@ def build_country_mask(
             props = feat.get("properties") or {}
             raw_code = str(props.get(code_field) or "").strip().upper()
             # Natural Earth uses "-99" as a sentinel for unassigned ISO codes.
+            # Fall back to ISO_A2_EH (Exceptionally Handled variant) which assigns
+            # correct codes to France (FR), Norway (NO), Kosovo (XK), etc.
+            if not raw_code or raw_code == "-99":
+                raw_code = str(props.get("ISO_A2_EH") or "").strip().upper()
             if not raw_code or raw_code == "-99":
                 continue
             country_id = code_to_id.get(raw_code)
@@ -948,8 +952,8 @@ def main() -> None:
     ap.add_argument(
         "--country-mask-deg",
         type=float,
-        default=0.1,
-        help="Grid resolution in degrees for the country mask (default: 0.1 ≈ 11 km).",
+        default=0.05,
+        help="Grid resolution in degrees for the country mask (default: 0.05 ≈ 5.5 km).",
     )
     ap.add_argument(
         "--country-input",

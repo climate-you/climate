@@ -75,6 +75,67 @@
             "enum": ["mean", "trend_slope", "max", "min"]
           },
           "description": "Aggregations for which a precomputed city ranking file should be generated."
+        },
+        "aggregates": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["mean", "min", "max"]
+          },
+          "description": "Aggregations for which precomputed regional aggregate time series should be generated."
+        },
+        "chart_group": {
+          "type": "object",
+          "description": "Groups related metrics together into a single combined chart (e.g. DHW risk-day stacked bar).",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Shared group identifier; metrics with the same id and location are merged into one chart."
+            },
+            "chart_mode": {
+              "type": "string",
+              "enum": ["stacked_bar", "hot_days_combo", "temperature_line"],
+              "description": "Chart rendering mode for the merged chart."
+            },
+            "chart_title": {
+              "type": "string",
+              "description": "Base title for the merged chart (location is appended automatically)."
+            },
+            "label": {
+              "type": "string",
+              "description": "Series label for this metric within the merged chart."
+            },
+            "short_label": {
+              "type": "string",
+              "description": "Shorter series label for use on mobile viewports."
+            },
+            "order": {
+              "type": "integer",
+              "description": "Sort order of this metric's series within the merged chart (ascending)."
+            },
+            "style": {
+              "type": "object",
+              "description": "Visual style for this series in the merged chart.",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["bar", "line"]
+                },
+                "color": {
+                  "type": "string",
+                  "description": "CSS colour string for this series."
+                },
+                "stack": {
+                  "type": "string",
+                  "description": "ECharts stack group name; series sharing the same stack are stacked."
+                }
+              },
+              "required": ["type"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["id", "chart_mode", "chart_title", "label", "order", "style"],
+          "additionalProperties": false
         }
       },
       "required": ["time_axis", "dtype", "missing", "source"],
