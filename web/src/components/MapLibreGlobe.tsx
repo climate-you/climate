@@ -1117,7 +1117,7 @@ export default function MapLibreGlobe({
     const apply = () => {
       const selected = layerOptions.find((layer) => layer.id === activeLayerId);
       if (!selected) {
-        setBackdropColor(map, BACKDROP_BLUE);
+        applyGlobeBackgroundRef.current?.();
         if (map.getLayer(TEXTURE_LAYER_ID)) {
           map.removeLayer(TEXTURE_LAYER_ID);
         }
@@ -1134,7 +1134,7 @@ export default function MapLibreGlobe({
         textureVariantOverrideRef.current,
       );
       if (!selectedTexture) {
-        setBackdropColor(map, BACKDROP_BLUE);
+        applyGlobeBackgroundRef.current?.();
         if (map.getLayer(TEXTURE_LAYER_ID)) {
           map.removeLayer(TEXTURE_LAYER_ID);
         }
