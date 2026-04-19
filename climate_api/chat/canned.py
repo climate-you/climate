@@ -137,6 +137,12 @@ CANNED: dict[str, tuple[str, list[dict], dict | None]] = {
             "region_ids": ["country:DE", "country:FR"],
         },
     ),
+    "what capital city sees the less rain?": (
+        "The capital city that sees the least rain is **Cairo, Egypt** with an average "
+        "annual rainfall of **26.6 mm**.",
+        [{"label": "Cairo", "lat": 30.06, "lon": 31.24}],
+        {"metric_id": "tp_annual_total_mm"},
+    ),
     # Disabled — requires continent/region averaging which is not yet supported:
     # "is it getting hotter in europe?": ("...", [], None),
     # Disabled — requires precipitation metrics which are not yet in the catalogue:

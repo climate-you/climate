@@ -176,6 +176,10 @@ function trendLegendLabel(
   if (graph.ui?.chart_mode === "hot_days_combo") {
     return `${seriesLabel(series, trendKey, { preferShort })}: ${sign}${perDecade.toFixed(1)} days/decade`;
   }
+  const seriesUnit = series[trendKey]?.unit ?? unit;
+  if (seriesUnit !== "C" && seriesUnit !== "°C" && seriesUnit !== "F" && seriesUnit !== "°F") {
+    return `${seriesLabel(series, trendKey, { preferShort })}: ${sign}${perDecade.toFixed(1)} ${seriesUnit}/decade`;
+  }
   const suffix = `${unit === "F" ? "ºF" : "ºC"}/decade`;
   return `${seriesLabel(series, trendKey, { preferShort })}: ${sign}${perDecade.toFixed(1)}${suffix}`;
 }
@@ -572,12 +576,12 @@ export function buildStackedBarOption({
   };
 }
 
-type BuildTemperatureOptionArgs = BuildOptionArgs & {
+type BuildTimeSeriesOptionArgs = BuildOptionArgs & {
   xMin?: number;
   xMax?: number;
 };
 
-export function buildTemperatureOption({
+export function buildTimeSeriesOption({
   graph,
   series,
   data,
@@ -586,7 +590,7 @@ export function buildTemperatureOption({
   unit,
   xMin,
   xMax,
-}: BuildTemperatureOptionArgs): EChartsOption {
+}: BuildTimeSeriesOptionArgs): EChartsOption {
   const theme = chartThemeTokens();
   const isMobile = isMobileViewport();
   const trendKeys = visibleKeys.filter(
@@ -713,7 +717,8 @@ export function buildTemperatureOption({
           const label = key
             ? seriesLabel(series, key, { preferShort: isMobile })
             : String(r.seriesName ?? "");
-          const unitSuffix = unit === "F" ? "°F" : unit === "C" ? "°C" : ` ${unit}`;
+          const su = (key && series[key]?.unit) ? series[key].unit! : unit;
+          const unitSuffix = su === "F" || su === "°F" ? " °F" : su === "C" || su === "°C" ? " °C" : ` ${su}`;
           return `${label}: ${Number((r.value as unknown[])[1]).toFixed(1)}${unitSuffix}`;
         });
         return [title, ...lines].join("<br/>");

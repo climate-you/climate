@@ -304,6 +304,102 @@
         }
       ]
     },
+    "precipitation": {
+      "title": "Precipitation",
+      "score_map_id": "tp_annual_trend_score",
+      "graphs": [
+        {
+          "id": "tp_annual",
+          "title": "Annual total precipitation",
+          "ui": {
+            "info_text": "Annual total precipitation is derived from daily ERA5 total precipitation, summed into yearly totals for 1979-2025. Source: CDS.",
+            "chart_mode": "temperature_line",
+            "axis_title_mode": "year"
+          },
+          "x_axis_label": "Year",
+          "y_axis_label": "Precipitation (mm)",
+          "source": "CDS ERA5 daily total precipitation (1979-2025), aggregated to yearly sums",
+          "series": [
+            {
+              "key": "tp_yearly_total",
+              "metric": "tp_annual_total_mm",
+              "label": "Annual total",
+              "ui": { "role": "raw" },
+              "unit": "mm",
+              "style": { "type": "line", "color": "#1f77b4" }
+            },
+            {
+              "key": "tp_yearly_total_5y",
+              "metric": "tp_annual_total_mm",
+              "label": "5-year mean",
+              "ui": { "role": "mean" },
+              "unit": "mm",
+              "style": { "type": "line", "color": "#1736ff" },
+              "transform": {
+                "fn": "rolling_mean",
+                "params": { "window": 5, "centered": true }
+              },
+              "annotations": [
+                { "type": "min", "label": "Minimum" },
+                { "type": "max", "label": "Maximum" }
+              ]
+            },
+            {
+              "key": "tp_yearly_trend",
+              "metric": "tp_annual_total_mm",
+              "label": "Trend",
+              "ui": { "role": "trend" },
+              "unit": "mm",
+              "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
+              "transform": { "fn": "linear_trend_line" }
+            }
+          ]
+        },
+        {
+          "id": "tp_cdd",
+          "title": "Consecutive dry days",
+          "ui": {
+            "info_text": "Maximum number of consecutive dry days (daily precipitation < 1 mm) per year for 1979-2025. Source: CDS.",
+            "chart_mode": "hot_days_combo",
+            "axis_title_mode": "year"
+          },
+          "x_axis_label": "Year",
+          "y_axis_label": "Days/year",
+          "source": "CDS ERA5 daily total precipitation (1979-2025)",
+          "series": [
+            {
+              "key": "tp_cdd",
+              "metric": "tp_cdd_per_year",
+              "label": "Max dry spell",
+              "ui": { "role": "raw" },
+              "unit": "days",
+              "style": { "type": "bar", "color": "#f4a582" }
+            },
+            {
+              "key": "tp_cdd_5y",
+              "metric": "tp_cdd_per_year",
+              "label": "5-year mean",
+              "ui": { "role": "mean" },
+              "unit": "days",
+              "style": { "type": "line", "color": "#1736ff" },
+              "transform": {
+                "fn": "rolling_mean",
+                "params": { "window": 5, "centered": true }
+              }
+            },
+            {
+              "key": "tp_cdd_trend",
+              "metric": "tp_cdd_per_year",
+              "label": "Trend",
+              "ui": { "role": "trend" },
+              "unit": "days",
+              "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
+              "transform": { "fn": "linear_trend_line" }
+            }
+          ]
+        }
+      ]
+    },
     "coral_reef_dhw": {
       "title": "Coral Reef Heat Stress",
       "score_map_id": "reef_domain_presence_score",

@@ -81,10 +81,12 @@ from climate.datasets.derive.time_agg import (
     find_time_dim,
     annual_mean_from_monthly,
     annual_mean_from_daily,
+    annual_sum_from_daily,
     monthly_max_from_daily,
     monthly_min_from_daily,
     monthly_mean_from_daily,
     climatology_mean_from_monthly,
+    max_cdd_per_year,
 )
 
 
@@ -792,6 +794,10 @@ def _apply_postprocess(da: xr.DataArray, steps: list[object] | None) -> xr.DataA
 
         if fn == "k_to_c":
             da = da - 273.15
+        elif fn == "m_to_mm":
+            da = da * 1000.0
+        elif fn == "scale":
+            da = da * float(params["factor"])
         else:
             raise ValueError(f"Unsupported postprocess fn: {fn} params={params}")
 
@@ -1012,6 +1018,11 @@ def _agg_map() -> dict[str, callable]:
         "annual_mean_from_monthly": lambda da, _params: annual_mean_from_monthly(da),
         "monthly_mean_from_daily": lambda da, _params: monthly_mean_from_daily(da),
         "annual_mean_from_daily": lambda da, _params: annual_mean_from_daily(da),
+        "annual_sum_from_daily": lambda da, _params: annual_sum_from_daily(da),
+        "max_cdd_per_year": lambda da, params: max_cdd_per_year(
+            da,
+            dry_day_threshold_mm=float((params or {}).get("dry_day_threshold_mm", 1.0)),
+        ),
         "monthly_max_from_daily": lambda da, _params: monthly_max_from_daily(da),
         "monthly_min_from_daily": lambda da, _params: monthly_min_from_daily(da),
         "cmip_multi_model_offset_from_monthly": lambda da, params: _cmip_multi_model_offset_from_monthly(

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
-import { buildComparisonBarOption, buildStackedBarOption, buildTemperatureOption } from "@/lib/explorer/chartOptions";
+import { buildComparisonBarOption, buildStackedBarOption, buildTimeSeriesOption } from "@/lib/explorer/chartOptions";
 import {
   mergeSeries,
   type GraphPayload,
@@ -109,7 +109,7 @@ function buildGraphPayload(chart: ChatChartPayload): GraphPayload {
     ui: { chart_mode: chartMode },
     // Stacked bar charts show days on the y-axis, not temperature.
     // For other non-temperature units (e.g. "score"), pass the unit as the y-axis label
-    // so buildTemperatureOption doesn't default to "°C".
+    // so buildTimeSeriesOption doesn't default to "°C".
     ...(chart.chart_mode === "stacked_bar"
       ? { y_axis_label: "Number of days" }
       : chart.unit && !["C", "F"].includes(chart.unit)
@@ -201,7 +201,7 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
           transitionMs: 0,
           unit: temperatureUnit,
         })
-      : buildTemperatureOption({
+      : buildTimeSeriesOption({
           graph,
           series: seriesRecord,
           data,

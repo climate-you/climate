@@ -235,6 +235,49 @@
       "compression": { "codec": "zstd", "level": 10 }
     }
   },
+  "tp_annual_total_mm": {
+    "id": "tp_annual_total_mm",
+    "title": "Total precipitation yearly sum",
+    "unit": "mm",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "rankings": ["mean", "trend_slope"],
+    "aggregates": ["mean"],
+    "source": {
+      "type": "cds",
+      "dataset_ref": "era5_daily_tp",
+      "batch_tiles_override": 4,
+      "agg": "annual_sum_from_daily",
+      "time_range": { "start_year": 1979, "end_year": 2025 }
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
+  "tp_cdd_per_year": {
+    "id": "tp_cdd_per_year",
+    "title": "Maximum consecutive dry days per year",
+    "unit": "days",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "source": {
+      "type": "cds",
+      "dataset_ref": "era5_daily_tp",
+      "batch_tiles_override": 4,
+      "agg": "max_cdd_per_year",
+      "params": { "dry_day_threshold_mm": 1.0 },
+      "time_range": { "start_year": 1979, "end_year": 2025 }
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
   "sst_yearly_mean_c": {
     "id": "sst_yearly_mean_c",
     "title": "SST yearly mean",

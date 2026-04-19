@@ -833,12 +833,14 @@ def build_panel_tiles_registry(
                 y=vec,
                 transform=series_spec.get("transform"),
             )
-            y = _convert_unit(y, series_spec.get("unit"), unit)
+            series_unit_in = series_spec.get("unit") or ""
+            y = _convert_unit(y, series_unit_in, unit)
+            series_unit_out = unit if series_unit_in.upper() in ("C", "F") else series_unit_in or unit
 
             series_payload[key] = SeriesPayload(
                 x=axis_vals_out,
                 y=_series_to_list(y),
-                unit=unit,
+                unit=series_unit_out,
                 label=series_spec.get("label"),
                 shortLabel=series_spec.get("shortLabel"),
                 ui=series_spec.get("ui"),

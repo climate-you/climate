@@ -96,6 +96,7 @@ export const CHAT_EXAMPLE_QUESTIONS_GENERIC = [
   "Which city has warmed the fastest in the last 50 years?",
   "What is the coldest major city in the world?",
   "How does the temperature in Dubai compare to 20 years ago?",
+  "What capital city sees the less rain?",
   "Which city sees more rain: London or Paris?",
   "Which continent is warming fastest?",
   "How has the sea surface temperature in the Indian Ocean changed?",

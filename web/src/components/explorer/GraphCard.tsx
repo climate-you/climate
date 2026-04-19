@@ -18,7 +18,7 @@ import {
 import {
   buildHotDaysOption,
   buildStackedBarOption,
-  buildTemperatureOption,
+  buildTimeSeriesOption,
   isMobileViewport,
 } from "@/lib/explorer/chartOptions";
 
@@ -229,7 +229,7 @@ export default function GraphCard({
         unit,
       });
     }
-    return buildTemperatureOption({
+    return buildTimeSeriesOption({
       graph,
       series,
       data: useAllVisibleDataForSeries ? allVisibleData : filteredData,
