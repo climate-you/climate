@@ -192,6 +192,7 @@ const GLOBE_BACKGROUNDS = [
   "/bg3.jpg",
   "/bg4.jpg",
   "/bg5.jpg",
+  "/bg6.jpg",
 ];
 function pickGlobeBackground(): string {
   return GLOBE_BACKGROUNDS[
@@ -226,8 +227,15 @@ export default function ExplorerPage({
   const [picked, setPicked] = useState<{ lat: number; lon: number } | null>(
     null,
   );
-  const [chatLocations, setChatLocations] = useState<Array<{ label: string; rank?: number; lat: number; lon: number }> | null>(null);
-  const [chatFlyToBbox, setChatFlyToBbox] = useState<[number, number, number, number] | null>(null);
+  const [chatLocations, setChatLocations] = useState<Array<{
+    label: string;
+    rank?: number;
+    lat: number;
+    lon: number;
+  }> | null>(null);
+  const [chatFlyToBbox, setChatFlyToBbox] = useState<
+    [number, number, number, number] | null
+  >(null);
   const [selectedLocation, setSelectedLocation] =
     useState<SelectedLocationMeta | null>(null);
   const [selectedGeonameidForPanel, setSelectedGeonameidForPanel] = useState<
@@ -418,7 +426,10 @@ export default function ExplorerPage({
     : effectiveTitleActionText;
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("unit") === "F" || defaultTemperatureUnitForLocale() === "F") {
+    if (
+      params.get("unit") === "F" ||
+      defaultTemperatureUnitForLocale() === "F"
+    ) {
       setUnit("F");
     }
   }, []);
@@ -717,7 +728,12 @@ export default function ExplorerPage({
     void loadPanel(item.lat, item.lon, unit, item.geonameid);
   }
 
-  async function handlePick(la: number, lo: number, keepChatLocations = false, openPanel = true) {
+  async function handlePick(
+    la: number,
+    lo: number,
+    keepChatLocations = false,
+    openPanel = true,
+  ) {
     fetch(`${apiBase}/api/events/click`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -727,7 +743,10 @@ export default function ExplorerPage({
     setLat(la);
     setLon(lo);
     setPicked({ lat: la, lon: lo });
-    if (!keepChatLocations) { setChatLocations(null); setChatFlyToBbox(null); }
+    if (!keepChatLocations) {
+      setChatLocations(null);
+      setChatFlyToBbox(null);
+    }
     setSelectedGeonameidForPanel(null);
     if (openPanel) setPanelOpen(true);
 
@@ -1039,11 +1058,23 @@ export default function ExplorerPage({
       if (axis === "y") return;
       if (Math.abs(deltaX) < TOUCH_SWIPE_THRESHOLD_PX) return;
       if (Math.abs(deltaX) <= Math.abs(deltaY)) return;
-      const duration = touchStartTimeRef.current !== null ? Date.now() - touchStartTimeRef.current : 0;
-      if (duration > 0 && Math.abs(deltaX) / duration < TOUCH_SWIPE_MIN_VELOCITY_PX_MS) return;
+      const duration =
+        touchStartTimeRef.current !== null
+          ? Date.now() - touchStartTimeRef.current
+          : 0;
+      if (
+        duration > 0 &&
+        Math.abs(deltaX) / duration < TOUCH_SWIPE_MIN_VELOCITY_PX_MS
+      )
+        return;
       goGraphPage(deltaX < 0 ? 1 : -1);
     },
-    [goGraphPage, TOUCH_CLOSE_PANEL_THRESHOLD_PX, TOUCH_SWIPE_THRESHOLD_PX, TOUCH_SWIPE_MIN_VELOCITY_PX_MS],
+    [
+      goGraphPage,
+      TOUCH_CLOSE_PANEL_THRESHOLD_PX,
+      TOUCH_SWIPE_THRESHOLD_PX,
+      TOUCH_SWIPE_MIN_VELOCITY_PX_MS,
+    ],
   );
 
   const handlePanelTouchCancel = useCallback(() => {
@@ -1475,9 +1506,15 @@ export default function ExplorerPage({
           unit={unit}
           devMode={debugMode}
           debugMode={debugMode}
-          onLocations={(locs) => { setChatLocations(locs && locs.length > 0 ? [...locs] : null); setChatFlyToBbox(null); }}
+          onLocations={(locs) => {
+            setChatLocations(locs && locs.length > 0 ? [...locs] : null);
+            setChatFlyToBbox(null);
+          }}
           onPickLocation={(la, lo) => void handlePick(la, lo, true, false)}
-          onFlyToBbox={(bbox) => { setChatFlyToBbox(bbox); setChatLocations(null); }}
+          onFlyToBbox={(bbox) => {
+            setChatFlyToBbox(bbox);
+            setChatLocations(null);
+          }}
         />
       )}
     </main>
