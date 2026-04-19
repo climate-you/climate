@@ -195,9 +195,12 @@ const GLOBE_BACKGROUNDS = [
   "/bg6.jpg",
 ];
 function pickGlobeBackground(): string {
-  return GLOBE_BACKGROUNDS[
-    Math.floor(Math.random() * GLOBE_BACKGROUNDS.length)
-  ];
+  const base =
+    GLOBE_BACKGROUNDS[Math.floor(Math.random() * GLOBE_BACKGROUNDS.length)];
+  if (isMobileViewport()) {
+    return base.replace(".jpg", "_mobile.jpg");
+  }
+  return base;
 }
 
 type ExplorerPageProps = {
@@ -265,6 +268,10 @@ export default function ExplorerPage({
   const [introShowMap, setIntroShowMap] = useState(!coldOpen);
   const [coldOpenAutoRotate, setColdOpenAutoRotate] = useState(false);
   const [globeBackground, setGlobeBackground] = useState(pickGlobeBackground);
+  useEffect(() => {
+    const img = new Image();
+    img.src = globeBackground;
+  }, [globeBackground]);
   const { aboutOpen, sourcesOpen, setOverlayOpenWithUrl } = useOverlayRouteSync(
     {
       initialOverlay,

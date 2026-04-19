@@ -518,13 +518,21 @@ export default function MapLibreGlobe({
       const container = map.getContainer();
       const canvas = map.getCanvas();
       if (url) {
-        container.style.backgroundImage = `url('${url}')`;
-        container.style.backgroundSize = "cover";
-        container.style.backgroundPosition = "center";
-        container.style.backgroundColor = "transparent";
-        // The WebGL canvas has transparent pixels outside the globe sphere.
-        // Setting backgroundColor to transparent lets the container image show through.
-        canvas.style.backgroundColor = "transparent";
+        const img = new Image();
+        const apply = () => {
+          if (backgroundImageUrlRef.current !== url) return;
+          container.style.backgroundImage = `url('${url}')`;
+          container.style.backgroundSize = "cover";
+          container.style.backgroundPosition = "center";
+          container.style.backgroundColor = "transparent";
+          // The WebGL canvas has transparent pixels outside the globe sphere.
+          // Setting backgroundColor to transparent lets the container image show through.
+          canvas.style.backgroundColor = "transparent";
+        };
+        img.onload = apply;
+        img.src = url;
+        // If already cached, onload won't fire — apply immediately.
+        if (img.complete) apply();
       } else {
         container.style.backgroundImage = "";
         container.style.backgroundColor = BACKDROP_BLUE;
