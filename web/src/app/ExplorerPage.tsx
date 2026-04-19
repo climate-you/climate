@@ -186,6 +186,19 @@ type PagedGraphItem = {
   data: ChartRow[];
 };
 
+const GLOBE_BACKGROUNDS = [
+  "/bg1.jpg",
+  "/bg2.jpg",
+  "/bg3.jpg",
+  "/bg4.jpg",
+  "/bg5.jpg",
+];
+function pickGlobeBackground(): string {
+  return GLOBE_BACKGROUNDS[
+    Math.floor(Math.random() * GLOBE_BACKGROUNDS.length)
+  ];
+}
+
 type ExplorerPageProps = {
   coldOpen?: boolean;
   initialOverlay?: "about" | "sources" | null;
@@ -243,6 +256,7 @@ export default function ExplorerPage({
   const [introActive, setIntroActive] = useState(coldOpen);
   const [introShowMap, setIntroShowMap] = useState(!coldOpen);
   const [coldOpenAutoRotate, setColdOpenAutoRotate] = useState(false);
+  const [globeBackground, setGlobeBackground] = useState(pickGlobeBackground);
   const { aboutOpen, sourcesOpen, setOverlayOpenWithUrl } = useOverlayRouteSync(
     {
       initialOverlay,
@@ -1089,13 +1103,14 @@ export default function ExplorerPage({
             setChatLocations(null);
             setChatFlyToBbox(null);
             setSelectedLocation(null);
+            setGlobeBackground(pickGlobeBackground());
           }}
           enablePick={!introActive}
           autoRotate={coldOpenAutoRotate}
           chatLocations={chatLocations}
           chatFlyToBbox={chatFlyToBbox}
           onPickChatMarker={(la, lo) => void handlePick(la, lo, true)}
-          backgroundImageUrl="/bg.jpg"
+          backgroundImageUrl={globeBackground}
         />
         {activeLayerLegend ? (
           <aside
