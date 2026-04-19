@@ -187,17 +187,17 @@ type PagedGraphItem = {
 };
 
 const GLOBE_BACKGROUNDS = [
-  "/bg1.jpg",
-  "/bg2.jpg",
-  "/bg3.jpg",
-  "/bg4.jpg",
-  "/bg5.jpg",
+  "/bg1.webp",
+  "/bg2.webp",
+  "/bg3.webp",
+  "/bg4.webp",
+  "/bg5.webp",
 ];
 function pickGlobeBackground(): string {
   const base =
     GLOBE_BACKGROUNDS[Math.floor(Math.random() * GLOBE_BACKGROUNDS.length)];
   if (isMobileViewport()) {
-    return base.replace(".jpg", "_mobile.jpg");
+    return base.replace(".webp", "_mobile.webp");
   }
   return base;
 }
