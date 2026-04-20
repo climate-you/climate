@@ -517,6 +517,10 @@ export default function MapLibreGlobe({
       const url = backgroundImageUrlRef.current;
       const container = map.getContainer();
       const canvas = map.getCanvas();
+      const activeLayer = layerOptionsRef.current.find(
+        (layer) => layer.id === activeLayerIdRef.current,
+      );
+      const hasActiveTexture = Boolean(activeLayer?.imageUrl);
       if (url) {
         const img = new Image();
         const apply = () => {
@@ -524,10 +528,12 @@ export default function MapLibreGlobe({
           container.style.backgroundImage = `url('${url}')`;
           container.style.backgroundSize = "cover";
           container.style.backgroundPosition = "center";
-          container.style.backgroundColor = "transparent";
-          // The WebGL canvas has transparent pixels outside the globe sphere.
-          // Setting backgroundColor to transparent lets the container image show through.
-          canvas.style.backgroundColor = "transparent";
+          if (!hasActiveTexture) {
+            container.style.backgroundColor = "transparent";
+            // The WebGL canvas has transparent pixels outside the globe sphere.
+            // Setting backgroundColor to transparent lets the container image show through.
+            canvas.style.backgroundColor = "transparent";
+          }
         };
         img.onload = apply;
         img.src = url;
@@ -535,8 +541,10 @@ export default function MapLibreGlobe({
         if (img.complete) apply();
       } else {
         container.style.backgroundImage = "";
-        container.style.backgroundColor = BACKDROP_BLUE;
-        canvas.style.backgroundColor = BACKDROP_BLUE;
+        if (!hasActiveTexture) {
+          container.style.backgroundColor = BACKDROP_BLUE;
+          canvas.style.backgroundColor = BACKDROP_BLUE;
+        }
       }
     }
     applyGlobeBackgroundRef.current = applyGlobeBackground;
