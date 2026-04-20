@@ -81,7 +81,11 @@ _BUDGET_EXHAUSTED_MSG = (
 
 
 class _QuotaExhaustedError(Exception):
-    """Raised when a tier's first API call hits a daily-token-quota limit."""
+    """Raised when a tier's API call hits a daily-token-quota limit."""
+
+    def __init__(self, mid_stream: bool = False) -> None:
+        super().__init__()
+        self.mid_stream = mid_stream
 
 
 _INTERNAL_FIELDS = {"alt_names"}
@@ -1444,12 +1448,12 @@ class ChatOrchestrator:
                 # Always accumulate model latency, even for failed calls
                 step_model_ms += int((_time.monotonic() - model_t0) * 1000)
 
-                # Quota exhaustion or request-too-large on the very first call
-                # (no events sent yet) → raise so the caller can fall through to
-                # the next tier silently.
-                if not events_yielded and (
-                    _is_quota_exhausted(exc) or _is_context_too_large(exc)
-                ):
+                # Quota exhaustion → always fall through to the next tier.
+                # Context-too-large → only fall through if no events sent yet
+                # (the request is too big for this tier regardless of retries).
+                if _is_quota_exhausted(exc):
+                    raise _QuotaExhaustedError(mid_stream=events_yielded) from exc
+                if not events_yielded and _is_context_too_large(exc):
                     raise _QuotaExhaustedError() from exc
 
                 error_body = getattr(exc, "body", {}) or {}
@@ -1751,7 +1755,11 @@ class ChatOrchestrator:
                         }
                     yield event
                 return
-            except _QuotaExhaustedError:
+            except _QuotaExhaustedError as exc:
+                if exc.mid_stream:
+                    # Some events were already sent to the client — signal the
+                    # frontend to reset its display before the next tier begins.
+                    yield {"type": "reset"}
                 rejected_tiers.append(tier.name)
                 continue
 

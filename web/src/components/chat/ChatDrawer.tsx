@@ -342,6 +342,17 @@ export default function ChatDrawer({
                   : m,
               ),
             );
+          } else if (type === "reset") {
+            // Quota hit mid-stream; tier fallback in progress — clear partial state.
+            finalAnswerText = "";
+            pendingNotice = undefined;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.messageId === messageId
+                  ? { ...m, text: "", toolCalls: [], loading: true }
+                  : m,
+              ),
+            );
           } else if (type === "notice") {
             pendingNotice = event.text as string;
           } else if (type === "answer") {
