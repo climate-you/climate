@@ -206,7 +206,7 @@ def _supplement_locations_from_answer(
     seen_keys = set(existing_keys)
     for m in _BOLD_CITY_RE.finditer(answer):
         candidate = m.group(1).strip().split(",")[0].strip()
-        if not candidate:
+        if not candidate or not candidate[0].isupper():
             continue
         if _norm_location(candidate) in existing_norm_names:
             continue
@@ -331,6 +331,64 @@ def _collect_series_for_extreme(
                     if (r.get("metric_id"), r.get("location"), r.get("role", "raw")) != trend_dedup_key
                 ]
                 series_results.append(trend_series)
+
+
+_ALL_CONTINENT_IDS = [
+    "continent:africa",
+    "continent:antarctica",
+    "continent:asia",
+    "continent:europe",
+    "continent:north_america",
+    "continent:oceania",
+    "continent:south_america",
+]
+
+
+def _collect_series_for_extreme_region(
+    extreme_result: dict,
+    args: dict,
+    tile_store: Any,
+    temperature_unit: str,
+    series_results: list[dict],
+) -> None:
+    """Fetch get_region_metric_series for each region returned by find_extreme_region."""
+    metric_id = args.get("metric_id")
+    if not metric_id:
+        return
+    start_year = args.get("start_year")
+    end_year = args.get("end_year")
+
+    _MAX_CHART_REGIONS = 5
+    if "results" in extreme_result:
+        region_ids = [r["region_id"] for r in extreme_result["results"] if "region_id" in r][:_MAX_CHART_REGIONS]
+    elif "region_id" in extreme_result:
+        region_ids = [extreme_result["region_id"]]
+    else:
+        return
+
+    # Always fetch all continents for comparison charts, regardless of limit.
+    if region_ids and all(r.startswith("continent:") for r in region_ids):
+        region_ids = _ALL_CONTINENT_IDS
+
+    for region_id in region_ids:
+        series_result = _tools.get_region_metric_series(
+            region_id=region_id,
+            metric_id=metric_id,
+            aggregation="mean",
+            tile_store=tile_store,
+            start_year=int(start_year) if start_year is not None else None,
+            end_year=int(end_year) if end_year is not None else None,
+            temperature_unit=temperature_unit,
+        )
+        if "error" in series_result or "data" not in series_result:
+            continue
+        series_result["_source"] = "auto"
+        dedup_key = (series_result.get("metric_id"), series_result.get("region_id"), "mean")
+        series_results[:] = [
+            r for r in series_results
+            if (r.get("metric_id"), r.get("region_id"), r.get("aggregation", "mean")) != dedup_key
+        ]
+        series_results.append(series_result)
 
 
 def _filter_series_results(series_results: list[dict]) -> list[dict]:
@@ -855,6 +913,65 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "find_extreme_region",
+            "description": (
+                "Find the region(s) with the highest or lowest aggregated value of a climate metric. "
+                "Use for questions like 'which country sees the most rain?', 'which continent is warmest?', "
+                "'which ocean is warming fastest?', 'top 5 wettest countries'. "
+                "Uses precomputed area-weighted regional aggregates — much faster than calling "
+                "get_region_metric_series in parallel for every country/continent/ocean. "
+                "Only works for metrics that have precomputed regional aggregates."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "metric_id": {
+                        "type": "string",
+                        "description": "Metric ID from the catalogue.",
+                    },
+                    "aggregation": {
+                        "type": "string",
+                        "description": (
+                            "How to reduce each region's time series to a scalar for ranking: "
+                            "mean (long-term average), max, min, or trend_slope (units/decade)."
+                        ),
+                    },
+                    "extremum": {
+                        "type": "string",
+                        "enum": ["max", "min"],
+                        "description": "Whether to return the region with the highest (max) or lowest (min) value.",
+                    },
+                    "region_type": {
+                        "type": "string",
+                        "description": "Filter results to this region type: 'country', 'continent', 'ocean', or 'globe'. Omit to include all types.",
+                    },
+                    "continent": {
+                        "type": "string",
+                        "description": (
+                            "When region_type='country', restrict to countries on this continent. "
+                            "Accepted values: Africa, Antarctica, Asia, Europe, "
+                            "North America, Oceania, South America. "
+                            "Use this for questions like 'which country in South America sees the most rain?'."
+                        ),
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of results to return (default 1). Use >1 for ranking questions.",
+                    },
+                    "start_year": {
+                        "description": "First year to include (inclusive). Must be a number, e.g. 2000.",
+                    },
+                    "end_year": {
+                        "description": "Last year to include (inclusive). Must be a number, e.g. 2024.",
+                    },
+                },
+                "required": ["metric_id", "aggregation", "extremum"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_region_metric_series",
             "description": (
                 "Return the time series of a climate metric aggregated over a country, "
@@ -964,12 +1081,21 @@ exists for a concept (e.g. t2m_trend_1979_2025_c_per_decade for warming trends, 
 t2m_total_warming_vs_preindustrial_c for total warming since pre-industrial), use it with \
 aggregation="mean" rather than computing trend_slope on t2m_yearly_mean_c. Check metric \
 notes in the catalogue for guidance.
-- For comparative questions across continents or oceans (e.g. "Which continent is warming \
-fastest?", "Compare oceans by temperature"), call get_region_metric_series in parallel for \
-each continent/ocean using the appropriate scalar metric (e.g. t2m_trend_1979_2025_c_per_decade). \
+- For "which region has the most/least X?" questions (e.g. "which country sees the most rain?", \
+"which continent is warmest?", "which ocean is warming fastest?"), use find_extreme_region — \
+it ranks all regions in one call using precomputed aggregates. Do NOT call get_region_metric_series \
+in parallel for every country/continent/ocean; use find_extreme_region instead. \
 Do NOT use find_extreme_location for region-level comparisons — it only ranks cities. \
-Do NOT fetch full yearly series (t2m_yearly_mean_c) and derive the trend yourself when a \
-pre-computed trend metric exists.
+For country ranking, limit=1 is fine unless the user asks for a top-N list. \
+Use the continent parameter to filter countries by continent \
+(e.g. "which country in South America sees the most rain?" → continent="South America", region_type="country"). \
+For ocean questions, only the 7 major oceans are included (Arctic, Indian, North/South Atlantic, North/South Pacific, Southern).
+- When the user names a specific known region (e.g. "Brazil", "Europe", "Indian Ocean"), \
+call get_region_metric_series directly — do not call find_extreme_region first.
+- For comparative questions where you already know the specific regions to compare \
+(e.g. "Is Europe warming faster than Asia?", "Compare the Indian Ocean and Pacific"), \
+call get_region_metric_series in parallel for each known region. \
+Do NOT fetch full yearly series and derive the trend yourself when a pre-computed trend metric exists.
 - You have at most {max_steps} tool-call steps. Use them efficiently — group independent \
 lookups into one parallel step where possible. If after a few steps the available data \
 does not fully answer the question, stop calling tools and give the best answer you can \
@@ -1079,7 +1205,9 @@ def _parse_text_tool_calls(text: str) -> list[dict]:
     Llama models sometimes emit tool calls as XML-ish text instead of structured
     tool_calls. This extracts them as a fallback.
     """
-    matches = re.findall(r"<function[^>]*>(.*?)</function>", text, re.DOTALL)
+    # Groq emits: <function=NAME{...}</function> (no > between tag and args)
+    # Older format: <function NAME>({...})</function> — also handled via lstrip/rstrip below
+    matches = re.findall(r"<function(.*?)</function>", text, re.DOTALL)
     calls = []
     for raw in matches:
         raw = raw.strip().rstrip(")")
@@ -1162,6 +1290,19 @@ class ChatOrchestrator:
                 tile_store=self.tile_store,
                 location_index=self.location_index,
                 limit=int(args.get("limit", 5)),
+                temperature_unit=temperature_unit,
+            )
+        elif name == "find_extreme_region":
+            result = _tools.find_extreme_region(
+                metric_id=str(args["metric_id"]),
+                aggregation=str(args["aggregation"]),
+                extremum=str(args["extremum"]),
+                tile_store=self.tile_store,
+                region_type=args.get("region_type") or None,
+                continent=args.get("continent") or None,
+                limit=int(args.get("limit", 1)),
+                start_year=_int_or_none(args.get("start_year")),
+                end_year=_int_or_none(args.get("end_year")),
                 temperature_unit=temperature_unit,
             )
         elif name == "get_region_metric_series":
@@ -1344,34 +1485,59 @@ class ChatOrchestrator:
                     step -= 1
                     continue
 
+                failed_gen = error_body.get("failed_generation")
                 logger.warning(
-                    "Chat API error (tier=%s, step=%d): %s",
+                    "Chat API error (tier=%s, step=%d): %s%s",
                     tier.name,
                     step,
                     error_msg,
+                    f"\nfailed_generation: {failed_gen}" if failed_gen else "",
                     exc_info=True,
                 )
-                steps_timing.append(
-                    {"step": step, "model_ms": step_model_ms, "error": True, **step_usage}
-                )
-                total_ms = int((_time.monotonic() - t_start) * 1000)
-                if _is_context_too_large(exc):
-                    user_msg = "The conversation has grown too long for this model. Please start a new chat."
-                else:
-                    user_msg = f"API error: {error_msg}"
-                yield {"type": "error", "message": user_msg, "detail": error_msg}
-                yield {
-                    "type": "done",
-                    "session_id": session_id,
-                    "step_count": step,
-                    "tools_called": tools_called,
-                    "tier": tier.name,
-                    "model": tier.model,
-                    "total_ms": total_ms,
-                    "steps_timing": steps_timing,
-                    "locations": locations,
-                }
-                return
+
+                # Groq rejects XML-format tool calls at the API level before the
+                # stream completes. Parse them from failed_generation and fall
+                # through to tool_calls processing as if they streamed normally.
+                xml_recovered = False
+                if failed_gen and "<function" in failed_gen:
+                    parsed = _parse_text_tool_calls(failed_gen)
+                    if parsed:
+                        raw_tool_calls = {
+                            i: {
+                                "id": tc["id"],
+                                "type": "function",
+                                "function": {
+                                    "name": tc["name"],
+                                    "arguments": json.dumps(tc["arguments"]),
+                                },
+                            }
+                            for i, tc in enumerate(parsed)
+                        }
+                        streamed_text = ""
+                        xml_recovered = True
+
+                if not xml_recovered:
+                    steps_timing.append(
+                        {"step": step, "model_ms": step_model_ms, "error": True, **step_usage}
+                    )
+                    total_ms = int((_time.monotonic() - t_start) * 1000)
+                    if _is_context_too_large(exc):
+                        user_msg = "The conversation has grown too long for this model. Please start a new chat."
+                    else:
+                        user_msg = f"API error: {error_msg}"
+                    yield {"type": "error", "message": user_msg, "detail": error_msg}
+                    yield {
+                        "type": "done",
+                        "session_id": session_id,
+                        "step_count": step,
+                        "tools_called": tools_called,
+                        "tier": tier.name,
+                        "model": tier.model,
+                        "total_ms": total_ms,
+                        "steps_timing": steps_timing,
+                        "locations": locations,
+                    }
+                    return
 
             # Normalise tool calls: structured (from stream), XML text fallback
             tool_calls = [raw_tool_calls[i] for i in sorted(raw_tool_calls)]
@@ -1449,6 +1615,13 @@ class ChatOrchestrator:
                                     parsed_result, args, self.tile_store,
                                     temperature_unit, series_results,
                                 )
+                        elif name == "find_extreme_region":
+                            parsed_result = json.loads(result)
+                            if "error" not in parsed_result:
+                                _collect_series_for_extreme_region(
+                                    parsed_result, args, self.tile_store,
+                                    temperature_unit, series_results,
+                                )
                         try:
                             for loc in _extract_locations(name, args, json.loads(result)):
                                 key = (round(loc["lat"], 1), round(loc["lon"], 1))
@@ -1475,7 +1648,10 @@ class ChatOrchestrator:
                 steps_timing.append({"step": step, "model_ms": step_model_ms, **step_usage})
                 total_ms = int((_time.monotonic() - t_start) * 1000)
                 answer = streamed_text
-                locations = _supplement_locations_from_answer(answer, locations, self.location_index)
+                # Text geocoding is unreliable for region names (e.g. "Colombia" → "Colombia, Cuba").
+                # Skip it when find_extreme_region was used; locations come from tool data only.
+                if "find_extreme_region" not in tools_called:
+                    locations = _supplement_locations_from_answer(answer, locations, self.location_index)
                 if tier.is_degraded:
                     yield {"type": "notice", "text": tier.degraded_notice}
                 yield {"type": "answer", "text": answer}

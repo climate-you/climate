@@ -569,6 +569,146 @@ def find_similar_locations(
     }
 
 
+_MAJOR_OCEAN_IDS = frozenset({
+    "ocean:arctic_ocean",
+    "ocean:indian_ocean",
+    "ocean:north_atlantic_ocean",
+    "ocean:south_atlantic_ocean",
+    "ocean:north_pacific_ocean",
+    "ocean:south_pacific_ocean",
+    "ocean:southern_ocean",
+})
+
+
+def find_extreme_region(
+    metric_id: str,
+    aggregation: str,
+    extremum: str,
+    tile_store: TileDataStore,
+    region_type: str | None = None,
+    continent: str | None = None,
+    limit: int = 1,
+    start_year: int | None = None,
+    end_year: int | None = None,
+    temperature_unit: str = "C",
+) -> dict:
+    """
+    Find the region(s) with the highest or lowest aggregated value of a climate metric.
+    Uses precomputed area-weighted regional aggregates (countries, continents, oceans, globe).
+    """
+    spec = tile_store.metrics.get(metric_id)
+    if spec is None:
+        return {"error": f"Unknown metric_id: '{metric_id}'."}
+    if aggregation not in ("mean", "max", "min", "trend_slope"):
+        return {"error": f"Unknown aggregation: '{aggregation}'. Use: mean, max, min, trend_slope."}
+    if extremum not in ("max", "min"):
+        return {"error": f"Unknown extremum: '{extremum}'. Use: max or min."}
+
+    valid_region_types = {"country", "continent", "ocean", "globe"}
+    if region_type and region_type not in valid_region_types:
+        return {"error": f"Unknown region_type: '{region_type}'. Use: country, continent, ocean, globe."}
+
+    continent_codes: frozenset[str] | None = None
+    if continent:
+        continent_codes = _resolve_continent(continent)
+        if continent_codes is None:
+            return {
+                "error": (
+                    f"Continent not recognised: '{continent}'. "
+                    "Use one of: Africa, Antarctica, Asia, Europe, "
+                    "North America, Oceania, South America."
+                )
+            }
+
+    agg_data = tile_store.aggregates.get((metric_id, "mean"))
+    if agg_data is None:
+        return {
+            "error": (
+                f"Regional aggregates are not available for metric '{metric_id}'. "
+                "Use get_region_metric_series for a known region instead."
+            )
+        }
+
+    time_axis = agg_data["time_axis"]
+    regions = agg_data["regions"]
+
+    scored: list[tuple[float, str, dict]] = []
+    for region_id, region_info in regions.items():
+        rtype = region_info.get("type", "")
+        if region_type and rtype != region_type:
+            continue
+        if rtype == "ocean" and region_id not in _MAJOR_OCEAN_IDS:
+            continue
+        if continent_codes and rtype == "country":
+            # Extract ISO-2 code from "country:FR" → "FR"
+            cc = region_id.split(":", 1)[-1] if ":" in region_id else ""
+            if cc not in continent_codes:
+                continue
+
+        values = region_info["values"]
+        years = [int(y) for y in time_axis]
+
+        if start_year is not None or end_year is not None:
+            pairs = [
+                (y, v) for y, v in zip(years, values)
+                if (start_year is None or y >= start_year)
+                and (end_year is None or y <= end_year)
+                and v is not None
+            ]
+        else:
+            pairs = [(y, v) for y, v in zip(years, values) if v is not None]
+
+        if not pairs:
+            continue
+        valid_years, valid_vals = zip(*pairs)
+        arr = np.array(valid_vals, dtype=np.float64)
+
+        if aggregation == "mean":
+            score = float(np.mean(arr))
+        elif aggregation == "max":
+            score = float(np.max(arr))
+        elif aggregation == "min":
+            score = float(np.min(arr))
+        else:  # trend_slope
+            if len(arr) < 2:
+                continue
+            score = float(np.polyfit(list(valid_years), arr, 1)[0]) * 10
+
+        scored.append((score, region_id, region_info))
+
+    if not scored:
+        return {"error": f"No regional data found for metric '{metric_id}' with the given filters."}
+
+    scored.sort(key=lambda t: t[0], reverse=(extremum == "max"))
+    top = scored[:limit]
+
+    is_delta = _is_delta_metric(spec) or aggregation == "trend_slope"
+    out_unit = _output_unit(spec, temperature_unit)
+
+    if limit == 1:
+        score, region_id, info = top[0]
+        return {
+            "region_id": region_id,
+            "region_name": info["name"],
+            "region_type": info["type"],
+            "value": _convert_temp(round(score, 3), spec, is_delta=is_delta, target=temperature_unit),
+            "unit": out_unit,
+        }
+    return {
+        "results": [
+            {
+                "rank": i + 1,
+                "region_id": region_id,
+                "region_name": info["name"],
+                "region_type": info["type"],
+                "value": _convert_temp(round(score, 3), spec, is_delta=is_delta, target=temperature_unit),
+                "unit": out_unit,
+            }
+            for i, (score, region_id, info) in enumerate(top)
+        ]
+    }
+
+
 def get_region_metric_series(
     region_id: str,
     metric_id: str,

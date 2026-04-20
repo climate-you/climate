@@ -77,7 +77,7 @@ CANNED: dict[str, tuple[str, list[dict], dict | None]] = {
         [{"label": "Dubai", "lat": 25.20, "lon": 55.27}],
         {"metric_id": "t2m_yearly_mean_c"},
     ),
-    "which continent is warming fastest?": (
+    "which continent is warming the fastest?": (
         "The continent that is warming the fastest is **Europe**, with a warming trend of "
         "**[[0.51°C|0.92°F]] per decade**.",
         [],
@@ -88,9 +88,9 @@ CANNED: dict[str, tuple[str, list[dict], dict | None]] = {
                 "continent:antarctica",
                 "continent:asia",
                 "continent:europe",
-                "continent:north america",
-                "continent:south america",
+                "continent:north_america",
                 "continent:oceania",
+                "continent:south_america",
             ],
         },
     ),
