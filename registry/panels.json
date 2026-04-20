@@ -304,7 +304,7 @@
         }
       ]
     },
-    "precipitation": {
+    "precipitation":     {
       "title": "Precipitation",
       "score_map_id": "tp_annual_trend_score",
       "graphs": [
@@ -324,34 +324,60 @@
               "key": "tp_yearly_total",
               "metric": "tp_annual_total_mm",
               "label": "Annual total",
-              "ui": { "role": "raw" },
+              "ui": {
+                "role": "raw"
+              },
               "unit": "mm",
-              "style": { "type": "line", "color": "#1f77b4" }
+              "style": {
+                "type": "line",
+                "color": "#1f77b4"
+              }
             },
             {
               "key": "tp_yearly_total_5y",
               "metric": "tp_annual_total_mm",
               "label": "5-year mean",
-              "ui": { "role": "mean" },
+              "ui": {
+                "role": "mean"
+              },
               "unit": "mm",
-              "style": { "type": "line", "color": "#1736ff" },
+              "style": {
+                "type": "line",
+                "color": "#1736ff"
+              },
               "transform": {
                 "fn": "rolling_mean",
-                "params": { "window": 5, "centered": true }
+                "params": {
+                  "window": 5,
+                  "centered": true
+                }
               },
               "annotations": [
-                { "type": "min", "label": "Minimum" },
-                { "type": "max", "label": "Maximum" }
+                {
+                  "type": "min",
+                  "label": "Minimum"
+                },
+                {
+                  "type": "max",
+                  "label": "Maximum"
+                }
               ]
             },
             {
               "key": "tp_yearly_trend",
               "metric": "tp_annual_total_mm",
               "label": "Trend",
-              "ui": { "role": "trend" },
+              "ui": {
+                "role": "trend"
+              },
               "unit": "mm",
-              "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
-              "transform": { "fn": "linear_trend_line" }
+              "style": {
+                "type": "line",
+                "color": "rgba(255,0,0,0.24)"
+              },
+              "transform": {
+                "fn": "linear_trend_line"
+              }
             }
           ]
         },
@@ -371,36 +397,194 @@
               "key": "tp_cdd",
               "metric": "tp_cdd_per_year",
               "label": "Max dry spell",
-              "ui": { "role": "raw" },
+              "ui": {
+                "role": "raw"
+              },
               "unit": "days",
-              "style": { "type": "bar", "color": "#f4a582" }
+              "style": {
+                "type": "bar",
+                "color": "#f4a582"
+              }
             },
             {
               "key": "tp_cdd_5y",
               "metric": "tp_cdd_per_year",
               "label": "5-year mean",
-              "ui": { "role": "mean" },
+              "ui": {
+                "role": "mean"
+              },
               "unit": "days",
-              "style": { "type": "line", "color": "#1736ff" },
+              "style": {
+                "type": "line",
+                "color": "#1736ff"
+              },
               "transform": {
                 "fn": "rolling_mean",
-                "params": { "window": 5, "centered": true }
+                "params": {
+                  "window": 5,
+                  "centered": true
+                }
               }
             },
             {
               "key": "tp_cdd_trend",
               "metric": "tp_cdd_per_year",
               "label": "Trend",
-              "ui": { "role": "trend" },
+              "ui": {
+                "role": "trend"
+              },
               "unit": "days",
-              "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
-              "transform": { "fn": "linear_trend_line" }
+              "style": {
+                "type": "line",
+                "color": "rgba(255,0,0,0.24)"
+              },
+              "transform": {
+                "fn": "linear_trend_line"
+              }
+            }
+          ]
+        },
+        {
+          "id": "tp_wet_days",
+          "title": "Wet days per year",
+          "ui": {
+            "info_text": "Number of days per year with at least 1 mm of precipitation. A declining count indicates drying conditions. Source: CDS ERA5.",
+            "chart_mode": "hot_days_combo",
+            "axis_title_mode": "year",
+            "trend_unit": "days"
+          },
+          "x_axis_label": "Year",
+          "y_axis_label": "Days/year",
+          "source": "CDS ERA5 daily total precipitation (1979-2025)",
+          "series": [
+            {
+              "key": "tp_wet_days",
+              "metric": "tp_wet_days_per_year",
+              "label": "Wet days",
+              "ui": {
+                "role": "raw"
+              },
+              "unit": "days",
+              "style": {
+                "type": "bar",
+                "color": "#67a9cf"
+              }
+            },
+            {
+              "key": "tp_wet_days_5y",
+              "metric": "tp_wet_days_per_year",
+              "label": "5-year mean",
+              "ui": {
+                "role": "mean"
+              },
+              "unit": "days",
+              "style": {
+                "type": "line",
+                "color": "#2166ac"
+              },
+              "transform": {
+                "fn": "rolling_mean",
+                "params": {
+                  "window": 5,
+                  "centered": true
+                }
+              }
+            },
+            {
+              "key": "tp_wet_days_trend",
+              "metric": "tp_wet_days_per_year",
+              "label": "Trend",
+              "ui": {
+                "role": "trend"
+              },
+              "unit": "days",
+              "style": {
+                "type": "line",
+                "color": "rgba(255,0,0,0.24)"
+              },
+              "transform": {
+                "fn": "linear_trend_line"
+              }
+            }
+          ]
+        },
+        {
+          "id": "tp_rx5day",
+          "title": "Max 5-day precipitation",
+          "ui": {
+            "info_text": "Maximum 5-day consecutive precipitation total per year (Rx5day). An increasing trend indicates intensifying extreme rainfall events. Source: CDS ERA5.",
+            "chart_mode": "temperature_line",
+            "axis_title_mode": "year",
+            "trend_unit": "mm"
+          },
+          "x_axis_label": "Year",
+          "y_axis_label": "Precipitation (mm)",
+          "source": "CDS ERA5 daily total precipitation (1979-2025)",
+          "series": [
+            {
+              "key": "tp_rx5day",
+              "metric": "tp_rx5day_per_year",
+              "label": "Rx5day",
+              "ui": {
+                "role": "raw"
+              },
+              "unit": "mm",
+              "style": {
+                "type": "line",
+                "color": "#1f77b4"
+              }
+            },
+            {
+              "key": "tp_rx5day_5y",
+              "metric": "tp_rx5day_per_year",
+              "label": "5-year mean",
+              "ui": {
+                "role": "mean"
+              },
+              "unit": "mm",
+              "style": {
+                "type": "line",
+                "color": "#2166ac"
+              },
+              "transform": {
+                "fn": "rolling_mean",
+                "params": {
+                  "window": 5,
+                  "centered": true
+                }
+              },
+              "annotations": [
+                {
+                  "type": "min",
+                  "label": "Minimum"
+                },
+                {
+                  "type": "max",
+                  "label": "Maximum"
+                }
+              ]
+            },
+            {
+              "key": "tp_rx5day_trend",
+              "metric": "tp_rx5day_per_year",
+              "label": "Trend",
+              "ui": {
+                "role": "trend"
+              },
+              "unit": "mm",
+              "style": {
+                "type": "line",
+                "color": "rgba(255,0,0,0.24)"
+              },
+              "transform": {
+                "fn": "linear_trend_line"
+              }
             }
           ]
         }
       ]
     },
-    "coral_reef_dhw": {
+        "coral_reef_dhw": {
       "title": "Coral Reef Heat Stress",
       "score_map_id": "reef_domain_presence_score",
       "graphs": [

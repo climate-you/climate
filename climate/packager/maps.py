@@ -302,6 +302,14 @@ def _load_scalar_grid_from_metric(
                     raise ValueError(
                         f"Unexpected series tile shape for {p}: {tile_series.shape}"
                     )
+                if hdr.nyears != len(axis):
+                    tile_years = axis[: hdr.nyears]
+                    raise ValueError(
+                        f"Tile file {p} has time range {tile_years[0]}..{tile_years[-1]}"
+                        f" ({hdr.nyears} years) but the metric axis expects"
+                        f" {axis[0]}..{axis[-1]} ({len(axis)} years)."
+                        f" Re-run without --resume to rebuild stale tiles."
+                    )
                 tile_scalar = _reduce_series(tile_series, axis, reducer)
 
             out[

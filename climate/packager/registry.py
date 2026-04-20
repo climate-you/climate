@@ -87,6 +87,8 @@ from climate.datasets.derive.time_agg import (
     monthly_mean_from_daily,
     climatology_mean_from_monthly,
     max_cdd_per_year,
+    wet_days_per_year,
+    rx5day_per_year,
 )
 
 
@@ -1026,6 +1028,11 @@ def _agg_map() -> dict[str, callable]:
         ),
         "monthly_max_from_daily": lambda da, _params: monthly_max_from_daily(da),
         "monthly_min_from_daily": lambda da, _params: monthly_min_from_daily(da),
+        "wet_days_per_year": lambda da, params: wet_days_per_year(
+            da,
+            wet_day_threshold_mm=float((params or {}).get("wet_day_threshold_mm", 1.0)),
+        ),
+        "rx5day_per_year": lambda da, _params: rx5day_per_year(da),
         "cmip_multi_model_offset_from_monthly": lambda da, params: _cmip_multi_model_offset_from_monthly(
             da,
             params,
@@ -1291,6 +1298,13 @@ def _tiles_from_time_da(
         raise ValueError(f"Unsupported compression codec: {codec}")
 
     lat_name, lon_name = _find_lat_lon_names(da.to_dataset(name="v"))
+
+    # Materialize dask arrays once before the tile loop.  Without this, each
+    # da_tile.values call re-reads all source files (one read per tile × per
+    # source file), causing up to batch_size² I/O amplification.
+    if hasattr(da.data, "compute"):
+        da = da.load()
+
     written = 0
     debug_tiles_printed = 0
 
@@ -1530,18 +1544,17 @@ def _download_batch_monthly_means(
             pass
 
     if dl_path.exists() and not overwrite_download:
-        try:
-            _normalize_cds_payload_to_netcdf(dl_path)
-            _ = xr.open_dataset(dl_path)
-            _.close()
-            print(f"Using cached download: {dl_path}")
+        _normalize_cds_payload_to_netcdf(dl_path)
+        if dl_path.stat().st_size > 0:
+            if debug:
+                print(f"Using cached download: {dl_path}")
             return dl_path
-        except Exception as exc:
-            print(f"[warn] Cached download invalid, deleting: {dl_path} ({exc})")
-            try:
-                dl_path.unlink()
-            except Exception:
-                pass
+        # Zero-size file is corrupted; fall through to re-download.
+        print(f"[warn] Cached download is empty, deleting: {dl_path}")
+        try:
+            dl_path.unlink()
+        except Exception:
+            pass
 
     if debug:
         print(
@@ -1639,18 +1652,17 @@ def _download_batch_daily_stats(
     )
 
     if dl_path.exists() and not overwrite_download:
-        try:
-            _normalize_cds_payload_to_netcdf(dl_path)
-            _ = xr.open_dataset(dl_path)
-            _.close()
-            print(f"Using cached download: {dl_path}")
+        _normalize_cds_payload_to_netcdf(dl_path)
+        if dl_path.stat().st_size > 0:
+            if debug:
+                print(f"Using cached download: {dl_path}")
             return dl_path
-        except Exception as exc:
-            print(f"[warn] Cached download invalid, deleting: {dl_path} ({exc})")
-            try:
-                dl_path.unlink()
-            except Exception:
-                pass
+        # Zero-size file is corrupted; fall through to re-slice / re-download.
+        print(f"[warn] Cached download is empty, deleting: {dl_path}")
+        try:
+            dl_path.unlink()
+        except Exception:
+            pass
 
     if not overwrite_download:
         covering = _find_covering_daily_cache(

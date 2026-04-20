@@ -278,6 +278,47 @@
       "compression": { "codec": "zstd", "level": 10 }
     }
   },
+  "tp_wet_days_per_year": {
+    "id": "tp_wet_days_per_year",
+    "title": "Wet days per year",
+    "unit": "days",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "source": {
+      "type": "cds",
+      "dataset_ref": "era5_daily_tp",
+      "batch_tiles_override": 4,
+      "agg": "wet_days_per_year",
+      "params": { "wet_day_threshold_mm": 1.0 },
+      "time_range": { "start_year": 1979, "end_year": 2025 }
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
+  "tp_rx5day_per_year": {
+    "id": "tp_rx5day_per_year",
+    "title": "Maximum 5-day precipitation total per year",
+    "unit": "mm",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "source": {
+      "type": "cds",
+      "dataset_ref": "era5_daily_tp",
+      "batch_tiles_override": 4,
+      "agg": "rx5day_per_year",
+      "time_range": { "start_year": 1979, "end_year": 2025 }
+    },
+    "storage": {
+      "tiled": true,
+      "compression": { "codec": "zstd", "level": 10 }
+    }
+  },
   "sst_yearly_mean_c": {
     "id": "sst_yearly_mean_c",
     "title": "SST yearly mean",

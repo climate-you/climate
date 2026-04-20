@@ -219,7 +219,8 @@
         "axis_title_mode": {
           "type": "string",
           "enum": ["year", "date"]
-        }
+        },
+        "trend_unit": { "type": "string" }
       },
       "additionalProperties": false
     },

@@ -363,29 +363,30 @@
       "dtype": "int16"
     }
   },
-  "tp_annual_trend_mercator_texture": {
-    "id": "tp_annual_trend_mercator_texture",
-    "title": "Annual precipitation trend (Mercator)",
+  "tp_cdd_trend_mercator_texture": {
+    "id": "tp_cdd_trend_mercator_texture",
+    "title": "Consecutive dry days trend (Mercator)",
     "type": "texture",
     "file_format": "webp",
     "projection": "mercator",
     "web_write": true,
-    "source_metric": "tp_annual_total_mm",
+    "source_metric": "tp_cdd_per_year",
     "reducer": {
       "op": "trend_slope"
     },
     "palette": {
-      "colors": ["#e66101", "#fdb863", "#f7f7f7", "#b2abd2", "#5e3c99"],
+      "colors": ["#2166ac", "#67a9cf", "#f5f5f5", "#d8b365", "#8c510a"],
       "nan_color": "#000000",
       "nan_alpha": 0.0
     },
     "scale": {
       "mode": "linear",
-      "vmin": -20.0,
-      "vmax": 20.0
+      "vmin": -0.5,
+      "vmax": 0.5
     },
     "output": {
-      "filename": "tp_annual_trend_mercator.webp"
+      "filename": "tp_cdd_trend_mercator.webp",
+      "mobile_filename": "tp_cdd_trend_mercator.mobile.webp"
     }
   },
   "tp_annual_trend_score": {
@@ -408,6 +409,81 @@
     "output": {
       "png_filename": "tp_annual_trend_score.png",
       "binary_filename": "tp_annual_trend_score.i16.bin",
+      "dtype": "int16"
+    }
+  },
+  "tp_wet_days_trend_mercator_texture": {
+    "id": "tp_wet_days_trend_mercator_texture",
+    "title": "Wet days trend (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "web_write": true,
+    "source_metric": "tp_wet_days_per_year",
+    "reducer": {
+      "op": "trend_slope"
+    },
+    "palette": {
+      "colors": ["#8c510a", "#d8b365", "#f5f5f5", "#67a9cf", "#2166ac"],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": -1.0,
+      "vmax": 1.0
+    },
+    "output": {
+      "filename": "tp_wet_days_trend_mercator.webp",
+      "mobile_filename": "tp_wet_days_trend_mercator.mobile.webp"
+    }
+  },
+  "tp_rx5day_trend_mercator_texture": {
+    "id": "tp_rx5day_trend_mercator_texture",
+    "title": "Max 5-day precipitation trend (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "web_write": true,
+    "source_metric": "tp_rx5day_per_year",
+    "reducer": {
+      "op": "trend_slope"
+    },
+    "palette": {
+      "colors": ["#8c510a", "#d8b365", "#f5f5f5", "#67a9cf", "#2166ac"],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": -1.0,
+      "vmax": 1.0
+    },
+    "output": {
+      "filename": "tp_rx5day_trend_mercator.webp",
+      "mobile_filename": "tp_rx5day_trend_mercator.mobile.webp"
+    }
+  },
+  "tp_cdd_trend_score": {
+    "id": "tp_cdd_trend_score",
+    "title": "Consecutive dry days trend score",
+    "type": "score",
+    "source_metric": "tp_cdd_per_year",
+    "reducer": {
+      "op": "trend_slope"
+    },
+    "default_score": 1,
+    "score_rules": [
+      { "score": 4, "predicate": { "op": "gt", "threshold": 12.0 } },
+      { "score": 4, "predicate": { "op": "lt", "threshold": -12.0 } },
+      { "score": 3, "predicate": { "op": "gt", "threshold": 7.0 } },
+      { "score": 3, "predicate": { "op": "lt", "threshold": -7.0 } },
+      { "score": 2, "predicate": { "op": "gt", "threshold": 3.0 } },
+      { "score": 2, "predicate": { "op": "lt", "threshold": -3.0 } }
+    ],
+    "output": {
+      "png_filename": "tp_cdd_trend_score.png",
+      "binary_filename": "tp_cdd_trend_score.i16.bin",
       "dtype": "int16"
     }
   },

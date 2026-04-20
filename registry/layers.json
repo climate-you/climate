@@ -44,5 +44,29 @@
     "map_id": "tp_annual_trend_mercator_texture",
     "opacity": 0.72,
     "resampling": "nearest"
+  },
+  "cdd_trend": {
+    "id": "cdd_trend",
+    "label": "Dry-spell trend",
+    "description": "Trend in maximum consecutive dry days per year (days/year); warm colors = longer dry spells.",
+    "map_id": "tp_cdd_trend_mercator_texture",
+    "opacity": 0.6,
+    "resampling": "nearest"
+  },
+  "wet_days_trend": {
+    "id": "wet_days_trend",
+    "label": "Wet-day trend",
+    "description": "Trend in number of wet days per year (days/year); blue = more wet days.",
+    "map_id": "tp_wet_days_trend_mercator_texture",
+    "opacity": 0.6,
+    "resampling": "nearest"
+  },
+  "rx5day_trend": {
+    "id": "rx5day_trend",
+    "label": "Heavy-rain trend",
+    "description": "Trend in maximum 5-day precipitation total per year (mm/year); blue = heavier extreme rain.",
+    "map_id": "tp_rx5day_trend_mercator_texture",
+    "opacity": 0.6,
+    "resampling": "nearest"
   }
 }

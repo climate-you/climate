@@ -161,6 +161,34 @@ def max_cdd_per_year(
     )
 
 
+def wet_days_per_year(
+    da: xr.DataArray,
+    *,
+    wet_day_threshold_mm: float = 1.0,
+) -> xr.DataArray:
+    """Number of wet days (precipitation >= threshold) per year."""
+    tname = find_time_dim(da)
+    if not np.issubdtype(da[tname].dtype, np.datetime64):
+        da = xr.decode_cf(da.to_dataset(name="v"))["v"]
+
+    wet = (da >= float(wet_day_threshold_mm)).astype("float32").where(da.notnull())
+    result = wet.groupby(f"{tname}.year").sum(tname, skipna=True, keep_attrs=False)
+    has_obs = da.notnull().groupby(f"{tname}.year").any(dim=tname)
+    return result.where(has_obs).astype("float32")
+
+
+def rx5day_per_year(da: xr.DataArray) -> xr.DataArray:
+    """Maximum 5-day consecutive precipitation total per year."""
+    tname = find_time_dim(da)
+    if not np.issubdtype(da[tname].dtype, np.datetime64):
+        da = xr.decode_cf(da.to_dataset(name="v"))["v"]
+
+    rolling_5 = da.rolling({tname: 5}, min_periods=5).sum()
+    result = rolling_5.groupby(f"{tname}.year").max(tname, keep_attrs=False)
+    has_obs = da.notnull().groupby(f"{tname}.year").any(dim=tname)
+    return result.where(has_obs).astype("float32")
+
+
 def climatology_mean_from_monthly(
     da: xr.DataArray,
     *,
