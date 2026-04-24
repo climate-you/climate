@@ -20,7 +20,7 @@ export const PANEL_TITLE_INFO_PREINDUSTRIAL =
 export const PANEL_TITLE_INFO_RECENT =
   "Local warming is computed from recent annual means relative to the configured baseline year for the selected layer.";
 
-export const MIN_PANEL_VIEWPORT_HEIGHT_FOR_TWO_GRAPHS = 540;
+export const MIN_PANEL_VIEWPORT_HEIGHT_FOR_TWO_GRAPHS = 600;
 export const WHEEL_STEP_THRESHOLD = 130;
 export const WHEEL_GESTURE_GAP_MS = 160;
 export const WHEEL_SUSTAIN_REPEAT_MS = 520;

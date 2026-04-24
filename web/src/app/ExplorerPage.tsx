@@ -1190,12 +1190,7 @@ export default function ExplorerPage({
           }}
           onChatOpen={() => {
             setPanelTab("chat");
-            if (panelOpen) return;
-            if (selectedLocation !== null) {
-              setPanelOpen(true);
-            } else {
-              void handlePick(48.8566, 2.3522);
-            }
+            if (!panelOpen) setPanelOpen(true);
           }}
         />
         {activeLayerLegend ? (
