@@ -1501,6 +1501,49 @@ export default function MapLibreGlobe({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelOpen]);
 
+  // Shift globe when panel opens/closes with no specific focus location (e.g. global data panel)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (focusLocation) return;
+
+    let rafId: number | null = null;
+    let timerId: number | null = null;
+
+    const applyPadding = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        // Skip if the map is already animating (e.g. home button flyTo is in progress)
+        if (!panelOpen && map.isMoving()) return;
+        map.easeTo({
+          padding: panelOpen
+            ? panelPaddingForViewport(map, true)
+            : { top: 0, right: 0, bottom: 0, left: 0 },
+          duration: FOCUS_RECENTER_DURATION_MS,
+          easing: cubicOut,
+          essential: true,
+        });
+      });
+    };
+
+    if (panelOpen) {
+      timerId = window.setTimeout(applyPadding, PANEL_TRANSITION_MS);
+    } else {
+      applyPadding();
+    }
+
+    const media = window.matchMedia(`(max-width: ${PANEL_BREAKPOINT_PX}px)`);
+    window.addEventListener("resize", applyPadding);
+    media.addEventListener?.("change", applyPadding);
+
+    return () => {
+      if (timerId !== null) window.clearTimeout(timerId);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", applyPadding);
+      media.removeEventListener?.("change", applyPadding);
+    };
+  }, [panelOpen, focusLocation]);
+
   useEffect(() => {
     const map = mapRef.current;
     chatMarkersRef.current.forEach((m) => m.remove());

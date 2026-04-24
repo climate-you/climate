@@ -714,6 +714,7 @@ export default function ExplorerPage({
     queueGraphRestoreFromVisible();
     setChatLocations(null);
     setChatFlyToBbox(null);
+    setPicked(null);
     setSelectedGeonameidForPanel(null);
     setSelectedLocation({
       geonameid: 0,
