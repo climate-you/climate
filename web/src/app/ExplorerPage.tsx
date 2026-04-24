@@ -1547,15 +1547,6 @@ export default function ExplorerPage({
         ) : null}
 
         <div className={styles.panelBottomBar}>
-          {chatEnabled ? (
-            <button
-              type="button"
-              className={styles.chatToggleBtn}
-              onClick={() => setPanelTab(panelTab === "chat" ? "graph" : "chat")}
-            >
-              {panelTab === "chat" ? "Graphs" : "Chat"}
-            </button>
-          ) : null}
           {panelTab === "graph" ? (
             <div className={styles.unitToggle} role="group" aria-label="Unit">
               <button
