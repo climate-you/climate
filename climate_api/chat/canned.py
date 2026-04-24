@@ -137,7 +137,7 @@ CANNED: dict[str, tuple[str, list[dict], dict | None]] = {
             "region_ids": ["country:DE", "country:FR"],
         },
     ),
-    "what capital city sees the less rain?": (
+    "what capital city sees the least rain?": (
         "The capital city that sees the least rain is **Cairo, Egypt** with an average "
         "annual rainfall of **26.6 mm**.",
         [{"label": "Cairo", "lat": 30.06, "lon": 31.24}],
@@ -145,9 +145,6 @@ CANNED: dict[str, tuple[str, list[dict], dict | None]] = {
     ),
     # Disabled — requires continent/region averaging which is not yet supported:
     # "is it getting hotter in europe?": ("...", [], None),
-    # Disabled — requires precipitation metrics which are not yet in the catalogue:
-    # "has rainfall changed in london over the last 30 years?": ("...", [], None),
-    # "which city sees more rain: london or paris?": ("...", [], None),
 }
 
 _TOKEN_RE = re.compile(r"\[\[([^\]|]+)\|([^\]]+)\]\]")
