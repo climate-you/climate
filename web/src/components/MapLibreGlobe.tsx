@@ -1515,14 +1515,27 @@ export default function MapLibreGlobe({
       rafId = requestAnimationFrame(() => {
         // Skip if the map is already animating (e.g. home button flyTo is in progress)
         if (!panelOpen && map.isMoving()) return;
-        map.easeTo({
-          padding: panelOpen
-            ? panelPaddingForViewport(map, true)
-            : { top: 0, right: 0, bottom: 0, left: 0 },
-          duration: FOCUS_RECENTER_DURATION_MS,
-          easing: cubicOut,
-          essential: true,
-        });
+        if (panelOpen) {
+          // Always reset to world view with panel padding so the globe visually
+          // moves even when coming from a location panel with the same padding.
+          const baseZoom = responsiveBaseZoom();
+          map.setMinZoom(baseZoom);
+          map.easeTo({
+            center: initialView.center,
+            zoom: baseZoom,
+            padding: panelPaddingForViewport(map, true),
+            duration: FOCUS_RECENTER_DURATION_MS,
+            easing: cubicOut,
+            essential: true,
+          });
+        } else {
+          map.easeTo({
+            padding: { top: 0, right: 0, bottom: 0, left: 0 },
+            duration: FOCUS_RECENTER_DURATION_MS,
+            easing: cubicOut,
+            essential: true,
+          });
+        }
       });
     };
 
