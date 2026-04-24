@@ -1124,6 +1124,169 @@ def build_scored_panels_tiles_registry(
     )
 
 
+def build_global_panels(
+    *,
+    tile_store: TileDataStore,
+    panels_manifest: dict[str, Any],
+    unit: str,
+    release: str,
+) -> PanelListResponse:
+    unit = unit.upper()
+    panels = panels_manifest.get("panels", {})
+
+    merged_series: dict[str, SeriesPayload] = {}
+    scored_panels: list[ScoredPanelPayload] = []
+
+    for panel_id, panel_spec in panels.items():
+        graphs_out: list[GraphPayload] = []
+
+        for graph in panel_spec.get("graphs", []):
+            graph_series_keys: list[str] = []
+            graph_error: str | None = None
+
+            # For animated graphs only use the "all_years" step (no daily/monthly global data)
+            animation_spec = graph.get("animation")
+            if animation_spec:
+                steps = animation_spec.get("steps", [])
+                all_years_keys: set[str] = set()
+                for s in steps:
+                    if s.get("id") == "all_years":
+                        all_years_keys.update(s.get("series_keys", []))
+            else:
+                all_years_keys = None  # type: ignore[assignment]
+
+            for series_spec in graph.get("series", []):
+                metric = series_spec.get("metric")
+                if not metric:
+                    continue
+
+                key = _series_key(series_spec)
+
+                if all_years_keys is not None and key not in all_years_keys:
+                    continue
+
+                if key in merged_series:
+                    graph_series_keys.append(key)
+                    continue
+
+                agg_data = tile_store.aggregates.get((metric, "mean"))
+                if agg_data is None:
+                    continue
+
+                globe = agg_data["regions"].get("globe")
+                if globe is None:
+                    continue
+
+                time_axis = agg_data["time_axis"]
+                values = globe["values"]
+
+                y_raw = np.asarray(
+                    [float("nan") if v is None else float(v) for v in values],
+                    dtype=np.float32,
+                )
+                x = np.asarray(
+                    [_axis_to_numeric(v) for v in time_axis], dtype=np.float64
+                )
+
+                axis_out, y_out = _apply_transform_with_axis(
+                    axis_vals=list(time_axis),
+                    x=x,
+                    y=y_raw,
+                    transform=series_spec.get("transform"),
+                )
+
+                series_unit_in = series_spec.get("unit") or ""
+                y_converted = _convert_unit(
+                    np.asarray(y_out, dtype=np.float32), series_unit_in, unit
+                )
+                series_unit_out = (
+                    unit
+                    if series_unit_in.upper() in ("C", "F")
+                    else series_unit_in or unit
+                )
+
+                merged_series[key] = SeriesPayload(
+                    x=list(axis_out),
+                    y=_series_to_list(y_converted),
+                    unit=series_unit_out,
+                    label=series_spec.get("label"),
+                    shortLabel=series_spec.get("shortLabel"),
+                    ui=series_spec.get("ui"),
+                    style=series_spec.get("style"),
+                )
+                graph_series_keys.append(key)
+
+            if not graph_series_keys:
+                graph_error = "Global data not available for this graph."
+
+            # Build animation with only the all_years step and available series
+            out_animation = None
+            if animation_spec:
+                steps = animation_spec.get("steps", [])
+                global_steps = [s for s in steps if s.get("id") == "all_years"]
+                filtered_steps = [
+                    {**s, "series_keys": [k for k in s.get("series_keys", []) if k in graph_series_keys]}
+                    for s in global_steps
+                    if any(k in graph_series_keys for k in s.get("series_keys", []))
+                ]
+                if filtered_steps:
+                    out_animation = {**animation_spec, "steps": filtered_steps}
+
+            graphs_out.append(
+                GraphPayload(
+                    id=graph.get("id", ""),
+                    title=graph.get("title", ""),
+                    ui=graph.get("ui"),
+                    series_keys=graph_series_keys,
+                    caption=None,
+                    error=graph_error,
+                    x_axis_label=graph.get("x_axis_label"),
+                    y_axis_label=graph.get("y_axis_label"),
+                    time_range=None,
+                    animation=out_animation,
+                )
+            )
+
+        if any(g.series_keys for g in graphs_out):
+            scored_panels.append(
+                ScoredPanelPayload(
+                    score=100,
+                    panel=PanelPayload(
+                        id=panel_id,
+                        title=panel_spec.get("title", panel_id),
+                        graphs=graphs_out,
+                    ),
+                )
+            )
+
+    location = LocationInfo(
+        query=QueryPoint(lat=0.0, lon=0.0),
+        place=PlaceInfo(
+            geonameid=0,
+            label="Global",
+            lat=0.0,
+            lon=0.0,
+            distance_km=0.0,
+            country_code=None,
+            population=None,
+        ),
+        data_cells=[],
+        panel_valid_bbox=None,
+        panel_bbox_grid_id=None,
+        panel_cell_indices=None,
+    )
+
+    return PanelListResponse(
+        release=release,
+        unit=unit,
+        location=location,
+        panels=scored_panels,
+        series=merged_series,
+        headlines=[],
+        layer_overrides={},
+    )
+
+
 def _grid_from_id(grid_id: str) -> GridSpec:
     if grid_id == "global_0p25":
         return GridSpec.global_0p25(tile_size=64)

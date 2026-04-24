@@ -238,6 +238,71 @@ def _compute_series(
     raise ValueError(f"Unsupported aggregation: {aggregation}")
 
 
+def _compute_globe_mean_incremental(
+    tiles_root: Path,
+    grid: GridSpec,
+    metric_id: str,
+    ext: str,
+) -> tuple[list[float | None], int] | None:
+    """Area-weighted globe mean computed tile-by-tile to avoid loading the full grid.
+
+    Returns (values, cell_count) or None if no tiles found.
+    """
+    n_tiles_lat, n_tiles_lon = tile_counts(grid)
+    ts = int(grid.tile_size)
+
+    ntime: int | None = None
+    for tr in range(n_tiles_lat):
+        for tc in range(n_tiles_lon):
+            p = tile_path(tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext)
+            if p.exists():
+                hdr, _ = read_tile_array(p)
+                ntime = hdr.nyears if hdr.nyears > 0 else 1
+                break
+        if ntime is not None:
+            break
+
+    if ntime is None:
+        return None
+
+    i_lat = np.arange(grid.nlat, dtype=np.float64)
+    lat_centers = grid.lat_max - (i_lat + 0.5) * grid.deg
+    w_area = np.cos(np.deg2rad(lat_centers)).astype(np.float32)
+
+    weighted_sum = np.zeros(ntime, dtype=np.float64)
+    weight_sum = np.zeros(ntime, dtype=np.float64)
+    cell_count = 0
+
+    for tr in range(n_tiles_lat):
+        r0 = tr * ts
+        r1 = min(r0 + ts, grid.nlat)
+        tile_w_area = w_area[r0:r1]
+
+        for tc in range(n_tiles_lon):
+            p = tile_path(tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext)
+            if not p.exists():
+                continue
+
+            _, arr = read_tile_array(p)
+            if arr.ndim == 2:
+                arr = arr[:, :, np.newaxis]
+
+            # Clip to the valid rows for boundary tiles
+            valid_rows = min(arr.shape[0], tile_w_area.shape[0])
+            arr = arr[:valid_rows, :, :]
+            w = tile_w_area[:valid_rows, np.newaxis, np.newaxis]
+            valid = ~np.isnan(arr)
+            weighted_sum += np.where(valid, arr * w, 0.0).sum(axis=(0, 1))
+            weight_sum += np.where(valid, w, 0.0).sum(axis=(0, 1))
+            cell_count += int(np.any(~np.isnan(arr), axis=-1).sum())
+
+    with np.errstate(invalid="ignore"):
+        result = np.where(weight_sum > 0, weighted_sum / weight_sum, np.nan)
+
+    values = [None if np.isnan(v) else round(float(v), 4) for v in result]
+    return values, cell_count
+
+
 # ---------------------------------------------------------------------------
 # Main precompute logic
 # ---------------------------------------------------------------------------
@@ -299,14 +364,6 @@ def precompute_aggregates(
         if metric_filter and metric_id not in metric_filter:
             continue
 
-        domain: str = spec.get("domain", "global")
-        if domain == "dataset_mask":
-            print(
-                f"[aggregates] skip {metric_id}: domain=dataset_mask not supported",
-                file=sys.stderr,
-            )
-            continue
-
         grid_id: str = spec.get("grid_id", "global_0p25")
         storage = spec.get("storage", {})
         tile_size = int(storage.get("tile_size", 64))
@@ -319,6 +376,69 @@ def precompute_aggregates(
             grid = GridSpec.global_0p05(tile_size=tile_size)
         else:
             print(f"[aggregates] skip {metric_id}: unknown grid_id={grid_id}", file=sys.stderr)
+            continue
+
+        domain: str = spec.get("domain", "global")
+        if domain == "dataset_mask":
+            # Compute globe-only aggregate incrementally (no full grid load).
+            tiles_path = series_root / grid_id / metric_id
+            if not tiles_path.is_dir():
+                print(
+                    f"[aggregates] skip {metric_id}: tiles not found in {tiles_path}",
+                    file=sys.stderr,
+                )
+                continue
+            time_axis_path = tiles_path / "time" / "yearly.json"
+            time_axis = (
+                json.loads(time_axis_path.read_text(encoding="utf-8"))
+                if time_axis_path.exists()
+                else []
+            )
+            aggregates_dir = tiles_path / "aggregates"
+            aggregates_dir.mkdir(parents=True, exist_ok=True)
+            for aggregation in aggregations:
+                if aggregation != "mean":
+                    continue
+                print(
+                    f"[aggregates] computing {metric_id}/{aggregation} (incremental globe) ...",
+                    end="",
+                    flush=True,
+                )
+                t0 = time.monotonic()
+                result = _compute_globe_mean_incremental(
+                    tiles_root=series_root,
+                    grid=grid,
+                    metric_id=metric_id,
+                    ext=ext,
+                )
+                if result is None:
+                    print(" no tiles found, skipping")
+                    continue
+                globe_values, cell_count = result
+                out_path = aggregates_dir / f"{aggregation}.json"
+                out_path.write_text(
+                    json.dumps(
+                        {
+                            "metric_id": metric_id,
+                            "aggregation": aggregation,
+                            "generated_at": datetime.now(timezone.utc).isoformat(),
+                            "time_axis": time_axis,
+                            "regions": {
+                                "globe": {
+                                    "name": "Global",
+                                    "type": "globe",
+                                    "cell_count": cell_count,
+                                    "values": globe_values,
+                                }
+                            },
+                        },
+                        indent=2,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                print(f" {time.monotonic() - t0:.1f}s -> {out_path}")
+                generated += 1
             continue
 
         # Check mask alignment

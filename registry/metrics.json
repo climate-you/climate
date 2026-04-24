@@ -8,18 +8,31 @@
     "missing": "nan",
     "domain": "global",
     "time_axis": "yearly",
-    "rankings": ["mean", "trend_slope"],
-    "aggregates": ["mean", "min", "max"],
+    "rankings": [
+      "mean",
+      "trend_slope"
+    ],
+    "aggregates": [
+      "mean",
+      "min",
+      "max"
+    ],
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_t2m",
       "batch_tiles_override": 4,
       "agg": "annual_mean_from_daily",
-      "time_range": { "start_year": 1979, "end_year": 2025 }
+      "time_range": {
+        "start_year": 1979,
+        "end_year": 2025
+      }
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
     }
   },
   "t2m_trend_1979_2025_c_per_decade": {
@@ -31,21 +44,32 @@
     "domain": "global",
     "time_axis": "yearly",
     "llm_note": "Use this for 'fastest warming', 'most warming since 1979', or 'warming trend' ranking questions. Prefer this over t2m_yearly_mean_c with aggregation=trend_slope.",
-    "rankings": ["mean"],
-    "aggregates": ["mean"],
+    "rankings": [
+      "mean"
+    ],
+    "aggregates": [
+      "mean"
+    ],
     "source": {
       "type": "derived",
-      "inputs": ["t2m_yearly_mean_c"],
+      "inputs": [
+        "t2m_yearly_mean_c"
+      ],
       "steps": [
         {
           "fn": "trend_slope_per_decade",
-          "params": { "label_year": 2025 }
+          "params": {
+            "label_year": 2025
+          }
         }
       ]
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
     }
   },
   "t2m_total_warming_vs_preindustrial_c": {
@@ -57,8 +81,12 @@
     "domain": "global",
     "time_axis": "yearly",
     "llm_note": "Use this for 'warmed most since pre-industrial times' or 'total warming since 1850' questions.",
-    "rankings": ["mean"],
-    "aggregates": ["mean"],
+    "rankings": [
+      "mean"
+    ],
+    "aggregates": [
+      "mean"
+    ],
     "source": {
       "type": "derived",
       "inputs": [
@@ -80,7 +108,10 @@
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
     }
   },
   "t2m_yearly_5y_mean_c": {
@@ -93,9 +124,17 @@
     "time_axis": "yearly",
     "source": {
       "type": "derived",
-      "inputs": ["t2m_yearly_mean_c"],
+      "inputs": [
+        "t2m_yearly_mean_c"
+      ],
       "steps": [
-        { "fn": "rolling_mean", "params": { "window": 5, "centered": true } }
+        {
+          "fn": "rolling_mean",
+          "params": {
+            "window": 5,
+            "centered": true
+          }
+        }
       ]
     },
     "materialize": "on_api"
@@ -120,11 +159,17 @@
         "ref_end_year": 2000,
         "label_year": 2000
       },
-      "time_range": { "start_year": 1850, "end_year": 2000 }
+      "time_range": {
+        "start_year": 1850,
+        "end_year": 2000
+      }
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
     }
   },
   "t2m_monthly_mean_c": {
@@ -140,11 +185,17 @@
       "dataset_ref": "era5_daily_t2m",
       "batch_tiles_override": 4,
       "agg": "monthly_mean_from_daily",
-      "time_range": { "start_year": 1979, "end_year": 2025 }
+      "time_range": {
+        "start_year": 1979,
+        "end_year": 2025
+      }
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
     }
   },
   "t2m_monthly_max_c": {
@@ -161,11 +212,17 @@
       "dataset_ref": "era5_daily_t2m_max",
       "batch_tiles_override": 4,
       "agg": "monthly_max_from_daily",
-      "time_range": { "start_year": 1979, "end_year": 2025 }
+      "time_range": {
+        "start_year": 1979,
+        "end_year": 2025
+      }
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
     }
   },
   "t2m_monthly_min_c": {
@@ -182,11 +239,17 @@
       "dataset_ref": "era5_daily_t2m_min",
       "batch_tiles_override": 4,
       "agg": "monthly_min_from_daily",
-      "time_range": { "start_year": 1979, "end_year": 2025 }
+      "time_range": {
+        "start_year": 1979,
+        "end_year": 2025
+      }
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
     }
   },
   "t2m_daily_mean_c": {
@@ -206,11 +269,17 @@
       "params": {
         "daily_statistic": "daily_mean"
       },
-      "time_range": { "start_year": 2021, "end_year": 2025 }
+      "time_range": {
+        "start_year": 2021,
+        "end_year": 2025
+      }
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
     }
   },
   "t2m_hotdays_per_year": {
@@ -234,8 +303,14 @@
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
-    }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
+    },
+    "aggregates": [
+      "mean"
+    ]
   },
   "tp_annual_total_mm": {
     "id": "tp_annual_total_mm",
@@ -245,18 +320,29 @@
     "missing": "nan",
     "domain": "global",
     "time_axis": "yearly",
-    "rankings": ["mean", "trend_slope"],
-    "aggregates": ["mean"],
+    "rankings": [
+      "mean",
+      "trend_slope"
+    ],
+    "aggregates": [
+      "mean"
+    ],
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_tp",
       "batch_tiles_override": 4,
       "agg": "annual_sum_from_daily",
-      "time_range": { "start_year": 1979, "end_year": 2025 }
+      "time_range": {
+        "start_year": 1979,
+        "end_year": 2025
+      }
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
     }
   },
   "tp_cdd_per_year": {
@@ -272,13 +358,24 @@
       "dataset_ref": "era5_daily_tp",
       "batch_tiles_override": 4,
       "agg": "max_cdd_per_year",
-      "params": { "dry_day_threshold_mm": 1.0 },
-      "time_range": { "start_year": 1979, "end_year": 2025 }
+      "params": {
+        "dry_day_threshold_mm": 1.0
+      },
+      "time_range": {
+        "start_year": 1979,
+        "end_year": 2025
+      }
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
-    }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
+    },
+    "aggregates": [
+      "mean"
+    ]
   },
   "sst_yearly_mean_c": {
     "id": "sst_yearly_mean_c",
@@ -288,7 +385,9 @@
     "missing": "nan",
     "domain": "ocean",
     "time_axis": "yearly",
-    "aggregates": ["mean"],
+    "aggregates": [
+      "mean"
+    ],
     "source": {
       "type": "erddap",
       "dataset_ref": "oisst_sst_v21_daily",
@@ -296,7 +395,10 @@
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
     }
   },
   "sst_hotdays_per_year": {
@@ -311,12 +413,21 @@
       "type": "erddap",
       "dataset_ref": "oisst_sst_v21_daily",
       "agg": "hot_days_per_year",
-      "params": { "baseline_years": 10, "percentile": 90 }
+      "params": {
+        "baseline_years": 10,
+        "percentile": 90
+      }
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
-    }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
+    },
+    "aggregates": [
+      "mean"
+    ]
   },
   "dhw_no_risk_days_per_year": {
     "id": "dhw_no_risk_days_per_year",
@@ -334,7 +445,10 @@
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
     },
     "chart_group": {
       "id": "dhw_risk_days",
@@ -343,8 +457,15 @@
       "label": "No risk (DHW < 4)",
       "short_label": "No risk",
       "order": 0,
-      "style": { "type": "bar", "color": "#ccccff", "stack": "dhw_risk_days" }
-    }
+      "style": {
+        "type": "bar",
+        "color": "#ccccff",
+        "stack": "dhw_risk_days"
+      }
+    },
+    "aggregates": [
+      "mean"
+    ]
   },
   "dhw_moderate_risk_days_per_year": {
     "id": "dhw_moderate_risk_days_per_year",
@@ -362,17 +483,27 @@
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
     },
     "chart_group": {
       "id": "dhw_risk_days",
       "chart_mode": "stacked_bar",
       "chart_title": "Coral reef DHW risk days",
-      "label": "Moderate risk (4 \u2264 DHW < 8)",
+      "label": "Moderate risk (4 ≤ DHW < 8)",
       "short_label": "Moderate risk",
       "order": 1,
-      "style": { "type": "bar", "color": "#fdd835", "stack": "dhw_risk_days" }
-    }
+      "style": {
+        "type": "bar",
+        "color": "#fdd835",
+        "stack": "dhw_risk_days"
+      }
+    },
+    "aggregates": [
+      "mean"
+    ]
   },
   "dhw_severe_risk_days_per_year": {
     "id": "dhw_severe_risk_days_per_year",
@@ -390,17 +521,27 @@
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
     },
     "chart_group": {
       "id": "dhw_risk_days",
       "chart_mode": "stacked_bar",
       "chart_title": "Coral reef DHW risk days",
-      "label": "Severe risk (DHW \u2265 8)",
+      "label": "Severe risk (DHW ≥ 8)",
       "short_label": "Severe risk",
       "order": 2,
-      "style": { "type": "bar", "color": "#ff0000", "stack": "dhw_risk_days" }
-    }
+      "style": {
+        "type": "bar",
+        "color": "#ff0000",
+        "stack": "dhw_risk_days"
+      }
+    },
+    "aggregates": [
+      "mean"
+    ]
   },
   "dhw_risk_score_per_year": {
     "id": "dhw_risk_score_per_year",
@@ -418,7 +559,10 @@
     },
     "storage": {
       "tiled": true,
-      "compression": { "codec": "zstd", "level": 10 }
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
     }
   }
 }

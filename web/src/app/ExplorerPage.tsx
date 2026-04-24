@@ -702,6 +702,37 @@ export default function ExplorerPage({
     }
   }
 
+  async function loadGlobalPanel() {
+    queueGraphRestoreFromVisible();
+    setChatLocations(null);
+    setChatFlyToBbox(null);
+    setSelectedGeonameidForPanel(null);
+    setSelectedLocation({
+      geonameid: 0,
+      label: "Global",
+      countryCode: "",
+      population: null,
+    });
+    setPanelTab("graph");
+    setPanelOpen(true);
+    setPanelLoading(true);
+    setPanelLoadError(null);
+    try {
+      const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/panel/global?unit=${unit}`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(await r.text());
+      const data = (await r.json()) as PanelResponse;
+      pinSessionRelease(data.release);
+      setResp(data);
+      setPanelLoadError(null);
+    } catch {
+      setResp(null);
+      setPanelLoadError(CLIMATE_DATA_LOAD_ERROR);
+    } finally {
+      setPanelLoading(false);
+    }
+  }
+
   async function fetchNearestLocation(nextLat: number, nextLon: number) {
     const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
       nextLon,
@@ -1154,7 +1185,7 @@ export default function ExplorerPage({
               setPanelTab("graph");
               setPanelOpen(true);
             } else {
-              void handlePick(48.8566, 2.3522);
+              void loadGlobalPanel();
             }
           }}
           onChatOpen={() => {

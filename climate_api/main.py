@@ -33,6 +33,7 @@ from .schemas import (
     ReleaseResolveResponse,
 )
 from .services.panels import (
+    build_global_panels,
     build_panel_tiles_registry,
     build_scored_panels_tiles_registry,
 )
@@ -541,6 +542,19 @@ def create_app() -> FastAPI:
                 "app_commit": app_version_info.app_commit,
                 "assets_release": context.release,
             },
+        )
+
+    @app.get("/api/v/{release}/panel/global", response_model=PanelListResponse)
+    def get_global_panel(
+        release: str,
+        unit: str = Query("C", pattern="^(C|F|c|f)$"),
+    ):
+        context = release_resolver.resolve_release_context(release)
+        return build_global_panels(
+            tile_store=context.tile_store,
+            panels_manifest=context.panels_manifest,
+            unit=unit,
+            release=context.release,
         )
 
     @app.get("/api/v/{release}/panel", response_model=PanelListResponse)
