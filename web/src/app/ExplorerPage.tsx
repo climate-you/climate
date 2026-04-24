@@ -1149,6 +1149,23 @@ export default function ExplorerPage({
           chatFlyToBbox={chatFlyToBbox}
           onPickChatMarker={(la, lo) => void handlePick(la, lo, true)}
           backgroundImageUrl={globeBackground}
+          onGraphOpen={() => {
+            if (selectedLocation !== null) {
+              setPanelTab("graph");
+              setPanelOpen(true);
+            } else {
+              void handlePick(48.8566, 2.3522);
+            }
+          }}
+          onChatOpen={() => {
+            setPanelTab("chat");
+            if (panelOpen) return;
+            if (selectedLocation !== null) {
+              setPanelOpen(true);
+            } else {
+              void handlePick(48.8566, 2.3522);
+            }
+          }}
         />
         {activeLayerLegend ? (
           <aside
@@ -1544,6 +1561,29 @@ export default function ExplorerPage({
           ) : null}
         </div>
       </aside>
+
+      <button
+        className={`${styles.panelOpenTab} ${!panelOpen && selectedLocation !== null ? styles.panelOpenTabVisible : ""}`}
+        type="button"
+        aria-label={`Open ${selectedLocation?.label ?? ""} location panel`}
+        onClick={() => setPanelOpen(true)}
+      >
+        <svg
+          className={styles.panelOpenTabIcon}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M15 18L9 12L15 6" />
+        </svg>
+        <span className={styles.panelOpenTabLabel}>
+          {selectedLocation?.label ?? ""}
+        </span>
+      </button>
 
     </main>
   );
