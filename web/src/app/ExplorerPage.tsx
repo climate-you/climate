@@ -255,6 +255,14 @@ export default function ExplorerPage({
   const touchGestureAxisRef = useRef<"x" | "y" | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const panelViewportRef = useRef<HTMLDivElement | null>(null);
+  const [panelViewportEl, setPanelViewportEl] = useState<HTMLDivElement | null>(null);
+  const panelViewportCallbackRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      panelViewportRef.current = el;
+      setPanelViewportEl(el);
+    },
+    [],
+  );
   const pendingGraphRestoreIdsRef = useRef<string[] | null>(null);
   const lastGraphViewFingerprintRef = useRef<string | null>(null);
   const lastTrackedLayerIdRef = useRef<string | null>(null);
@@ -845,24 +853,23 @@ export default function ExplorerPage({
   }, [activeLayerId, mapLayers]);
 
   useEffect(() => {
-    const viewport = panelViewportRef.current;
-    if (!viewport) return;
+    if (!panelViewportEl) return;
     const updateGraphsPerPage = () => {
       const next =
-        viewport.clientHeight < MIN_PANEL_VIEWPORT_HEIGHT_FOR_TWO_GRAPHS
+        panelViewportEl.clientHeight < MIN_PANEL_VIEWPORT_HEIGHT_FOR_TWO_GRAPHS
           ? 1
           : 2;
       setGraphsPerPage((prev) => (prev === next ? prev : next));
     };
     updateGraphsPerPage();
     const observer = new ResizeObserver(updateGraphsPerPage);
-    observer.observe(viewport);
+    observer.observe(panelViewportEl);
     window.addEventListener("resize", updateGraphsPerPage);
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", updateGraphsPerPage);
     };
-  }, []);
+  }, [panelViewportEl]);
 
   useEffect(() => {
     const panel = panelRef.current;
@@ -1444,7 +1451,7 @@ export default function ExplorerPage({
 
         {panelTab === "graph" ? (
           <>
-            <div ref={panelViewportRef} className={styles.panelViewport}>
+            <div ref={panelViewportCallbackRef} className={styles.panelViewport}>
               {graphSlots.map((entry, slotIndex) =>
                 entry ? (
                   <GraphCard
