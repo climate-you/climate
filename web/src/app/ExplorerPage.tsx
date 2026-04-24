@@ -1387,6 +1387,19 @@ export default function ExplorerPage({
                     </span>
                   ) : panelLoading ? (
                     <span>Loading climate data...</span>
+                  ) : selectedLocation?.geonameid === 0 && resp ? (
+                    <>
+                      Globally,{" "}
+                      <span className={styles.panelTitleSmall}>
+                        human activities have caused{" "}
+                      </span>
+                      <span className={styles.panelTitleTempAccent}>
+                        {formatHeadlineDelta(unit === "F" ? 1.1 * 1.8 : 1.1, unit)}
+                      </span>
+                      <span className={styles.panelTitleSmall}>
+                        {" "}since 1850–1900
+                      </span>
+                    </>
                   ) : typeof tempHeadline?.value === "number" &&
                     Number.isFinite(tempHeadline.value) ? (
                     <>
