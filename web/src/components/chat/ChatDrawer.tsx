@@ -5,7 +5,10 @@ import Markdown from "react-markdown";
 import styles from "./ChatDrawer.module.css";
 import {
   CHAT_EXAMPLE_QUESTIONS_GENERIC,
+  CHAT_LOCAL_QUESTION_TEMPLATES,
   CHAT_MODEL_OVERRIDE_KEY,
+  type ExampleQuestion,
+  type QuestionScope,
 } from "@/lib/explorer/constants";
 import ChatChart, { type ChatChartPayload } from "./ChatChart";
 
@@ -48,6 +51,11 @@ type ChatDrawerProps = {
   onLocations?: (locs: ChatLocation[] | null) => void;
   onPickLocation?: (lat: number, lon: number) => void;
   onFlyToBbox?: (bbox: [number, number, number, number]) => void;
+  // Embedded mode: renders inline inside the panel without a floating button
+  embedded?: boolean;
+  embeddedVisible?: boolean;
+  onClose?: () => void;
+  onSwitchToGraph?: () => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -199,6 +207,10 @@ export default function ChatDrawer({
   onLocations,
   onPickLocation,
   onFlyToBbox,
+  embedded = false,
+  embeddedVisible = true,
+  onClose,
+  onSwitchToGraph,
 }: ChatDrawerProps) {
   const [open, setOpen] = useState(false);
   const [conversationId, setConversationId] = useState(() => generateUUID());
@@ -235,22 +247,28 @@ export default function ChatDrawer({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Focus input when drawer opens
+  // Focus input when drawer opens or when mounted in embedded mode
   useEffect(() => {
-    if (open) {
+    if (embedded) {
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [open]);
-
-  // Keyboard: close on Escape
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
-    if (!open) return;
+    if (!embedded && open) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [embedded, open]);
+
+  // Keyboard: close on Escape (non-embedded only)
+  useEffect(() => {
+    if (embedded || !open) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open]);
+  }, [embedded, open]);
 
   function persistModelOverride(value: ModelOverride) {
     setModelOverride(value);
@@ -571,24 +589,314 @@ export default function ChatDrawer({
     }
   }
 
-  const exampleQuestions = React.useMemo(() => {
+  const exampleQuestions = React.useMemo((): ExampleQuestion[] => {
     const shuffled = [...CHAT_EXAMPLE_QUESTIONS_GENERIC].sort(
       () => Math.random() - 0.5,
     );
     if (mapContext?.label) {
       const cityName = mapContext.label.split(",")[0];
-      return [
-        `What was the hottest year on record in ${cityName}?`,
-        `How have temperatures changed in ${cityName} since 2000?`,
-        `What was the annual mean temperature in ${cityName} in 2020?`,
-        ...shuffled.slice(0, 2),
-      ];
+      const localQuestions: ExampleQuestion[] = CHAT_LOCAL_QUESTION_TEMPLATES.map(
+        ({ template, dataset }) => ({
+          text: template.replace("{city}", cityName),
+          scope: "local" as QuestionScope,
+          dataset,
+        }),
+      );
+      return [...localQuestions, ...shuffled.slice(0, 6)];
     }
-    return shuffled.slice(0, 5);
+    return shuffled.slice(0, 9);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, mapContext?.label]);
 
   const isEmpty = messages.length === 0;
+
+  // Shared header controls (title + model selector + new conversation button)
+  const headerControls = (
+    <>
+      <div className={styles.drawerTitle}>
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          className={styles.drawerTitleIcon}
+        >
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+        Research Terminal
+      </div>
+
+      {devMode && (
+        <select
+          className={styles.modelSelect}
+          aria-label="Model override"
+          value={modelOverride ?? ""}
+          onChange={(e) => {
+            const v = e.target.value;
+            persistModelOverride((v || null) as ModelOverride);
+          }}
+        >
+          <option value="">auto</option>
+          <option value="groq_8b">groq · llama 8b</option>
+          <option value="local">local</option>
+          <option disabled>──────────</option>
+          <option value="groq_70b">groq · llama 70b</option>
+          <option value="groq_scout">groq · llama 4 scout</option>
+        </select>
+      )}
+
+      <button
+        type="button"
+        className={styles.drawerClose}
+        aria-label="New conversation"
+        title="New conversation"
+        onClick={clearSession}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+          <path d="M3 3v5h5" />
+        </svg>
+      </button>
+    </>
+  );
+
+  // Shared messages area
+  const messagesArea = (
+    <div className={styles.messages}>
+      {isEmpty && (
+        <div className={styles.emptyState}>
+          <p className={styles.emptyStateHint}>
+            Ask a question about climate data, or try one of these:
+          </p>
+          <div className={styles.chips}>
+            {exampleQuestions.map((q) => (
+              <button
+                key={q.text}
+                type="button"
+                className={styles.chip}
+                onClick={() => void sendMessage(q.text)}
+              >
+                <span
+                  className={`${styles.chipCategory} ${styles[`chipScope_${q.scope}`]}`}
+                >
+                  {q.scope} · {q.dataset}
+                </span>
+                {q.text}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {messages.map((msg, i) => (
+        <div
+          key={i}
+          className={`${styles.message} ${msg.role === "user" ? styles.messageUser : styles.messageAssistant}`}
+        >
+          {msg.debugInfo && (
+            <div className={styles.debugBar}>{msg.debugInfo}</div>
+          )}
+          {msg.notice && (
+            <div className={styles.noticeBar}>{msg.notice}</div>
+          )}
+          {msg.toolCalls && msg.toolCalls.length > 0 && (
+            <div className={styles.toolCalls}>
+              {msg.toolCalls.map((tc, j) => (
+                <div key={j} className={styles.toolCallItem}>
+                  <em>{describeToolCall(tc.name, tc.args)}</em>
+                </div>
+              ))}
+            </div>
+          )}
+          <div
+            className={`${styles.messageBubble} ${msg.error ? styles.messageBubbleError : ""}`}
+          >
+            {msg.loading ? (
+              <span className={styles.loadingDots}>
+                <span />
+                <span />
+                <span />
+              </span>
+            ) : msg.aborted ? (
+              <em className={styles.abortedText}>Message was aborted.</em>
+            ) : msg.exhausted ? (
+              <>
+                The AI assistant&apos;s daily budget is exhausted. This
+                project is provided for free and is self-funded. If you
+                find it useful, please consider supporting it at{" "}
+                <a
+                  href="https://ko-fi.com/climateyou"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.exhaustedLink}
+                >
+                  ko-fi.com/climateyou
+                </a>
+                .
+              </>
+            ) : (
+              <div className={styles.markdown}>
+                <Markdown
+                  components={
+                    msg.locations && msg.locations.length > 0
+                      ? {
+                          a({ href, children }) {
+                            if (href?.startsWith("#loc:")) {
+                              const [, lat, lon] = href.split(":");
+                              return (
+                                <a
+                                  href="#"
+                                  className={styles.locationLink}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    onPickLocation?.(
+                                      parseFloat(lat),
+                                      parseFloat(lon),
+                                    );
+                                  }}
+                                >
+                                  {children}
+                                </a>
+                              );
+                            }
+                            if (href === "#locs") {
+                              return (
+                                <a
+                                  href="#"
+                                  className={styles.locationLink}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    onLocations?.(msg.locations!);
+                                  }}
+                                >
+                                  {children}
+                                </a>
+                              );
+                            }
+                            return <a href={href}>{children}</a>;
+                          },
+                        }
+                      : undefined
+                  }
+                >
+                  {msg.locations && msg.locations.length > 0
+                    ? addSummaryLineLink(linkifyCities(msg.text, msg.locations))
+                    : msg.text}
+                </Markdown>
+              </div>
+            )}
+          </div>
+
+          {msg.charts && msg.charts.length > 0 && !msg.loading && (
+            <div className={styles.charts}>
+              {msg.charts.map((chart, i) => (
+                <ChatChart key={i} chart={chart} temperatureUnit={unit} />
+              ))}
+            </div>
+          )}
+
+          {msg.role === "assistant" &&
+            msg.messageId &&
+            !msg.loading &&
+            !msg.error &&
+            !msg.exhausted && (
+              <div className={styles.feedback}>
+                <button
+                  type="button"
+                  className={`${styles.feedbackBtn} ${msg.feedback === "good" ? styles.feedbackBtnActive : ""}`}
+                  aria-label="Good answer"
+                  aria-pressed={msg.feedback === "good"}
+                  onClick={() =>
+                    void submitFeedback(msg.messageId!, "good")
+                  }
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.feedbackBtn} ${msg.feedback === "bad" ? styles.feedbackBtnActive : ""}`}
+                  aria-label="Bad answer"
+                  aria-pressed={msg.feedback === "bad"}
+                  onClick={() =>
+                    void submitFeedback(msg.messageId!, "bad")
+                  }
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>
+                </button>
+              </div>
+            )}
+        </div>
+      ))}
+      <div ref={messagesEndRef} />
+    </div>
+  );
+
+  // Shared input row
+  const makeInputRow = (extraClass?: string) => (
+    <div className={`${styles.inputRow}${extraClass ? ` ${extraClass}` : ""}`}>
+      <textarea
+        ref={inputRef}
+        className={styles.input}
+        rows={1}
+        placeholder={
+          conversationExhausted
+            ? "Please try again later."
+            : "Ask about climate data…"
+        }
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={handleInputKeyDown}
+        disabled={loading || conversationExhausted}
+        aria-label="Chat input"
+      />
+      {loading ? (
+        <button
+          type="button"
+          className={styles.stopBtn}
+          aria-label="Stop"
+          onClick={abortMessage}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" />
+          </svg>
+        </button>
+      ) : (
+        <button
+          type="button"
+          className={styles.sendBtn}
+          aria-label="Send"
+          disabled={!input.trim() || conversationExhausted}
+          onClick={() => void sendMessage(input)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <div className={styles.embeddedContainer} style={embeddedVisible ? undefined : { display: "none" }}>
+        <div className={styles.embeddedHeader}>
+          {headerControls}
+          {onClose && (
+            <button
+              type="button"
+              className={styles.drawerClose}
+              aria-label="Close panel"
+              onClick={onClose}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 6L18 18M18 6L6 18" />
+              </svg>
+            </button>
+          )}
+        </div>
+        {messagesArea}
+        {makeInputRow(styles.embeddedInputRow)}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -616,52 +924,8 @@ export default function ChatDrawer({
           aria-label="Climate data assistant"
           aria-modal="false"
         >
-          {/* Header */}
           <div className={styles.drawerHeader}>
-            <div className={styles.drawerTitle}>
-              <svg
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-                className={styles.drawerTitleIcon}
-              >
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-              Research Terminal
-            </div>
-
-            {/* Dev model selector */}
-            {devMode && (
-              <select
-                className={styles.modelSelect}
-                aria-label="Model override"
-                value={modelOverride ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  persistModelOverride((v || null) as ModelOverride);
-                }}
-              >
-                <option value="">auto</option>
-                <option value="groq_8b">groq · llama 8b</option>
-                <option value="local">local</option>
-                <option disabled>──────────</option>
-                <option value="groq_70b">groq · llama 70b</option>
-                <option value="groq_scout">groq · llama 4 scout</option>
-              </select>
-            )}
-
-            <button
-              type="button"
-              className={styles.drawerClose}
-              aria-label="New conversation"
-              title="New conversation"
-              onClick={clearSession}
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                <path d="M3 3v5h5" />
-              </svg>
-            </button>
-
+            {headerControls}
             <button
               type="button"
               className={styles.drawerClose}
@@ -673,222 +937,8 @@ export default function ChatDrawer({
               </svg>
             </button>
           </div>
-
-          {/* Messages */}
-          <div className={styles.messages}>
-            {isEmpty && (
-              <div className={styles.emptyState}>
-                <p className={styles.emptyStateHint}>
-                  Ask a question about climate data, or try one of these:
-                </p>
-                <div className={styles.chips}>
-                  {exampleQuestions.map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      className={styles.chip}
-                      onClick={() => void sendMessage(q)}
-                    >
-                      {q}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {messages.map((msg, i) => (
-              <div
-                key={i}
-                className={`${styles.message} ${msg.role === "user" ? styles.messageUser : styles.messageAssistant}`}
-              >
-                {msg.debugInfo && (
-                  <div className={styles.debugBar}>{msg.debugInfo}</div>
-                )}
-                {msg.notice && (
-                  <div className={styles.noticeBar}>{msg.notice}</div>
-                )}
-                {msg.toolCalls && msg.toolCalls.length > 0 && (
-                  <div className={styles.toolCalls}>
-                    {msg.toolCalls.map((tc, j) => (
-                      <div key={j} className={styles.toolCallItem}>
-                        <em>{describeToolCall(tc.name, tc.args)}</em>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div
-                  className={`${styles.messageBubble} ${msg.error ? styles.messageBubbleError : ""}`}
-                >
-                  {msg.loading ? (
-                    <span className={styles.loadingDots}>
-                      <span />
-                      <span />
-                      <span />
-                    </span>
-                  ) : msg.aborted ? (
-                    <em className={styles.abortedText}>Message was aborted.</em>
-                  ) : msg.exhausted ? (
-                    <>
-                      The AI assistant&apos;s daily budget is exhausted. This
-                      project is provided for free and is self-funded. If you
-                      find it useful, please consider supporting it at{" "}
-                      <a
-                        href="https://ko-fi.com/climateyou"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={styles.exhaustedLink}
-                      >
-                        ko-fi.com/climateyou
-                      </a>
-                      .
-                    </>
-                  ) : (
-                    <div className={styles.markdown}>
-                      <Markdown
-                        components={
-                          msg.locations && msg.locations.length > 0
-                            ? {
-                                a({ href, children }) {
-                                  if (href?.startsWith("#loc:")) {
-                                    const [, lat, lon] = href.split(":");
-                                    return (
-                                      <a
-                                        href="#"
-                                        className={styles.locationLink}
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          onPickLocation?.(
-                                            parseFloat(lat),
-                                            parseFloat(lon),
-                                          );
-                                        }}
-                                      >
-                                        {children}
-                                      </a>
-                                    );
-                                  }
-                                  if (href === "#locs") {
-                                    return (
-                                      <a
-                                        href="#"
-                                        className={styles.locationLink}
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          onLocations?.(msg.locations!);
-                                        }}
-                                      >
-                                        {children}
-                                      </a>
-                                    );
-                                  }
-                                  return <a href={href}>{children}</a>;
-                                },
-                              }
-                            : undefined
-                        }
-                      >
-                        {msg.locations && msg.locations.length > 0
-                          ? addSummaryLineLink(linkifyCities(msg.text, msg.locations))
-                          : msg.text}
-                      </Markdown>
-                    </div>
-                  )}
-                </div>
-
-                {/* Charts from get_metric_series tool calls */}
-                {msg.charts && msg.charts.length > 0 && !msg.loading && (
-                  <div className={styles.charts}>
-                    {msg.charts.map((chart, i) => (
-                      <ChatChart key={i} chart={chart} temperatureUnit={unit} />
-                    ))}
-                  </div>
-                )}
-
-                {/* Feedback buttons for assistant messages */}
-                {msg.role === "assistant" &&
-                  msg.messageId &&
-                  !msg.loading &&
-                  !msg.error &&
-                  !msg.exhausted && (
-                    <div className={styles.feedback}>
-                      <button
-                        type="button"
-                        className={`${styles.feedbackBtn} ${msg.feedback === "good" ? styles.feedbackBtnActive : ""}`}
-                        aria-label="Good answer"
-                        aria-pressed={msg.feedback === "good"}
-                        onClick={() =>
-                          void submitFeedback(msg.messageId!, "good")
-                        }
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
-                      </button>
-                      <button
-                        type="button"
-                        className={`${styles.feedbackBtn} ${msg.feedback === "bad" ? styles.feedbackBtnActive : ""}`}
-                        aria-label="Bad answer"
-                        aria-pressed={msg.feedback === "bad"}
-                        onClick={() =>
-                          void submitFeedback(msg.messageId!, "bad")
-                        }
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>
-                      </button>
-                    </div>
-                  )}
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input */}
-          <div className={styles.inputRow}>
-            <textarea
-              ref={inputRef}
-              className={styles.input}
-              rows={1}
-              placeholder={
-                conversationExhausted
-                  ? "Please try again later."
-                  : "Ask about climate data…"
-              }
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleInputKeyDown}
-              disabled={loading || conversationExhausted}
-              aria-label="Chat input"
-            />
-            {loading ? (
-              <button
-                type="button"
-                className={styles.stopBtn}
-                aria-label="Stop"
-                onClick={abortMessage}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <rect
-                    x="7"
-                    y="7"
-                    width="10"
-                    height="10"
-                    rx="1.5"
-                    fill="currentColor"
-                  />
-                </svg>
-              </button>
-            ) : (
-              <button
-                type="button"
-                className={styles.sendBtn}
-                aria-label="Send"
-                disabled={!input.trim() || conversationExhausted}
-                onClick={() => void sendMessage(input)}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" />
-                </svg>
-              </button>
-            )}
-          </div>
+          {messagesArea}
+          {makeInputRow()}
         </aside>
       )}
     </>

@@ -562,11 +562,46 @@
   gap: 10px;
 }
 
-.unitControl {
+.panelBottomBar {
   position: absolute;
   bottom: 24px;
   left: 24px;
-  z-index: 10;
+  z-index: 16;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chatToggleBtn {
+  border: 1px solid var(--surface-border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-primary);
+  padding: 6px 8px;
+  font-size: 14px;
+  min-width: 60px;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.chatToggleBtn:hover {
+  background: var(--surface-alt);
+  border-color: var(--surface-border-strong);
+}
+
+.chatToggleBtnOn {
+  background: var(--control-active-bg);
+  color: var(--control-active-fg);
+  border-color: var(--control-active-bg);
+}
+
+.chatToggleBtnOn:hover {
+  background: var(--control-active-bg);
+  border-color: var(--control-active-bg);
 }
 
 .unitToggle {
@@ -891,9 +926,10 @@
     margin-right: 0;
   }
 
-  .unitControl {
+  .panelBottomBar {
     left: 14px;
     bottom: 14px;
+    gap: 8px;
   }
 
   .panelScrollNav {

@@ -20,7 +20,7 @@ export const PANEL_TITLE_INFO_PREINDUSTRIAL =
 export const PANEL_TITLE_INFO_RECENT =
   "Local warming is computed from recent annual means relative to the configured baseline year for the selected layer.";
 
-export const MIN_PANEL_VIEWPORT_HEIGHT_FOR_TWO_GRAPHS = 600;
+export const MIN_PANEL_VIEWPORT_HEIGHT_FOR_TWO_GRAPHS = 540;
 export const WHEEL_STEP_THRESHOLD = 130;
 export const WHEEL_GESTURE_GAP_MS = 160;
 export const WHEEL_SUSTAIN_REPEAT_MS = 520;
@@ -89,24 +89,55 @@ export const AUTO_ROTATE_DEG_PER_SEC = 3;
 export const CHAT_FEATURE_FLAG_KEY = "climate.chatBotEnabled";
 export const CHAT_OPT_OUT_KEY = "climate.chatOptOut";
 export const CHAT_MODEL_OVERRIDE_KEY = "climate.chatModelOverride";
-export const CHAT_EXAMPLE_QUESTIONS_GENERIC = [
-  "What is the hottest capital city in the world?",
-  "What are the top 5 warmest large cities in the world?",
-  "How have winters changed in Tokyo since 2000?",
-  "Which city has warmed the fastest in the last 50 years?",
-  "What is the coldest major city in the world?",
-  "How does the temperature in Dubai compare to 20 years ago?",
-  "What capital city sees the less rain?",
-  "Which city sees more rain: London or Paris?",
-  "Which continent is warming the fastest?",
-  "How has the sea surface temperature in the Indian Ocean changed?",
-  "How are global temperatures changing?",
-  "Is Germany warming faster than France?",
-  "How has the mean temperature in Norway changed in recent years?",
-  // Disabled until continent/region averaging is supported:
-  // "Is it getting hotter in Europe?",
-  // Disabled until precipitation metrics are available:
-  // "Has rainfall changed in London over the last 30 years?",
+export type QuestionScope = "local" | "city" | "country" | "global";
+export type QuestionDataset = "temperature" | "precipitation" | "sea temperature";
+
+export interface ExampleQuestion {
+  text: string;
+  scope: QuestionScope;
+  dataset: QuestionDataset;
+}
+
+export const CHAT_EXAMPLE_QUESTIONS_GENERIC: ExampleQuestion[] = [
+  // Global · temperature
+  { text: "Which continent is warming the fastest?", scope: "global", dataset: "temperature" },
+  { text: "How are global temperatures changing?", scope: "global", dataset: "temperature" },
+  { text: "How has the sea surface temperature in the Indian Ocean changed?", scope: "global", dataset: "sea temperature" },
+  { text: "What year was the hottest on record globally?", scope: "global", dataset: "temperature" },
+  { text: "How much has the global average temperature risen since 1900?", scope: "global", dataset: "temperature" },
+  // Global · sea temperature
+  { text: "Which ocean is seeing the strongest changes in sea surface temperature?", scope: "global", dataset: "sea temperature" },
+  // Country · temperature
+  { text: "Is Germany warming faster than France?", scope: "country", dataset: "temperature" },
+  { text: "How has the mean temperature in Norway changed in recent years?", scope: "country", dataset: "temperature" },
+  { text: "Which country has warmed the most in the last 50 years?", scope: "country", dataset: "temperature" },
+  { text: "How has Australia's temperature changed since 1979?", scope: "country", dataset: "temperature" },
+  { text: "What is the warmest country in South America?", scope: "country", dataset: "temperature" },
+  // Country · precipitation
+  { text: "Which country in Europe receives the least rainfall?", scope: "country", dataset: "precipitation" },
+  { text: "How has annual rainfall in the UK changed over the last 50 years?", scope: "country", dataset: "precipitation" },
+  // City · temperature
+  { text: "What is the hottest capital city in the world?", scope: "city", dataset: "temperature" },
+  { text: "What are the top 5 warmest large cities in the world?", scope: "city", dataset: "temperature" },
+  { text: "How have winters changed in Tokyo since 2000?", scope: "city", dataset: "temperature" },
+  { text: "Which city has warmed the fastest in the last 50 years?", scope: "city", dataset: "temperature" },
+  { text: "What is the coldest major city in the world?", scope: "city", dataset: "temperature" },
+  { text: "How does the temperature in Dubai compare to 20 years ago?", scope: "city", dataset: "temperature" },
+  // City · precipitation
+  { text: "What capital city sees the least rain?", scope: "city", dataset: "precipitation" },
+  { text: "Which city sees more rain: London or Paris?", scope: "city", dataset: "precipitation" },
+  { text: "What is the wettest major city in the world?", scope: "city", dataset: "precipitation" },
+];
+
+export const CHAT_LOCAL_QUESTION_TEMPLATES: Array<{
+  template: string;
+  dataset: QuestionDataset;
+}> = [
+  { template: "What was the hottest year on record in {city}?", dataset: "temperature" },
+  { template: "How have temperatures changed in {city} since 2000?", dataset: "temperature" },
+  { template: "What was the annual mean temperature in {city} in 2020?", dataset: "temperature" },
+  { template: "Has rainfall changed in {city} over the last 30 years?", dataset: "precipitation" },
+  { template: "What is the wettest month in {city}?", dataset: "precipitation" },
 ];
 export const CHAT_PRIVACY_NOTICE =
   "Your questions may be reviewed to improve the assistant.";

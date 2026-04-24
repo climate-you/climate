@@ -224,6 +224,7 @@ export default function ExplorerPage({
   const [panelLoading, setPanelLoading] = useState<boolean>(false);
   const [panelRetrying, setPanelRetrying] = useState<boolean>(false);
   const [panelOpen, setPanelOpen] = useState<boolean>(false);
+  const [panelTab, setPanelTab] = useState<"graph" | "chat">("graph");
   const [panelDragOffsetPx, setPanelDragOffsetPx] = useState(0);
   const [panelDragActive, setPanelDragActive] = useState(false);
   const [picked, setPicked] = useState<{ lat: number; lon: number } | null>(
@@ -1279,7 +1280,7 @@ export default function ExplorerPage({
         onTouchEnd={handlePanelTouchEnd}
         onTouchCancel={handlePanelTouchCancel}
       >
-        {stepCount >= 2 ? (
+        {panelTab === "graph" && stepCount >= 2 ? (
           <div
             className={styles.panelSteps}
             role="tablist"
@@ -1398,131 +1399,152 @@ export default function ExplorerPage({
           </div>
         </div>
 
-        <div ref={panelViewportRef} className={styles.panelViewport}>
-          {graphSlots.map((entry, slotIndex) =>
-            entry ? (
-              <GraphCard
-                key={`slot-${slotIndex}`}
-                graph={entry.graph}
-                data={entry.data}
-                series={resp?.series ?? {}}
-                unit={unit}
-                stepIndex={graphStepById[entry.graph.id] ?? 0}
-                onStepIndexChange={handleGraphStepChange}
-              />
-            ) : null,
-          )}
-        </div>
-        {stepCount >= 2 ? (
-          <div className={styles.panelScrollNav}>
-            <button
-              type="button"
-              className={`${styles.panelScrollArrow} ${styles.panelScrollArrowPrev}`}
-              aria-label="Previous graphs"
-              onClick={() => {
-                const next = graphPage > 0 ? graphPage - 1 : maxGraphPage;
-                goToGraphPage(next);
-                wheelAccumRef.current = 0;
-                wheelGestureConsumedRef.current = false;
-                wheelGestureConsumedAtRef.current = 0;
-              }}
-            >
-              <svg
-                viewBox="0 0 14.51 35.1"
-                width="14"
-                height="35"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <polygon points="0,7.91 6.94,0.34 7.26,0 7.57,0.34 14.51,7.91 14.04,8.35 7.57,1.3 7.57,35.1 6.94,35.1 6.94,1.3 0.47,8.35" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              className={`${styles.panelScrollArrow} ${styles.panelScrollArrowNext}`}
-              aria-label="Next graphs"
-              onClick={() => {
-                const next = graphPage < maxGraphPage ? graphPage + 1 : 0;
-                goToGraphPage(next);
-                wheelAccumRef.current = 0;
-                wheelGestureConsumedRef.current = false;
-                wheelGestureConsumedAtRef.current = 0;
-              }}
-            >
-              <svg
-                viewBox="0 0 14.51 35.1"
-                width="14"
-                height="35"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <polygon points="0,7.91 6.94,0.34 7.26,0 7.57,0.34 14.51,7.91 14.04,8.35 7.57,1.3 7.57,35.1 6.94,35.1 6.94,1.3 0.47,8.35" />
-              </svg>
-            </button>
-          </div>
+        {panelTab === "graph" ? (
+          <>
+            <div ref={panelViewportRef} className={styles.panelViewport}>
+              {graphSlots.map((entry, slotIndex) =>
+                entry ? (
+                  <GraphCard
+                    key={`slot-${slotIndex}`}
+                    graph={entry.graph}
+                    data={entry.data}
+                    series={resp?.series ?? {}}
+                    unit={unit}
+                    stepIndex={graphStepById[entry.graph.id] ?? 0}
+                    onStepIndexChange={handleGraphStepChange}
+                  />
+                ) : null,
+              )}
+            </div>
+            {stepCount >= 2 ? (
+              <div className={styles.panelScrollNav}>
+                <button
+                  type="button"
+                  className={`${styles.panelScrollArrow} ${styles.panelScrollArrowPrev}`}
+                  aria-label="Previous graphs"
+                  onClick={() => {
+                    const next = graphPage > 0 ? graphPage - 1 : maxGraphPage;
+                    goToGraphPage(next);
+                    wheelAccumRef.current = 0;
+                    wheelGestureConsumedRef.current = false;
+                    wheelGestureConsumedAtRef.current = 0;
+                  }}
+                >
+                  <svg
+                    viewBox="0 0 14.51 35.1"
+                    width="14"
+                    height="35"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <polygon points="0,7.91 6.94,0.34 7.26,0 7.57,0.34 14.51,7.91 14.04,8.35 7.57,1.3 7.57,35.1 6.94,35.1 6.94,1.3 0.47,8.35" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.panelScrollArrow} ${styles.panelScrollArrowNext}`}
+                  aria-label="Next graphs"
+                  onClick={() => {
+                    const next = graphPage < maxGraphPage ? graphPage + 1 : 0;
+                    goToGraphPage(next);
+                    wheelAccumRef.current = 0;
+                    wheelGestureConsumedRef.current = false;
+                    wheelGestureConsumedAtRef.current = 0;
+                  }}
+                >
+                  <svg
+                    viewBox="0 0 14.51 35.1"
+                    width="14"
+                    height="35"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <polygon points="0,7.91 6.94,0.34 7.26,0 7.57,0.34 14.51,7.91 14.04,8.35 7.57,1.3 7.57,35.1 6.94,35.1 6.94,1.3 0.47,8.35" />
+                  </svg>
+                </button>
+              </div>
+            ) : null}
+          </>
         ) : null}
-        <div className={styles.unitControl}>
-          <div className={styles.unitToggle} role="group" aria-label="Unit">
+
+        {chatEnabled ? (
+          <ChatDrawer
+            embedded
+            embeddedVisible={panelTab === "chat"}
+            apiBase={apiBase}
+            mapContext={
+              selectedLocation
+                ? {
+                    lat,
+                    lon,
+                    label: selectedLocation.label,
+                  }
+                : null
+            }
+            unit={unit}
+            devMode={debugMode}
+            debugMode={debugMode}
+            onLocations={(locs) => {
+              setChatLocations(locs && locs.length > 0 ? [...locs] : null);
+              setChatFlyToBbox(null);
+            }}
+            onPickLocation={(la, lo) => void handlePick(la, lo, true, false)}
+            onFlyToBbox={(bbox) => {
+              setChatFlyToBbox(bbox);
+              setChatLocations(null);
+            }}
+            onClose={() => setPanelOpen(false)}
+            onSwitchToGraph={() => setPanelTab("graph")}
+          />
+        ) : null}
+
+        <div className={styles.panelBottomBar}>
+          {chatEnabled ? (
             <button
               type="button"
-              className={`${styles.unitOption} ${
-                unit === "C" ? styles.unitOptionActive : ""
-              }`}
-              aria-pressed={unit === "C"}
-              onClick={() => {
-                if (unit === "C") return;
-                queueGraphRestoreFromVisible();
-                setUnit("C");
-                void loadPanel(lat, lon, "C");
-              }}
+              className={styles.chatToggleBtn}
+              onClick={() => setPanelTab(panelTab === "chat" ? "graph" : "chat")}
             >
-              °C
+              {panelTab === "chat" ? "Graphs" : "Chat"}
             </button>
-            <button
-              type="button"
-              className={`${styles.unitOption} ${
-                unit === "F" ? styles.unitOptionActive : ""
-              }`}
-              aria-pressed={unit === "F"}
-              onClick={() => {
-                if (unit === "F") return;
-                queueGraphRestoreFromVisible();
-                setUnit("F");
-                void loadPanel(lat, lon, "F");
-              }}
-            >
-              °F
-            </button>
-          </div>
+          ) : null}
+          {panelTab === "graph" ? (
+            <div className={styles.unitToggle} role="group" aria-label="Unit">
+              <button
+                type="button"
+                className={`${styles.unitOption} ${
+                  unit === "C" ? styles.unitOptionActive : ""
+                }`}
+                aria-pressed={unit === "C"}
+                onClick={() => {
+                  if (unit === "C") return;
+                  queueGraphRestoreFromVisible();
+                  setUnit("C");
+                  void loadPanel(lat, lon, "C");
+                }}
+              >
+                °C
+              </button>
+              <button
+                type="button"
+                className={`${styles.unitOption} ${
+                  unit === "F" ? styles.unitOptionActive : ""
+                }`}
+                aria-pressed={unit === "F"}
+                onClick={() => {
+                  if (unit === "F") return;
+                  queueGraphRestoreFromVisible();
+                  setUnit("F");
+                  void loadPanel(lat, lon, "F");
+                }}
+              >
+                °F
+              </button>
+            </div>
+          ) : null}
         </div>
       </aside>
 
-      {chatEnabled && (
-        <ChatDrawer
-          apiBase={apiBase}
-          mapContext={
-            selectedLocation
-              ? {
-                  lat,
-                  lon,
-                  label: selectedLocation.label,
-                }
-              : null
-          }
-          unit={unit}
-          devMode={debugMode}
-          debugMode={debugMode}
-          onLocations={(locs) => {
-            setChatLocations(locs && locs.length > 0 ? [...locs] : null);
-            setChatFlyToBbox(null);
-          }}
-          onPickLocation={(la, lo) => void handlePick(la, lo, true, false)}
-          onFlyToBbox={(bbox) => {
-            setChatFlyToBbox(bbox);
-            setChatLocations(null);
-          }}
-        />
-      )}
     </main>
   );
 }
