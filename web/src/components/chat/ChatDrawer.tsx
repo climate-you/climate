@@ -611,16 +611,15 @@ export default function ChatDrawer({
   const isEmpty = messages.length === 0;
 
   const groupedQuestions = React.useMemo(() => {
-    const order: QuestionScope[] = [];
+    const scopeOrder: QuestionScope[] = ["local", "global", "country", "city"];
     const map: Partial<Record<QuestionScope, ExampleQuestion[]>> = {};
     for (const q of exampleQuestions) {
-      if (!map[q.scope]) {
-        order.push(q.scope);
-        map[q.scope] = [];
-      }
+      if (!map[q.scope]) map[q.scope] = [];
       map[q.scope]!.push(q);
     }
-    return order.map((scope) => ({ scope, questions: map[scope]! }));
+    return scopeOrder
+      .filter((scope) => map[scope])
+      .map((scope) => ({ scope, questions: map[scope]! }));
   }, [exampleQuestions]);
 
   const cityName = mapContext?.label?.split(",")[0]?.trim() ?? null;
