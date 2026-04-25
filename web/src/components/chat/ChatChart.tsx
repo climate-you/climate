@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
-import { buildComparisonBarOption, buildStackedBarOption, buildTimeSeriesOption } from "@/lib/explorer/chartOptions";
+import { buildComparisonBarOption, buildStackedBarOption, buildTimeSeriesOption, getMultiSeriesColors } from "@/lib/explorer/chartOptions";
 import {
   mergeSeries,
   type GraphPayload,
@@ -34,17 +34,9 @@ type ChatChartProps = {
   temperatureUnit: "C" | "F";
 };
 
-const CHART_HEIGHT = 200;
+const CHART_MAX_HEIGHT = 260;
+const CHART_MIN_ASPECT_RATIO = 1.5;
 
-// Bauhaus colours: primaries first, then secondaries
-const MULTI_SERIES_COLORS = [
-  "#0000FF", // blue
-  "#FF0000", // red
-  "#FFCC00", // yellow
-  "#000000", // black
-  "#FF6600", // orange
-  "#007700", // green
-];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -72,7 +64,7 @@ function buildSeriesRecord(
       isStackedBar && s.style
         ? s.style
         : multiSeries && !isTrend && !isStackedBar
-          ? { color: s.style?.color ?? MULTI_SERIES_COLORS[rawIndex % MULTI_SERIES_COLORS.length] }
+          ? { color: getMultiSeriesColors()[rawIndex % getMultiSeriesColors().length] }
           : s.style?.color
             ? { color: s.style.color }
             : undefined;
@@ -112,9 +104,13 @@ function buildGraphPayload(chart: ChatChartPayload): GraphPayload {
     // so buildTimeSeriesOption doesn't default to "°C".
     ...(chart.chart_mode === "stacked_bar"
       ? { y_axis_label: "Number of days" }
-      : chart.unit && !["C", "F"].includes(chart.unit)
-        ? { y_axis_label: chart.unit.charAt(0).toUpperCase() + chart.unit.slice(1) }
-        : {}),
+      : chart.unit === "mm"
+        ? { y_axis_label: "Precipitation (mm)" }
+        : chart.unit === "days"
+          ? { y_axis_label: "Days/year" }
+          : chart.unit && !["C", "F"].includes(chart.unit)
+            ? { y_axis_label: chart.unit }
+            : {}),
   };
 }
 
@@ -124,8 +120,25 @@ function buildGraphPayload(chart: ChatChartPayload): GraphPayload {
 
 export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const chartHostRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
   const [colorScheme, setColorScheme] = useState<"light" | "dark">("light");
+  const [chartHeight, setChartHeight] = useState(CHART_MAX_HEIGHT);
+
+  useEffect(() => {
+    const host = chartHostRef.current;
+    if (!host) return;
+    const update = () => {
+      const width = host.clientWidth;
+      if (!Number.isFinite(width) || width <= 0) return;
+      const next = Math.max(1, Math.min(CHART_MAX_HEIGHT, Math.floor(width / CHART_MIN_ASPECT_RATIO)));
+      setChartHeight((prev) => (prev === next ? prev : next));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -142,7 +155,7 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
     if (!rootRef.current) return;
     const instance = echarts.init(rootRef.current, undefined, {
       width: rootRef.current.clientWidth || undefined,
-      height: CHART_HEIGHT,
+      height: chartHeight,
     });
     chartRef.current = instance;
     const observer = new ResizeObserver(() => instance.resize());
@@ -152,6 +165,7 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
       instance.dispose();
       chartRef.current = null;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Build and apply chart option whenever chart data or unit changes
@@ -169,7 +183,7 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
         unit: temperatureUnit === "F" && chart.unit === "C" ? "F" : chart.unit,
       });
       (option as Record<string, unknown>).grid = {
-        left: 8,
+        left: 60,
         right: 12,
         top: 28,
         // Extra bottom room when x labels are rotated to avoid clipping.
@@ -200,6 +214,7 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
           visibleKeys,
           transitionMs: 0,
           unit: temperatureUnit,
+          showYAxisName: true,
         })
       : buildTimeSeriesOption({
           graph,
@@ -208,23 +223,17 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
           visibleKeys,
           transitionMs: 0,
           unit: effectiveUnit,
+          showYAxisName: true,
         });
-
-    const dark = colorScheme === "dark";
 
     // Tighter grid for the narrow chat drawer; extra top space when legend is
     // present (multi-series) to prevent it overlapping the plot area.
-    // show: true + backgroundColor colors only the plot area, not the legend/axis area.
-    const plotBg = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
     (option as Record<string, unknown>).grid = {
-      left: 8,
+      left: 36,
       right: 12,
       top: isStackedBar || rawCount > 3 ? 72 : multiSeries ? 44 : 28,
       bottom: 12,
       containLabel: true,
-      show: !isStackedBar,
-      backgroundColor: plotBg,
-      borderColor: "transparent",
     };
     // Render tooltip into document.body so it escapes the drawer's overflow:hidden
     if (option.tooltip && !Array.isArray(option.tooltip)) {
@@ -326,13 +335,13 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
   }, [chart, colorScheme, temperatureUnit]);
 
   return (
-    <div className={styles.chartCard}>
+    <div className={styles.chartCard} ref={chartHostRef}>
+      <div className={styles.chartTitle}>{chart.title}</div>
       <div
         ref={rootRef}
         data-chat-chart="true"
-        style={{ width: "100%", height: CHART_HEIGHT }}
+        style={{ width: "100%", height: chartHeight }}
       />
-      <div className={styles.chartTitle}>{chart.title}</div>
     </div>
   );
 }

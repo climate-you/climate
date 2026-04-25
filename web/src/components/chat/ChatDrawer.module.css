@@ -413,18 +413,13 @@
 }
 
 .chartCard {
-  background: var(--surface-alt, #f4f4f4);
-  border: 1px solid var(--surface-border, rgba(17, 17, 17, 0.18));
-  border-radius: 12px;
   overflow: visible;
-  padding-top: 8px;
 }
 
 .chartTitle {
   font-weight: 600;
-  font-size: 12px;
-  padding: 4px 12px 8px;
-  text-align: center;
+  font-size: 15px;
+  padding: 0 0 2px;
   color: var(--text-primary, #111827);
 }
 

@@ -1,5 +1,20 @@
 import type { EChartsOption } from "echarts";
 
+// Shared color palette derived from panels.json series colors
+export function getMultiSeriesColors(): string[] {
+  const dark =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  return [
+    "#0000ff", // blue
+    "#ff0000", // red
+    dark ? "#ffffff" : "#000000", // black / white in dark mode
+    "#ccccff", // light blue
+    "#FF7F7F", // light red
+    "#B9BAB8", // grey
+  ];
+}
+
 import { CHART_ANIMATION_DURATION_MS } from "@/lib/explorer/constants";
 import {
   formatAxisTitle,
@@ -82,6 +97,17 @@ function chartThemeTokens(): ChartThemeTokens {
     dailyLine: "rgba(180,180,180,0.7)",
     rawLine: "#ff2e55",
   };
+}
+
+function isDarkMode(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-color-scheme: dark)").matches
+  );
+}
+
+function adaptColor(color: string): string {
+  return isDarkMode() && color === "#000000" ? "#ffffff" : color;
 }
 
 export function isMobileViewport(): boolean {
@@ -177,7 +203,12 @@ function trendLegendLabel(
     return `${seriesLabel(series, trendKey, { preferShort })}: ${sign}${perDecade.toFixed(1)} days/decade`;
   }
   const seriesUnit = series[trendKey]?.unit ?? unit;
-  if (seriesUnit !== "C" && seriesUnit !== "°C" && seriesUnit !== "F" && seriesUnit !== "°F") {
+  if (
+    seriesUnit !== "C" &&
+    seriesUnit !== "°C" &&
+    seriesUnit !== "F" &&
+    seriesUnit !== "°F"
+  ) {
     return `${seriesLabel(series, trendKey, { preferShort })}: ${sign}${perDecade.toFixed(1)} ${seriesUnit}/decade`;
   }
   const suffix = `${unit === "F" ? "ºF" : "ºC"}/decade`;
@@ -296,6 +327,7 @@ type BuildOptionArgs = {
   transitionMs: number;
   /** "C" | "F" for temperature charts; arbitrary unit string for non-temperature charts. */
   unit: string;
+  showYAxisName?: boolean;
 };
 
 export function buildHotDaysOption({
@@ -305,6 +337,7 @@ export function buildHotDaysOption({
   visibleKeys,
   transitionMs,
   unit,
+  showYAxisName,
 }: BuildOptionArgs): EChartsOption {
   const theme = chartThemeTokens();
   const isMobile = isMobileViewport();
@@ -334,7 +367,11 @@ export function buildHotDaysOption({
     ? trendLegendLabel(graph, data, trendKey, series, unit, isMobile)
     : "Trend";
   const barBaseColor = seriesColor(series, barKey, theme.barBase);
-  const barAccentColor = (barKey && series[barKey]?.style?.accent_color) ? series[barKey]!.style!.accent_color! : theme.barAccent;
+  const barAccentColor = adaptColor(
+    barKey && series[barKey]?.style?.accent_color
+      ? series[barKey]!.style!.accent_color!
+      : theme.barAccent,
+  );
   const meanColor = seriesColor(series, meanKey, theme.meanLine);
   const trendColor = seriesColor(series, trendKey, theme.trendArea);
   const valueSuffix =
@@ -472,7 +509,7 @@ export function buildHotDaysOption({
     },
     yAxis: {
       type: "value",
-      name: isMobile ? "" : yAxisTitle(graph, unit),
+      name: showYAxisName || !isMobile ? yAxisTitle(graph, unit) : "",
       ...sharedYAxisStyle(),
       axisLabel: {
         color: theme.axisLabelColor,
@@ -590,6 +627,7 @@ export function buildTimeSeriesOption({
   unit,
   xMin,
   xMax,
+  showYAxisName,
 }: BuildTimeSeriesOptionArgs): EChartsOption {
   const theme = chartThemeTokens();
   const isMobile = isMobileViewport();
@@ -604,11 +642,11 @@ export function buildTimeSeriesOption({
       const role = seriesRole(series, key);
       const isTrend = role === "trend";
       const isMean = role === "mean";
-      const baseColor = seriesColor(
+      const baseColor = adaptColor(seriesColor(
         series,
         key,
         isTrend ? theme.trendArea : isMean ? theme.meanLine : theme.rawLine,
-      );
+      ));
       const rawValues = data.map((row) => (row[key] as number | null) ?? null);
       const displayValues = isMean
         ? deriveMeanFromBase(data, key, rawValues)
@@ -717,8 +755,13 @@ export function buildTimeSeriesOption({
           const label = key
             ? seriesLabel(series, key, { preferShort: isMobile })
             : String(r.seriesName ?? "");
-          const su = (key && series[key]?.unit) ? series[key].unit! : unit;
-          const unitSuffix = su === "F" || su === "°F" ? " °F" : su === "C" || su === "°C" ? " °C" : ` ${su}`;
+          const su = key && series[key]?.unit ? series[key].unit! : unit;
+          const unitSuffix =
+            su === "F" || su === "°F"
+              ? " °F"
+              : su === "C" || su === "°C"
+                ? " °C"
+                : ` ${su}`;
           return `${label}: ${Number((r.value as unknown[])[1]).toFixed(1)}${unitSuffix}`;
         });
         return [title, ...lines].join("<br/>");
@@ -732,7 +775,7 @@ export function buildTimeSeriesOption({
     },
     yAxis: {
       type: "value",
-      name: isMobile ? "" : yAxisName,
+      name: showYAxisName || !isMobile ? yAxisName : "",
       ...sharedYAxisStyle(),
       axisLabel: {
         color: theme.axisLabelColor,
@@ -773,12 +816,23 @@ export function buildComparisonBarOption({
         ? "°F"
         : unit.replace(/^C(\/|$)/, "°C$1").replace(/^F(\/|$)/, "°F$1");
   const isTemp = unit === "C" || unit === "°C" || unit === "F" || unit === "°F";
-  const decimalPlaces = isTemp ? 1 : 2;
+  const isTempTrend = /^[CF]\//.test(unit);
+  const decimalPlaces = isTemp || isTempTrend ? 1 : 2;
+  const tempBaseUnit = unitDisplay.startsWith("°F") ? "°F" : "°C";
+  const rateSuffix = isTempTrend ? unitDisplay.replace(/^°[CF]/, "") : "";
+  const yAxisName = isTemp
+    ? `Temperature (${unitDisplay})`
+    : isTempTrend
+      ? `Temperature (${tempBaseUnit}) ${rateSuffix.replace(/^\//, "/ ")}`
+      : unitDisplay;
 
   // Start y-axis from 0 when all values are non-negative (standard for bar charts
   // showing magnitudes like trends or totals). Use auto-scale for mixed-sign data.
   const numericValues = yValues.filter((v): v is number => v != null);
-  const yMin = numericValues.length > 0 && numericValues.every((v) => v >= 0) ? 0 : undefined;
+  const yMin =
+    numericValues.length > 0 && numericValues.every((v) => v >= 0)
+      ? 0
+      : undefined;
 
   // Layout adapts for many bars: rotate x labels, hide per-bar value labels.
   const manyBars = xLabels.length >= 5;
@@ -792,7 +846,9 @@ export function buildComparisonBarOption({
       textStyle: { color: theme.tooltipText, fontSize: 12 },
       appendToBody: true,
       formatter: (params: unknown) => {
-        const p = (params as Array<{ name: string; value: number | null; color: string }>)[0];
+        const p = (
+          params as Array<{ name: string; value: number | null; color: string }>
+        )[0];
         if (p.value == null) return `${p.name}: n/a`;
         return `${p.name}: <b>${p.value.toFixed(decimalPlaces)} ${unitDisplay}</b>`;
       },
@@ -812,16 +868,13 @@ export function buildComparisonBarOption({
     },
     yAxis: {
       type: "value",
-      // Show only the number on axis ticks; unit appears in the axis name.
+      name: yAxisName,
+      ...sharedYAxisStyle(),
       axisLabel: {
         color: theme.axisLabelColor,
-        formatter: (v: number) => formatIntegerOnlyAxisTick(v) || v.toFixed(decimalPlaces),
+        formatter: (v: number) =>
+          formatIntegerOnlyAxisTick(v) || v.toFixed(decimalPlaces),
       },
-      name: unitDisplay,
-      nameLocation: "end" as const,
-      nameTextStyle: { color: theme.axisLabelColor, fontSize: 10, align: "left" as const },
-      nameGap: 6,
-      splitLine: { lineStyle: { color: theme.splitLineColor } },
       ...(yMin !== undefined ? { min: yMin } : { scale: true }),
     },
     series: [
@@ -836,14 +889,15 @@ export function buildComparisonBarOption({
               show: true,
               position: "top",
               formatter: (params: { value: number | null }) =>
-                params.value != null ? `${params.value.toFixed(decimalPlaces)} ${unitDisplay}` : "",
+                params.value != null
+                  ? `${params.value.toFixed(decimalPlaces)} ${unitDisplay}`
+                  : "",
               fontSize: 11,
               color: theme.axisLabelColor,
             },
         barMaxWidth: 80,
       },
     ],
-    // Bauhaus palette — same order as MULTI_SERIES_COLORS in ChatChart.tsx
-    color: ["#0000FF", "#FF0000", "#FFCC00", "#000000", "#FF6600", "#007700"],
+    color: getMultiSeriesColors(),
   } as EChartsOption;
 }
