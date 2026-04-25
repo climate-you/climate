@@ -8,11 +8,6 @@ import {
   BACKDROP_BLUE,
   BACKDROP_DARK_MODE,
   BACKDROP_WHITE,
-  CHAT_DRAWER_BREAKPOINT_PX,
-  CHAT_DRAWER_DESKTOP_RIGHT_PX,
-  CHAT_DRAWER_MOBILE_BOTTOM_PX,
-  CHAT_DRAWER_MOBILE_HEIGHT_MAX_PX,
-  CHAT_DRAWER_MOBILE_HEIGHT_RATIO,
   CITY_SNAP_LAYER_IDS,
   CITY_SNAP_MAX_ZOOM,
   CITY_SNAP_RADIUS_PX,
@@ -144,22 +139,6 @@ function panelPaddingForViewport(map: maplibregl.Map, panelOpen: boolean) {
   };
 }
 
-function chatDrawerPaddingForViewport(map: maplibregl.Map) {
-  const BASE_PAD = 80;
-  const mapRect = map.getContainer().getBoundingClientRect();
-  const isMobile = window.matchMedia(
-    `(max-width: ${CHAT_DRAWER_BREAKPOINT_PX}px)`,
-  ).matches;
-  if (isMobile) {
-    const drawerH =
-      Math.min(window.innerHeight * CHAT_DRAWER_MOBILE_HEIGHT_RATIO, CHAT_DRAWER_MOBILE_HEIGHT_MAX_PX) +
-      CHAT_DRAWER_MOBILE_BOTTOM_PX;
-    const bottomPad = Math.min(BASE_PAD + drawerH, mapRect.height * 0.85);
-    return { top: BASE_PAD, bottom: bottomPad, left: BASE_PAD, right: BASE_PAD };
-  }
-  const rightPad = Math.min(BASE_PAD + CHAT_DRAWER_DESKTOP_RIGHT_PX, mapRect.width * 0.6);
-  return { top: BASE_PAD, bottom: BASE_PAD, left: BASE_PAD, right: rightPad };
-}
 
 function setBackdropColor(map: maplibregl.Map, color: string) {
   map.getContainer().style.backgroundColor = color;
@@ -1618,25 +1597,35 @@ export default function MapLibreGlobe({
     });
     const lons = chatLocations.map((l) => l.lon);
     const lats = chatLocations.map((l) => l.lat);
+    const panelPad = panelPaddingForViewport(map, panelOpenRef.current);
     if (chatLocations.length === 1) {
       map.flyTo({
         center: [lons[0], lats[0]],
         zoom: focusZoomTarget(map),
         pitch: 0,
         bearing: 0,
-        padding: chatDrawerPaddingForViewport(map),
+        padding: panelPad,
         duration: FOCUS_FLY_DURATION_MS,
         easing: cubicOut,
         essential: true,
       });
     } else {
-      map.fitBounds(
-        new maplibregl.LngLatBounds(
-          [Math.min(...lons), Math.min(...lats)],
-          [Math.max(...lons), Math.max(...lats)],
-        ),
-        { padding: chatDrawerPaddingForViewport(map), duration: FOCUS_FLY_DURATION_MS, essential: true },
-      );
+      const centerLon = (Math.min(...lons) + Math.max(...lons)) / 2;
+      const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+      const spanLon = Math.max(...lons) - Math.min(...lons);
+      const spanLat = Math.max(...lats) - Math.min(...lats);
+      const span = Math.max(spanLon, spanLat);
+      const zoom = Math.max(1, Math.min(5, Math.floor(Math.log2(360 / Math.max(span, 1)))));
+      map.flyTo({
+        center: [centerLon, centerLat],
+        zoom,
+        pitch: 0,
+        bearing: 0,
+        padding: panelPad,
+        duration: FOCUS_FLY_DURATION_MS,
+        easing: cubicOut,
+        essential: true,
+      });
     }
   }, [chatLocations]);
 
@@ -1645,10 +1634,21 @@ export default function MapLibreGlobe({
     const map = mapRef.current;
     if (!map || !chatFlyToBbox) return;
     const [west, south, east, north] = chatFlyToBbox;
-    map.fitBounds(
-      new maplibregl.LngLatBounds([west, south], [east, north]),
-      { padding: chatDrawerPaddingForViewport(map), duration: FOCUS_FLY_DURATION_MS, essential: true },
-    );
+    const panelPad = panelPaddingForViewport(map, panelOpenRef.current);
+    const centerLon = (west + east) / 2;
+    const centerLat = (south + north) / 2;
+    const span = Math.max(east - west, north - south);
+    const zoom = Math.max(1, Math.min(5, Math.floor(Math.log2(360 / Math.max(span, 1)))));
+    map.flyTo({
+      center: [centerLon, centerLat],
+      zoom,
+      pitch: 0,
+      bearing: 0,
+      padding: panelPad,
+      duration: FOCUS_FLY_DURATION_MS,
+      easing: cubicOut,
+      essential: true,
+    });
   }, [chatFlyToBbox]);
 
   useEffect(() => {
