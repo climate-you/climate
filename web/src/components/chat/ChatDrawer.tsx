@@ -610,6 +610,47 @@ export default function ChatDrawer({
 
   const isEmpty = messages.length === 0;
 
+  const groupedQuestions = React.useMemo(() => {
+    const order: QuestionScope[] = [];
+    const map: Partial<Record<QuestionScope, ExampleQuestion[]>> = {};
+    for (const q of exampleQuestions) {
+      if (!map[q.scope]) {
+        order.push(q.scope);
+        map[q.scope] = [];
+      }
+      map[q.scope]!.push(q);
+    }
+    return order.map((scope) => ({ scope, questions: map[scope]! }));
+  }, [exampleQuestions]);
+
+  const cityName = mapContext?.label?.split(",")[0] ?? null;
+
+  function DatasetIcon({ dataset }: { dataset: ExampleQuestion["dataset"] }) {
+    if (dataset === "precipitation") {
+      // raindrop
+      return (
+        <svg className={styles.chipDatasetIcon} viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 2C8.5 7.5 5 12 5 15.5a7 7 0 0 0 14 0C19 12 15.5 7.5 12 2z" />
+        </svg>
+      );
+    }
+    if (dataset === "sea temperature") {
+      // two wave lines
+      return (
+        <svg className={styles.chipDatasetIcon} viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M2 10c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />
+          <path d="M2 16c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />
+        </svg>
+      );
+    }
+    // thermometer: tube + bulb as a single outline
+    return (
+      <svg className={styles.chipDatasetIcon} viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
+      </svg>
+    );
+  }
+
   // Shared header controls (title + model selector + new conversation button)
   const headerControls = (
     <>
@@ -666,23 +707,26 @@ export default function ChatDrawer({
           <p className={styles.emptyStateHint}>
             Ask a question about climate data, or try one of these:
           </p>
-          <div className={styles.chips}>
-            {exampleQuestions.map((q) => (
-              <button
-                key={q.text}
-                type="button"
-                className={styles.chip}
-                onClick={() => void sendMessage(q.text)}
-              >
-                <span
-                  className={`${styles.chipCategory} ${styles[`chipScope_${q.scope}`]}`}
-                >
-                  {q.scope} · {q.dataset}
-                </span>
-                {q.text}
-              </button>
-            ))}
-          </div>
+          {groupedQuestions.map(({ scope, questions }) => (
+            <div key={scope} className={styles.chipGroup}>
+              <div className={styles.chipGroupHeader}>
+                {scope === "local" && cityName ? cityName : scope.charAt(0).toUpperCase() + scope.slice(1)}
+              </div>
+              <div className={styles.chips}>
+                {questions.map((q) => (
+                  <button
+                    key={q.text}
+                    type="button"
+                    className={styles.chip}
+                    onClick={() => void sendMessage(q.text)}
+                  >
+                    <DatasetIcon dataset={q.dataset} />
+                    {q.text}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

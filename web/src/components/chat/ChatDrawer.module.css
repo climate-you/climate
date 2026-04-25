@@ -197,13 +197,27 @@
 .emptyState {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 16px;
 }
 
 .emptyStateHint {
   margin: 0;
   font-size: 13px;
   color: var(--muted-text, rgba(17, 17, 17, 0.72));
+}
+
+.chipGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chipGroupHeader {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #0000ff;
 }
 
 .chips {
@@ -214,6 +228,9 @@
 
 .chip {
   flex: 0 1 calc(50% - 3px);
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
   text-align: left;
   background: var(--surface-alt, #f4f4f4);
   border: 1px solid var(--surface-border, rgba(17, 17, 17, 0.18));
@@ -226,6 +243,19 @@
   transition: background 120ms ease, border-color 120ms ease;
 }
 
+.chipDatasetIcon {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  margin-top: 1px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.55;
+}
+
 .chip:hover {
   background: #e8e8e8;
   border-color: var(--surface-border-strong, rgba(17, 17, 17, 0.35));
@@ -234,15 +264,6 @@
 .chip:focus-visible {
   outline: 2px solid var(--cta, #0000ff);
   outline-offset: 1px;
-}
-
-.chipCategory {
-  display: block;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  margin-bottom: 4px;
 }
 
 .chipScope_local {
