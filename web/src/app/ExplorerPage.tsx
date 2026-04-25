@@ -1542,6 +1542,7 @@ export default function ExplorerPage({
                     lat,
                     lon,
                     label: selectedLocation.label,
+                    countryCode: selectedLocation.countryCode,
                   }
                 : null
             }

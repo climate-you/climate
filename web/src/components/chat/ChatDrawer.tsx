@@ -16,7 +16,7 @@ import ChatChart, { type ChatChartPayload } from "./ChatChart";
 // Types
 // ---------------------------------------------------------------------------
 
-type MapContext = { lat: number; lon: number; label: string } | null;
+type MapContext = { lat: number; lon: number; label: string; countryCode?: string | null } | null;
 type ModelOverride = "groq_8b" | "local" | "groq_70b" | "groq_scout" | null;
 type ConversationTurn = { role: "user" | "assistant"; text: string };
 
@@ -623,7 +623,10 @@ export default function ChatDrawer({
     return order.map((scope) => ({ scope, questions: map[scope]! }));
   }, [exampleQuestions]);
 
-  const cityName = mapContext?.label?.split(",")[0] ?? null;
+  const cityName = mapContext?.label?.split(",")[0]?.trim() ?? null;
+  const countryName = mapContext?.countryCode
+    ? (mapContext.label.split(",").pop()?.trim() ?? null)
+    : null;
 
   function DatasetIcon({ dataset }: { dataset: ExampleQuestion["dataset"] }) {
     if (dataset === "precipitation") {
@@ -710,7 +713,11 @@ export default function ChatDrawer({
           {groupedQuestions.map(({ scope, questions }) => (
             <div key={scope} className={styles.chipGroup}>
               <div className={styles.chipGroupHeader}>
-                {scope === "local" && cityName ? cityName : scope.charAt(0).toUpperCase() + scope.slice(1)}
+                {scope === "local" && cityName
+                  ? countryName && countryName !== cityName
+                    ? `${cityName}, ${countryName}`
+                    : cityName
+                  : scope.charAt(0).toUpperCase() + scope.slice(1)}
               </div>
               <div className={styles.chips}>
                 {questions.map((q) => (
