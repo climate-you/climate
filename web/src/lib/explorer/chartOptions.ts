@@ -163,7 +163,7 @@ function sharedYAxisStyle() {
   return {
     nameLocation: "middle" as const,
     nameRotate: 90,
-    nameGap: 46,
+    nameGap: 50,
     nameTextStyle: {
       color: theme.axisLabelColor,
       fontSize: 13,
@@ -642,11 +642,13 @@ export function buildTimeSeriesOption({
       const role = seriesRole(series, key);
       const isTrend = role === "trend";
       const isMean = role === "mean";
-      const baseColor = adaptColor(seriesColor(
-        series,
-        key,
-        isTrend ? theme.trendArea : isMean ? theme.meanLine : theme.rawLine,
-      ));
+      const baseColor = adaptColor(
+        seriesColor(
+          series,
+          key,
+          isTrend ? theme.trendArea : isMean ? theme.meanLine : theme.rawLine,
+        ),
+      );
       const rawValues = data.map((row) => (row[key] as number | null) ?? null);
       const displayValues = isMean
         ? deriveMeanFromBase(data, key, rawValues)
