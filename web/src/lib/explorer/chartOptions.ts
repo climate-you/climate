@@ -334,7 +334,7 @@ export function buildHotDaysOption({
     ? trendLegendLabel(graph, data, trendKey, series, unit, isMobile)
     : "Trend";
   const barBaseColor = seriesColor(series, barKey, theme.barBase);
-  const barAccentColor = theme.barAccent;
+  const barAccentColor = (barKey && series[barKey]?.style?.accent_color) ? series[barKey]!.style!.accent_color! : theme.barAccent;
   const meanColor = seriesColor(series, meanKey, theme.meanLine);
   const trendColor = seriesColor(series, trendKey, theme.trendArea);
   const valueSuffix =
@@ -643,7 +643,7 @@ export function buildTimeSeriesOption({
           color: isTrend ? "transparent" : baseColor,
         },
         z: isTrend ? 1 : isMean ? 3 : 2,
-        areaStyle: isTrend ? { color: theme.trendArea } : undefined,
+        areaStyle: isTrend ? { color: baseColor } : undefined,
         animationDuration: CHART_ANIMATION_DURATION_MS,
         animationDelay: 0,
         animationDurationUpdate: transitionMs,

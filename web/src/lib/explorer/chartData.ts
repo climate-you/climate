@@ -17,7 +17,7 @@ export type SeriesPayload = {
   label?: string | null;
   shortLabel?: string | null;
   ui?: { role?: "raw" | "mean" | "trend" | "category" } | null;
-  style?: { type?: "line" | "bar"; color?: string; stack?: string } | null;
+  style?: { type?: "line" | "bar"; color?: string; accent_color?: string; stack?: string } | null;
 };
 
 export type GraphPayload = {

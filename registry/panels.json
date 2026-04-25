@@ -326,7 +326,7 @@
               "label": "Annual total",
               "ui": { "role": "raw" },
               "unit": "mm",
-              "style": { "type": "line", "color": "#1f77b4" }
+              "style": { "type": "line", "color": "#000000" }
             },
             {
               "key": "tp_yearly_total_5y",
@@ -350,7 +350,7 @@
               "label": "Trend",
               "ui": { "role": "trend" },
               "unit": "mm",
-              "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
+              "style": { "type": "line", "color": "rgba(0,0,255,0.24)" },
               "transform": { "fn": "linear_trend_line" }
             }
           ]
@@ -373,7 +373,7 @@
               "label": "Max dry spell",
               "ui": { "role": "raw" },
               "unit": "days",
-              "style": { "type": "bar", "color": "#f4a582" }
+              "style": { "type": "bar", "color": "#B9BAB8", "accent_color": "#000000" }
             },
             {
               "key": "tp_cdd_5y",
@@ -393,7 +393,7 @@
               "label": "Trend",
               "ui": { "role": "trend" },
               "unit": "days",
-              "style": { "type": "line", "color": "rgba(255,0,0,0.24)" },
+              "style": { "type": "line", "color": "rgba(0,0,255,0.24)" },
               "transform": { "fn": "linear_trend_line" }
             }
           ]
