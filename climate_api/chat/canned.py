@@ -1,17 +1,14 @@
 """
 Pre-written answers for the example questions shown in the chat UI.
 
-Matching is case-insensitive and whitespace-normalised.
-When a question matches, the answer is streamed via SSE with a short artificial
-delay so it behaves like a real response.
+Answers and chart specs are stored in question_tree.json and loaded at startup
+via question_tree.py.  This module derives the lookup dict from the tree so
+there is a single source of truth for all question content.
 
 Temperature values are encoded as [[C_VALUE|F_VALUE]] tokens.  At stream time,
 _apply_unit() strips the token and emits the appropriate value.  Absolute
 temperatures use the full C→F conversion (×9/5 + 32); delta/trend values use
 the scale-only conversion (×9/5).
-
-Run the questions through the 70b model and update the answers below once
-you're happy with them.
 """
 
 from __future__ import annotations
@@ -20,131 +17,18 @@ import re
 import time
 from typing import Any
 
-# question (lowercased, stripped) → (answer text, locations list, chart_spec | None)
-# chart_spec: {"metric_id": str, "start_year": int|None, "end_year": int|None,
-#              "month_filter": list[int]|None, "aggregate_by_year": bool}
-CANNED: dict[str, tuple[str, list[dict], dict | None]] = {
-    "what is the hottest capital city in the world?": (
-        "The hottest capital city in the world is **Khartoum, Sudan**, with a mean annual "
-        "temperature of **[[29.6°C|85.3°F]]**.",
-        [{"label": "Khartoum", "lat": 15.55, "lon": 32.53}],
-        {"metric_id": "t2m_yearly_mean_c"},
-    ),
-    "what are the top 5 warmest large cities in the world?": (
-        "The top 5 warmest large cities in the world are:\n\n"
-        "1. **Khartoum, Sudan** — [[29.6°C|85.3°F]]\n"
-        "2. **Niamey, Niger** — [[29.4°C|84.9°F]]\n"
-        "3. **Makkah, Saudi Arabia** — [[29.3°C|84.7°F]]\n"
-        "4. **Omdurman, Sudan** — [[29.2°C|84.6°F]]\n"
-        "5. **Sokoto, Nigeria** — [[29.2°C|84.6°F]]",
-        [
-            {"label": "Khartoum", "lat": 15.55, "lon": 32.53},
-            {"label": "Niamey", "lat": 13.51, "lon": 2.11},
-            {"label": "Makkah", "lat": 21.39, "lon": 39.86},
-            {"label": "Omdurman", "lat": 15.65, "lon": 32.48},
-            {"label": "Sokoto", "lat": 13.06, "lon": 5.24},
-        ],
-        {"metric_id": "t2m_yearly_mean_c"},
-    ),
-    "how have winters changed in tokyo since 2000?": (
-        "Winter temperatures in the Tokyo area (December–February) have warmed noticeably "
-        "since 2000. The coldest winter on record was in 2001, averaging around [[4.3°C|39.7°F]] across "
-        "the three winter months, while the warmest was 2023 at around [[6.5°C|43.7°F]]. "
-        "The overall trend shows roughly [[+0.3–0.5°C|+0.5–0.9°F]] of warming over the period, consistent "
-        "with the broader pattern of urban warming in East Asia.",
-        [{"label": "Tokyo", "lat": 35.69, "lon": 139.69}],
-        {"metric_id": "t2m_monthly_mean_c", "start_year": 2000,
-         "month_filter": [12, 1, 2], "aggregate_by_year": True},
-    ),
-    "which city has warmed the fastest in the last 50 years?": (
-        "The city that has warmed the fastest in the last 50 years is **Longyearbyen, "
-        "Svalbard** (Norway), with a warming trend of **[[1.21°C|2.18°F]] per decade** — roughly [[6°C|10.8°F]] "
-        "of warming over 50 years. This reflects the Arctic amplification effect, where "
-        "polar regions warm at two to three times the global average rate.",
-        [{"label": "Longyearbyen", "lat": 78.22, "lon": 15.65}],
-        {"metric_id": "t2m_yearly_mean_c", "show_trend": True},
-    ),
-    "what is the coldest major city in the world?": (
-        "The coldest major city in the world is **Krasnoyarsk, Russia**, with a mean annual "
-        "temperature of **[[1.0°C|33.8°F]]**.",
-        [{"label": "Krasnoyarsk", "lat": 56.02, "lon": 92.87}],
-        {"metric_id": "t2m_yearly_mean_c"},
-    ),
-    "how does the temperature in dubai compare to 20 years ago?": (
-        "Dubai is measurably warmer than 20 years ago. The annual mean temperature has risen "
-        "from **[[28.1°C|82.6°F]]** in 2006 to **[[28.9°C|84.0°F]]** in 2025 — an increase of **[[0.8°C|1.4°F]]** over "
-        "two decades, driven by a combination of global warming and rapid urban expansion.",
-        [{"label": "Dubai", "lat": 25.20, "lon": 55.27}],
-        {"metric_id": "t2m_yearly_mean_c"},
-    ),
-    "which continent is warming the fastest?": (
-        "The continent that is warming the fastest is **Europe**, with a warming trend of "
-        "**[[0.51°C|0.92°F]] per decade**.",
-        [],
-        {
-            "metric_id": "t2m_trend_1979_2025_c_per_decade",
-            "region_ids": [
-                "continent:africa",
-                "continent:antarctica",
-                "continent:asia",
-                "continent:europe",
-                "continent:north_america",
-                "continent:oceania",
-                "continent:south_america",
-            ],
-        },
-    ),
-    "how has the sea surface temperature in the indian ocean changed?": (
-        "The sea surface temperature in the Indian Ocean has been increasing over the years, "
-        "with a mean temperature of **[[17.3°C|63.1°F]]** in 1982 and **[[18.1°C|64.6°F]]** in 2025.",
-        [],
-        {
-            "metric_id": "sst_yearly_mean_c",
-            "start_year": 1982,
-            "end_year": 2025,
-            "region_ids": ["ocean:indian_ocean"],
-        },
-    ),
-    "how are global temperatures changing?": (
-        "Global mean temperature has been increasing steadily, rising from **[[13.9°C|57.0°F]]** "
-        "in 1979 to **[[15.0°C|59.0°F]]** in 2025 — an increase of **[[1.1°C|2.0°F]]** over 46 years.",
-        [],
-        {
-            "metric_id": "t2m_yearly_mean_c",
-            "start_year": 1979,
-            "end_year": 2025,
-            "region_ids": ["globe"],
-        },
-    ),
-    "how has the mean temperature in norway changed in recent years?": (
-        "The mean temperature in Norway has been increasing in recent years. "
-        "In 2025, the mean temperature was **[[2.6°C|36.7°F]]**, which is higher than "
-        "the mean temperature in 2000, which was **[[1.4°C|34.5°F]]**.",
-        [],
-        {
-            "metric_id": "t2m_yearly_mean_c",
-            "start_year": 2000,
-            "end_year": 2025,
-            "region_ids": ["country:NO"],
-        },
-    ),
-    "is germany warming faster than france?": (
-        "Yes, Germany is warming faster than France. Germany has a warming trend of "
-        "**[[0.50°C|0.90°F]] per decade**, compared to France's **[[0.41°C|0.74°F]] per decade**.",
-        [],
-        {
-            "metric_id": "t2m_trend_1979_2025_c_per_decade",
-            "region_ids": ["country:DE", "country:FR"],
-        },
-    ),
-    "what capital city sees the least rain?": (
-        "The capital city that sees the least rain is **Cairo, Egypt** with an average "
-        "annual rainfall of **26.6 mm**.",
-        [{"label": "Cairo", "lat": 30.06, "lon": 31.24}],
-        {"metric_id": "tp_annual_total_mm"},
-    ),
-    # Disabled — requires continent/region averaging which is not yet supported:
-    # "is it getting hotter in europe?": ("...", [], None),
+from .question_tree import QUESTION_TREE, TREE_VERSION
+
+# Build lookup: question text (normalised) → (answer, locations, chart_spec, follow_up_ids)
+CANNED: dict[str, tuple[str, list[dict], dict | None, list[str]]] = {
+    " ".join(node.question.strip().lower().split()): (
+        node.answer,
+        node.locations,
+        node.chart_spec,
+        node.follow_up_ids,
+    )
+    for node in QUESTION_TREE.values()
+    if node.answer is not None and node.status == "active"
 }
 
 _TOKEN_RE = re.compile(r"\[\[([^\]|]+)\|([^\]]+)\]\]")
@@ -157,8 +41,8 @@ def _apply_unit(text: str, unit: str) -> str:
     return _TOKEN_RE.sub(r"\1", text)
 
 
-def lookup(question: str) -> tuple[str, list[dict], dict | None] | None:
-    """Return (answer, locations, chart_spec) for a question, or None if not found."""
+def lookup(question: str) -> tuple[str, list[dict], dict | None, list[str]] | None:
+    """Return (answer, locations, chart_spec, follow_up_ids) for a question, or None."""
     key = " ".join(question.strip().lower().split())
     return CANNED.get(key)
 
@@ -189,7 +73,6 @@ def build_canned_charts(
 
     region_ids = chart_spec.get("region_ids")
     if region_ids:
-        # Region-based chart (continent, ocean, globe, country)
         aggregation = chart_spec.get("aggregation", "mean")
         for region_id in region_ids:
             result = _tools.get_region_metric_series(
@@ -205,7 +88,6 @@ def build_canned_charts(
                 continue
             series_results.append(result)
     else:
-        # Point-based chart (lat/lon locations)
         for loc in locations:
             result = _tools._get_metric_series(
                 lat=loc["lat"],
@@ -253,6 +135,7 @@ def stream_canned(
     answer: str,
     locations: list[dict],
     charts: list[dict] | None = None,
+    follow_up_ids: list[str] | None = None,
     delay_s: float = 1.5,
     temperature_unit: str = "C",
 ):
@@ -263,15 +146,13 @@ def stream_canned(
     """
     resolved = _apply_unit(answer, temperature_unit)
 
-    # Short initial delay to simulate model "thinking"
     time.sleep(min(delay_s, 0.3))
 
-    # Stream word-by-word
     words = resolved.split(" ")
     for i, word in enumerate(words):
         chunk = word if i == 0 else " " + word
         yield {"type": "chunk", "text": chunk}
-        time.sleep(0.02)  # ~50 words/second
+        time.sleep(0.02)
 
     yield {"type": "answer", "text": resolved}
     yield {
@@ -287,4 +168,6 @@ def stream_canned(
         "steps_timing": [],
         "locations": locations,
         "charts": charts or [],
+        "follow_up_ids": follow_up_ids or [],
+        "question_tree_version": TREE_VERSION,
     }

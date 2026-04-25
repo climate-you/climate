@@ -1,0 +1,468 @@
+{
+  "version": "2026-04-25",
+  "root_ids": [
+    "global_temp_change",
+    "fastest_warming_continent",
+    "sea_temp_global",
+    "coral_risk_global",
+    "hottest_capital",
+    "least_rain_capital",
+    "local_temp_trend"
+  ],
+  "nodes": {
+    "global_temp_change": {
+      "id": "global_temp_change",
+      "question": "How has air temperature changed globally?",
+      "scope": "global",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["fastest_warming_continent", "sea_temp_increase", "fastest_warming_city", "hot_days_global", "country_warming_most", "local_vs_global"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "Global mean temperature has been increasing steadily, rising from [[13.9°C|57.0°F]] in 1979 to [[15.0°C|59.0°F]] in 2025 — an increase of [[1.1°C|2.0°F]] over 46 years.",
+      "locations": [],
+      "chart_spec": {
+        "metric_id": "t2m_yearly_mean_c",
+        "start_year": 1979,
+        "end_year": 2025,
+        "region_ids": ["globe"]
+      },
+      "status": "active"
+    },
+    "fastest_warming_continent": {
+      "id": "fastest_warming_continent",
+      "question": "Which continent is warming the fastest?",
+      "scope": "global",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["country_warming_most", "europe_vs_asia", "arctic_amplification", "slowest_warming_continent", "country_in_europe_warming", "local_vs_global"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "The continent that is warming the fastest is **Europe**, with a warming trend of **[[0.51°C|0.92°F]] per decade**.",
+      "locations": [],
+      "chart_spec": {
+        "metric_id": "t2m_trend_1979_2025_c_per_decade",
+        "region_ids": ["continent:africa", "continent:antarctica", "continent:asia", "continent:europe", "continent:north_america", "continent:oceania", "continent:south_america"]
+      },
+      "status": "active"
+    },
+    "sea_temp_global": {
+      "id": "sea_temp_global",
+      "question": "How have global sea surface temperatures changed?",
+      "scope": "global",
+      "datasets": ["sea_temperature"],
+      "follow_up_ids": ["sea_temp_indian", "sea_temp_all_oceans", "sea_vs_land_warming", "coral_risk_global", "sea_temp_local"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "TODO: Write canned answer — global SST has been rising since 1982, with the trend accelerating in recent decades.",
+      "locations": [],
+      "chart_spec": {
+        "metric_id": "sst_yearly_mean_c",
+        "start_year": 1982,
+        "end_year": 2025,
+        "region_ids": ["globe"]
+      },
+      "status": "active"
+    },
+    "coral_risk_global": {
+      "id": "coral_risk_global",
+      "question": "How is ocean warming affecting coral reefs?",
+      "scope": "global",
+      "datasets": ["coral"],
+      "follow_up_ids": ["sea_temp_global", "sea_temp_all_oceans", "coral_risk_local"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "TODO: Write canned answer — severe coral bleaching risk days per year have increased significantly since the 1990s due to sustained ocean warming.",
+      "locations": [],
+      "chart_spec": {
+        "metric_id": "dhw_severe_risk_days_per_year",
+        "region_ids": ["globe"]
+      },
+      "status": "active"
+    },
+    "hottest_capital": {
+      "id": "hottest_capital",
+      "question": "What is the hottest capital city in the world?",
+      "scope": "city",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["top5_warmest_cities", "coldest_major_city", "fastest_warming_city", "local_rank"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "The hottest capital city in the world is **Khartoum, Sudan**, with a mean annual temperature of **[[29.6°C|85.3°F]]**.",
+      "locations": [{"label": "Khartoum", "lat": 15.55, "lon": 32.53}],
+      "chart_spec": {"metric_id": "t2m_yearly_mean_c"},
+      "status": "active"
+    },
+    "least_rain_capital": {
+      "id": "least_rain_capital",
+      "question": "What capital city sees the least rain?",
+      "scope": "city",
+      "datasets": ["precipitation"],
+      "follow_up_ids": ["wettest_major_city", "driest_country", "rainfall_local"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "The capital city that sees the least rain is **Cairo, Egypt** with an average annual rainfall of **26.6 mm**.",
+      "locations": [{"label": "Cairo", "lat": 30.06, "lon": 31.24}],
+      "chart_spec": {"metric_id": "tp_annual_total_mm"},
+      "status": "active"
+    },
+    "local_temp_trend": {
+      "id": "local_temp_trend",
+      "question": "How has the temperature changed in {location}?",
+      "scope": "local",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["local_vs_global", "local_rank", "fastest_warming_city", "local_winters"],
+      "requires_location": true,
+      "location_filter": "any",
+      "answer": null,
+      "locations": [],
+      "chart_spec": null,
+      "status": "active"
+    },
+    "sea_temp_increase": {
+      "id": "sea_temp_increase",
+      "question": "Has global sea surface temperature also increased?",
+      "scope": "global",
+      "datasets": ["sea_temperature"],
+      "follow_up_ids": ["sea_temp_global", "sea_temp_all_oceans", "sea_vs_land_warming", "sea_temp_local"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "TODO: Write canned answer — yes, global SST has also risen since 1982, tracking closely with air temperature but at a somewhat slower rate.",
+      "locations": [],
+      "chart_spec": {
+        "metric_id": "sst_yearly_mean_c",
+        "start_year": 1982,
+        "end_year": 2025,
+        "region_ids": ["globe"]
+      },
+      "status": "active"
+    },
+    "fastest_warming_city": {
+      "id": "fastest_warming_city",
+      "question": "Which city has warmed the fastest in the last 50 years?",
+      "scope": "city",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["hottest_capital", "coldest_major_city", "top5_warmest_cities", "arctic_amplification", "local_vs_global"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "The city that has warmed the fastest in the last 50 years is **Longyearbyen, Svalbard** (Norway), with a warming trend of **[[1.21°C|2.18°F]] per decade** — roughly [[6°C|10.8°F]] of warming over 50 years. This reflects the Arctic amplification effect, where polar regions warm at two to three times the global average rate.",
+      "locations": [{"label": "Longyearbyen", "lat": 78.22, "lon": 15.65}],
+      "chart_spec": {"metric_id": "t2m_yearly_mean_c", "show_trend": true},
+      "status": "active"
+    },
+    "country_warming_most": {
+      "id": "country_warming_most",
+      "question": "Which country has warmed the most globally?",
+      "scope": "country",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["fastest_warming_continent", "top5_warming_countries", "europe_vs_asia"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "TODO: Write canned answer — the country with the highest warming trend since 1979 (derive from t2m_trend_1979_2025_c_per_decade).",
+      "locations": [],
+      "chart_spec": {
+        "metric_id": "t2m_trend_1979_2025_c_per_decade"
+      },
+      "status": "active"
+    },
+    "arctic_amplification": {
+      "id": "arctic_amplification",
+      "question": "Is the Arctic warming faster than the rest of the world?",
+      "scope": "global",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["fastest_warming_continent", "global_temp_change", "fastest_warming_city"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "TODO: Write canned answer — yes, the Arctic Ocean has warmed at roughly 2–3× the global average rate since 1979 (Arctic amplification). Chart: t2m_yearly_mean_c for globe vs ocean:arctic_ocean.",
+      "locations": [],
+      "chart_spec": {
+        "metric_id": "t2m_yearly_mean_c",
+        "start_year": 1979,
+        "end_year": 2025,
+        "region_ids": ["globe", "ocean:arctic_ocean"]
+      },
+      "status": "active"
+    },
+    "hot_days_global": {
+      "id": "hot_days_global",
+      "question": "Are extreme heat events becoming more common?",
+      "scope": "global",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["global_temp_change", "fastest_warming_continent", "local_vs_global"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "TODO: Write canned answer — the number of extreme heat days per year globally has been increasing since 1979 (t2m_hotdays_per_year, globe).",
+      "locations": [],
+      "chart_spec": {
+        "metric_id": "t2m_hotdays_per_year",
+        "start_year": 1979,
+        "end_year": 2025,
+        "region_ids": ["globe"]
+      },
+      "status": "active"
+    },
+    "local_vs_global": {
+      "id": "local_vs_global",
+      "question": "How does {location} compare to the global temperature trend?",
+      "scope": "local",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["global_temp_change", "fastest_warming_continent", "local_rank"],
+      "requires_location": true,
+      "location_filter": "any",
+      "answer": null,
+      "locations": [],
+      "chart_spec": null,
+      "status": "active"
+    },
+    "europe_vs_asia": {
+      "id": "europe_vs_asia",
+      "question": "How does Europe compare to Asia in terms of warming?",
+      "scope": "global",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["fastest_warming_continent", "country_warming_most", "country_in_europe_warming"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "TODO: Write canned answer — Europe is warming faster than Asia; compare their respective t2m_trend_1979_2025_c_per_decade.",
+      "locations": [],
+      "chart_spec": {
+        "metric_id": "t2m_trend_1979_2025_c_per_decade",
+        "region_ids": ["continent:europe", "continent:asia"]
+      },
+      "status": "active"
+    },
+    "country_in_europe_warming": {
+      "id": "country_in_europe_warming",
+      "question": "Which country in Europe has warmed the most?",
+      "scope": "country",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["fastest_warming_continent", "europe_vs_asia", "top5_warming_countries"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "TODO: Write canned answer — the European country with the highest warming trend since 1979 (derive from t2m_trend_1979_2025_c_per_decade filtered by continent).",
+      "locations": [],
+      "chart_spec": {
+        "metric_id": "t2m_trend_1979_2025_c_per_decade"
+      },
+      "status": "active"
+    },
+    "top5_warming_countries": {
+      "id": "top5_warming_countries",
+      "question": "What are the top 5 countries that have warmed the most?",
+      "scope": "country",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["country_warming_most", "europe_vs_asia", "fastest_warming_continent"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "TODO: Write canned answer — top 5 countries by warming trend since 1979 (derive from t2m_trend_1979_2025_c_per_decade).",
+      "locations": [],
+      "chart_spec": {
+        "metric_id": "t2m_trend_1979_2025_c_per_decade"
+      },
+      "status": "active"
+    },
+    "slowest_warming_continent": {
+      "id": "slowest_warming_continent",
+      "question": "Which continent has seen the least warming?",
+      "scope": "global",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["fastest_warming_continent", "global_temp_change", "sea_vs_land_warming"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "TODO: Write canned answer — the continent with the lowest warming trend since 1979 (same chart as fastest_warming_continent, different framing).",
+      "locations": [],
+      "chart_spec": {
+        "metric_id": "t2m_trend_1979_2025_c_per_decade",
+        "region_ids": ["continent:africa", "continent:antarctica", "continent:asia", "continent:europe", "continent:north_america", "continent:oceania", "continent:south_america"]
+      },
+      "status": "active"
+    },
+    "top5_warmest_cities": {
+      "id": "top5_warmest_cities",
+      "question": "What are the top 5 warmest large cities in the world?",
+      "scope": "city",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["hottest_capital", "coldest_major_city", "fastest_warming_city", "local_rank"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "The top 5 warmest large cities in the world are:\n\n1. **Khartoum, Sudan** — [[29.6°C|85.3°F]]\n2. **Niamey, Niger** — [[29.4°C|84.9°F]]\n3. **Makkah, Saudi Arabia** — [[29.3°C|84.7°F]]\n4. **Omdurman, Sudan** — [[29.2°C|84.6°F]]\n5. **Sokoto, Nigeria** — [[29.2°C|84.6°F]]",
+      "locations": [
+        {"label": "Khartoum", "lat": 15.55, "lon": 32.53},
+        {"label": "Niamey", "lat": 13.51, "lon": 2.11},
+        {"label": "Makkah", "lat": 21.39, "lon": 39.86},
+        {"label": "Omdurman", "lat": 15.65, "lon": 32.48},
+        {"label": "Sokoto", "lat": 13.06, "lon": 5.24}
+      ],
+      "chart_spec": {"metric_id": "t2m_yearly_mean_c"},
+      "status": "active"
+    },
+    "coldest_major_city": {
+      "id": "coldest_major_city",
+      "question": "What is the coldest major city in the world?",
+      "scope": "city",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["hottest_capital", "top5_warmest_cities", "fastest_warming_city", "arctic_amplification"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "The coldest major city in the world is **Krasnoyarsk, Russia**, with a mean annual temperature of **[[1.0°C|33.8°F]]**.",
+      "locations": [{"label": "Krasnoyarsk", "lat": 56.02, "lon": 92.87}],
+      "chart_spec": {"metric_id": "t2m_yearly_mean_c"},
+      "status": "active"
+    },
+    "local_rank": {
+      "id": "local_rank",
+      "question": "How does {location} rank globally for temperature?",
+      "scope": "local",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["hottest_capital", "local_vs_global", "local_temp_trend"],
+      "requires_location": true,
+      "location_filter": "any",
+      "answer": null,
+      "locations": [],
+      "chart_spec": null,
+      "status": "active"
+    },
+    "sea_temp_indian": {
+      "id": "sea_temp_indian",
+      "question": "How has the sea surface temperature in the Indian Ocean changed?",
+      "scope": "global",
+      "datasets": ["sea_temperature"],
+      "follow_up_ids": ["sea_temp_global", "sea_temp_all_oceans", "sea_vs_land_warming", "coral_risk_global"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "The sea surface temperature in the Indian Ocean has been increasing over the years, with a mean temperature of **[[17.3°C|63.1°F]]** in 1982 and **[[18.1°C|64.6°F]]** in 2025.",
+      "locations": [],
+      "chart_spec": {
+        "metric_id": "sst_yearly_mean_c",
+        "start_year": 1982,
+        "end_year": 2025,
+        "region_ids": ["ocean:indian_ocean"]
+      },
+      "status": "active"
+    },
+    "sea_temp_all_oceans": {
+      "id": "sea_temp_all_oceans",
+      "question": "Which ocean has warmed the most?",
+      "scope": "global",
+      "datasets": ["sea_temperature"],
+      "follow_up_ids": ["sea_temp_global", "sea_vs_land_warming", "coral_risk_global"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "TODO: Write canned answer — compare SST warming trends across Atlantic, Pacific, Indian, Arctic, and Southern Oceans since 1982.",
+      "locations": [],
+      "chart_spec": {
+        "metric_id": "sst_yearly_mean_c",
+        "start_year": 1982,
+        "end_year": 2025,
+        "region_ids": ["ocean:atlantic_ocean", "ocean:pacific_ocean", "ocean:indian_ocean", "ocean:arctic_ocean", "ocean:southern_ocean"]
+      },
+      "status": "active"
+    },
+    "sea_vs_land_warming": {
+      "id": "sea_vs_land_warming",
+      "question": "How does ocean warming compare to land warming?",
+      "scope": "global",
+      "datasets": ["temperature", "sea_temperature"],
+      "follow_up_ids": ["global_temp_change", "fastest_warming_continent", "sea_temp_all_oceans"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "TODO: Write canned answer — land has warmed roughly twice as fast as oceans since 1982; show both t2m and sst globe series aligned from 1982.",
+      "locations": [],
+      "chart_spec": null,
+      "status": "active"
+    },
+    "sea_temp_local": {
+      "id": "sea_temp_local",
+      "question": "How has the sea temperature near {location} changed?",
+      "scope": "local",
+      "datasets": ["sea_temperature"],
+      "follow_up_ids": ["sea_temp_global", "coral_risk_global", "sea_temp_all_oceans"],
+      "requires_location": true,
+      "location_filter": "coastal",
+      "answer": null,
+      "locations": [],
+      "chart_spec": null,
+      "status": "active"
+    },
+    "coral_risk_local": {
+      "id": "coral_risk_local",
+      "question": "What is the coral bleaching risk near {location}?",
+      "scope": "local",
+      "datasets": ["coral"],
+      "follow_up_ids": ["coral_risk_global", "sea_temp_global", "sea_temp_local"],
+      "requires_location": true,
+      "location_filter": "tropical_coastal",
+      "answer": null,
+      "locations": [],
+      "chart_spec": null,
+      "status": "active"
+    },
+    "wettest_major_city": {
+      "id": "wettest_major_city",
+      "question": "What is the wettest major city in the world?",
+      "scope": "city",
+      "datasets": ["precipitation"],
+      "follow_up_ids": ["least_rain_capital", "driest_country", "rainfall_local"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "TODO: Write canned answer — the wettest major city in the world by annual mean precipitation (tp_annual_total_mm).",
+      "locations": [],
+      "chart_spec": {"metric_id": "tp_annual_total_mm"},
+      "status": "active"
+    },
+    "driest_country": {
+      "id": "driest_country",
+      "question": "Which country receives the least rainfall?",
+      "scope": "country",
+      "datasets": ["precipitation"],
+      "follow_up_ids": ["least_rain_capital", "wettest_major_city", "rainfall_local"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "TODO: Write canned answer — the driest country by annual mean precipitation (tp_annual_total_mm by country region).",
+      "locations": [],
+      "chart_spec": {"metric_id": "tp_annual_total_mm"},
+      "status": "active"
+    },
+    "rainfall_uk": {
+      "id": "rainfall_uk",
+      "question": "How has annual rainfall in the UK changed over the last 50 years?",
+      "scope": "country",
+      "datasets": ["precipitation"],
+      "follow_up_ids": ["driest_country", "least_rain_capital", "rainfall_local"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "TODO: Write canned answer — annual rainfall in the UK since 1979 (tp_annual_total_mm, country:GB).",
+      "locations": [],
+      "chart_spec": {
+        "metric_id": "tp_annual_total_mm",
+        "start_year": 1979,
+        "end_year": 2025,
+        "region_ids": ["country:GB"]
+      },
+      "status": "active"
+    },
+    "rainfall_local": {
+      "id": "rainfall_local",
+      "question": "How has rainfall changed in {location}?",
+      "scope": "local",
+      "datasets": ["precipitation"],
+      "follow_up_ids": ["least_rain_capital", "driest_country", "rainfall_uk"],
+      "requires_location": true,
+      "location_filter": "any",
+      "answer": null,
+      "locations": [],
+      "chart_spec": null,
+      "status": "active"
+    },
+    "local_winters": {
+      "id": "local_winters",
+      "question": "How have winters changed in {location}?",
+      "scope": "local",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["local_temp_trend", "fastest_warming_city", "global_temp_change"],
+      "requires_location": true,
+      "location_filter": "any",
+      "answer": null,
+      "locations": [],
+      "chart_spec": null,
+      "status": "active"
+    }
+  }
+}

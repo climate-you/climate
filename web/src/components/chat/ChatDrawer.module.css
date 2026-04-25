@@ -282,6 +282,25 @@
   color: #1a7a55;
 }
 
+/* Follow-up chips row (after assistant answer) */
+
+.followUpRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--surface-border, rgba(17, 17, 17, 0.12));
+  margin-top: 2px;
+}
+
+.followUpLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted-text, rgba(17, 17, 17, 0.5));
+}
+
 /* Message rows */
 
 .message {

@@ -39,6 +39,7 @@ from .services.panels import (
 )
 from .chat.orchestrator import ChatOrchestrator, ProviderTier
 from .chat.canned import lookup as _canned_lookup, stream_canned as _stream_canned, build_canned_charts as _build_canned_charts
+from .chat.question_tree import get_tree_metadata as _get_tree_metadata
 from .store.country_classifier import CountryClassifier
 from .store.location_index import LocationIndex
 from .store.ocean_classifier import OceanClassifier
@@ -79,6 +80,10 @@ class _ChatRequest(BaseModel):
     model_override: str | None = None
     # Temperature unit preference set by the frontend ("C" or "F").
     temperature_unit: str = "C"
+    # Question-tree analytics fields (optional; omitted for user-typed questions).
+    question_id: str | None = None
+    parent_question_id: str | None = None
+    question_tree_version: str | None = None
 
 
 class _FeedbackBody(BaseModel):
@@ -715,6 +720,10 @@ def create_app() -> FastAPI:
     # Chat endpoints
     # ------------------------------------------------------------------
 
+    @app.get("/api/chat/questions")
+    def get_chat_questions():
+        return _get_tree_metadata()
+
     @app.post("/api/chat")
     def chat(body: _ChatRequest, request: Request):
         if chat_orchestrator is None:
@@ -751,14 +760,16 @@ def create_app() -> FastAPI:
 
             canned = _canned_lookup(body.question) if not body.model_override else None
             if canned is not None:
-                canned_answer, canned_locs, canned_chart_spec = canned
+                canned_answer, canned_locs, canned_chart_spec, canned_follow_up_ids = canned
                 canned_charts = (
                     _build_canned_charts(canned_locs, canned_chart_spec, chat_orchestrator.tile_store, body.temperature_unit)
                     if canned_chart_spec
                     else []
                 )
                 event_source = _stream_canned(
-                    canned_answer, canned_locs, charts=canned_charts, temperature_unit=body.temperature_unit
+                    canned_answer, canned_locs, charts=canned_charts,
+                    follow_up_ids=canned_follow_up_ids,
+                    temperature_unit=body.temperature_unit,
                 )
             else:
                 event_source = chat_orchestrator.run(
@@ -815,6 +826,9 @@ def create_app() -> FastAPI:
                     rejected_tiers=rejected_tiers or None,
                     model_override=model_override_used,
                     error=error_text,
+                    question_id=body.question_id,
+                    parent_question_id=body.parent_question_id,
+                    question_tree_version=body.question_tree_version,
                 )
 
         return StreamingResponse(

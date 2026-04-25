@@ -4,11 +4,10 @@ import React, { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import styles from "./ChatDrawer.module.css";
 import {
-  CHAT_EXAMPLE_QUESTIONS_GENERIC,
-  CHAT_LOCAL_QUESTION_TEMPLATES,
+  CHAT_FOLLOWUP_CHIP_CAP,
   CHAT_MODEL_OVERRIDE_KEY,
-  type ExampleQuestion,
-  type QuestionScope,
+  CHAT_QUESTIONS_API_PATH,
+  CHAT_ROOT_CHIP_CAP,
 } from "@/lib/explorer/constants";
 import ChatChart, { type ChatChartPayload } from "./ChatChart";
 
@@ -20,38 +19,55 @@ type MapContext = { lat: number; lon: number; label: string; countryCode?: strin
 type ModelOverride = "groq_8b" | "local" | "groq_70b" | "groq_scout" | null;
 type ConversationTurn = { role: "user" | "assistant"; text: string };
 
-const MAX_HISTORY_TURNS = 3; // keep last N user+assistant pairs
+const MAX_HISTORY_TURNS = 3;
 
 type ChatLocation = { label: string; rank?: number; lat: number; lon: number; alt_names?: string };
-
 type ToolCallInfo = { name: string; args: Record<string, unknown> };
 
 type ChatMessage = {
   role: "user" | "assistant";
   text: string;
   messageId?: string;
-  notice?: string; // degraded-model disclaimer
-  debugInfo?: string; // shown only in debug mode
+  notice?: string;
+  debugInfo?: string;
   feedback?: "good" | "bad" | null;
   error?: boolean;
   loading?: boolean;
   aborted?: boolean;
-  exhausted?: boolean; // daily budget exhausted — locks the input
-  locations?: ChatLocation[]; // locations mentioned in this answer
-  charts?: ChatChartPayload[]; // optional charts from get_metric_series calls
-  toolCalls?: ToolCallInfo[]; // tool calls made during this response
+  exhausted?: boolean;
+  locations?: ChatLocation[];
+  charts?: ChatChartPayload[];
+  toolCalls?: ToolCallInfo[];
 };
+
+type QuestionScope = "global" | "country" | "city" | "local";
+type LocationFilter = "any" | "coastal" | "tropical_coastal";
+
+interface QuestionMeta {
+  id: string;
+  question: string;
+  scope: QuestionScope;
+  datasets: string[];
+  follow_up_ids: string[];
+  requires_location: boolean;
+  location_filter: LocationFilter;
+}
+
+interface QuestionTree {
+  version: string;
+  root_ids: string[];
+  questions: Record<string, QuestionMeta>;
+}
 
 type ChatDrawerProps = {
   apiBase: string;
   mapContext: MapContext;
   unit?: "C" | "F";
-  devMode?: boolean; // shows the model toggle when true
-  debugMode?: boolean; // shows per-reply model/tier/timing info
+  devMode?: boolean;
+  debugMode?: boolean;
   onLocations?: (locs: ChatLocation[] | null) => void;
   onPickLocation?: (lat: number, lon: number) => void;
   onFlyToBbox?: (bbox: [number, number, number, number]) => void;
-  // Embedded mode: renders inline inside the panel without a floating button
   embedded?: boolean;
   embeddedVisible?: boolean;
   onClose?: () => void;
@@ -110,7 +126,6 @@ function linkifyCities(text: string, locs: ChatLocation[]): string {
   let result = text;
   for (const loc of locs) {
     const city = loc.label.split(",")[0].trim();
-    // Build a list of name variants to linkify: local name + any comma-separated alt names
     const variants = [city];
     if (loc.alt_names) {
       for (const alt of loc.alt_names.split(",")) {
@@ -130,26 +145,17 @@ function linkifyCities(text: string, locs: ChatLocation[]): string {
 }
 
 function addSummaryLineLink(text: string): string {
-  // Match a line ending with ':' that is immediately followed (with optional blank lines)
-  // by a numbered or bulleted list — this is the summary line for a location list.
   const match = text.match(/^([^\n]+):([ \t]*\n(?:[ \t]*\n)*[ \t]*)(?=\d+\.|- )/m);
   if (!match || match.index === undefined) return text;
-
   const lineContent = match[1];
-
-  // Try to extract the meaningful anchor: strip leading article ("The/A/An")
-  // and trailing linking verb ("are/is/were/include/contain/…")
   const anchorMatch = lineContent.match(
     /^(?:(?:the|a|an)\s+)?(.+?)(?:\s+(?:are|is|were|was|have been|includes?|contains?))?$/i,
   );
   const anchor = anchorMatch ? anchorMatch[1].trim() : lineContent.trim();
-
-  // Wrap the anchor in a #locs link
   const anchorIdx = lineContent.indexOf(anchor);
   const before = lineContent.slice(0, anchorIdx);
   const after = lineContent.slice(anchorIdx + anchor.length);
   const newLine = `${before}[${anchor}](#locs)${after}:${match[2]}`;
-
   return (
     text.slice(0, match.index) +
     newLine +
@@ -161,7 +167,6 @@ function generateUUID(): string {
   if (cryptoAvailable) {
     return crypto.randomUUID();
   }
-  // Dev-only fallback for non-secure contexts (e.g. mobile via local IP)
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
@@ -215,22 +220,30 @@ export default function ChatDrawer({
   const [open, setOpen] = useState(false);
   const [conversationId, setConversationId] = useState(() => generateUUID());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [conversationHistory, setConversationHistory] = useState<
-    ConversationTurn[]
-  >([]);
+  const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [conversationExhausted, setConversationExhausted] = useState(false);
   const [modelOverride, setModelOverride] = useState<ModelOverride>(null);
+  const [questionTree, setQuestionTree] = useState<QuestionTree | null>(null);
+  const [currentFollowUpIds, setCurrentFollowUpIds] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const lastAnsweredQuestionIdRef = useRef<string | null>(null);
+
+  // Fetch question tree once on mount
+  useEffect(() => {
+    fetch(`${apiBase}${CHAT_QUESTIONS_API_PATH}`)
+      .then((r) => r.json())
+      .then((data: QuestionTree) => setQuestionTree(data))
+      .catch(() => {}); // fail silently — chips simply don't appear
+  }, [apiBase]);
 
   // Read persisted preferences from localStorage (client-side only)
   useEffect(() => {
     const stored = localStorage.getItem(CHAT_MODEL_OVERRIDE_KEY);
     if (!devMode) {
-      // Clear any override that may have been set during a debug session
       localStorage.removeItem(CHAT_MODEL_OVERRIDE_KEY);
     } else if (
       stored === "groq_8b" ||
@@ -242,12 +255,10 @@ export default function ChatDrawer({
     }
   }, [devMode]);
 
-  // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Focus input when drawer opens or when mounted in embedded mode
   useEffect(() => {
     if (embedded) {
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -260,7 +271,6 @@ export default function ChatDrawer({
     }
   }, [embedded, open]);
 
-  // Keyboard: close on Escape (non-embedded only)
   useEffect(() => {
     if (embedded || !open) return;
     const handler = (e: KeyboardEvent) => {
@@ -284,6 +294,8 @@ export default function ChatDrawer({
     setConversationHistory([]);
     setConversationExhausted(false);
     setConversationId(generateUUID());
+    setCurrentFollowUpIds([]);
+    lastAnsweredQuestionIdRef.current = null;
     onLocations?.(null);
   }
 
@@ -291,7 +303,7 @@ export default function ChatDrawer({
     abortControllerRef.current?.abort();
   }
 
-  async function sendMessage(question: string) {
+  async function sendMessage(question: string, questionId?: string | null) {
     if (!question.trim() || loading) return;
     if (!cryptoAvailable && process.env.NODE_ENV !== "development") {
       setMessages((prev) => [
@@ -305,9 +317,11 @@ export default function ChatDrawer({
       ]);
       return;
     }
+    const parentQuestionId = lastAnsweredQuestionIdRef.current;
     setInput("");
     setLoading(true);
-    onLocations?.(null); // clear any previous chat markers
+    setCurrentFollowUpIds([]);
+    onLocations?.(null);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -329,13 +343,15 @@ export default function ChatDrawer({
         apiBase,
         {
           question,
-          history:
-            conversationHistory.length > 0 ? conversationHistory : undefined,
+          history: conversationHistory.length > 0 ? conversationHistory : undefined,
           map_context: mapContext,
           session_id: conversationId,
           message_id: messageId,
           model_override: modelOverride ?? undefined,
           temperature_unit: unit,
+          question_id: questionId ?? null,
+          parent_question_id: parentQuestionId,
+          question_tree_version: questionTree?.version ?? undefined,
         },
         (event) => {
           const type = event.type as string;
@@ -361,7 +377,6 @@ export default function ChatDrawer({
               ),
             );
           } else if (type === "reset") {
-            // Quota hit mid-stream; tier fallback in progress — clear partial state.
             finalAnswerText = "";
             pendingNotice = undefined;
             setMessages((prev) =>
@@ -379,12 +394,7 @@ export default function ChatDrawer({
             setMessages((prev) =>
               prev.map((m) =>
                 m.messageId === messageId
-                  ? {
-                      ...m,
-                      text: finalAnswerText,
-                      notice: pendingNotice,
-                      loading: false,
-                    }
+                  ? { ...m, text: finalAnswerText, notice: pendingNotice, loading: false }
                   : m,
               ),
             );
@@ -393,12 +403,7 @@ export default function ChatDrawer({
             setMessages((prev) =>
               prev.map((m) =>
                 m.messageId === messageId
-                  ? {
-                      ...m,
-                      text: event.message as string,
-                      loading: false,
-                      error: true,
-                    }
+                  ? { ...m, text: event.message as string, loading: false, error: true }
                   : m,
               ),
             );
@@ -417,13 +422,10 @@ export default function ChatDrawer({
                 | undefined
             )?.map((loc) => ({ ...loc, label: loc.label.replace(/\*/g, "") }));
             const answerLower = finalAnswerText.toLowerCase();
-            // Extract rank from ordered list items (e.g. "1. Khartoum, Sudan — 29.6°C")
             const rankMap = new Map<string, number>();
-            const orderedListRegex = /^(\d+)\.\s+(.+?)(?=[,\u2014\u2013]|$)/gm;
+            const orderedListRegex = /^(\d+)\.\s+(.+?)(?=[,—–]|$)/gm;
             let rankMatch;
-            while (
-              (rankMatch = orderedListRegex.exec(finalAnswerText)) !== null
-            ) {
+            while ((rankMatch = orderedListRegex.exec(finalAnswerText)) !== null) {
               rankMap.set(
                 rankMatch[2].replace(/\*/g, "").trim().toLowerCase(),
                 parseInt(rankMatch[1], 10),
@@ -442,7 +444,6 @@ export default function ChatDrawer({
               })
               .map((loc) => {
                 const cityName = loc.label.split(",")[0].trim().toLowerCase();
-                // Try local name first, then alt names for rank lookup
                 let rank = rankMap.get(cityName);
                 if (rank === undefined && loc.alt_names) {
                   for (const alt of loc.alt_names.split(",")) {
@@ -457,9 +458,7 @@ export default function ChatDrawer({
             if (locsToShow && locsToShow.length > 0) {
               setMessages((prev) =>
                 prev.map((m) =>
-                  m.messageId === messageId
-                    ? { ...m, locations: locsToShow }
-                    : m,
+                  m.messageId === messageId ? { ...m, locations: locsToShow } : m,
                 ),
               );
             }
@@ -486,8 +485,7 @@ export default function ChatDrawer({
               const totalMs = event.total_ms as number | null;
               const rejected = (event.rejected_tiers as string[] | null) ?? [];
               const parts: string[] = [];
-              if (rejected.length > 0)
-                parts.push(`~~${rejected.join(", ")}~~ →`);
+              if (rejected.length > 0) parts.push(`~~${rejected.join(", ")}~~ →`);
               if (tier) parts.push(tier);
               if (model) parts.push(`(${model})`);
               if (totalMs != null)
@@ -501,22 +499,24 @@ export default function ChatDrawer({
                 ),
               );
             }
+            // Set follow-up chips: use canned follow_up_ids if present, else root pool
+            const followUpIds = (event.follow_up_ids as string[] | undefined) ?? [];
+            setCurrentFollowUpIds(
+              followUpIds.length > 0
+                ? followUpIds
+                : questionTree?.root_ids ?? [],
+            );
+            lastAnsweredQuestionIdRef.current = questionId ?? null;
           }
         },
         controller.signal,
       );
 
       if (!answered && !errorReceived) {
-        // Stream ended without an answer or error event
         setMessages((prev) =>
           prev.map((m) =>
             m.messageId === messageId
-              ? {
-                  ...m,
-                  text: "No response received.",
-                  loading: false,
-                  error: true,
-                }
+              ? { ...m, text: "No response received.", loading: false, error: true }
               : m,
           ),
         );
@@ -559,11 +559,7 @@ export default function ChatDrawer({
     }
   }
 
-  async function submitFeedback(
-    messageId: string,
-    feedback: "good" | "bad" | null,
-  ) {
-    // Toggle: clicking the active state clears feedback
+  async function submitFeedback(messageId: string, feedback: "good" | "bad" | null) {
     const current = messages.find((m) => m.messageId === messageId)?.feedback;
     const next = current === feedback ? null : feedback;
     setMessages((prev) =>
@@ -578,7 +574,7 @@ export default function ChatDrawer({
         body: JSON.stringify({ feedback: next }),
       });
     } catch {
-      // Feedback is best-effort; don't surface errors
+      // Feedback is best-effort
     }
   }
 
@@ -589,55 +585,74 @@ export default function ChatDrawer({
     }
   }
 
-  const exampleQuestions = React.useMemo((): ExampleQuestion[] => {
-    const shuffled = [...CHAT_EXAMPLE_QUESTIONS_GENERIC].sort(
-      () => Math.random() - 0.5,
-    );
-    if (mapContext?.label) {
-      const cityName = mapContext.label.split(",")[0];
-      const localQuestions: ExampleQuestion[] = CHAT_LOCAL_QUESTION_TEMPLATES.map(
-        ({ template, dataset }) => ({
-          text: template.replace("{city}", cityName),
-          scope: "local" as QuestionScope,
-          dataset,
-        }),
-      );
-      return [...localQuestions, ...shuffled.slice(0, 6)];
-    }
-    return shuffled.slice(0, 9);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId, mapContext?.label]);
-
-  const isEmpty = messages.length === 0;
-
-  const groupedQuestions = React.useMemo(() => {
-    const scopeOrder: QuestionScope[] = ["local", "global", "country", "city"];
-    const map: Partial<Record<QuestionScope, ExampleQuestion[]>> = {};
-    for (const q of exampleQuestions) {
-      if (!map[q.scope]) map[q.scope] = [];
-      map[q.scope]!.push(q);
-    }
-    return scopeOrder
-      .filter((scope) => map[scope])
-      .map((scope) => ({ scope, questions: map[scope]! }));
-  }, [exampleQuestions]);
+  // ---------------------------------------------------------------------------
+  // Question tree — chip helpers
+  // ---------------------------------------------------------------------------
 
   const cityName = mapContext?.label?.split(",")[0]?.trim() ?? null;
   const countryName = mapContext?.countryCode
     ? (mapContext.label.split(",").pop()?.trim() ?? null)
     : null;
 
-  function DatasetIcon({ dataset }: { dataset: ExampleQuestion["dataset"] }) {
+  function resolveChipText(node: QuestionMeta): string {
+    if (!node.requires_location) return node.question;
+    return node.question.replace("{location}", cityName ?? "");
+  }
+
+  function passesLocationFilter(node: QuestionMeta): boolean {
+    if (node.requires_location && !mapContext) return false;
+    if (node.location_filter === "tropical_coastal") {
+      if (!mapContext || Math.abs(mapContext.lat) > 35) return false;
+    }
+    if (node.location_filter === "coastal" && !mapContext) return false;
+    return true;
+  }
+
+  // Root chips: filtered + capped, grouped by scope
+  const rootNodes = React.useMemo((): QuestionMeta[] => {
+    if (!questionTree) return [];
+    return questionTree.root_ids
+      .map((id) => questionTree.questions[id])
+      .filter((node): node is QuestionMeta => !!node && passesLocationFilter(node))
+      .slice(0, CHAT_ROOT_CHIP_CAP);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionTree, conversationId, mapContext?.label, mapContext?.lat]);
+
+  const groupedQuestions = React.useMemo(() => {
+    const scopeOrder: QuestionScope[] = ["local", "global", "country", "city"];
+    const map: Partial<Record<QuestionScope, QuestionMeta[]>> = {};
+    for (const node of rootNodes) {
+      if (!map[node.scope]) map[node.scope] = [];
+      map[node.scope]!.push(node);
+    }
+    return scopeOrder
+      .filter((scope) => map[scope])
+      .map((scope) => ({ scope, questions: map[scope]! }));
+  }, [rootNodes]);
+
+  // Follow-up chips: filtered + capped
+  const visibleFollowUpNodes = React.useMemo((): QuestionMeta[] => {
+    if (!questionTree || currentFollowUpIds.length === 0) return [];
+    return currentFollowUpIds
+      .map((id) => questionTree.questions[id])
+      .filter((node): node is QuestionMeta => !!node && passesLocationFilter(node))
+      .slice(0, CHAT_FOLLOWUP_CHIP_CAP);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionTree, currentFollowUpIds, mapContext?.label, mapContext?.lat]);
+
+  // ---------------------------------------------------------------------------
+  // Dataset icon
+  // ---------------------------------------------------------------------------
+
+  function DatasetIcon({ dataset }: { dataset: string }) {
     if (dataset === "precipitation") {
-      // raindrop
       return (
         <svg className={styles.chipDatasetIcon} viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 2C8.5 7.5 5 12 5 15.5a7 7 0 0 0 14 0C19 12 15.5 7.5 12 2z" />
         </svg>
       );
     }
-    if (dataset === "sea temperature") {
-      // two wave lines
+    if (dataset === "sea_temperature" || dataset === "coral") {
       return (
         <svg className={styles.chipDatasetIcon} viewBox="0 0 24 24" aria-hidden="true">
           <path d="M2 10c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />
@@ -645,7 +660,6 @@ export default function ChatDrawer({
         </svg>
       );
     }
-    // thermometer: tube + bulb as a single outline
     return (
       <svg className={styles.chipDatasetIcon} viewBox="0 0 24 24" aria-hidden="true">
         <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
@@ -653,15 +667,14 @@ export default function ChatDrawer({
     );
   }
 
-  // Shared header controls (title + model selector + new conversation button)
+  // ---------------------------------------------------------------------------
+  // Shared header controls
+  // ---------------------------------------------------------------------------
+
   const headerControls = (
     <>
       <div className={styles.drawerTitle}>
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className={styles.drawerTitleIcon}
-        >
+        <svg viewBox="0 0 24 24" aria-hidden="true" className={styles.drawerTitleIcon}>
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
         Research Terminal
@@ -701,7 +714,12 @@ export default function ChatDrawer({
     </>
   );
 
-  // Shared messages area
+  // ---------------------------------------------------------------------------
+  // Messages area
+  // ---------------------------------------------------------------------------
+
+  const isEmpty = messages.length === 0;
+
   const messagesArea = (
     <div className={styles.messages}>
       {isEmpty && (
@@ -719,17 +737,20 @@ export default function ChatDrawer({
                   : scope.charAt(0).toUpperCase() + scope.slice(1)}
               </div>
               <div className={styles.chips}>
-                {questions.map((q) => (
-                  <button
-                    key={q.text}
-                    type="button"
-                    className={styles.chip}
-                    onClick={() => void sendMessage(q.text)}
-                  >
-                    <DatasetIcon dataset={q.dataset} />
-                    {q.text}
-                  </button>
-                ))}
+                {questions.map((node) => {
+                  const text = resolveChipText(node);
+                  return (
+                    <button
+                      key={node.id}
+                      type="button"
+                      className={styles.chip}
+                      onClick={() => void sendMessage(text, node.id)}
+                    >
+                      <DatasetIcon dataset={node.datasets[0] ?? "temperature"} />
+                      {text}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -797,10 +818,7 @@ export default function ChatDrawer({
                                   className={styles.locationLink}
                                   onClick={(e) => {
                                     e.preventDefault();
-                                    onPickLocation?.(
-                                      parseFloat(lat),
-                                      parseFloat(lon),
-                                    );
+                                    onPickLocation?.(parseFloat(lat), parseFloat(lon));
                                   }}
                                 >
                                   {children}
@@ -837,8 +855,8 @@ export default function ChatDrawer({
 
           {msg.charts && msg.charts.length > 0 && !msg.loading && (
             <div className={styles.charts}>
-              {msg.charts.map((chart, i) => (
-                <ChatChart key={i} chart={chart} temperatureUnit={unit} />
+              {msg.charts.map((chart, ci) => (
+                <ChatChart key={ci} chart={chart} temperatureUnit={unit} />
               ))}
             </div>
           )}
@@ -854,9 +872,7 @@ export default function ChatDrawer({
                   className={`${styles.feedbackBtn} ${msg.feedback === "good" ? styles.feedbackBtnActive : ""}`}
                   aria-label="Good answer"
                   aria-pressed={msg.feedback === "good"}
-                  onClick={() =>
-                    void submitFeedback(msg.messageId!, "good")
-                  }
+                  onClick={() => void submitFeedback(msg.messageId!, "good")}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
                 </button>
@@ -865,9 +881,7 @@ export default function ChatDrawer({
                   className={`${styles.feedbackBtn} ${msg.feedback === "bad" ? styles.feedbackBtnActive : ""}`}
                   aria-label="Bad answer"
                   aria-pressed={msg.feedback === "bad"}
-                  onClick={() =>
-                    void submitFeedback(msg.messageId!, "bad")
-                  }
+                  onClick={() => void submitFeedback(msg.messageId!, "bad")}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>
                 </button>
@@ -875,11 +889,38 @@ export default function ChatDrawer({
             )}
         </div>
       ))}
+
+      {/* Follow-up chips — shown after the last answer while not loading */}
+      {!isEmpty && !loading && visibleFollowUpNodes.length > 0 && (
+        <div className={styles.followUpRow}>
+          <div className={styles.followUpLabel}>Continue exploring</div>
+          <div className={styles.chips}>
+            {visibleFollowUpNodes.map((node) => {
+              const text = resolveChipText(node);
+              return (
+                <button
+                  key={node.id}
+                  type="button"
+                  className={styles.chip}
+                  onClick={() => void sendMessage(text, node.id)}
+                >
+                  <DatasetIcon dataset={node.datasets[0] ?? "temperature"} />
+                  {text}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div ref={messagesEndRef} />
     </div>
   );
 
-  // Shared input row
+  // ---------------------------------------------------------------------------
+  // Input row
+  // ---------------------------------------------------------------------------
+
   const makeInputRow = (extraClass?: string) => (
     <div className={`${styles.inputRow}${extraClass ? ` ${extraClass}` : ""}`}>
       <textarea
@@ -887,9 +928,7 @@ export default function ChatDrawer({
         className={styles.input}
         rows={1}
         placeholder={
-          conversationExhausted
-            ? "Please try again later."
-            : "Ask about climate data…"
+          conversationExhausted ? "Please try again later." : "Ask about climate data…"
         }
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -924,6 +963,10 @@ export default function ChatDrawer({
     </div>
   );
 
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+
   if (embedded) {
     return (
       <div className={styles.embeddedContainer} style={embeddedVisible ? undefined : { display: "none" }}>
@@ -950,23 +993,17 @@ export default function ChatDrawer({
 
   return (
     <>
-      {/* Floating chat button */}
       <button
         type="button"
         className={`${styles.chatButton} ${open ? styles.chatButtonOpen : ""}`}
         aria-label="Open climate data assistant"
         onClick={() => setOpen((v) => !v)}
       >
-        <svg
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          className={styles.chatButtonIcon}
-        >
+        <svg viewBox="0 0 24 24" aria-hidden="true" className={styles.chatButtonIcon}>
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
       </button>
 
-      {/* Drawer */}
       {open && (
         <aside
           className={styles.drawer}

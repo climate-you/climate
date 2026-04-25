@@ -612,6 +612,10 @@ def main() -> int:
                 _ssh_chown(remote, dst_dir, args.remote_chown, recursive=True, dry_run=args.dry_run)
         print()
 
+    # --- Check for llm assets ---
+    question_tree_src = repo_root / "climate_api" / "chat" / "question_tree.json"
+    has_question_tree = question_tree_src.is_file()
+
     # --- Build new release manifest ---
     new_series_pointers: dict[str, str] = {}
     for metric_id in unchanged_metrics:
@@ -625,7 +629,7 @@ def main() -> int:
     for map_id in sync_maps:
         new_maps_pointers[map_id] = artifact_date
 
-    release_manifest = {
+    release_manifest: dict = {
         "format_version": 2,
         "release": release,
         "base_release": base_release,
@@ -633,6 +637,8 @@ def main() -> int:
         "series": new_series_pointers,
         "maps": new_maps_pointers,
     }
+    if has_question_tree:
+        release_manifest["llm"] = {"question_tree": artifact_date}
 
     # --- Write release dir on remote ---
     print(f"[release] Creating release '{release}' on remote...")
@@ -661,6 +667,17 @@ def main() -> int:
         )
     else:
         print(f"  WARNING: no aux directory found at {local_aux_dir}; sparse risk mask will not be included in the release.")
+    if has_question_tree:
+        print(f"  Copying question_tree.json from {question_tree_src}...")
+        _ssh_mkdir(remote, f"{remote_release_dir}/llm", deploy_user, dry_run=args.dry_run)
+        _rsync_file(
+            str(question_tree_src),
+            _dst(remote, f"{remote_release_dir}/llm/question_tree.json"),
+            dry_run=args.dry_run,
+            chmod=args.rsync_chmod,
+        )
+    else:
+        print(f"  WARNING: question_tree.json not found at {question_tree_src}, skipping llm/ dir.")
     _write_remote_json(
         remote,
         f"{remote_release_dir}/manifest.json",

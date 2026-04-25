@@ -32,30 +32,40 @@ CREATE TABLE IF NOT EXISTS session_events (
 
 _CREATE_CHAT_MESSAGES = """
 CREATE TABLE IF NOT EXISTS chat_messages (
-    message_id        TEXT    PRIMARY KEY,
-    session_id        TEXT    NOT NULL,
-    ts                INTEGER NOT NULL,
-    question          TEXT    NOT NULL,
-    answer            TEXT,
-    step_count        INTEGER,
-    tools_called      TEXT,
-    tool_calls_detail TEXT,
-    tier              TEXT,
-    feedback          TEXT,
-    feedback_ts       INTEGER,
-    feedback_status   TEXT,
-    opt_out           INTEGER NOT NULL DEFAULT 0,
-    map_lat           REAL,
-    map_lon           REAL,
-    map_label         TEXT,
-    total_ms          INTEGER,
-    steps_timing      TEXT,
-    model             TEXT,
-    rejected_tiers    TEXT,
-    model_override    TEXT,
-    error             TEXT
+    message_id            TEXT    PRIMARY KEY,
+    session_id            TEXT    NOT NULL,
+    ts                    INTEGER NOT NULL,
+    question              TEXT    NOT NULL,
+    answer                TEXT,
+    step_count            INTEGER,
+    tools_called          TEXT,
+    tool_calls_detail     TEXT,
+    tier                  TEXT,
+    feedback              TEXT,
+    feedback_ts           INTEGER,
+    feedback_status       TEXT,
+    opt_out               INTEGER NOT NULL DEFAULT 0,
+    map_lat               REAL,
+    map_lon               REAL,
+    map_label             TEXT,
+    total_ms              INTEGER,
+    steps_timing          TEXT,
+    model                 TEXT,
+    rejected_tiers        TEXT,
+    model_override        TEXT,
+    error                 TEXT,
+    question_id           TEXT,
+    parent_question_id    TEXT,
+    question_tree_version TEXT
 )
 """
+
+# Columns added in later migrations — applied via ALTER TABLE to existing DBs.
+_OPTIONAL_MIGRATIONS = [
+    "ALTER TABLE chat_messages ADD COLUMN question_id TEXT",
+    "ALTER TABLE chat_messages ADD COLUMN parent_question_id TEXT",
+    "ALTER TABLE chat_messages ADD COLUMN question_tree_version TEXT",
+]
 
 def snap(value: float, resolution: float) -> float:
     return round(value / resolution) * resolution
@@ -97,6 +107,15 @@ class AnalyticsDB:
                     f"DROP TABLE IF EXISTS click_events; "
                     f"DROP TABLE IF EXISTS session_events;\""
                 )
+            # Apply optional migrations for columns added after initial schema creation.
+            with self._lock:
+                conn = self._connect()
+                for stmt in _OPTIONAL_MIGRATIONS:
+                    try:
+                        conn.execute(stmt)
+                        conn.commit()
+                    except Exception:
+                        pass  # column already exists
         except RuntimeError:
             raise
         except Exception:
@@ -203,6 +222,9 @@ class AnalyticsDB:
         rejected_tiers: list[str] | None = None,
         model_override: str | None = None,
         error: str | None = None,
+        question_id: str | None = None,
+        parent_question_id: str | None = None,
+        question_tree_version: str | None = None,
     ) -> None:
         import json as _json
         ts = int(time.time())
@@ -214,8 +236,8 @@ class AnalyticsDB:
                        (message_id, session_id, ts, question, answer, step_count, tools_called,
                         tool_calls_detail, tier, opt_out, map_lat, map_lon, map_label,
                         total_ms, steps_timing, model, rejected_tiers, model_override, error,
-                        feedback_status)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        feedback_status, question_id, parent_question_id, question_tree_version)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         message_id, session_id, ts, question, answer, step_count,
                         _json.dumps(tools_called),
@@ -229,6 +251,9 @@ class AnalyticsDB:
                         model_override,
                         error,
                         "new" if error else None,
+                        question_id,
+                        parent_question_id,
+                        question_tree_version,
                     ),
                 )
                 conn.commit()
