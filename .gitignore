@@ -2,6 +2,7 @@
 .coverage
 .DS_Store
 *.egg-info
+CLAUDE.md
 TODO.md
 __pycache__
 /build/
