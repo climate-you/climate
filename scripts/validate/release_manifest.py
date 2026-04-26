@@ -104,9 +104,7 @@ def _validate_v2(
                 continue
             artifact_dir = artifacts_root / "series" / metric_id / artifact_date
             if not artifact_dir.exists():
-                errors.append(
-                    f"Series artifact dir missing: {artifact_dir}"
-                )
+                errors.append(f"Series artifact dir missing: {artifact_dir}")
             else:
                 manifest_file = artifact_dir / ".artifact_manifest.json"
                 if not manifest_file.exists():
@@ -125,9 +123,7 @@ def _validate_v2(
                 continue
             artifact_dir = artifacts_root / "maps" / map_id / artifact_date
             if not artifact_dir.exists():
-                errors.append(
-                    f"Map artifact dir missing: {artifact_dir}"
-                )
+                errors.append(f"Map artifact dir missing: {artifact_dir}")
             else:
                 manifest_file = artifact_dir / ".artifact_manifest.json"
                 if not manifest_file.exists():
@@ -184,7 +180,9 @@ def main() -> int:
         artifacts_root = args.artifacts_root
         if artifacts_root is None:
             artifacts_root = args.releases_root.parent / "artifacts"
-        return _validate_v2(payload, args.release, release_root, manifest_path, artifacts_root)
+        return _validate_v2(
+            payload, args.release, release_root, manifest_path, artifacts_root
+        )
     else:
         return _validate_v1(payload, args.release, release_root, manifest_path)
 

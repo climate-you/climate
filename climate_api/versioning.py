@@ -60,7 +60,9 @@ def resolve_app_version(*, repo_root: Path) -> AppVersionInfo:
     tag = _select_preferred_tag(tags)
 
     if tag:
-        return AppVersionInfo(app_version=tag, app_tag=tag, app_commit=commit, app_branch=branch)
+        return AppVersionInfo(
+            app_version=tag, app_tag=tag, app_commit=commit, app_branch=branch
+        )
     if commit:
         return AppVersionInfo(
             app_version=f"dev+{commit}",
@@ -68,4 +70,6 @@ def resolve_app_version(*, repo_root: Path) -> AppVersionInfo:
             app_commit=commit,
             app_branch=branch,
         )
-    return AppVersionInfo(app_version="unknown", app_tag=None, app_commit=None, app_branch=None)
+    return AppVersionInfo(
+        app_version="unknown", app_tag=None, app_commit=None, app_branch=None
+    )

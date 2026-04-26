@@ -2,7 +2,12 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
-import { buildComparisonBarOption, buildStackedBarOption, buildTimeSeriesOption, getMultiSeriesColors } from "@/lib/explorer/chartOptions";
+import {
+  buildComparisonBarOption,
+  buildStackedBarOption,
+  buildTimeSeriesOption,
+  getMultiSeriesColors,
+} from "@/lib/explorer/chartOptions";
 import {
   mergeSeries,
   type GraphPayload,
@@ -37,7 +42,6 @@ type ChatChartProps = {
 const CHART_MAX_HEIGHT = 260;
 const CHART_MIN_ASPECT_RATIO = 1.5;
 
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -64,7 +68,12 @@ function buildSeriesRecord(
       isStackedBar && s.style
         ? s.style
         : multiSeries && !isTrend && !isStackedBar
-          ? { color: getMultiSeriesColors()[rawIndex % getMultiSeriesColors().length] }
+          ? {
+              color:
+                getMultiSeriesColors()[
+                  rawIndex % getMultiSeriesColors().length
+                ],
+            }
           : s.style?.color
             ? { color: s.style.color }
             : undefined;
@@ -131,7 +140,10 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
     const update = () => {
       const width = host.clientWidth;
       if (!Number.isFinite(width) || width <= 0) return;
-      const next = Math.max(1, Math.min(CHART_MAX_HEIGHT, Math.floor(width / CHART_MIN_ASPECT_RATIO)));
+      const next = Math.max(
+        1,
+        Math.min(CHART_MAX_HEIGHT, Math.floor(width / CHART_MIN_ASPECT_RATIO)),
+      );
       setChartHeight((prev) => (prev === next ? prev : next));
     };
     update();
@@ -165,7 +177,7 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
       instance.dispose();
       chartRef.current = null;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Build and apply chart option whenever chart data or unit changes
@@ -261,50 +273,58 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
         const padding = Math.max(1, range * 0.1);
         const yAxis = option.yAxis as Record<string, unknown> | undefined;
         if (yAxis) {
-          option.yAxis = { ...yAxis, min: dataMin - padding, max: dataMax + padding };
+          option.yAxis = {
+            ...yAxis,
+            min: dataMin - padding,
+            max: dataMax + padding,
+          };
         }
       }
 
       option.series = (option.series as unknown[]).map((s) => {
         // Skip trend series — markPoints only belong on the raw data line
         const echartsS = s as { id?: string };
-        if (typeof echartsS.id === "string" && echartsS.id.endsWith(":trend")) return s;
-        return { ...(s as object), markPoint: {
-          symbol: "circle",
-          symbolSize: 7,
-          data: [
-            {
-              name: "min",
-              type: "min" as const,
-              itemStyle: { color: "#0000FF" },
-              label: {
-                show: true,
-                position: "bottom" as const,
-                formatter: (p: { value: number }) =>
-                  isTemp
-                    ? `${p.value.toFixed(1)}°${temperatureUnit}`
-                    : `${p.value.toFixed(1)} ${chart.unit}`,
-                fontSize: 10,
-                color: "#0000FF",
+        if (typeof echartsS.id === "string" && echartsS.id.endsWith(":trend"))
+          return s;
+        return {
+          ...(s as object),
+          markPoint: {
+            symbol: "circle",
+            symbolSize: 7,
+            data: [
+              {
+                name: "min",
+                type: "min" as const,
+                itemStyle: { color: "#0000FF" },
+                label: {
+                  show: true,
+                  position: "bottom" as const,
+                  formatter: (p: { value: number }) =>
+                    isTemp
+                      ? `${p.value.toFixed(1)}°${temperatureUnit}`
+                      : `${p.value.toFixed(1)} ${chart.unit}`,
+                  fontSize: 10,
+                  color: "#0000FF",
+                },
               },
-            },
-            {
-              name: "max",
-              type: "max" as const,
-              itemStyle: { color: "#FF0000" },
-              label: {
-                show: true,
-                position: "top" as const,
-                formatter: (p: { value: number }) =>
-                  isTemp
-                    ? `${p.value.toFixed(1)}°${temperatureUnit}`
-                    : `${p.value.toFixed(1)} ${chart.unit}`,
-                fontSize: 10,
-                color: "#FF0000",
+              {
+                name: "max",
+                type: "max" as const,
+                itemStyle: { color: "#FF0000" },
+                label: {
+                  show: true,
+                  position: "top" as const,
+                  formatter: (p: { value: number }) =>
+                    isTemp
+                      ? `${p.value.toFixed(1)}°${temperatureUnit}`
+                      : `${p.value.toFixed(1)} ${chart.unit}`,
+                  fontSize: 10,
+                  color: "#FF0000",
+                },
               },
-            },
-          ],
-        } };
+            ],
+          },
+        };
       }) as typeof option.series;
     }
 

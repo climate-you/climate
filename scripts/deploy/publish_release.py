@@ -93,19 +93,36 @@ def _dst(remote: str | None, path: str) -> str:
     return f"{remote}:{path}" if remote else path
 
 
-def _ssh_mkdir(remote: str | None, path: str, owner: str, *, dry_run: bool = False) -> None:
+def _ssh_mkdir(
+    remote: str | None, path: str, owner: str, *, dry_run: bool = False
+) -> None:
     """Create a remote directory via sudo and chown it to owner so it is writable."""
     _ssh_run(remote, f"sudo mkdir -p {shlex.quote(path)}", dry_run=dry_run)
-    _ssh_run(remote, f"sudo chown {shlex.quote(owner)} {shlex.quote(path)}", dry_run=dry_run)
+    _ssh_run(
+        remote, f"sudo chown {shlex.quote(owner)} {shlex.quote(path)}", dry_run=dry_run
+    )
 
 
-def _ssh_chown(remote: str | None, path: str, owner: str, *, recursive: bool = False, dry_run: bool = False) -> None:
+def _ssh_chown(
+    remote: str | None,
+    path: str,
+    owner: str,
+    *,
+    recursive: bool = False,
+    dry_run: bool = False,
+) -> None:
     """Chown a remote path via sudo, optionally recursively."""
     flag = "-R " if recursive else ""
-    _ssh_run(remote, f"sudo chown {flag}{shlex.quote(owner)} {shlex.quote(path)}", dry_run=dry_run)
+    _ssh_run(
+        remote,
+        f"sudo chown {flag}{shlex.quote(owner)} {shlex.quote(path)}",
+        dry_run=dry_run,
+    )
 
 
-def _rsync_dir(src: str, dst: str, *, dry_run: bool = False, chmod: str = "a+rX") -> None:
+def _rsync_dir(
+    src: str, dst: str, *, dry_run: bool = False, chmod: str = "a+rX"
+) -> None:
     if not src.endswith("/"):
         src += "/"
     cmd = ["rsync", "-av", "--progress", "--exclude=._*", "--exclude=.DS_Store"]
@@ -115,7 +132,9 @@ def _rsync_dir(src: str, dst: str, *, dry_run: bool = False, chmod: str = "a+rX"
     _run(cmd, dry_run=dry_run)
 
 
-def _rsync_file(src: str, dst: str, *, dry_run: bool = False, chmod: str = "a+rX") -> None:
+def _rsync_file(
+    src: str, dst: str, *, dry_run: bool = False, chmod: str = "a+rX"
+) -> None:
     cmd = ["rsync", "-av"]
     if chmod:
         cmd += ["--chmod", chmod]
@@ -242,7 +261,9 @@ def _fetch_prod_state(
         return None
 
     try:
-        manifest = json.loads(_ssh_read(remote, f"{releases_root}/{latest}/manifest.json"))
+        manifest = json.loads(
+            _ssh_read(remote, f"{releases_root}/{latest}/manifest.json")
+        )
     except (FileNotFoundError, json.JSONDecodeError) as exc:
         print(f"WARNING: could not read prod manifest for '{latest}': {exc}")
         return None
@@ -251,7 +272,10 @@ def _fetch_prod_state(
     for metric_id, date in manifest.get("series", {}).items():
         try:
             info = json.loads(
-                _ssh_read(remote, f"{artifacts_root}/series/{metric_id}/{date}/.artifact_manifest.json")
+                _ssh_read(
+                    remote,
+                    f"{artifacts_root}/series/{metric_id}/{date}/.artifact_manifest.json",
+                )
             )
             series_checksums[metric_id] = info.get("tree_sha256")
         except (FileNotFoundError, json.JSONDecodeError):
@@ -261,7 +285,10 @@ def _fetch_prod_state(
     for map_id, date in manifest.get("maps", {}).items():
         try:
             info = json.loads(
-                _ssh_read(remote, f"{artifacts_root}/maps/{map_id}/{date}/.artifact_manifest.json")
+                _ssh_read(
+                    remote,
+                    f"{artifacts_root}/maps/{map_id}/{date}/.artifact_manifest.json",
+                )
             )
             maps_checksums[map_id] = info.get("tree_sha256")
         except (FileNotFoundError, json.JSONDecodeError):
@@ -284,7 +311,8 @@ def _run_validate_suite(repo_root: Path) -> bool:
     cmd = [
         sys.executable,
         "scripts/validate_suite.py",
-        "--release", "dev",
+        "--release",
+        "dev",
         "--skip-smoke",
         "--skip-pytest",
         "--tile-summary-only",
@@ -376,7 +404,8 @@ def main() -> int:
         help="Skip the validate_suite pre-flight check.",
     )
     ap.add_argument(
-        "--yes", "-y",
+        "--yes",
+        "-y",
         action="store_true",
         help="Skip confirmation prompt.",
     )
@@ -391,9 +420,8 @@ def main() -> int:
     if remote and not args.remote_releases_root:
         raise SystemExit("--remote-releases-root is required when --remote is set.")
     remote_releases_root: str = args.remote_releases_root or "data/releases"
-    remote_artifacts_root: str = (
-        args.remote_artifacts_root
-        or str(Path(remote_releases_root).parent / "artifacts")
+    remote_artifacts_root: str = args.remote_artifacts_root or str(
+        Path(remote_releases_root).parent / "artifacts"
     )
     release: str = args.release or datetime.date.today().strftime("%Y_%m_%d")
     deploy_user: str = remote.split("@")[0] if remote and "@" in remote else "deploy"
@@ -474,22 +502,26 @@ def main() -> int:
     # --- Diff ---
     new_metrics = [m for m in sorted(local_metrics) if m not in prod_series]
     changed_metrics = [
-        m for m in sorted(local_metrics)
+        m
+        for m in sorted(local_metrics)
         if m in prod_series and local_metric_sha[m] != prod_series_checksums.get(m)
     ]
     unchanged_metrics = [
-        m for m in sorted(local_metrics)
+        m
+        for m in sorted(local_metrics)
         if m in prod_series and local_metric_sha[m] == prod_series_checksums.get(m)
     ]
     removed_metrics = [m for m in prod_series if m not in local_metrics]
 
     new_maps = [m for m in local_maps if m not in prod_maps]
     changed_maps = [
-        m for m in local_maps
+        m
+        for m in local_maps
         if m in prod_maps and local_map_sha[m] != prod_maps_checksums.get(m)
     ]
     unchanged_maps = [
-        m for m in local_maps
+        m
+        for m in local_maps
         if m in prod_maps and local_map_sha[m] == prod_maps_checksums.get(m)
     ]
     removed_maps = [m for m in prod_maps if m not in local_maps]
@@ -519,8 +551,14 @@ def main() -> int:
         print(f"  {marker} {kind}/{name}")
     print()
 
-    has_changes = bool(new_metrics or changed_metrics or removed_metrics or
-                       new_maps or changed_maps or removed_maps)
+    has_changes = bool(
+        new_metrics
+        or changed_metrics
+        or removed_metrics
+        or new_maps
+        or changed_maps
+        or removed_maps
+    )
     if not has_changes:
         print("Nothing to publish — all local data matches prod.")
         return 0
@@ -578,7 +616,13 @@ def main() -> int:
                 chmod=args.rsync_chmod,
             )
             if args.remote_chown:
-                _ssh_chown(remote, dst_dir, args.remote_chown, recursive=True, dry_run=args.dry_run)
+                _ssh_chown(
+                    remote,
+                    dst_dir,
+                    args.remote_chown,
+                    recursive=True,
+                    dry_run=args.dry_run,
+                )
         print()
 
     if sync_maps:
@@ -609,7 +653,13 @@ def main() -> int:
                 chmod=args.rsync_chmod,
             )
             if args.remote_chown:
-                _ssh_chown(remote, dst_dir, args.remote_chown, recursive=True, dry_run=args.dry_run)
+                _ssh_chown(
+                    remote,
+                    dst_dir,
+                    args.remote_chown,
+                    recursive=True,
+                    dry_run=args.dry_run,
+                )
         print()
 
     # --- Check for llm assets ---
@@ -644,7 +694,9 @@ def main() -> int:
     print(f"[release] Creating release '{release}' on remote...")
     remote_release_dir = f"{remote_releases_root}/{release}"
     _ssh_mkdir(remote, remote_release_dir, deploy_user, dry_run=args.dry_run)
-    _ssh_mkdir(remote, f"{remote_release_dir}/registry", deploy_user, dry_run=args.dry_run)
+    _ssh_mkdir(
+        remote, f"{remote_release_dir}/registry", deploy_user, dry_run=args.dry_run
+    )
     registry_src = args.registry
     if registry_src.is_dir():
         _rsync_dir(
@@ -658,7 +710,9 @@ def main() -> int:
     local_aux_dir = dev_root / "aux"
     if local_aux_dir.is_dir():
         print(f"  Copying aux files from {local_aux_dir}...")
-        _ssh_mkdir(remote, f"{remote_release_dir}/aux", deploy_user, dry_run=args.dry_run)
+        _ssh_mkdir(
+            remote, f"{remote_release_dir}/aux", deploy_user, dry_run=args.dry_run
+        )
         _rsync_dir(
             str(local_aux_dir),
             _dst(remote, f"{remote_release_dir}/aux/"),
@@ -666,10 +720,14 @@ def main() -> int:
             chmod=args.rsync_chmod,
         )
     else:
-        print(f"  WARNING: no aux directory found at {local_aux_dir}; sparse risk mask will not be included in the release.")
+        print(
+            f"  WARNING: no aux directory found at {local_aux_dir}; sparse risk mask will not be included in the release."
+        )
     if has_question_tree:
         print(f"  Copying question_tree.json from {question_tree_src}...")
-        _ssh_mkdir(remote, f"{remote_release_dir}/llm", deploy_user, dry_run=args.dry_run)
+        _ssh_mkdir(
+            remote, f"{remote_release_dir}/llm", deploy_user, dry_run=args.dry_run
+        )
         _rsync_file(
             str(question_tree_src),
             _dst(remote, f"{remote_release_dir}/llm/question_tree.json"),
@@ -677,7 +735,9 @@ def main() -> int:
             chmod=args.rsync_chmod,
         )
     else:
-        print(f"  WARNING: question_tree.json not found at {question_tree_src}, skipping llm/ dir.")
+        print(
+            f"  WARNING: question_tree.json not found at {question_tree_src}, skipping llm/ dir."
+        )
     _write_remote_json(
         remote,
         f"{remote_release_dir}/manifest.json",
@@ -686,7 +746,13 @@ def main() -> int:
         chmod=args.rsync_chmod,
     )
     if args.remote_chown:
-        _ssh_chown(remote, remote_release_dir, args.remote_chown, recursive=True, dry_run=args.dry_run)
+        _ssh_chown(
+            remote,
+            remote_release_dir,
+            args.remote_chown,
+            recursive=True,
+            dry_run=args.dry_run,
+        )
     print()
 
     # --- Update LATEST ---

@@ -255,14 +255,13 @@ export default function ExplorerPage({
   const touchGestureAxisRef = useRef<"x" | "y" | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const panelViewportRef = useRef<HTMLDivElement | null>(null);
-  const [panelViewportEl, setPanelViewportEl] = useState<HTMLDivElement | null>(null);
-  const panelViewportCallbackRef = useCallback(
-    (el: HTMLDivElement | null) => {
-      panelViewportRef.current = el;
-      setPanelViewportEl(el);
-    },
-    [],
+  const [panelViewportEl, setPanelViewportEl] = useState<HTMLDivElement | null>(
+    null,
   );
+  const panelViewportCallbackRef = useCallback((el: HTMLDivElement | null) => {
+    panelViewportRef.current = el;
+    setPanelViewportEl(el);
+  }, []);
   const pendingGraphRestoreIdsRef = useRef<string[] | null>(null);
   const lastGraphViewFingerprintRef = useRef<string | null>(null);
   const lastTrackedLayerIdRef = useRef<string | null>(null);
@@ -1405,10 +1404,14 @@ export default function ExplorerPage({
                         human activities have caused{" "}
                       </span>
                       <span className={styles.panelTitleTempAccent}>
-                        {formatHeadlineDelta(unit === "F" ? 1.1 * 1.8 : 1.1, unit)}
+                        {formatHeadlineDelta(
+                          unit === "F" ? 1.1 * 1.8 : 1.1,
+                          unit,
+                        )}
                       </span>
                       <span className={styles.panelTitleSmall}>
-                        {" "}since 1850–1900
+                        {" "}
+                        since 1850–1900
                       </span>
                     </>
                   ) : typeof tempHeadline?.value === "number" &&
@@ -1476,7 +1479,10 @@ export default function ExplorerPage({
 
         {panelTab === "graph" ? (
           <>
-            <div ref={panelViewportCallbackRef} className={styles.panelViewport}>
+            <div
+              ref={panelViewportCallbackRef}
+              className={styles.panelViewport}
+            >
               {graphSlots.map((entry, slotIndex) =>
                 entry ? (
                   <GraphCard
@@ -1642,7 +1648,6 @@ export default function ExplorerPage({
           {selectedLocation?.label ?? ""}
         </span>
       </button>
-
     </main>
   );
 }

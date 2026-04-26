@@ -179,7 +179,9 @@ class LocationIndex:
         i = self._name_to_idx.get(q)
         return self._hit(i) if i is not None else None
 
-    def iter_all(self, *, min_population: int = 0, capitals_only: bool = False) -> List[LocationHit]:
+    def iter_all(
+        self, *, min_population: int = 0, capitals_only: bool = False
+    ) -> List[LocationHit]:
         """Return all locations matching the given filters, sorted by population descending."""
         result = []
         for i in range(len(self._labels)):

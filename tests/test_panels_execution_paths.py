@@ -228,7 +228,9 @@ def test_build_scored_panels_tiles_registry_success_and_fallback(
         lambda lat, lon, map_id, map_spec, tile_store, maps_root, map_artifact_roots=None: {
             "m1": 1,
             "m2": 3,
-        }.get(map_id, 0),
+        }.get(
+            map_id, 0
+        ),
     )
     monkeypatch.setattr(
         panels_module,

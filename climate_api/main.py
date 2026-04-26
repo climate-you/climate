@@ -38,7 +38,11 @@ from .services.panels import (
     build_scored_panels_tiles_registry,
 )
 from .chat.orchestrator import ChatOrchestrator, ProviderTier
-from .chat.canned import lookup as _canned_lookup, stream_canned as _stream_canned, build_canned_charts as _build_canned_charts
+from .chat.canned import (
+    lookup as _canned_lookup,
+    stream_canned as _stream_canned,
+    build_canned_charts as _build_canned_charts,
+)
 from .chat.question_tree import get_tree_metadata as _get_tree_metadata
 from .store.country_classifier import CountryClassifier
 from .store.location_index import LocationIndex
@@ -62,7 +66,7 @@ class _MapContext(BaseModel):
 
 
 class _ConversationTurn(BaseModel):
-    role: str   # "user" or "assistant"
+    role: str  # "user" or "assistant"
     text: str
 
 
@@ -723,7 +727,9 @@ def create_app() -> FastAPI:
     @app.get("/api/chat/questions")
     def get_chat_questions():
         if chat_orchestrator is None:
-            raise HTTPException(status_code=503, detail="Chat is not enabled on this server.")
+            raise HTTPException(
+                status_code=503, detail="Chat is not enabled on this server."
+            )
         return _get_tree_metadata()
 
     @app.post("/api/chat")
@@ -762,21 +768,34 @@ def create_app() -> FastAPI:
 
             canned = _canned_lookup(body.question) if not body.model_override else None
             if canned is not None:
-                canned_answer, canned_locs, canned_chart_spec, canned_follow_up_ids = canned
+                canned_answer, canned_locs, canned_chart_spec, canned_follow_up_ids = (
+                    canned
+                )
                 canned_charts = (
-                    _build_canned_charts(canned_locs, canned_chart_spec, chat_orchestrator.tile_store, body.temperature_unit)
+                    _build_canned_charts(
+                        canned_locs,
+                        canned_chart_spec,
+                        chat_orchestrator.tile_store,
+                        body.temperature_unit,
+                    )
                     if canned_chart_spec
                     else []
                 )
                 event_source = _stream_canned(
-                    canned_answer, canned_locs, charts=canned_charts,
+                    canned_answer,
+                    canned_locs,
+                    charts=canned_charts,
                     follow_up_ids=canned_follow_up_ids,
                     temperature_unit=body.temperature_unit,
                 )
             else:
                 event_source = chat_orchestrator.run(
                     question=body.question,
-                    history=[(t.role, t.text) for t in body.history] if body.history else None,
+                    history=(
+                        [(t.role, t.text) for t in body.history]
+                        if body.history
+                        else None
+                    ),
                     map_context=map_ctx,
                     session_id=message_id,
                     model_override=body.model_override,

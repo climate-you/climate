@@ -39,7 +39,7 @@ class Settings:
     artifacts_root: Optional[Path] = None
     # Chat / LLM provider config
     chat_enabled: bool = False
-    chat_dev_mode: bool = True   # safe default — set CHAT_DEV_MODE=0 in production
+    chat_dev_mode: bool = True  # safe default — set CHAT_DEV_MODE=0 in production
     chat_max_steps: int = 5
     # Groq keys — free key is used for Tier 1 (70b free in prod, 8b in dev) and Tier 3 (8b fallback in prod).
     # Paid key is used only in prod for Tier 2 (70b paid). Never used in dev mode.
@@ -166,10 +166,16 @@ def load_settings() -> Settings:
     chat_dev_mode = _env_bool("CHAT_DEV_MODE", True)
     chat_max_steps = int(os.environ.get("CHAT_MAX_STEPS", "5"))
     # GROQ_API_KEY accepted as a fallback alias for GROQ_API_KEY_FREE (backward compat)
-    groq_api_key_free = os.environ.get("GROQ_API_KEY_FREE") or os.environ.get("GROQ_API_KEY") or None
+    groq_api_key_free = (
+        os.environ.get("GROQ_API_KEY_FREE") or os.environ.get("GROQ_API_KEY") or None
+    )
     groq_api_key_paid = os.environ.get("GROQ_API_KEY_PAID") or None
     # GROQ_MODEL accepted as a fallback alias for GROQ_MODEL_PRIMARY (backward compat)
-    groq_model_primary = os.environ.get("GROQ_MODEL_PRIMARY") or os.environ.get("GROQ_MODEL") or "llama-3.3-70b-versatile"
+    groq_model_primary = (
+        os.environ.get("GROQ_MODEL_PRIMARY")
+        or os.environ.get("GROQ_MODEL")
+        or "llama-3.3-70b-versatile"
+    )
     groq_model_fallback = os.environ.get("GROQ_MODEL_FALLBACK", "llama-3.1-8b-instant")
     ollama_base_url = os.environ.get("OLLAMA_BASE_URL", "")
     ollama_model = os.environ.get("OLLAMA_MODEL", "qwen2.5:14b")

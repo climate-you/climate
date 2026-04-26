@@ -361,7 +361,9 @@ def test_post_session_returns_204(
     settings = _make_settings(tmp_path)
     app = _make_app(settings, monkeypatch)
 
-    with patch("climate_api.analytics.geo.GeoIPCache.lookup", return_value=("US", 37.0, -95.0)):
+    with patch(
+        "climate_api.analytics.geo.GeoIPCache.lookup", return_value=("US", 37.0, -95.0)
+    ):
         status, _, _ = asyncio.run(_asgi_post(app, "/api/events/session"))
     assert status == 204
 

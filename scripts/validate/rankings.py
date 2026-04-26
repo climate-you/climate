@@ -39,7 +39,9 @@ def check_rankings(
             continue
         grid_id = spec.get("grid_id", "")
         for aggregation in aggregations:
-            path = series_root / grid_id / metric_id / "rankings" / f"{aggregation}.json"
+            path = (
+                series_root / grid_id / metric_id / "rankings" / f"{aggregation}.json"
+            )
             if not path.exists():
                 errors.append(
                     f"Missing ranking file: {path.relative_to(series_root.parent)}"

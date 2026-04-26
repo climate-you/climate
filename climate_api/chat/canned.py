@@ -104,9 +104,12 @@ def build_canned_charts(
             if temperature_unit == "F" and spec.get("unit") == "C":
                 is_delta = _tools._is_delta_metric(spec)
                 result["data"] = [
-                    {**entry, "value": _tools._convert_temp(
-                        entry["value"], spec, is_delta=is_delta, target="F"
-                    )}
+                    {
+                        **entry,
+                        "value": _tools._convert_temp(
+                            entry["value"], spec, is_delta=is_delta, target="F"
+                        ),
+                    }
                     for entry in result["data"]
                 ]
                 result["unit"] = _tools._output_unit(spec, "F")
@@ -119,14 +122,21 @@ def build_canned_charts(
                 values = [d["value"] for d in data_pts]
                 if len(years) >= 2:
                     coeffs = np.polyfit(years, values, 1)
-                    trend_values = [round(float(np.polyval(coeffs, y)), 3) for y in years]
-                    series_results.append({
-                        "metric_id": metric_id,
-                        "unit": result.get("unit", ""),
-                        "location": loc["label"],
-                        "role": "trend",
-                        "data": [{"year": y, "value": v} for y, v in zip(years, trend_values)],
-                    })
+                    trend_values = [
+                        round(float(np.polyval(coeffs, y)), 3) for y in years
+                    ]
+                    series_results.append(
+                        {
+                            "metric_id": metric_id,
+                            "unit": result.get("unit", ""),
+                            "location": loc["label"],
+                            "role": "trend",
+                            "data": [
+                                {"year": y, "value": v}
+                                for y, v in zip(years, trend_values)
+                            ],
+                        }
+                    )
 
     return _build_chart_payloads(series_results, tile_store)
 

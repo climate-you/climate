@@ -31,10 +31,13 @@ _DEFAULT_DEV_ROOT = Path("data/releases/dev")
 # Helpers (copied from publish_release.py to stay self-contained)
 # ---------------------------------------------------------------------------
 
+
 def _ssh_read(remote: str, path: str) -> str:
     result = subprocess.run(
         ["ssh", remote, f"cat {shlex.quote(path)}"],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if result.returncode != 0:
         raise FileNotFoundError(f"{remote}:{path}: {result.stderr.strip()}")
@@ -44,7 +47,9 @@ def _ssh_read(remote: str, path: str) -> str:
 def _ssh_run_capture(remote: str, cmd: str) -> str:
     result = subprocess.run(
         ["ssh", remote, cmd],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     return result.stdout
 
@@ -58,7 +63,9 @@ def _hash_files(files: list[tuple[str, Path]]) -> str:
     return h.hexdigest()
 
 
-def _metric_sha256_local(dev_series_root: Path, metric_id: str) -> tuple[str, list[str]]:
+def _metric_sha256_local(
+    dev_series_root: Path, metric_id: str
+) -> tuple[str, list[str]]:
     """Returns (sha256, sorted list of rel paths hashed)."""
     files: list[tuple[str, Path]] = []
     for grid_dir in sorted(dev_series_root.iterdir()):
@@ -98,9 +105,15 @@ print(json.dumps({"sha256": h.hexdigest(), "files": [r for r, _ in sorted(files)
 
 def _compute_remote_hash(remote: str, artifact_dir: str) -> tuple[str, list[str]]:
     # Send the script inline via python3 -c
-    escaped = _REMOTE_HASH_SCRIPT.replace("\\", "\\\\").replace("'", "'\\''").replace("\n", "\n")
+    escaped = (
+        _REMOTE_HASH_SCRIPT.replace("\\", "\\\\")
+        .replace("'", "'\\''")
+        .replace("\n", "\n")
+    )
     cmd = f"python3 - {shlex.quote(artifact_dir)} << 'PYEOF'\n{_REMOTE_HASH_SCRIPT}\nPYEOF"
-    result = subprocess.run(["ssh", remote, cmd], capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["ssh", remote, cmd], capture_output=True, text=True, check=False
+    )
     if result.returncode != 0 or not result.stdout.strip():
         raise RuntimeError(f"Remote hash failed:\n{result.stderr.strip()}")
     data = json.loads(result.stdout.strip())
@@ -110,6 +123,7 @@ def _compute_remote_hash(remote: str, artifact_dir: str) -> tuple[str, list[str]
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Diagnose metric checksum mismatch.")
@@ -138,7 +152,9 @@ def main() -> int:
     print(f"\n[prod] Reading LATEST release manifest ...")
     latest = _ssh_read(args.remote, f"{args.remote_releases_root}/LATEST").strip()
     print(f"  LATEST: {latest}")
-    manifest = json.loads(_ssh_read(args.remote, f"{args.remote_releases_root}/{latest}/manifest.json"))
+    manifest = json.loads(
+        _ssh_read(args.remote, f"{args.remote_releases_root}/{latest}/manifest.json")
+    )
     artifact_date = manifest.get("series", {}).get(args.metric)
     if not artifact_date:
         print(f"  ERROR: {args.metric} not in prod release manifest")
@@ -146,7 +162,9 @@ def main() -> int:
     print(f"  artifact date: {artifact_date}")
 
     artifact_dir = f"{remote_artifacts_root}/series/{args.metric}/{artifact_date}"
-    art_manifest = json.loads(_ssh_read(args.remote, f"{artifact_dir}/.artifact_manifest.json"))
+    art_manifest = json.loads(
+        _ssh_read(args.remote, f"{artifact_dir}/.artifact_manifest.json")
+    )
     prod_stored_sha = art_manifest.get("tree_sha256", "(missing)")
     print(f"  stored hash: {prod_stored_sha}")
 
@@ -168,10 +186,14 @@ def main() -> int:
     if prod_computed_sha:
         print(f"  prod computed hash : {prod_computed_sha}")
         if prod_stored_sha != prod_computed_sha:
-            print("  WARNING: prod stored hash != prod computed hash (manifest was written incorrectly!)")
+            print(
+                "  WARNING: prod stored hash != prod computed hash (manifest was written incorrectly!)"
+            )
 
     if local_sha == prod_stored_sha:
-        print("\n  RESULT: hashes match — no real change (deploy script may have a comparison bug)")
+        print(
+            "\n  RESULT: hashes match — no real change (deploy script may have a comparison bug)"
+        )
     else:
         print("\n  RESULT: hashes differ")
 

@@ -22,7 +22,9 @@ export function useDebugTextureSync(
     if (typeof window === "undefined") return;
     const sync = () =>
       setTextureVariantOverride(
-        debugAllowed ? parseTextureVariantQuery(window.location.search) : "auto",
+        debugAllowed
+          ? parseTextureVariantQuery(window.location.search)
+          : "auto",
       );
     sync();
     window.addEventListener("popstate", sync);

@@ -55,10 +55,13 @@ export function useReleaseResolution(
   const [assetsRelease, setAssetsRelease] = useState<string | null>(null);
   const [releaseLayers, setReleaseLayers] = useState<ReleaseLayer[]>([]);
 
-  const pinSessionRelease = useCallback((releaseValue: string | null | undefined) => {
-    if (!releaseValue) return;
-    setSessionRelease((prev) => prev ?? releaseValue);
-  }, []);
+  const pinSessionRelease = useCallback(
+    (releaseValue: string | null | undefined) => {
+      if (!releaseValue) return;
+      setSessionRelease((prev) => prev ?? releaseValue);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;

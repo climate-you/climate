@@ -104,7 +104,8 @@ def _load_rankings(
     missing = [key for key in expected if key not in loaded]
     logger.info(
         "Loaded %d/%d metric ranking(s)%s",
-        len(loaded), len(expected),
+        len(loaded),
+        len(expected),
         f"; missing: {', '.join(f'{m}/{a}' for m, a in missing)}" if missing else "",
     )
     return loaded
@@ -145,7 +146,8 @@ def _load_aggregates(
     missing = [key for key in expected if key not in loaded]
     logger.info(
         "Loaded %d/%d metric aggregate(s)%s",
-        len(loaded), len(expected),
+        len(loaded),
+        len(expected),
         f"; missing: {', '.join(f'{m}/{a}' for m, a in missing)}" if missing else "",
     )
     return loaded

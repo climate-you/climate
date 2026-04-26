@@ -67,6 +67,7 @@ _OPTIONAL_MIGRATIONS = [
     "ALTER TABLE chat_messages ADD COLUMN question_tree_version TEXT",
 ]
 
+
 def snap(value: float, resolution: float) -> float:
     return round(value / resolution) * resolution
 
@@ -91,21 +92,37 @@ class AnalyticsDB:
 
     def check_schema(self) -> None:
         """Call at startup. Logs an error and raises if required columns are missing."""
-        required = {"message_id", "session_id", "tool_calls_detail", "tier", "total_ms", "steps_timing", "model", "rejected_tiers", "model_override", "error"}
+        required = {
+            "message_id",
+            "session_id",
+            "tool_calls_detail",
+            "tier",
+            "total_ms",
+            "steps_timing",
+            "model",
+            "rejected_tiers",
+            "model_override",
+            "error",
+        }
         try:
             with self._lock:
                 conn = self._connect()
-                cols = {row[1] for row in conn.execute("PRAGMA table_info(chat_messages)").fetchall()}
+                cols = {
+                    row[1]
+                    for row in conn.execute(
+                        "PRAGMA table_info(chat_messages)"
+                    ).fetchall()
+                }
             missing = required - cols
             if missing:
                 raise RuntimeError(
                     f"Analytics DB schema is stale — missing columns: {sorted(missing)}. "
                     f"Wipe the DB and restart: "
                     f"sqlite3 {self._db_path} "
-                    f"\"DROP TABLE IF EXISTS chat_messages; "
+                    f'"DROP TABLE IF EXISTS chat_messages; '
                     f"DROP TABLE IF EXISTS chat_sessions; "
                     f"DROP TABLE IF EXISTS click_events; "
-                    f"DROP TABLE IF EXISTS session_events;\""
+                    f'DROP TABLE IF EXISTS session_events;"'
                 )
             # Apply optional migrations for columns added after initial schema creation.
             with self._lock:
@@ -178,8 +195,7 @@ class AnalyticsDB:
                     " GROUP BY user_country, user_lat, user_lon"
                 ).fetchall()
             return [
-                {"country": r[0], "lat": r[1], "lon": r[2], "count": r[3]}
-                for r in rows
+                {"country": r[0], "lat": r[1], "lon": r[2], "count": r[3]} for r in rows
             ]
         except Exception:
             logger.exception("Failed to query session aggregates")
@@ -227,6 +243,7 @@ class AnalyticsDB:
         question_tree_version: str | None = None,
     ) -> None:
         import json as _json
+
         ts = int(time.time())
         try:
             with self._lock:
@@ -239,15 +256,31 @@ class AnalyticsDB:
                         feedback_status, question_id, parent_question_id, question_tree_version)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
-                        message_id, session_id, ts, question, answer, step_count,
+                        message_id,
+                        session_id,
+                        ts,
+                        question,
+                        answer,
+                        step_count,
                         _json.dumps(tools_called),
-                        _json.dumps(tool_calls_detail) if tool_calls_detail is not None else None,
-                        tier, int(opt_out),
-                        map_lat, map_lon, map_label,
+                        (
+                            _json.dumps(tool_calls_detail)
+                            if tool_calls_detail is not None
+                            else None
+                        ),
+                        tier,
+                        int(opt_out),
+                        map_lat,
+                        map_lon,
+                        map_label,
                         total_ms,
                         _json.dumps(steps_timing) if steps_timing is not None else None,
                         model,
-                        _json.dumps(rejected_tiers) if rejected_tiers is not None else None,
+                        (
+                            _json.dumps(rejected_tiers)
+                            if rejected_tiers is not None
+                            else None
+                        ),
                         model_override,
                         error,
                         "new" if error else None,
@@ -298,6 +331,7 @@ class AnalyticsDB:
         feedback: str | None = None,
     ) -> list[dict]:
         import json as _json
+
         try:
             with self._lock:
                 conn = self._connect()
@@ -320,13 +354,17 @@ class AnalyticsDB:
                     ).fetchall()
             return [
                 {
-                    "message_id": r[0], "session_id": r[1], "ts": r[2], "question": r[3],
+                    "message_id": r[0],
+                    "session_id": r[1],
+                    "ts": r[2],
+                    "question": r[3],
                     "answer": r[4] or "",
                     "step_count": r[5],
                     "tools_called": _json.loads(r[6]) if r[6] else [],
                     "tool_calls_detail": _json.loads(r[7]) if r[7] else [],
                     "tier": r[8],
-                    "feedback": r[9], "feedback_status": r[10],
+                    "feedback": r[9],
+                    "feedback_status": r[10],
                     "total_ms": r[11],
                     "steps_timing": _json.loads(r[12]) if r[12] else [],
                     "model": r[13],
@@ -343,6 +381,7 @@ class AnalyticsDB:
     def get_chat_bad_answers(self, limit: int = 50) -> list[dict]:
         """Return messages needing review: bad feedback or errors, with feedback_status='new'."""
         import json as _json
+
         try:
             with self._lock:
                 conn = self._connect()
@@ -358,13 +397,17 @@ class AnalyticsDB:
                 ).fetchall()
             return [
                 {
-                    "message_id": r[0], "session_id": r[1], "ts": r[2], "question": r[3],
+                    "message_id": r[0],
+                    "session_id": r[1],
+                    "ts": r[2],
+                    "question": r[3],
                     "answer": r[4] or "",
                     "step_count": r[5],
                     "tools_called": _json.loads(r[6]) if r[6] else [],
                     "tool_calls_detail": _json.loads(r[7]) if r[7] else [],
                     "tier": r[8],
-                    "feedback": r[9], "feedback_status": r[10],
+                    "feedback": r[9],
+                    "feedback_status": r[10],
                     "total_ms": r[11],
                     "steps_timing": _json.loads(r[12]) if r[12] else [],
                     "model": r[13],
@@ -382,14 +425,24 @@ class AnalyticsDB:
         try:
             with self._lock:
                 conn = self._connect()
-                total_messages = conn.execute("SELECT COUNT(*) FROM chat_messages").fetchone()[0]
-                total_sessions = conn.execute("SELECT COUNT(DISTINCT session_id) FROM chat_messages").fetchone()[0]
-                good = conn.execute("SELECT COUNT(*) FROM chat_messages WHERE feedback='good'").fetchone()[0]
-                bad  = conn.execute("SELECT COUNT(*) FROM chat_messages WHERE feedback='bad'").fetchone()[0]
+                total_messages = conn.execute(
+                    "SELECT COUNT(*) FROM chat_messages"
+                ).fetchone()[0]
+                total_sessions = conn.execute(
+                    "SELECT COUNT(DISTINCT session_id) FROM chat_messages"
+                ).fetchone()[0]
+                good = conn.execute(
+                    "SELECT COUNT(*) FROM chat_messages WHERE feedback='good'"
+                ).fetchone()[0]
+                bad = conn.execute(
+                    "SELECT COUNT(*) FROM chat_messages WHERE feedback='bad'"
+                ).fetchone()[0]
                 new_bad = conn.execute(
                     "SELECT COUNT(*) FROM chat_messages WHERE feedback_status='new'"
                 ).fetchone()[0]
-                avg_steps = conn.execute("SELECT AVG(step_count) FROM chat_messages").fetchone()[0]
+                avg_steps = conn.execute(
+                    "SELECT AVG(step_count) FROM chat_messages"
+                ).fetchone()[0]
                 timing_rows = conn.execute(
                     "SELECT total_ms FROM chat_messages WHERE total_ms IS NOT NULL ORDER BY total_ms"
                 ).fetchall()
@@ -402,7 +455,9 @@ class AnalyticsDB:
                 p95_idx = max(0, int(len(values) * 0.95) - 1)
                 p95_resp_ms = values[p95_idx]
 
-            avg_msg_per_session = round(total_messages / total_sessions, 1) if total_sessions else None
+            avg_msg_per_session = (
+                round(total_messages / total_sessions, 1) if total_sessions else None
+            )
 
             return {
                 "total_messages": total_messages,

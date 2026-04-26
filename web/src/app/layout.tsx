@@ -1,10 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import {
-  GOATCOUNTER_ENDPOINT,
-  SITE_HOST,
-  SITE_URL,
-} from "@/lib/siteConfig";
+import { GOATCOUNTER_ENDPOINT, SITE_HOST, SITE_URL } from "@/lib/siteConfig";
 import "./globals.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 

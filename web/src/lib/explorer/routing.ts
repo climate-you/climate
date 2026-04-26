@@ -11,7 +11,9 @@ export function parseDebugQuery(search: string): boolean {
   return raw === "on" || raw === "1" || raw === "true";
 }
 
-export function parseTextureVariantQuery(search: string): TextureVariantOverride {
+export function parseTextureVariantQuery(
+  search: string,
+): TextureVariantOverride {
   const raw = (new URLSearchParams(search).get("texture") ?? "")
     .trim()
     .toLowerCase();

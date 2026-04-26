@@ -13,7 +13,8 @@ const MAP_STYLE: maplibregl.StyleSpecification = {
       type: "raster",
       tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
       tileSize: 256,
-      attribution: "© <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors",
+      attribution:
+        "© <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors",
     },
   },
   layers: [
@@ -31,12 +32,26 @@ const MAP_STYLE: maplibregl.StyleSpecification = {
 // ---------------------------------------------------------------------------
 
 type ClickCell = { lat: number; lon: number; count: number };
-type OriginCell = { country: string | null; lat: number | null; lon: number | null; count: number };
+type OriginCell = {
+  country: string | null;
+  lat: number | null;
+  lon: number | null;
+  count: number;
+};
 type AdminEvents = { clicks: ClickCell[]; origins: OriginCell[] };
 type AdminStatus = {
-  app: { version: string; tag: string | null; commit: string | null; branch: string | null };
+  app: {
+    version: string;
+    tag: string | null;
+    commit: string | null;
+    branch: string | null;
+  };
   release: string;
-  analytics: { enabled: boolean; db_size_bytes: number | null; last_event_ts: number | null };
+  analytics: {
+    enabled: boolean;
+    db_size_bytes: number | null;
+    last_event_ts: number | null;
+  };
   system: {
     disk_total_bytes: number;
     disk_used_bytes: number;
@@ -48,8 +63,19 @@ type AdminStatus = {
   };
 };
 
-type ToolCallDetail = { name: string; args: Record<string, unknown>; step: number };
-type StepTiming = { step: number; model_ms: number; tools_ms?: number; error?: boolean; prompt_tokens?: number; completion_tokens?: number };
+type ToolCallDetail = {
+  name: string;
+  args: Record<string, unknown>;
+  step: number;
+};
+type StepTiming = {
+  step: number;
+  model_ms: number;
+  tools_ms?: number;
+  error?: boolean;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+};
 type ChatMessage = {
   message_id: string;
   session_id: string;
@@ -85,7 +111,9 @@ type ChatStats = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function toClickGeoJSON(clicks: ClickCell[]): GeoJSON.FeatureCollection<GeoJSON.Point> {
+function toClickGeoJSON(
+  clicks: ClickCell[],
+): GeoJSON.FeatureCollection<GeoJSON.Point> {
   return {
     type: "FeatureCollection",
     features: clicks.map((c) => ({
@@ -96,7 +124,9 @@ function toClickGeoJSON(clicks: ClickCell[]): GeoJSON.FeatureCollection<GeoJSON.
   };
 }
 
-function toOriginGeoJSON(origins: OriginCell[]): GeoJSON.FeatureCollection<GeoJSON.Point> {
+function toOriginGeoJSON(
+  origins: OriginCell[],
+): GeoJSON.FeatureCollection<GeoJSON.Point> {
   return {
     type: "FeatureCollection",
     features: origins
@@ -109,7 +139,9 @@ function toOriginGeoJSON(origins: OriginCell[]): GeoJSON.FeatureCollection<GeoJS
   };
 }
 
-function fmt(n: number): string { return n.toLocaleString(); }
+function fmt(n: number): string {
+  return n.toLocaleString();
+}
 
 function relativeTime(ts: number): string {
   const sec = Math.floor(Date.now() / 1000) - ts;
@@ -156,11 +188,14 @@ function buildCopyText(s: ChatMessage): string {
   }
 
   const modelParts: string[] = [];
-  if (s.rejected_tiers?.length > 0) modelParts.push(`~~${s.rejected_tiers.join(", ")}~~ →`);
+  if (s.rejected_tiers?.length > 0)
+    modelParts.push(`~~${s.rejected_tiers.join(", ")}~~ →`);
   if (s.tier) modelParts.push(s.tier);
   if (s.model) modelParts.push(`(${s.model})`);
   if (s.model_override) modelParts.push("· user-selected");
-  lines.push(`**Model:** ${modelParts.join(" ") || "—"} | **Total:** ${fmtMs(s.total_ms)} | **Steps:** ${s.step_count}`);
+  lines.push(
+    `**Model:** ${modelParts.join(" ") || "—"} | **Total:** ${fmtMs(s.total_ms)} | **Steps:** ${s.step_count}`,
+  );
 
   if (s.feedback) lines.push(`**Feedback:** ${s.feedback}`);
   lines.push("");
@@ -169,7 +204,9 @@ function buildCopyText(s: ChatMessage): string {
     lines.push("**Tool calls:**");
     for (const t of s.tool_calls_detail) {
       lines.push(`- step ${t.step}: \`${t.name}\``);
-      lines.push(`  \`\`\`json\n  ${JSON.stringify(t.args, null, 2).replace(/\n/g, "\n  ")}\n  \`\`\``);
+      lines.push(
+        `  \`\`\`json\n  ${JSON.stringify(t.args, null, 2).replace(/\n/g, "\n  ")}\n  \`\`\``,
+      );
     }
     lines.push("");
   }
@@ -179,13 +216,23 @@ function buildCopyText(s: ChatMessage): string {
     for (const t of s.steps_timing) {
       let row = `- step ${t.step}: model ${fmtMs(t.model_ms)}`;
       if (t.tools_ms != null) row += ` → tools ${fmtMs(t.tools_ms)}`;
-      if (t.prompt_tokens != null) row += ` (${t.prompt_tokens.toLocaleString()}p + ${(t.completion_tokens ?? 0).toLocaleString()}c tokens)`;
+      if (t.prompt_tokens != null)
+        row += ` (${t.prompt_tokens.toLocaleString()}p + ${(t.completion_tokens ?? 0).toLocaleString()}c tokens)`;
       if (t.error) row += " ← error";
       lines.push(row);
     }
-    const totalP = s.steps_timing.reduce((a, t) => a + (t.prompt_tokens ?? 0), 0);
-    const totalC = s.steps_timing.reduce((a, t) => a + (t.completion_tokens ?? 0), 0);
-    const tokenStr = totalP > 0 ? ` ${totalP.toLocaleString()}p + ${totalC.toLocaleString()}c` : "";
+    const totalP = s.steps_timing.reduce(
+      (a, t) => a + (t.prompt_tokens ?? 0),
+      0,
+    );
+    const totalC = s.steps_timing.reduce(
+      (a, t) => a + (t.completion_tokens ?? 0),
+      0,
+    );
+    const tokenStr =
+      totalP > 0
+        ? ` ${totalP.toLocaleString()}p + ${totalC.toLocaleString()}c`
+        : "";
     lines.push(`- total: ${fmtMs(s.total_ms)}${tokenStr}`);
     lines.push("");
   }
@@ -212,7 +259,10 @@ export default function AdminPage() {
   const [healthMs, setHealthMs] = useState<number | null>(null);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
-  const [visibleLayers, setVisibleLayers] = useState({ clicks: true, origins: true });
+  const [visibleLayers, setVisibleLayers] = useState({
+    clicks: true,
+    origins: true,
+  });
 
   // --- Chat tab state ---
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -222,14 +272,17 @@ export default function AdminPage() {
   const [chatRefreshKey, setChatRefreshKey] = useState(0);
   const [chatLoading, setChatLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [highlightedSessionId, setHighlightedSessionId] = useState<string | null>(null);
+  const [highlightedSessionId, setHighlightedSessionId] = useState<
+    string | null
+  >(null);
   const CHAT_PAGE_SIZE = 50;
 
   const apiBase = useMemo(() => {
     if (process.env.NEXT_PUBLIC_CLIMATE_API_BASE) {
       return process.env.NEXT_PUBLIC_CLIMATE_API_BASE.replace(/\/+$/, "");
     }
-    if (typeof window === "undefined") return `http://localhost:${DEFAULT_API_PORT}`;
+    if (typeof window === "undefined")
+      return `http://localhost:${DEFAULT_API_PORT}`;
     return `http://${window.location.hostname}:${DEFAULT_API_PORT}`;
   }, []);
 
@@ -239,9 +292,17 @@ export default function AdminPage() {
       const map = mapRef.current;
       if (map) {
         if (layer === "clicks" && map.getLayer("clicks-heat"))
-          map.setLayoutProperty("clicks-heat", "visibility", next.clicks ? "visible" : "none");
+          map.setLayoutProperty(
+            "clicks-heat",
+            "visibility",
+            next.clicks ? "visible" : "none",
+          );
         if (layer === "origins" && map.getLayer("origins-circle"))
-          map.setLayoutProperty("origins-circle", "visibility", next.origins ? "visible" : "none");
+          map.setLayoutProperty(
+            "origins-circle",
+            "visibility",
+            next.origins ? "visible" : "none",
+          );
       }
       return next;
     });
@@ -250,7 +311,10 @@ export default function AdminPage() {
   // Fetch chat stats on mount so the badge is visible before visiting the Chat tab
   useEffect(() => {
     fetch(`${apiBase}/api/admin/chat/sessions?limit=1`)
-      .then((r) => r.json() as Promise<{ messages: ChatMessage[]; stats: ChatStats }>)
+      .then(
+        (r) =>
+          r.json() as Promise<{ messages: ChatMessage[]; stats: ChatStats }>,
+      )
       .then((res) => setChatStats(res.stats))
       .catch(() => {});
   }, [apiBase]);
@@ -259,18 +323,30 @@ export default function AdminPage() {
   useEffect(() => {
     const t0 = performance.now();
     fetch(`${apiBase}/healthz`)
-      .then((r) => { if (r.ok) setHealthMs(performance.now() - t0); })
+      .then((r) => {
+        if (r.ok) setHealthMs(performance.now() - t0);
+      })
       .catch(() => {});
     fetch(`${apiBase}/api/admin/events`)
-      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() as Promise<AdminEvents>; })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<AdminEvents>;
+      })
       .then(setEvents)
-      .catch((e: unknown) => setEventsError(e instanceof Error ? e.message : "Failed to load analytics"));
+      .catch((e: unknown) =>
+        setEventsError(
+          e instanceof Error ? e.message : "Failed to load analytics",
+        ),
+      );
   }, [apiBase]);
 
   useEffect(() => {
     const fetchStatus = () => {
       fetch(`${apiBase}/api/admin/status`)
-        .then((r) => { if (!r.ok) return; return r.json() as Promise<AdminStatus>; })
+        .then((r) => {
+          if (!r.ok) return;
+          return r.json() as Promise<AdminStatus>;
+        })
         .then((s) => s && setStatus(s))
         .catch(() => {});
     };
@@ -285,15 +361,23 @@ export default function AdminPage() {
     setChatLoading(true);
     const offset = chatPage * CHAT_PAGE_SIZE;
     Promise.all([
-      fetch(`${apiBase}/api/admin/chat/sessions?limit=${CHAT_PAGE_SIZE}&offset=${offset}`)
-        .then((r) => r.json() as Promise<{ messages: ChatMessage[]; stats: ChatStats }>),
-      fetch(`${apiBase}/api/admin/chat/bad-answers?limit=200`)
-        .then((r) => r.json() as Promise<{ bad_answers: ChatMessage[]; stats: ChatStats }>),
+      fetch(
+        `${apiBase}/api/admin/chat/sessions?limit=${CHAT_PAGE_SIZE}&offset=${offset}`,
+      ).then(
+        (r) =>
+          r.json() as Promise<{ messages: ChatMessage[]; stats: ChatStats }>,
+      ),
+      fetch(`${apiBase}/api/admin/chat/bad-answers?limit=200`).then(
+        (r) =>
+          r.json() as Promise<{ bad_answers: ChatMessage[]; stats: ChatStats }>,
+      ),
     ])
       .then(([messagesRes, badRes]) => {
         setChatMessages(messagesRes.messages);
         setChatStats(messagesRes.stats);
-        setBadAnswers(badRes.bad_answers.filter((m) => m.feedback_status === "new"));
+        setBadAnswers(
+          badRes.bad_answers.filter((m) => m.feedback_status === "new"),
+        );
       })
       .catch(() => {})
       .finally(() => setChatLoading(false));
@@ -317,13 +401,23 @@ export default function AdminPage() {
   }, [chatMessages]);
 
   async function markReviewed(messageId: string) {
-    await fetch(`${apiBase}/api/chat/${messageId}/reviewed`, { method: "POST" });
+    await fetch(`${apiBase}/api/chat/${messageId}/reviewed`, {
+      method: "POST",
+    });
     setBadAnswers((prev) => prev.filter((m) => m.message_id !== messageId));
     setChatMessages((prev) =>
-      prev.map((m) => m.message_id === messageId ? { ...m, feedback_status: "reviewed" } : m)
+      prev.map((m) =>
+        m.message_id === messageId ? { ...m, feedback_status: "reviewed" } : m,
+      ),
     );
     if (chatStats) {
-      setChatStats({ ...chatStats, bad_answers_unreviewed: Math.max(0, chatStats.bad_answers_unreviewed - 1) });
+      setChatStats({
+        ...chatStats,
+        bad_answers_unreviewed: Math.max(
+          0,
+          chatStats.bad_answers_unreviewed - 1,
+        ),
+      });
     }
   }
 
@@ -340,7 +434,10 @@ export default function AdminPage() {
     map.addControl(new maplibregl.AttributionControl({ compact: true }));
     map.on("load", () => setMapReady(true));
     mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; };
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -358,12 +455,38 @@ export default function AdminPage() {
         type: "heatmap",
         source: "clicks",
         paint: {
-          "heatmap-weight": ["interpolate", ["linear"], ["get", "count"], 0, 0, maxCount, 1],
-          "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1, 8, 3],
+          "heatmap-weight": [
+            "interpolate",
+            ["linear"],
+            ["get", "count"],
+            0,
+            0,
+            maxCount,
+            1,
+          ],
+          "heatmap-intensity": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            0,
+            1,
+            8,
+            3,
+          ],
           "heatmap-color": [
-            "interpolate", ["linear"], ["heatmap-density"],
-            0, "rgba(0,0,255,0)", 0.2, "rgb(0,100,255)", 0.5, "rgb(0,220,160)",
-            0.8, "rgb(255,220,0)", 1, "rgb(255,80,0)",
+            "interpolate",
+            ["linear"],
+            ["heatmap-density"],
+            0,
+            "rgba(0,0,255,0)",
+            0.2,
+            "rgb(0,100,255)",
+            0.5,
+            "rgb(0,220,160)",
+            0.8,
+            "rgb(255,220,0)",
+            1,
+            "rgb(255,80,0)",
           ],
           "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 8, 6, 20],
           "heatmap-opacity": 0.85,
@@ -379,13 +502,24 @@ export default function AdminPage() {
         type: "circle",
         source: "origins",
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["get", "count"], 1, 5, 50, 20],
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["get", "count"],
+            1,
+            5,
+            50,
+            20,
+          ],
           "circle-color": "rgba(255, 160, 40, 0.7)",
           "circle-stroke-color": "rgba(255, 200, 100, 0.9)",
           "circle-stroke-width": 1,
         },
       });
-      const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
+      const popup = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+      });
       map.on("mouseenter", "origins-circle", (e) => {
         map.getCanvas().style.cursor = "pointer";
         const feat = e.features?.[0];
@@ -393,30 +527,76 @@ export default function AdminPage() {
         const country = feat.properties?.country || "Unknown";
         const count = feat.properties?.count ?? 0;
         const coords = (feat.geometry as GeoJSON.Point).coordinates.slice();
-        popup.setLngLat([coords[0], coords[1]])
-          .setHTML(`<strong>${country}</strong><br/>${count} session${count === 1 ? "" : "s"}`)
+        popup
+          .setLngLat([coords[0], coords[1]])
+          .setHTML(
+            `<strong>${country}</strong><br/>${count} session${count === 1 ? "" : "s"}`,
+          )
           .addTo(map);
       });
-      map.on("mouseleave", "origins-circle", () => { map.getCanvas().style.cursor = ""; popup.remove(); });
+      map.on("mouseleave", "origins-circle", () => {
+        map.getCanvas().style.cursor = "";
+        popup.remove();
+      });
     }
   }, [events, mapReady]);
 
   const totalClicks = events?.clicks.reduce((s, c) => s + c.count, 0) ?? 0;
   const totalSessions = events?.origins.reduce((s, o) => s + o.count, 0) ?? 0;
-  const uniqueCountries = events ? new Set(events.origins.map((o) => o.country).filter(Boolean)).size : 0;
+  const uniqueCountries = events
+    ? new Set(events.origins.map((o) => o.country).filter(Boolean)).size
+    : 0;
   const unreviewedCount = chatStats?.bad_answers_unreviewed ?? 0;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: "#111", color: "#eee", fontFamily: "system-ui, sans-serif" }}>
-
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100dvh",
+        background: "#111",
+        color: "#eee",
+        fontFamily: "system-ui, sans-serif",
+      }}
+    >
       {/* Header + tabs */}
-      <div style={{ padding: "10px 20px", borderBottom: "1px solid #2a2a2a", flexShrink: 0, display: "flex", alignItems: "center", gap: 20 }}>
-        <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: 0.3 }}>Admin Dashboard</span>
+      <div
+        style={{
+          padding: "10px 20px",
+          borderBottom: "1px solid #2a2a2a",
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          gap: 20,
+        }}
+      >
+        <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: 0.3 }}>
+          Admin Dashboard
+        </span>
         <div style={{ display: "flex", gap: 4 }}>
-          <TabButton active={activeTab === "map"} onClick={() => setActiveTab("map")}>Map</TabButton>
-          <TabButton active={activeTab === "chat"} onClick={() => setActiveTab("chat")}>
-            Chat{unreviewedCount > 0 && (
-              <span style={{ marginLeft: 6, background: "#e53e3e", color: "#fff", borderRadius: 999, padding: "1px 6px", fontSize: 11, fontWeight: 700 }}>
+          <TabButton
+            active={activeTab === "map"}
+            onClick={() => setActiveTab("map")}
+          >
+            Map
+          </TabButton>
+          <TabButton
+            active={activeTab === "chat"}
+            onClick={() => setActiveTab("chat")}
+          >
+            Chat
+            {unreviewedCount > 0 && (
+              <span
+                style={{
+                  marginLeft: 6,
+                  background: "#e53e3e",
+                  color: "#fff",
+                  borderRadius: 999,
+                  padding: "1px 6px",
+                  fontSize: 11,
+                  fontWeight: 700,
+                }}
+              >
                 {unreviewedCount}
               </span>
             )}
@@ -425,7 +605,16 @@ export default function AdminPage() {
         <button
           onClick={() => setChatRefreshKey((k) => k + 1)}
           disabled={chatLoading}
-          style={{ marginLeft: "auto", background: "transparent", border: "1px solid #333", color: chatLoading ? "#444" : "#888", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: chatLoading ? "default" : "pointer" }}
+          style={{
+            marginLeft: "auto",
+            background: "transparent",
+            border: "1px solid #333",
+            color: chatLoading ? "#444" : "#888",
+            borderRadius: 6,
+            padding: "4px 10px",
+            fontSize: 12,
+            cursor: chatLoading ? "default" : "pointer",
+          }}
         >
           {chatLoading ? "Loading…" : "↻ Refresh"}
         </button>
@@ -435,34 +624,104 @@ export default function AdminPage() {
       <div style={{ display: activeTab === "map" ? "contents" : "none" }}>
         <>
           {/* Status cards */}
-          <div style={{ display: "flex", gap: 10, padding: "10px 14px", flexShrink: 0, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              padding: "10px 14px",
+              flexShrink: 0,
+              flexWrap: "wrap",
+            }}
+          >
             <Card title="Backend">
-              <Row label="Health" value={healthMs != null ? `${healthMs.toFixed(0)} ms` : "–"} ok={healthMs != null ? healthMs < 500 : undefined} />
-              {eventsError && <Row label="Events" value={eventsError} ok={false} />}
+              <Row
+                label="Health"
+                value={healthMs != null ? `${healthMs.toFixed(0)} ms` : "–"}
+                ok={healthMs != null ? healthMs < 500 : undefined}
+              />
+              {eventsError && (
+                <Row label="Events" value={eventsError} ok={false} />
+              )}
             </Card>
             <Card title="Version">
               <Row label="App" value={status?.app.version ?? "–"} />
               <Row label="Tag" value={status?.app.tag ?? "–"} />
               <Row label="Branch" value={status?.app.branch ?? "–"} />
-              <Row label="Commit" value={status?.app.commit?.slice(0, 8) ?? "–"} />
+              <Row
+                label="Commit"
+                value={status?.app.commit?.slice(0, 8) ?? "–"}
+              />
               <Row label="Release" value={status?.release ?? "–"} />
             </Card>
             <Card title="System">
-              <Row label="Disk used" value={status ? `${fmtBytes(status.system.disk_used_bytes)} / ${fmtBytes(status.system.disk_total_bytes)}` : "–"} />
-              <Row label="Disk free" value={status ? fmtBytes(status.system.disk_free_bytes) : "–"} />
-              <Row label="RAM (process)" value={status ? fmtBytes(status.system.rss_bytes) : "–"} />
-              {status?.system.mem_total_bytes != null && status.system.mem_available_bytes != null && (
-                <Row label="RAM (system)" value={`${fmtBytes(status.system.mem_total_bytes - status.system.mem_available_bytes)} / ${fmtBytes(status.system.mem_total_bytes)}`} />
-              )}
-              <Row label="CPU (1 min avg)" value={status ? status.system.cpu_1m_pct != null ? `${status.system.cpu_1m_pct}%` : "sampling…" : "–"} />
+              <Row
+                label="Disk used"
+                value={
+                  status
+                    ? `${fmtBytes(status.system.disk_used_bytes)} / ${fmtBytes(status.system.disk_total_bytes)}`
+                    : "–"
+                }
+              />
+              <Row
+                label="Disk free"
+                value={status ? fmtBytes(status.system.disk_free_bytes) : "–"}
+              />
+              <Row
+                label="RAM (process)"
+                value={status ? fmtBytes(status.system.rss_bytes) : "–"}
+              />
+              {status?.system.mem_total_bytes != null &&
+                status.system.mem_available_bytes != null && (
+                  <Row
+                    label="RAM (system)"
+                    value={`${fmtBytes(status.system.mem_total_bytes - status.system.mem_available_bytes)} / ${fmtBytes(status.system.mem_total_bytes)}`}
+                  />
+                )}
+              <Row
+                label="CPU (1 min avg)"
+                value={
+                  status
+                    ? status.system.cpu_1m_pct != null
+                      ? `${status.system.cpu_1m_pct}%`
+                      : "sampling…"
+                    : "–"
+                }
+              />
             </Card>
             <Card title="Analytics">
-              <Row label="Recording" value={status ? status.analytics.enabled ? "enabled" : "disabled" : "–"} ok={status?.analytics.enabled} />
+              <Row
+                label="Recording"
+                value={
+                  status
+                    ? status.analytics.enabled
+                      ? "enabled"
+                      : "disabled"
+                    : "–"
+                }
+                ok={status?.analytics.enabled}
+              />
               <Row label="Sessions" value={events ? fmt(totalSessions) : "–"} />
               <Row label="Clicks" value={events ? fmt(totalClicks) : "–"} />
-              <Row label="Countries" value={events ? fmt(uniqueCountries) : "–"} />
-              {status?.analytics.db_size_bytes != null && <Row label="DB size" value={fmtBytes(status.analytics.db_size_bytes)} />}
-              <Row label="Last event" value={status ? status.analytics.last_event_ts != null ? relativeTime(status.analytics.last_event_ts) : "none" : "–"} />
+              <Row
+                label="Countries"
+                value={events ? fmt(uniqueCountries) : "–"}
+              />
+              {status?.analytics.db_size_bytes != null && (
+                <Row
+                  label="DB size"
+                  value={fmtBytes(status.analytics.db_size_bytes)}
+                />
+              )}
+              <Row
+                label="Last event"
+                value={
+                  status
+                    ? status.analytics.last_event_ts != null
+                      ? relativeTime(status.analytics.last_event_ts)
+                      : "none"
+                    : "–"
+                }
+              />
             </Card>
           </div>
 
@@ -470,32 +729,93 @@ export default function AdminPage() {
           <div ref={mapContainerRef} style={{ flex: 1, minHeight: 0 }} />
 
           {/* Legend */}
-          <div style={{ padding: "8px 16px", borderTop: "1px solid #2a2a2a", display: "flex", gap: 24, fontSize: 12, color: "#aaa", flexShrink: 0 }}>
-            <LegendItem color="rgba(255,220,0,0.85)" label="Map clicks (heatmap)" active={visibleLayers.clicks} onClick={() => toggleLayer("clicks")} />
-            <LegendItem color="rgba(255,160,40,0.7)" label="User origins (circles)" circle active={visibleLayers.origins} onClick={() => toggleLayer("origins")} />
+          <div
+            style={{
+              padding: "8px 16px",
+              borderTop: "1px solid #2a2a2a",
+              display: "flex",
+              gap: 24,
+              fontSize: 12,
+              color: "#aaa",
+              flexShrink: 0,
+            }}
+          >
+            <LegendItem
+              color="rgba(255,220,0,0.85)"
+              label="Map clicks (heatmap)"
+              active={visibleLayers.clicks}
+              onClick={() => toggleLayer("clicks")}
+            />
+            <LegendItem
+              color="rgba(255,160,40,0.7)"
+              label="User origins (circles)"
+              circle
+              active={visibleLayers.origins}
+              onClick={() => toggleLayer("origins")}
+            />
           </div>
         </>
       </div>
 
       {/* Chat tab */}
       {activeTab === "chat" && (
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
-
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            padding: "12px 16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+          }}
+        >
           {/* Stats cards */}
           {chatStats && (
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flexShrink: 0 }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                flexShrink: 0,
+              }}
+            >
               <Card title="Chat activity">
                 <Row label="Sessions" value={fmt(chatStats.total_sessions)} />
                 <Row label="Messages" value={fmt(chatStats.total_messages)} />
-                <Row label="Msgs / session" value={chatStats.avg_messages_per_session != null ? chatStats.avg_messages_per_session.toFixed(1) : "–"} />
-                <Row label="Avg steps" value={chatStats.avg_step_count != null ? chatStats.avg_step_count.toFixed(1) : "–"} />
-                <Row label="Avg resp time" value={fmtMs(chatStats.avg_resp_ms)} />
-                <Row label="p95 resp time" value={fmtMs(chatStats.p95_resp_ms)} />
+                <Row
+                  label="Msgs / session"
+                  value={
+                    chatStats.avg_messages_per_session != null
+                      ? chatStats.avg_messages_per_session.toFixed(1)
+                      : "–"
+                  }
+                />
+                <Row
+                  label="Avg steps"
+                  value={
+                    chatStats.avg_step_count != null
+                      ? chatStats.avg_step_count.toFixed(1)
+                      : "–"
+                  }
+                />
+                <Row
+                  label="Avg resp time"
+                  value={fmtMs(chatStats.avg_resp_ms)}
+                />
+                <Row
+                  label="p95 resp time"
+                  value={fmtMs(chatStats.p95_resp_ms)}
+                />
               </Card>
               <Card title="Feedback">
                 <Row label="👍 Good" value={fmt(chatStats.feedback_good)} />
                 <Row label="👎 Bad" value={fmt(chatStats.feedback_bad)} />
-                <Row label="Unreviewed" value={fmt(chatStats.bad_answers_unreviewed)} ok={chatStats.bad_answers_unreviewed === 0} />
+                <Row
+                  label="Unreviewed"
+                  value={fmt(chatStats.bad_answers_unreviewed)}
+                  ok={chatStats.bad_answers_unreviewed === 0}
+                />
               </Card>
             </div>
           )}
@@ -503,14 +823,20 @@ export default function AdminPage() {
           {/* Bad answers inbox */}
           {badAnswers.length > 0 && (
             <section>
-              <SectionTitle>To review ({badAnswers.length} unreviewed)</SectionTitle>
+              <SectionTitle>
+                To review ({badAnswers.length} unreviewed)
+              </SectionTitle>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {badAnswers.map((m) => (
                   <MessageRow
                     key={m.message_id}
                     message={m}
                     expanded={expandedId === m.message_id}
-                    onToggle={() => setExpandedId(expandedId === m.message_id ? null : m.message_id)}
+                    onToggle={() =>
+                      setExpandedId(
+                        expandedId === m.message_id ? null : m.message_id,
+                      )
+                    }
                     onMarkReviewed={() => void markReviewed(m.message_id)}
                     onViewSession={() => setHighlightedSessionId(m.session_id)}
                     highlight
@@ -522,9 +848,13 @@ export default function AdminPage() {
 
           {/* All sessions grouped */}
           <section style={{ flex: 1 }}>
-            <SectionTitle>All sessions{chatLoading ? " (loading…)" : ""}</SectionTitle>
+            <SectionTitle>
+              All sessions{chatLoading ? " (loading…)" : ""}
+            </SectionTitle>
             {groupedSessions.length === 0 && !chatLoading && (
-              <div style={{ color: "#555", fontSize: 13 }}>No messages recorded yet.</div>
+              <div style={{ color: "#555", fontSize: 13 }}>
+                No messages recorded yet.
+              </div>
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {groupedSessions.map(({ session_id, messages, latest_ts }) => {
@@ -533,25 +863,58 @@ export default function AdminPage() {
                   <div
                     key={session_id}
                     style={{
-                      border: "1px solid " + (isHighlighted ? "#7ec8e3" : "#333"),
+                      border:
+                        "1px solid " + (isHighlighted ? "#7ec8e3" : "#333"),
                       borderRadius: 8,
                       overflow: "hidden",
                       background: "#1a1a1a",
                     }}
                   >
-                    <div style={{ padding: "6px 12px", background: "#1d1d1d", display: "flex", gap: 10, fontSize: 11, color: "#777", alignItems: "center", borderBottom: "1px solid #333" }}>
-                      <span style={{ fontFamily: "ui-monospace, monospace" }}>{session_id.slice(0, 8)}…</span>
-                      <span>{messages.length} message{messages.length !== 1 ? "s" : ""}</span>
+                    <div
+                      style={{
+                        padding: "6px 12px",
+                        background: "#1d1d1d",
+                        display: "flex",
+                        gap: 10,
+                        fontSize: 11,
+                        color: "#777",
+                        alignItems: "center",
+                        borderBottom: "1px solid #333",
+                      }}
+                    >
+                      <span style={{ fontFamily: "ui-monospace, monospace" }}>
+                        {session_id.slice(0, 8)}…
+                      </span>
+                      <span>
+                        {messages.length} message
+                        {messages.length !== 1 ? "s" : ""}
+                      </span>
                       <span>{relativeTime(latest_ts)}</span>
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "4px 0" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2,
+                        padding: "4px 0",
+                      }}
+                    >
                       {messages.map((m) => (
                         <MessageRow
                           key={m.message_id}
                           message={m}
                           expanded={expandedId === m.message_id}
-                          onToggle={() => setExpandedId(expandedId === m.message_id ? null : m.message_id)}
-                          onMarkReviewed={(m.feedback === "bad" || !!m.error) && m.feedback_status === "new" ? () => void markReviewed(m.message_id) : undefined}
+                          onToggle={() =>
+                            setExpandedId(
+                              expandedId === m.message_id ? null : m.message_id,
+                            )
+                          }
+                          onMarkReviewed={
+                            (m.feedback === "bad" || !!m.error) &&
+                            m.feedback_status === "new"
+                              ? () => void markReviewed(m.message_id)
+                              : undefined
+                          }
                           indented
                         />
                       ))}
@@ -563,7 +926,14 @@ export default function AdminPage() {
 
             {/* Pagination */}
             {(chatPage > 0 || chatMessages.length === CHAT_PAGE_SIZE) && (
-              <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  marginTop: 12,
+                  alignItems: "center",
+                }}
+              >
                 <button
                   onClick={() => setChatPage((p) => Math.max(0, p - 1))}
                   disabled={chatPage === 0}
@@ -571,11 +941,15 @@ export default function AdminPage() {
                 >
                   ← Prev
                 </button>
-                <span style={{ fontSize: 12, color: "#666" }}>Page {chatPage + 1}</span>
+                <span style={{ fontSize: 12, color: "#666" }}>
+                  Page {chatPage + 1}
+                </span>
                 <button
                   onClick={() => setChatPage((p) => p + 1)}
                   disabled={chatMessages.length < CHAT_PAGE_SIZE}
-                  style={paginationBtnStyle(chatMessages.length < CHAT_PAGE_SIZE)}
+                  style={paginationBtnStyle(
+                    chatMessages.length < CHAT_PAGE_SIZE,
+                  )}
                 >
                   Next →
                 </button>
@@ -592,7 +966,15 @@ export default function AdminPage() {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <button
       onClick={onClick}
@@ -616,7 +998,16 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 11, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+    <div
+      style={{
+        fontSize: 11,
+        fontWeight: 700,
+        color: "#888",
+        textTransform: "uppercase",
+        letterSpacing: 1,
+        marginBottom: 8,
+      }}
+    >
       {children}
     </div>
   );
@@ -640,8 +1031,10 @@ function MessageRow({
   indented?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
-  const feedbackIcon = s.feedback === "good" ? "👍" : s.feedback === "bad" ? "👎" : "—";
-  const feedbackColor = s.feedback === "good" ? "#4caf50" : s.feedback === "bad" ? "#f66" : "#555";
+  const feedbackIcon =
+    s.feedback === "good" ? "👍" : s.feedback === "bad" ? "👎" : "—";
+  const feedbackColor =
+    s.feedback === "good" ? "#4caf50" : s.feedback === "bad" ? "#f66" : "#555";
 
   function handleCopy() {
     void navigator.clipboard.writeText(buildCopyText(s)).then(() => {
@@ -653,8 +1046,14 @@ function MessageRow({
   return (
     <div
       style={{
-        background: highlight ? "rgba(229,62,62,0.08)" : indented ? "transparent" : "#1a1a1a",
-        border: indented ? "none" : "1px solid " + (highlight ? "rgba(229,62,62,0.3)" : "#2a2a2a"),
+        background: highlight
+          ? "rgba(229,62,62,0.08)"
+          : indented
+            ? "transparent"
+            : "#1a1a1a",
+        border: indented
+          ? "none"
+          : "1px solid " + (highlight ? "rgba(229,62,62,0.3)" : "#2a2a2a"),
         borderRadius: indented ? 0 : 7,
         borderBottom: indented ? "1px solid #2a2a2a" : undefined,
         overflow: "hidden",
@@ -663,26 +1062,104 @@ function MessageRow({
       {/* Summary row */}
       <div
         onClick={onToggle}
-        style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer", fontSize: 12, background: expanded ? "#252525" : "transparent", transition: "background 120ms ease" }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "8px 12px",
+          cursor: "pointer",
+          fontSize: 12,
+          background: expanded ? "#252525" : "transparent",
+          transition: "background 120ms ease",
+        }}
       >
-        <span style={{ color: "#777", flexShrink: 0, width: 60 }}>{relativeTime(s.ts)}</span>
-        <span style={{ flex: 1, minWidth: 0, color: "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {s.error && <span style={{ color: "#f66", marginRight: 5, fontSize: 10 }} title={s.error}>⬤</span>}
+        <span style={{ color: "#777", flexShrink: 0, width: 60 }}>
+          {relativeTime(s.ts)}
+        </span>
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            color: "#ccc",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {s.error && (
+            <span
+              style={{ color: "#f66", marginRight: 5, fontSize: 10 }}
+              title={s.error}
+            >
+              ⬤
+            </span>
+          )}
           {truncate(s.question, 80)}
         </span>
-        <span style={{ color: "#888", flexShrink: 0, width: 130, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {s.model_override && <span style={{ color: "#e8a838", marginRight: 4, fontSize: 10 }}>user</span>}
+        <span
+          style={{
+            color: "#888",
+            flexShrink: 0,
+            width: 130,
+            textAlign: "right",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {s.model_override && (
+            <span style={{ color: "#e8a838", marginRight: 4, fontSize: 10 }}>
+              user
+            </span>
+          )}
           <span style={{ color: tierColor(s.tier) }}>{s.tier ?? "—"}</span>
         </span>
-        <span style={{ color: "#888", flexShrink: 0, width: 50, textAlign: "right" }}>{s.step_count} steps</span>
-        <span style={{ color: "#888", flexShrink: 0, width: 44, textAlign: "right" }}>{fmtMs(s.total_ms)}</span>
-        <span style={{ color: feedbackColor, flexShrink: 0, width: 24, textAlign: "center" }}>{feedbackIcon}</span>
-        <span style={{ color: "#666", flexShrink: 0 }}>{expanded ? "▲" : "▼"}</span>
+        <span
+          style={{
+            color: "#888",
+            flexShrink: 0,
+            width: 50,
+            textAlign: "right",
+          }}
+        >
+          {s.step_count} steps
+        </span>
+        <span
+          style={{
+            color: "#888",
+            flexShrink: 0,
+            width: 44,
+            textAlign: "right",
+          }}
+        >
+          {fmtMs(s.total_ms)}
+        </span>
+        <span
+          style={{
+            color: feedbackColor,
+            flexShrink: 0,
+            width: 24,
+            textAlign: "center",
+          }}
+        >
+          {feedbackIcon}
+        </span>
+        <span style={{ color: "#666", flexShrink: 0 }}>
+          {expanded ? "▲" : "▼"}
+        </span>
       </div>
 
       {/* Expanded detail */}
       {expanded && (
-        <div style={{ padding: "0 12px 12px", borderTop: "1px solid #333", display: "flex", flexDirection: "column", gap: 10 }}>
+        <div
+          style={{
+            padding: "0 12px 12px",
+            borderTop: "1px solid #333",
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+          }}
+        >
           <DetailSection label="Question">
             <pre style={preStyle}>{s.question}</pre>
           </DetailSection>
@@ -690,15 +1167,33 @@ function MessageRow({
             <pre style={preStyle}>{s.answer || "—"}</pre>
           </DetailSection>
           <DetailSection label="Model selection">
-            <div style={{ display: "flex", gap: 6, fontSize: 12, fontFamily: "ui-monospace, monospace", alignItems: "center", flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 6,
+                fontSize: 12,
+                fontFamily: "ui-monospace, monospace",
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
               {s.rejected_tiers?.map((t) => (
-                <span key={t} style={{ color: "#555", textDecoration: "line-through" }}>{t}</span>
+                <span
+                  key={t}
+                  style={{ color: "#555", textDecoration: "line-through" }}
+                >
+                  {t}
+                </span>
               ))}
-              {s.rejected_tiers?.length > 0 && <span style={{ color: "#444" }}>→</span>}
+              {s.rejected_tiers?.length > 0 && (
+                <span style={{ color: "#444" }}>→</span>
+              )}
               <span style={{ color: tierColor(s.tier) }}>{s.tier ?? "—"}</span>
               {s.model && <span style={{ color: "#666" }}>({s.model})</span>}
               {s.model_override && (
-                <span style={{ color: "#e8a838", fontSize: 11 }}>· user-selected</span>
+                <span style={{ color: "#e8a838", fontSize: 11 }}>
+                  · user-selected
+                </span>
               )}
             </div>
           </DetailSection>
@@ -706,7 +1201,13 @@ function MessageRow({
             <DetailSection label={`Tool calls (${s.tool_calls_detail.length})`}>
               {s.tool_calls_detail.map((t: ToolCallDetail, i: number) => (
                 <div key={i} style={{ marginBottom: 4 }}>
-                  <span style={{ color: "#7ec8e3", fontFamily: "monospace", fontSize: 12 }}>
+                  <span
+                    style={{
+                      color: "#7ec8e3",
+                      fontFamily: "monospace",
+                      fontSize: 12,
+                    }}
+                  >
                     step {t.step}: {t.name}
                   </span>
                   <pre style={{ ...preStyle, marginTop: 2, color: "#888" }}>
@@ -728,41 +1229,83 @@ function MessageRow({
                   const isLast = i === s.steps_timing.length - 1;
                   const hasTools = t.tools_ms != null;
                   return (
-                    <div key={i} style={{ display: "flex", gap: 8, fontSize: 12, fontFamily: "ui-monospace, monospace", alignItems: "center" }}>
-                      <span style={{ color: "#555", width: 48, flexShrink: 0 }}>step {t.step}</span>
-                      <span style={{ color: "#7ec8e3" }}>model {fmtMs(t.model_ms)}</span>
+                    <div
+                      key={i}
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        fontSize: 12,
+                        fontFamily: "ui-monospace, monospace",
+                        alignItems: "center",
+                      }}
+                    >
+                      <span style={{ color: "#555", width: 48, flexShrink: 0 }}>
+                        step {t.step}
+                      </span>
+                      <span style={{ color: "#7ec8e3" }}>
+                        model {fmtMs(t.model_ms)}
+                      </span>
                       {hasTools && (
-                        <span style={{ color: "#888" }}>→ tools {fmtMs(t.tools_ms)}</span>
+                        <span style={{ color: "#888" }}>
+                          → tools {fmtMs(t.tools_ms)}
+                        </span>
                       )}
                       {t.prompt_tokens != null && (
                         <span style={{ color: "#666", fontSize: 11 }}>
-                          {t.prompt_tokens.toLocaleString()}p + {(t.completion_tokens ?? 0).toLocaleString()}c
+                          {t.prompt_tokens.toLocaleString()}p +{" "}
+                          {(t.completion_tokens ?? 0).toLocaleString()}c
                         </span>
                       )}
                       {t.error && (
-                        <span style={{ color: "#f66", fontSize: 11 }}>← error</span>
+                        <span style={{ color: "#f66", fontSize: 11 }}>
+                          ← error
+                        </span>
                       )}
                       {isLast && !hasTools && !t.error && (
-                        <span style={{ color: "#4caf50", fontSize: 11 }}>← final answer</span>
+                        <span style={{ color: "#4caf50", fontSize: 11 }}>
+                          ← final answer
+                        </span>
                       )}
                     </div>
                   );
                 })}
-                {s.total_ms != null && (() => {
-                  const totalP = s.steps_timing.reduce((a, t) => a + (t.prompt_tokens ?? 0), 0);
-                  const totalC = s.steps_timing.reduce((a, t) => a + (t.completion_tokens ?? 0), 0);
-                  return (
-                    <div style={{ marginTop: 4, fontSize: 12, color: "#666", fontFamily: "ui-monospace, monospace" }}>
-                      total: {fmtMs(s.total_ms)}
-                      {totalP > 0 && <span style={{ marginLeft: 8 }}>{totalP.toLocaleString()}p + {totalC.toLocaleString()}c</span>}
-                    </div>
-                  );
-                })()}
+                {s.total_ms != null &&
+                  (() => {
+                    const totalP = s.steps_timing.reduce(
+                      (a, t) => a + (t.prompt_tokens ?? 0),
+                      0,
+                    );
+                    const totalC = s.steps_timing.reduce(
+                      (a, t) => a + (t.completion_tokens ?? 0),
+                      0,
+                    );
+                    return (
+                      <div
+                        style={{
+                          marginTop: 4,
+                          fontSize: 12,
+                          color: "#666",
+                          fontFamily: "ui-monospace, monospace",
+                        }}
+                      >
+                        total: {fmtMs(s.total_ms)}
+                        {totalP > 0 && (
+                          <span style={{ marginLeft: 8 }}>
+                            {totalP.toLocaleString()}p +{" "}
+                            {totalC.toLocaleString()}c
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
               </div>
             </DetailSection>
           )}
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={handleCopy} style={{ ...reviewBtnStyle, borderColor: "#666", color: "#aaa" }}>
+            <button
+              onClick={handleCopy}
+              style={{ ...reviewBtnStyle, borderColor: "#666", color: "#aaa" }}
+            >
               {copied ? "✓ Copied!" : "Copy"}
             </button>
             {onMarkReviewed && (
@@ -771,7 +1314,14 @@ function MessageRow({
               </button>
             )}
             {onViewSession && (
-              <button onClick={onViewSession} style={{ ...reviewBtnStyle, borderColor: "#7ec8e3", color: "#7ec8e3" }}>
+              <button
+                onClick={onViewSession}
+                style={{
+                  ...reviewBtnStyle,
+                  borderColor: "#7ec8e3",
+                  color: "#7ec8e3",
+                }}
+              >
                 View session ↓
               </button>
             )}
@@ -782,10 +1332,25 @@ function MessageRow({
   );
 }
 
-function DetailSection({ label, children }: { label: string; children: React.ReactNode }) {
+function DetailSection({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <div style={{ fontSize: 10, fontWeight: 700, color: "#777", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          color: "#777",
+          textTransform: "uppercase",
+          letterSpacing: 1,
+          marginBottom: 4,
+        }}
+      >
         {label}
       </div>
       {children}
@@ -828,31 +1393,105 @@ function paginationBtnStyle(disabled: boolean): React.CSSProperties {
   };
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div style={{ background: "#1a1a1a", border: "1px solid #333", borderRadius: 8, padding: "10px 14px", minWidth: 160, flex: "1 1 160px" }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+    <div
+      style={{
+        background: "#1a1a1a",
+        border: "1px solid #333",
+        borderRadius: 8,
+        padding: "10px 14px",
+        minWidth: 160,
+        flex: "1 1 160px",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          color: "#888",
+          textTransform: "uppercase",
+          letterSpacing: 1,
+          marginBottom: 8,
+        }}
+      >
         {title}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>{children}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+        {children}
+      </div>
     </div>
   );
 }
 
-function Row({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
+function Row({
+  label,
+  value,
+  ok,
+}: {
+  label: string;
+  value: string;
+  ok?: boolean;
+}) {
   const valueColor = ok === true ? "#4caf50" : ok === false ? "#f66" : "#ddd";
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12 }}>
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 8,
+        fontSize: 12,
+      }}
+    >
       <span style={{ color: "#777" }}>{label}</span>
-      <span style={{ color: valueColor, fontVariantNumeric: "tabular-nums" }}>{value}</span>
+      <span style={{ color: valueColor, fontVariantNumeric: "tabular-nums" }}>
+        {value}
+      </span>
     </div>
   );
 }
 
-function LegendItem({ color, label, circle, active = true, onClick }: { color: string; label: string; circle?: boolean; active?: boolean; onClick?: () => void }) {
+function LegendItem({
+  color,
+  label,
+  circle,
+  active = true,
+  onClick,
+}: {
+  color: string;
+  label: string;
+  circle?: boolean;
+  active?: boolean;
+  onClick?: () => void;
+}) {
   return (
-    <span onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 6, cursor: onClick ? "pointer" : undefined, opacity: active ? 1 : 0.35, userSelect: "none" }}>
-      <span style={{ width: 12, height: 12, background: color, borderRadius: circle ? "50%" : 2, display: "inline-block", flexShrink: 0 }} />
+    <span
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        cursor: onClick ? "pointer" : undefined,
+        opacity: active ? 1 : 0.35,
+        userSelect: "none",
+      }}
+    >
+      <span
+        style={{
+          width: 12,
+          height: 12,
+          background: color,
+          borderRadius: circle ? "50%" : 2,
+          display: "inline-block",
+          flexShrink: 0,
+        }}
+      />
       {label}
     </span>
   );

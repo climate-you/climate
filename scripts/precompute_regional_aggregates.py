@@ -128,7 +128,9 @@ def _compute_globe_mean_incremental(
     ntime: int | None = None
     for tr in range(n_tiles_lat):
         for tc in range(n_tiles_lon):
-            p = tile_path(tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext)
+            p = tile_path(
+                tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
+            )
             if p.exists():
                 hdr, _ = read_tile_array(p)
                 ntime = hdr.nyears if hdr.nyears > 0 else 1
@@ -153,7 +155,9 @@ def _compute_globe_mean_incremental(
         tile_w_area = w_area[r0:r1]
 
         for tc in range(n_tiles_lon):
-            p = tile_path(tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext)
+            p = tile_path(
+                tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
+            )
             if not p.exists():
                 continue
 
@@ -201,7 +205,9 @@ def _compute_aggregates_incremental(
     ntime: int | None = None
     for tr in range(n_tiles_lat):
         for tc in range(n_tiles_lon):
-            p = tile_path(tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext)
+            p = tile_path(
+                tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
+            )
             if p.exists():
                 hdr, _ = read_tile_array(p)
                 ntime = hdr.nyears if hdr.nyears > 0 else 1
@@ -236,7 +242,9 @@ def _compute_aggregates_incremental(
         w_row = w_area[r0:r1]  # (tile_rows,)
 
         for tc in range(n_tiles_lon):
-            p = tile_path(tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext)
+            p = tile_path(
+                tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
+            )
             if not p.exists():
                 continue
 
@@ -251,17 +259,19 @@ def _compute_aggregates_incremental(
             valid = ~np.isnan(arr)  # (h, w, ntime)
 
             for region_key, frac in named_regions:
-                frac_tile = frac[r0: r0 + h, c0: c0 + w]
+                frac_tile = frac[r0 : r0 + h, c0 : c0 + w]
                 ri, ci = np.where(frac_tile > 0)
                 if ri.size == 0:
                     continue
 
-                cell_data = arr[ri, ci, :]     # (ncells, ntime)
+                cell_data = arr[ri, ci, :]  # (ncells, ntime)
                 cell_valid = valid[ri, ci, :]  # (ncells, ntime)
 
                 if do_mean:
                     wt = (w_row[ri] * frac_tile[ri, ci])[:, np.newaxis]  # (ncells, 1)
-                    mean_wsum[region_key] += np.where(cell_valid, cell_data * wt, 0.0).sum(axis=0)
+                    mean_wsum[region_key] += np.where(
+                        cell_valid, cell_data * wt, 0.0
+                    ).sum(axis=0)
                     mean_wsumw[region_key] += np.where(cell_valid, wt, 0.0).sum(axis=0)
 
                 if do_min:
@@ -278,20 +288,26 @@ def _compute_aggregates_incremental(
         res: dict[str, list[float | None]] = {}
         for key, _ in named_regions:
             with np.errstate(invalid="ignore"):
-                v = np.where(mean_wsumw[key] > 0, mean_wsum[key] / mean_wsumw[key], np.nan)
+                v = np.where(
+                    mean_wsumw[key] > 0, mean_wsum[key] / mean_wsumw[key], np.nan
+                )
             res[key] = [None if np.isnan(x) else round(float(x), 4) for x in v]
         out["mean"] = res
 
     if do_min:
         res = {}
         for key, _ in named_regions:
-            res[key] = [None if np.isinf(x) else round(float(x), 4) for x in min_acc[key]]
+            res[key] = [
+                None if np.isinf(x) else round(float(x), 4) for x in min_acc[key]
+            ]
         out["min"] = res
 
     if do_max:
         res = {}
         for key, _ in named_regions:
-            res[key] = [None if np.isinf(x) else round(float(x), 4) for x in max_acc[key]]
+            res[key] = [
+                None if np.isinf(x) else round(float(x), 4) for x in max_acc[key]
+            ]
         out["max"] = res
 
     return out, ntime
@@ -334,7 +350,9 @@ def precompute_aggregates(
     # code → display name
     country_code_to_name: dict[str, str] = {}
     if country_names_path.exists():
-        country_code_to_name = json.loads(country_names_path.read_text(encoding="utf-8"))
+        country_code_to_name = json.loads(
+            country_names_path.read_text(encoding="utf-8")
+        )
     print(f" {len(country_id_to_code)} countries")
 
     print("[aggregates] loading ocean mask ...", end="", flush=True)
@@ -369,7 +387,10 @@ def precompute_aggregates(
         elif grid_id == "global_0p05":
             grid = GridSpec.global_0p05(tile_size=tile_size)
         else:
-            print(f"[aggregates] skip {metric_id}: unknown grid_id={grid_id}", file=sys.stderr)
+            print(
+                f"[aggregates] skip {metric_id}: unknown grid_id={grid_id}",
+                file=sys.stderr,
+            )
             continue
 
         domain: str = spec.get("domain", "global")
@@ -436,7 +457,10 @@ def precompute_aggregates(
             continue
 
         # Check mask alignment
-        for mask_deg, label in [(country_mask_deg, "country"), (ocean_mask_deg, "ocean")]:
+        for mask_deg, label in [
+            (country_mask_deg, "country"),
+            (ocean_mask_deg, "ocean"),
+        ]:
             factor = grid.deg / mask_deg
             if abs(round(factor) - factor) > 1e-9:
                 print(
@@ -465,7 +489,9 @@ def precompute_aggregates(
         # Country weights (only for global domain)
         country_weights: dict[int, np.ndarray] = {}
         if domain in ("global",):
-            country_weights = _build_fractional_weights(country_mask, country_mask_deg, grid)
+            country_weights = _build_fractional_weights(
+                country_mask, country_mask_deg, grid
+            )
 
         # Ocean weights
         ocean_weights: dict[int, np.ndarray] = {}

@@ -6,6 +6,7 @@ Returns a dict that will be JSON-serialised and sent back to the LLM as a
 tool result.  Errors are returned as {"error": "..."} so the LLM can
 react rather than crashing the loop.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -166,7 +167,9 @@ def _get_metric_series(
         return {"error": str(e)}
 
     if vec is None:
-        return {"error": f"No data at lat={lat}, lon={lon} for metric '{metric_id}' (ocean/missing cell)."}
+        return {
+            "error": f"No data at lat={lat}, lon={lon} for metric '{metric_id}' (ocean/missing cell)."
+        }
 
     axis = tile_store.axis(metric_id)
     if len(axis) != len(vec):
@@ -206,19 +209,30 @@ def _get_metric_series(
                 for y, vs in sorted(year_vals.items())
             ]
             return {
-                "metric_id": metric_id, "lat": lat, "lon": lon, "unit": unit,
+                "metric_id": metric_id,
+                "lat": lat,
+                "lon": lon,
+                "unit": unit,
                 "data": data,
                 "note": f"Annual means for months {month_filter}.",
             }
 
-        return {"metric_id": metric_id, "lat": lat, "lon": lon, "unit": unit, "data": data}
+        return {
+            "metric_id": metric_id,
+            "lat": lat,
+            "lon": lon,
+            "unit": unit,
+            "data": data,
+        }
 
     else:
         # yearly axis — int years (also catches any unknown time_axis_type)
         try:
             years = [int(a) for a in axis]
         except (ValueError, TypeError):
-            return {"error": f"Unsupported time axis format for metric '{metric_id}' (type: {time_axis_type!r})."}
+            return {
+                "error": f"Unsupported time axis format for metric '{metric_id}' (type: {time_axis_type!r})."
+            }
 
         pairs = [(y, float(v)) for y, v in zip(years, vec)]
         available_min, available_max = years[0], years[-1]
@@ -287,8 +301,13 @@ def get_metric_series(
     if "error" in loc:
         return loc
     result = _get_metric_series(
-        loc["lat"], loc["lon"], metric_id, tile_store,
-        start_year=start_year, end_year=end_year, month_filter=month_filter,
+        loc["lat"],
+        loc["lon"],
+        metric_id,
+        tile_store,
+        start_year=start_year,
+        end_year=end_year,
+        month_filter=month_filter,
         aggregate_by_year=aggregate_by_year,
     )
     if "error" not in result:
@@ -297,7 +316,12 @@ def get_metric_series(
         if temperature_unit == "F" and spec.get("unit") == "C":
             is_delta = _is_delta_metric(spec)
             result["data"] = [
-                {**entry, "value": _convert_temp(entry["value"], spec, is_delta=is_delta, target="F")}
+                {
+                    **entry,
+                    "value": _convert_temp(
+                        entry["value"], spec, is_delta=is_delta, target="F"
+                    ),
+                }
                 for entry in result["data"]
             ]
             result["unit"] = _output_unit(spec, "F")
@@ -333,20 +357,26 @@ def find_extreme_location(
     if spec is None:
         return {"error": f"Unknown metric_id: '{metric_id}'."}
     if aggregation not in ("mean", "max", "min", "trend_slope"):
-        return {"error": f"Unknown aggregation: '{aggregation}'. Use: mean, max, min, trend_slope."}
+        return {
+            "error": f"Unknown aggregation: '{aggregation}'. Use: mean, max, min, trend_slope."
+        }
     if extremum not in ("max", "min"):
         return {"error": f"Unknown extremum: '{extremum}'. Use: max or min."}
 
     time_axis_type = spec.get("time_axis", "yearly")
     if aggregation == "trend_slope" and time_axis_type == "monthly":
-        return {"error": "trend_slope is not supported for monthly metrics. Use mean, max, or min."}
+        return {
+            "error": "trend_slope is not supported for monthly metrics. Use mean, max, or min."
+        }
 
     # Resolve country filter
     country_code: str | None = None
     if country:
         country_code = country_name_to_code.get(country.strip().casefold())
         if country_code is None:
-            return {"error": f"Country not recognised: '{country}'. Use the full English country name."}
+            return {
+                "error": f"Country not recognised: '{country}'. Use the full English country name."
+            }
 
     # Resolve continent filter
     continent_codes: frozenset[str] | None = None
@@ -367,7 +397,8 @@ def find_extreme_location(
         if ranking is not None:
             effective_min_pop = max(min_population, 1000)
             filtered = [
-                c for c in ranking
+                c
+                for c in ranking
                 if c["population"] >= effective_min_pop
                 and (not capital_only or c.get("capital"))
                 and (not country_code or c.get("country") == country_code)
@@ -375,7 +406,11 @@ def find_extreme_location(
             ]
             if not filtered:
                 return {"error": "No locations match the given filters."}
-            top = filtered[:limit] if extremum == "max" else list(reversed(filtered))[:limit]
+            top = (
+                filtered[:limit]
+                if extremum == "max"
+                else list(reversed(filtered))[:limit]
+            )
             is_delta = _is_delta_metric(spec) or aggregation == "trend_slope"
             out_unit = _output_unit(spec, temperature_unit)
             if limit == 1:
@@ -384,7 +419,12 @@ def find_extreme_location(
                     "nearest_city": c["name"],
                     "lat": c["lat"],
                     "lon": c["lon"],
-                    "value": _convert_temp(round(c["value"], 3), spec, is_delta=is_delta, target=temperature_unit),
+                    "value": _convert_temp(
+                        round(c["value"], 3),
+                        spec,
+                        is_delta=is_delta,
+                        target=temperature_unit,
+                    ),
                     "unit": out_unit,
                 }
             return {
@@ -394,7 +434,12 @@ def find_extreme_location(
                         "nearest_city": c["name"],
                         "lat": c["lat"],
                         "lon": c["lon"],
-                        "value": _convert_temp(round(c["value"], 3), spec, is_delta=is_delta, target=temperature_unit),
+                        "value": _convert_temp(
+                            round(c["value"], 3),
+                            spec,
+                            is_delta=is_delta,
+                            target=temperature_unit,
+                        ),
                         "unit": out_unit,
                     }
                     for i, c in enumerate(top)
@@ -425,8 +470,13 @@ def find_extreme_location(
         seen_cells.add(cell_key)
 
         series_result = _get_metric_series(
-            city.lat, city.lon, metric_id, tile_store,
-            start_year=start_year, end_year=end_year, month_filter=month_filter,
+            city.lat,
+            city.lon,
+            metric_id,
+            tile_store,
+            start_year=start_year,
+            end_year=end_year,
+            month_filter=month_filter,
         )
         if "error" in series_result:
             continue
@@ -457,7 +507,9 @@ def find_extreme_location(
         scored.append((score, year_of_extreme, city))
 
     if not scored:
-        return {"error": f"No data found for metric '{metric_id}' with the given filters."}
+        return {
+            "error": f"No data found for metric '{metric_id}' with the given filters."
+        }
 
     scored.sort(key=lambda t: t[0], reverse=(extremum == "max"))
     top = scored[:limit]
@@ -474,7 +526,9 @@ def find_extreme_location(
             "alt_names": city.alt_names,
             "lat": city.lat,
             "lon": city.lon,
-            "value": _convert_temp(round(score, 3), spec, is_delta=is_delta, target=temperature_unit),
+            "value": _convert_temp(
+                round(score, 3), spec, is_delta=is_delta, target=temperature_unit
+            ),
             "unit": out_unit,
         }
         if year_of_extreme is not None:
@@ -488,7 +542,9 @@ def find_extreme_location(
                 "alt_names": city.alt_names,
                 "lat": city.lat,
                 "lon": city.lon,
-                "value": _convert_temp(round(score, 3), spec, is_delta=is_delta, target=temperature_unit),
+                "value": _convert_temp(
+                    round(score, 3), spec, is_delta=is_delta, target=temperature_unit
+                ),
                 "unit": out_unit,
                 **({"year": year_of_extreme} if year_of_extreme is not None else {}),
             }
@@ -553,31 +609,39 @@ def find_similar_locations(
         "reference": ref["label"],
         "reference_lat": ref["lat"],
         "reference_lon": ref["lon"],
-        "reference_mean": _convert_temp(round(ref_mean, 3), spec, is_delta=is_delta, target=temperature_unit),
+        "reference_mean": _convert_temp(
+            round(ref_mean, 3), spec, is_delta=is_delta, target=temperature_unit
+        ),
         "unit": out_unit,
         "similar_locations": [
             {
                 "city": city.label,
                 "lat": city.lat,
                 "lon": city.lon,
-                "value": _convert_temp(round(mean, 3), spec, is_delta=is_delta, target=temperature_unit),
+                "value": _convert_temp(
+                    round(mean, 3), spec, is_delta=is_delta, target=temperature_unit
+                ),
                 # delta between cities is always a difference (no +32 offset)
-                "delta": _convert_temp(round(delta, 3), spec, is_delta=True, target=temperature_unit),
+                "delta": _convert_temp(
+                    round(delta, 3), spec, is_delta=True, target=temperature_unit
+                ),
             }
             for delta, mean, city in scored[:limit]
         ],
     }
 
 
-_MAJOR_OCEAN_IDS = frozenset({
-    "ocean:arctic_ocean",
-    "ocean:indian_ocean",
-    "ocean:north_atlantic_ocean",
-    "ocean:south_atlantic_ocean",
-    "ocean:north_pacific_ocean",
-    "ocean:south_pacific_ocean",
-    "ocean:southern_ocean",
-})
+_MAJOR_OCEAN_IDS = frozenset(
+    {
+        "ocean:arctic_ocean",
+        "ocean:indian_ocean",
+        "ocean:north_atlantic_ocean",
+        "ocean:south_atlantic_ocean",
+        "ocean:north_pacific_ocean",
+        "ocean:south_pacific_ocean",
+        "ocean:southern_ocean",
+    }
+)
 
 
 def find_extreme_region(
@@ -600,13 +664,17 @@ def find_extreme_region(
     if spec is None:
         return {"error": f"Unknown metric_id: '{metric_id}'."}
     if aggregation not in ("mean", "max", "min", "trend_slope"):
-        return {"error": f"Unknown aggregation: '{aggregation}'. Use: mean, max, min, trend_slope."}
+        return {
+            "error": f"Unknown aggregation: '{aggregation}'. Use: mean, max, min, trend_slope."
+        }
     if extremum not in ("max", "min"):
         return {"error": f"Unknown extremum: '{extremum}'. Use: max or min."}
 
     valid_region_types = {"country", "continent", "ocean", "globe"}
     if region_type and region_type not in valid_region_types:
-        return {"error": f"Unknown region_type: '{region_type}'. Use: country, continent, ocean, globe."}
+        return {
+            "error": f"Unknown region_type: '{region_type}'. Use: country, continent, ocean, globe."
+        }
 
     continent_codes: frozenset[str] | None = None
     if continent:
@@ -650,7 +718,8 @@ def find_extreme_region(
 
         if start_year is not None or end_year is not None:
             pairs = [
-                (y, v) for y, v in zip(years, values)
+                (y, v)
+                for y, v in zip(years, values)
                 if (start_year is None or y >= start_year)
                 and (end_year is None or y <= end_year)
                 and v is not None
@@ -677,7 +746,9 @@ def find_extreme_region(
         scored.append((score, region_id, region_info))
 
     if not scored:
-        return {"error": f"No regional data found for metric '{metric_id}' with the given filters."}
+        return {
+            "error": f"No regional data found for metric '{metric_id}' with the given filters."
+        }
 
     scored.sort(key=lambda t: t[0], reverse=(extremum == "max"))
     top = scored[:limit]
@@ -691,7 +762,9 @@ def find_extreme_region(
             "region_id": region_id,
             "region_name": info["name"],
             "region_type": info["type"],
-            "value": _convert_temp(round(score, 3), spec, is_delta=is_delta, target=temperature_unit),
+            "value": _convert_temp(
+                round(score, 3), spec, is_delta=is_delta, target=temperature_unit
+            ),
             "unit": out_unit,
         }
     return {
@@ -701,7 +774,9 @@ def find_extreme_region(
                 "region_id": region_id,
                 "region_name": info["name"],
                 "region_type": info["type"],
-                "value": _convert_temp(round(score, 3), spec, is_delta=is_delta, target=temperature_unit),
+                "value": _convert_temp(
+                    round(score, 3), spec, is_delta=is_delta, target=temperature_unit
+                ),
                 "unit": out_unit,
             }
             for i, (score, region_id, info) in enumerate(top)
@@ -730,7 +805,9 @@ def get_region_metric_series(
     if spec is None:
         return {"error": f"Unknown metric_id: '{metric_id}'."}
     if aggregation not in ("mean", "min", "max"):
-        return {"error": f"Unknown aggregation: '{aggregation}'. Use: mean, min, or max."}
+        return {
+            "error": f"Unknown aggregation: '{aggregation}'. Use: mean, min, or max."
+        }
 
     agg_data = tile_store.aggregates.get((metric_id, aggregation))
     if agg_data is None:
@@ -754,10 +831,9 @@ def get_region_metric_series(
     # Resolve region_id (accept human-readable names)
     resolved = _resolve_region_id(region_id, tile_store, metric_id, aggregation)
     if resolved is None:
-        available_types = sorted({
-            info["type"]
-            for info in agg_data["regions"].values()
-        })
+        available_types = sorted(
+            {info["type"] for info in agg_data["regions"].values()}
+        )
         return {
             "error": (
                 f"Region not found: '{region_id}'. "
@@ -794,7 +870,11 @@ def get_region_metric_series(
     out_unit = _output_unit(spec, temperature_unit)
     if temperature_unit == "F" and spec.get("unit") == "C":
         values = [
-            _convert_temp(v, spec, is_delta=is_delta, target="F") if v is not None else None
+            (
+                _convert_temp(v, spec, is_delta=is_delta, target="F")
+                if v is not None
+                else None
+            )
             for v in values
         ]
 
@@ -809,8 +889,5 @@ def get_region_metric_series(
         "aggregation": aggregation,
         "unit": out_unit,
         "cell_count": region_info["cell_count"],
-        "data": [
-            {"year": y, "value": v}
-            for y, v in zip(time_axis, values)
-        ],
+        "data": [{"year": y, "value": v} for y, v in zip(time_axis, values)],
     }

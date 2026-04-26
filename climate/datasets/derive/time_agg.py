@@ -149,14 +149,22 @@ def max_cdd_per_year(
         return xr.DataArray(
             np.empty((0, lat_vals.size, lon_vals.size), dtype=np.float32),
             dims=("year", lat_name, lon_name),
-            coords={"year": np.array([], dtype=int), lat_name: lat_vals, lon_name: lon_vals},
+            coords={
+                "year": np.array([], dtype=int),
+                lat_name: lat_vals,
+                lon_name: lon_vals,
+            },
             name="max_cdd_per_year",
         )
 
     return xr.DataArray(
         np.stack(out_vals, axis=0),
         dims=("year", lat_name, lon_name),
-        coords={"year": np.asarray(out_years, dtype=int), lat_name: lat_vals, lon_name: lon_vals},
+        coords={
+            "year": np.asarray(out_years, dtype=int),
+            lat_name: lat_vals,
+            lon_name: lon_vals,
+        },
         name="max_cdd_per_year",
     )
 

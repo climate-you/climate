@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  DEFAULT_OVERLAY_BASE_PATH,
-} from "@/lib/explorer/constants";
+import { DEFAULT_OVERLAY_BASE_PATH } from "@/lib/explorer/constants";
 import {
   overlayPathForRoute,
   parseOverlayFromLocationParts,

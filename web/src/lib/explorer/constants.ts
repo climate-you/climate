@@ -92,7 +92,7 @@ export const CHAT_MODEL_OVERRIDE_KEY = "climate.chatModelOverride";
 
 // Chat question tree
 export const CHAT_QUESTIONS_API_PATH = "/api/chat/questions";
-export const CHAT_ROOT_CHIP_CAP = 8;     // max chips shown in initial display
+export const CHAT_ROOT_CHIP_CAP = 8; // max chips shown in initial display
 export const CHAT_FOLLOWUP_CHIP_CAP = 3; // max chips shown after an answer
 
 export const CHAT_PRIVACY_NOTICE =

@@ -8,6 +8,7 @@ Covers:
 - main.py: get_release_asset for v2 map paths
 - scripts/validate/release_manifest.py: v2 validation
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -87,7 +88,9 @@ def test_per_metric_roots_fallback_to_tiles_root(tmp_path: Path) -> None:
     )
 
     path = store._metric_tile_path("t2m_annual", 2, 14)
-    assert path == tiles_root / "global_0p25" / "t2m_annual" / "z64" / "r002_c014.bin.zst"
+    assert (
+        path == tiles_root / "global_0p25" / "t2m_annual" / "z64" / "r002_c014.bin.zst"
+    )
 
 
 def test_per_metric_roots_axis(tmp_path: Path) -> None:
@@ -154,7 +157,13 @@ def test_release_context_v2_defaults() -> None:
 def _write_registry(release_dir: Path) -> None:
     registry_dir = release_dir / "registry"
     registry_dir.mkdir(parents=True, exist_ok=True)
-    for name in ("metrics.json", "datasets.json", "maps.json", "panels.json", "layers.json"):
+    for name in (
+        "metrics.json",
+        "datasets.json",
+        "maps.json",
+        "panels.json",
+        "layers.json",
+    ):
         (registry_dir / name).write_text("{}", encoding="utf-8")
 
 
@@ -178,9 +187,13 @@ def test_validate_v2_manifest_ok(tmp_path: Path) -> None:
 
     # Create artifact dirs
     series_art = artifacts_root / "series" / "t2m_annual" / "2026_04_01"
-    _write_artifact_manifest(series_art, {"metric_id": "t2m_annual", "artifact_date": "2026_04_01"})
+    _write_artifact_manifest(
+        series_art, {"metric_id": "t2m_annual", "artifact_date": "2026_04_01"}
+    )
     map_art = artifacts_root / "maps" / "t2m_mean_map" / "2026_04_01"
-    _write_artifact_manifest(map_art, {"map_id": "t2m_mean_map", "artifact_date": "2026_04_01"})
+    _write_artifact_manifest(
+        map_art, {"map_id": "t2m_mean_map", "artifact_date": "2026_04_01"}
+    )
 
     manifest = {
         "release": release_id,
@@ -202,24 +215,34 @@ def test_validate_v2_manifest_ok(tmp_path: Path) -> None:
         [
             sys.executable,
             "scripts/validate/release_manifest.py",
-            "--release", release_id,
-            "--releases-root", str(releases_root),
-            "--artifacts-root", str(artifacts_root),
+            "--release",
+            release_id,
+            "--releases-root",
+            str(releases_root),
+            "--artifacts-root",
+            str(artifacts_root),
         ],
         capture_output=True,
         text=True,
-        cwd=str(tmp_path.parent.parent)  # run from repo root equivalent
-        if False else None,
+        cwd=(
+            str(tmp_path.parent.parent)  # run from repo root equivalent
+            if False
+            else None
+        ),
     )
     # We just invoke the function directly instead of subprocess to avoid cwd issues
     from scripts.validate.release_manifest import main as validate_main
     import sys as _sys
+
     orig_argv = _sys.argv
     _sys.argv = [
         "release_manifest.py",
-        "--release", release_id,
-        "--releases-root", str(releases_root),
-        "--artifacts-root", str(artifacts_root),
+        "--release",
+        release_id,
+        "--releases-root",
+        str(releases_root),
+        "--artifacts-root",
+        str(artifacts_root),
     ]
     try:
         rc = validate_main()
@@ -260,9 +283,12 @@ def test_validate_v2_manifest_missing_artifact(tmp_path: Path) -> None:
     orig_argv = _sys.argv
     _sys.argv = [
         "release_manifest.py",
-        "--release", release_id,
-        "--releases-root", str(releases_root),
-        "--artifacts-root", str(artifacts_root),
+        "--release",
+        release_id,
+        "--releases-root",
+        str(releases_root),
+        "--artifacts-root",
+        str(artifacts_root),
     ]
     try:
         rc = validate_main()
@@ -305,9 +331,12 @@ def test_validate_v2_manifest_missing_artifact_manifest(tmp_path: Path) -> None:
     orig_argv = _sys.argv
     _sys.argv = [
         "release_manifest.py",
-        "--release", release_id,
-        "--releases-root", str(releases_root),
-        "--artifacts-root", str(artifacts_root),
+        "--release",
+        release_id,
+        "--releases-root",
+        str(releases_root),
+        "--artifacts-root",
+        str(artifacts_root),
     ]
     try:
         rc = validate_main()
@@ -357,7 +386,10 @@ async def _asgi_get(app: Any, path: str) -> tuple[int, dict, dict]:
         if message["type"] == "http.response.start":
             status = int(message["status"])
             headers.update(
-                {k.decode("latin1"): v.decode("latin1") for k, v in message.get("headers", [])}
+                {
+                    k.decode("latin1"): v.decode("latin1")
+                    for k, v in message.get("headers", [])
+                }
             )
         elif message["type"] == "http.response.body":
             body_chunks.append(message.get("body", b""))
@@ -429,8 +461,13 @@ def test_v2_release_asset_served_from_artifact_store(
         "climate_api.main.PlaceResolver",
         lambda **kwargs: SimpleNamespace(
             resolve_place=lambda lat, lon: SimpleNamespace(
-                geonameid=1, label="A", lat=lat, lon=lon,
-                distance_km=0.0, country_code="US", population=1,
+                geonameid=1,
+                label="A",
+                lat=lat,
+                lon=lon,
+                distance_km=0.0,
+                country_code="US",
+                population=1,
             )
         ),
     )
@@ -531,8 +568,13 @@ def test_v2_release_asset_missing_returns_404(
         "climate_api.main.PlaceResolver",
         lambda **kwargs: SimpleNamespace(
             resolve_place=lambda lat, lon: SimpleNamespace(
-                geonameid=1, label="A", lat=lat, lon=lon,
-                distance_km=0.0, country_code="US", population=1,
+                geonameid=1,
+                label="A",
+                lat=lat,
+                lon=lon,
+                distance_km=0.0,
+                country_code="US",
+                population=1,
             )
         ),
     )

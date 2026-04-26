@@ -43,7 +43,9 @@ def check_aggregates(
             continue
         grid_id = spec.get("grid_id", "")
         for aggregation in aggregations:
-            path = series_root / grid_id / metric_id / "aggregates" / f"{aggregation}.json"
+            path = (
+                series_root / grid_id / metric_id / "aggregates" / f"{aggregation}.json"
+            )
             rel = path.relative_to(series_root.parent)
             if not path.exists():
                 errors.append(f"Missing aggregate file: {rel}")

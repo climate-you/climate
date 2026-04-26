@@ -835,7 +835,9 @@ def build_panel_tiles_registry(
             )
             series_unit_in = series_spec.get("unit") or ""
             y = _convert_unit(y, series_unit_in, unit)
-            series_unit_out = unit if series_unit_in.upper() in ("C", "F") else series_unit_in or unit
+            series_unit_out = (
+                unit if series_unit_in.upper() in ("C", "F") else series_unit_in or unit
+            )
 
             series_payload[key] = SeriesPayload(
                 x=axis_vals_out,
@@ -1221,7 +1223,14 @@ def build_global_panels(
             if animation_spec:
                 steps = animation_spec.get("steps", [])
                 filtered_steps = [
-                    {**s, "series_keys": [k for k in s.get("series_keys", []) if k in graph_series_keys]}
+                    {
+                        **s,
+                        "series_keys": [
+                            k
+                            for k in s.get("series_keys", [])
+                            if k in graph_series_keys
+                        ],
+                    }
                     for s in steps
                     if any(k in graph_series_keys for k in s.get("series_keys", []))
                 ]
@@ -1327,9 +1336,7 @@ def _read_score_value(
     else:
         bin_path = maps_root / grid.grid_id / map_id / binary_name
     expected = grid.nlat * grid.nlon
-    score_values = _load_score_map_values_cached(
-        bin_path=bin_path, expected=expected
-    )
+    score_values = _load_score_map_values_cached(bin_path=bin_path, expected=expected)
 
     cell, _tile = locate_tile(lat, lon, grid)
     idx = cell.i_lat * grid.nlon + cell.i_lon

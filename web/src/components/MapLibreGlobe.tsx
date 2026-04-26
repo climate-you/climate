@@ -86,7 +86,12 @@ type Props = {
   textureVariantOverride?: TextureVariantOverride;
   onTextureDebugInfoChange?: (info: TextureDebugInfo | null) => void;
   autoRotate?: boolean;
-  chatLocations?: Array<{ label: string; rank?: number; lat: number; lon: number }> | null;
+  chatLocations?: Array<{
+    label: string;
+    rank?: number;
+    lat: number;
+    lon: number;
+  }> | null;
   chatFlyToBbox?: [number, number, number, number] | null;
   onPickChatMarker?: (lat: number, lon: number) => void;
   backgroundImageUrl?: string;
@@ -139,7 +144,6 @@ function panelPaddingForViewport(map: maplibregl.Map, panelOpen: boolean) {
     left: 0,
   };
 }
-
 
 function setBackdropColor(map: maplibregl.Map, color: string) {
   map.getContainer().style.backgroundColor = color;
@@ -470,7 +474,6 @@ export default function MapLibreGlobe({
   useEffect(() => {
     showControlsRef.current = showControls;
   }, [showControls]);
-
 
   useEffect(() => {
     enablePickRef.current = enablePick;
@@ -1500,7 +1503,7 @@ export default function MapLibreGlobe({
       duration: PANEL_TRANSITION_MS,
       essential: true,
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelOpen]);
 
   // Shift globe when panel opens/closes with no specific focus location (e.g. global data panel)
@@ -1576,14 +1579,17 @@ export default function MapLibreGlobe({
           loc.lat > other.lat,
       );
       const cityName = loc.label.split(",")[0].trim();
-      const displayName = loc.rank !== undefined ? `${loc.rank}. ${cityName}` : cityName;
+      const displayName =
+        loc.rank !== undefined ? `${loc.rank}. ${cityName}` : cityName;
       const el = document.createElement("div");
-      el.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer";
+      el.style.cssText =
+        "display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer";
       const pin = document.createElement("div");
       pin.style.cssText = `width:12px;height:12px;border-radius:50%;background:${MARKER_COLOR};border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.5);flex-shrink:0`;
       const labelEl = document.createElement("span");
       labelEl.textContent = displayName;
-      labelEl.style.cssText = "background:rgba(0,0,0,0.65);color:white;font-size:11px;font-weight:600;padding:1px 5px;border-radius:3px;white-space:nowrap";
+      labelEl.style.cssText =
+        "background:rgba(0,0,0,0.65);color:white;font-size:11px;font-weight:600;padding:1px 5px;border-radius:3px;white-space:nowrap";
       if (labelAbove) {
         el.appendChild(labelEl);
         el.appendChild(pin);
@@ -1613,7 +1619,10 @@ export default function MapLibreGlobe({
         });
       });
       chatMarkersRef.current.push(
-        new maplibregl.Marker({ element: el, anchor: labelAbove ? "bottom" : "top" })
+        new maplibregl.Marker({
+          element: el,
+          anchor: labelAbove ? "bottom" : "top",
+        })
           .setLngLat([loc.lon, loc.lat])
           .addTo(map),
       );
@@ -1638,7 +1647,10 @@ export default function MapLibreGlobe({
       const spanLon = Math.max(...lons) - Math.min(...lons);
       const spanLat = Math.max(...lats) - Math.min(...lats);
       const span = Math.max(spanLon, spanLat);
-      const zoom = Math.max(1, Math.min(5, Math.floor(Math.log2(360 / Math.max(span, 1)))));
+      const zoom = Math.max(
+        1,
+        Math.min(5, Math.floor(Math.log2(360 / Math.max(span, 1)))),
+      );
       map.flyTo({
         center: [centerLon, centerLat],
         zoom,
@@ -1661,7 +1673,10 @@ export default function MapLibreGlobe({
     const centerLon = (west + east) / 2;
     const centerLat = (south + north) / 2;
     const span = Math.max(east - west, north - south);
-    const zoom = Math.max(1, Math.min(5, Math.floor(Math.log2(360 / Math.max(span, 1)))));
+    const zoom = Math.max(
+      1,
+      Math.min(5, Math.floor(Math.log2(360 / Math.max(span, 1)))),
+    );
     map.flyTo({
       center: [centerLon, centerLat],
       zoom,

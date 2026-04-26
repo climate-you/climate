@@ -335,8 +335,12 @@ export default function GraphCard({
         </div>
       ) : null}
 
-      {graph.source ? <p className={styles.graphSource}>Source: {graph.source}</p> : null}
-      {graph.caption ? <p className={styles.graphCaption}>{graph.caption}</p> : null}
+      {graph.source ? (
+        <p className={styles.graphSource}>Source: {graph.source}</p>
+      ) : null}
+      {graph.caption ? (
+        <p className={styles.graphCaption}>{graph.caption}</p>
+      ) : null}
       {hasGraphError ? (
         <p className={styles.graphError}>
           Data unavailable for this location and metric.

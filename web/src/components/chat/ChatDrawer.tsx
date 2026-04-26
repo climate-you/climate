@@ -15,13 +15,24 @@ import ChatChart, { type ChatChartPayload } from "./ChatChart";
 // Types
 // ---------------------------------------------------------------------------
 
-type MapContext = { lat: number; lon: number; label: string; countryCode?: string | null } | null;
+type MapContext = {
+  lat: number;
+  lon: number;
+  label: string;
+  countryCode?: string | null;
+} | null;
 type ModelOverride = "groq_8b" | "local" | "groq_70b" | "groq_scout" | null;
 type ConversationTurn = { role: "user" | "assistant"; text: string };
 
 const MAX_HISTORY_TURNS = 3;
 
-type ChatLocation = { label: string; rank?: number; lat: number; lon: number; alt_names?: string };
+type ChatLocation = {
+  label: string;
+  rank?: number;
+  lat: number;
+  lon: number;
+  alt_names?: string;
+};
 type ToolCallInfo = { name: string; args: Record<string, unknown> };
 
 type ChatMessage = {
@@ -145,7 +156,9 @@ function linkifyCities(text: string, locs: ChatLocation[]): string {
 }
 
 function addSummaryLineLink(text: string): string {
-  const match = text.match(/^([^\n]+):([ \t]*\n(?:[ \t]*\n)*[ \t]*)(?=\d+\.|- )/m);
+  const match = text.match(
+    /^([^\n]+):([ \t]*\n(?:[ \t]*\n)*[ \t]*)(?=\d+\.|- )/m,
+  );
   if (!match || match.index === undefined) return text;
   const lineContent = match[1];
   const anchorMatch = lineContent.match(
@@ -181,18 +194,27 @@ function describeToolCall(name: string, args: Record<string, unknown>): string {
       const location = args.location as string | undefined;
       const metricId = args.metric_id as string | undefined;
       const metric = metricId ? metricLabel(metricId) : "data";
-      return location ? `Querying ${metric} for ${location}` : `Querying ${metric}`;
+      return location
+        ? `Querying ${metric} for ${location}`
+        : `Querying ${metric}`;
     }
     case "find_extreme_location": {
       const extreme = args.extreme as string | undefined;
       const metricId = args.metric_id as string | undefined;
       const metric = metricId ? metricLabel(metricId) : "climate";
-      const adj = extreme === "max" ? "highest" : extreme === "min" ? "lowest" : "extreme";
+      const adj =
+        extreme === "max"
+          ? "highest"
+          : extreme === "min"
+            ? "lowest"
+            : "extreme";
       return `Finding ${adj} ${metric} locations`;
     }
     case "find_similar_locations": {
       const ref = args.reference_location as string | undefined;
-      return ref ? `Finding locations similar to ${ref}` : "Finding similar locations";
+      return ref
+        ? `Finding locations similar to ${ref}`
+        : "Finding similar locations";
     }
     default:
       return name.replace(/_/g, " ");
@@ -220,7 +242,9 @@ export default function ChatDrawer({
   const [open, setOpen] = useState(false);
   const [conversationId, setConversationId] = useState(() => generateUUID());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>([]);
+  const [conversationHistory, setConversationHistory] = useState<
+    ConversationTurn[]
+  >([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [conversationExhausted, setConversationExhausted] = useState(false);
@@ -237,10 +261,15 @@ export default function ChatDrawer({
   useEffect(() => {
     fetch(`${apiBase}${CHAT_QUESTIONS_API_PATH}`)
       .then((r) => {
-        if (!r.ok) { setChatUnavailable(true); return undefined; }
+        if (!r.ok) {
+          setChatUnavailable(true);
+          return undefined;
+        }
         return r.json() as Promise<QuestionTree>;
       })
-      .then((data) => { if (data) setQuestionTree(data); })
+      .then((data) => {
+        if (data) setQuestionTree(data);
+      })
       .catch(() => setChatUnavailable(true));
   }, [apiBase]);
 
@@ -347,7 +376,8 @@ export default function ChatDrawer({
         apiBase,
         {
           question,
-          history: conversationHistory.length > 0 ? conversationHistory : undefined,
+          history:
+            conversationHistory.length > 0 ? conversationHistory : undefined,
           map_context: mapContext,
           session_id: conversationId,
           message_id: messageId,
@@ -398,7 +428,12 @@ export default function ChatDrawer({
             setMessages((prev) =>
               prev.map((m) =>
                 m.messageId === messageId
-                  ? { ...m, text: finalAnswerText, notice: pendingNotice, loading: false }
+                  ? {
+                      ...m,
+                      text: finalAnswerText,
+                      notice: pendingNotice,
+                      loading: false,
+                    }
                   : m,
               ),
             );
@@ -407,7 +442,12 @@ export default function ChatDrawer({
             setMessages((prev) =>
               prev.map((m) =>
                 m.messageId === messageId
-                  ? { ...m, text: event.message as string, loading: false, error: true }
+                  ? {
+                      ...m,
+                      text: event.message as string,
+                      loading: false,
+                      error: true,
+                    }
                   : m,
               ),
             );
@@ -422,14 +462,21 @@ export default function ChatDrawer({
             }
             const locs = (
               event.locations as
-                | Array<{ label: string; lat: number; lon: number; alt_names?: string }>
+                | Array<{
+                    label: string;
+                    lat: number;
+                    lon: number;
+                    alt_names?: string;
+                  }>
                 | undefined
             )?.map((loc) => ({ ...loc, label: loc.label.replace(/\*/g, "") }));
             const answerLower = finalAnswerText.toLowerCase();
             const rankMap = new Map<string, number>();
             const orderedListRegex = /^(\d+)\.\s+(.+?)(?=[,—–]|$)/gm;
             let rankMatch;
-            while ((rankMatch = orderedListRegex.exec(finalAnswerText)) !== null) {
+            while (
+              (rankMatch = orderedListRegex.exec(finalAnswerText)) !== null
+            ) {
               rankMap.set(
                 rankMatch[2].replace(/\*/g, "").trim().toLowerCase(),
                 parseInt(rankMatch[1], 10),
@@ -462,7 +509,9 @@ export default function ChatDrawer({
             if (locsToShow && locsToShow.length > 0) {
               setMessages((prev) =>
                 prev.map((m) =>
-                  m.messageId === messageId ? { ...m, locations: locsToShow } : m,
+                  m.messageId === messageId
+                    ? { ...m, locations: locsToShow }
+                    : m,
                 ),
               );
             }
@@ -489,7 +538,8 @@ export default function ChatDrawer({
               const totalMs = event.total_ms as number | null;
               const rejected = (event.rejected_tiers as string[] | null) ?? [];
               const parts: string[] = [];
-              if (rejected.length > 0) parts.push(`~~${rejected.join(", ")}~~ →`);
+              if (rejected.length > 0)
+                parts.push(`~~${rejected.join(", ")}~~ →`);
               if (tier) parts.push(tier);
               if (model) parts.push(`(${model})`);
               if (totalMs != null)
@@ -504,11 +554,12 @@ export default function ChatDrawer({
               );
             }
             // Set follow-up chips: use canned follow_up_ids if present, else root pool
-            const followUpIds = (event.follow_up_ids as string[] | undefined) ?? [];
+            const followUpIds =
+              (event.follow_up_ids as string[] | undefined) ?? [];
             setCurrentFollowUpIds(
               followUpIds.length > 0
                 ? followUpIds
-                : questionTree?.root_ids ?? [],
+                : (questionTree?.root_ids ?? []),
             );
             lastAnsweredQuestionIdRef.current = questionId ?? null;
           }
@@ -520,7 +571,12 @@ export default function ChatDrawer({
         setMessages((prev) =>
           prev.map((m) =>
             m.messageId === messageId
-              ? { ...m, text: "No response received.", loading: false, error: true }
+              ? {
+                  ...m,
+                  text: "No response received.",
+                  loading: false,
+                  error: true,
+                }
               : m,
           ),
         );
@@ -563,7 +619,10 @@ export default function ChatDrawer({
     }
   }
 
-  async function submitFeedback(messageId: string, feedback: "good" | "bad" | null) {
+  async function submitFeedback(
+    messageId: string,
+    feedback: "good" | "bad" | null,
+  ) {
     const current = messages.find((m) => m.messageId === messageId)?.feedback;
     const next = current === feedback ? null : feedback;
     setMessages((prev) =>
@@ -617,7 +676,9 @@ export default function ChatDrawer({
     if (!questionTree) return [];
     return questionTree.root_ids
       .map((id) => questionTree.questions[id])
-      .filter((node): node is QuestionMeta => !!node && passesLocationFilter(node))
+      .filter(
+        (node): node is QuestionMeta => !!node && passesLocationFilter(node),
+      )
       .slice(0, CHAT_ROOT_CHIP_CAP);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questionTree, conversationId, mapContext?.label, mapContext?.lat]);
@@ -639,7 +700,9 @@ export default function ChatDrawer({
     if (!questionTree || currentFollowUpIds.length === 0) return [];
     return currentFollowUpIds
       .map((id) => questionTree.questions[id])
-      .filter((node): node is QuestionMeta => !!node && passesLocationFilter(node))
+      .filter(
+        (node): node is QuestionMeta => !!node && passesLocationFilter(node),
+      )
       .slice(0, CHAT_FOLLOWUP_CHIP_CAP);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questionTree, currentFollowUpIds, mapContext?.label, mapContext?.lat]);
@@ -651,21 +714,33 @@ export default function ChatDrawer({
   function DatasetIcon({ dataset }: { dataset: string }) {
     if (dataset === "precipitation") {
       return (
-        <svg className={styles.chipDatasetIcon} viewBox="0 0 24 24" aria-hidden="true">
+        <svg
+          className={styles.chipDatasetIcon}
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
           <path d="M12 2C8.5 7.5 5 12 5 15.5a7 7 0 0 0 14 0C19 12 15.5 7.5 12 2z" />
         </svg>
       );
     }
     if (dataset === "sea_temperature" || dataset === "coral") {
       return (
-        <svg className={styles.chipDatasetIcon} viewBox="0 0 24 24" aria-hidden="true">
+        <svg
+          className={styles.chipDatasetIcon}
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
           <path d="M2 10c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />
           <path d="M2 16c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />
         </svg>
       );
     }
     return (
-      <svg className={styles.chipDatasetIcon} viewBox="0 0 24 24" aria-hidden="true">
+      <svg
+        className={styles.chipDatasetIcon}
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
         <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
       </svg>
     );
@@ -678,7 +753,11 @@ export default function ChatDrawer({
   const headerControls = (
     <>
       <div className={styles.drawerTitle}>
-        <svg viewBox="0 0 24 24" aria-hidden="true" className={styles.drawerTitleIcon}>
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          className={styles.drawerTitleIcon}
+        >
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
         Research Terminal
@@ -729,39 +808,44 @@ export default function ChatDrawer({
       {isEmpty && (
         <div className={styles.emptyState}>
           {chatUnavailable ? (
-            <p className={styles.emptyStateError}>Research terminal not running.</p>
+            <p className={styles.emptyStateError}>
+              Research terminal not running.
+            </p>
           ) : (
             <p className={styles.emptyStateHint}>
               Ask a question about climate data, or try one of these:
             </p>
           )}
-          {!chatUnavailable && groupedQuestions.map(({ scope, questions }) => (
-            <div key={scope} className={styles.chipGroup}>
-              <div className={styles.chipGroupHeader}>
-                {scope === "local" && cityName
-                  ? countryName && countryName !== cityName
-                    ? `${cityName}, ${countryName}`
-                    : cityName
-                  : scope.charAt(0).toUpperCase() + scope.slice(1)}
+          {!chatUnavailable &&
+            groupedQuestions.map(({ scope, questions }) => (
+              <div key={scope} className={styles.chipGroup}>
+                <div className={styles.chipGroupHeader}>
+                  {scope === "local" && cityName
+                    ? countryName && countryName !== cityName
+                      ? `${cityName}, ${countryName}`
+                      : cityName
+                    : scope.charAt(0).toUpperCase() + scope.slice(1)}
+                </div>
+                <div className={styles.chips}>
+                  {questions.map((node) => {
+                    const text = resolveChipText(node);
+                    return (
+                      <button
+                        key={node.id}
+                        type="button"
+                        className={styles.chip}
+                        onClick={() => void sendMessage(text, node.id)}
+                      >
+                        <DatasetIcon
+                          dataset={node.datasets[0] ?? "temperature"}
+                        />
+                        {text}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div className={styles.chips}>
-                {questions.map((node) => {
-                  const text = resolveChipText(node);
-                  return (
-                    <button
-                      key={node.id}
-                      type="button"
-                      className={styles.chip}
-                      onClick={() => void sendMessage(text, node.id)}
-                    >
-                      <DatasetIcon dataset={node.datasets[0] ?? "temperature"} />
-                      {text}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+            ))}
         </div>
       )}
 
@@ -773,9 +857,7 @@ export default function ChatDrawer({
           {msg.debugInfo && (
             <div className={styles.debugBar}>{msg.debugInfo}</div>
           )}
-          {msg.notice && (
-            <div className={styles.noticeBar}>{msg.notice}</div>
-          )}
+          {msg.notice && <div className={styles.noticeBar}>{msg.notice}</div>}
           {msg.toolCalls && msg.toolCalls.length > 0 && (
             <div className={styles.toolCalls}>
               {msg.toolCalls.map((tc, j) => (
@@ -798,9 +880,9 @@ export default function ChatDrawer({
               <em className={styles.abortedText}>Message was aborted.</em>
             ) : msg.exhausted ? (
               <>
-                The AI assistant&apos;s daily budget is exhausted. This
-                project is provided for free and is self-funded. If you
-                find it useful, please consider supporting it at{" "}
+                The AI assistant&apos;s daily budget is exhausted. This project
+                is provided for free and is self-funded. If you find it useful,
+                please consider supporting it at{" "}
                 <a
                   href="https://ko-fi.com/climateyou"
                   target="_blank"
@@ -826,7 +908,10 @@ export default function ChatDrawer({
                                   className={styles.locationLink}
                                   onClick={(e) => {
                                     e.preventDefault();
-                                    onPickLocation?.(parseFloat(lat), parseFloat(lon));
+                                    onPickLocation?.(
+                                      parseFloat(lat),
+                                      parseFloat(lon),
+                                    );
                                   }}
                                 >
                                   {children}
@@ -882,7 +967,21 @@ export default function ChatDrawer({
                   aria-pressed={msg.feedback === "good"}
                   onClick={() => void submitFeedback(msg.messageId!, "good")}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M7 10v12" />
+                    <path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" />
+                  </svg>
                 </button>
                 <button
                   type="button"
@@ -891,7 +990,21 @@ export default function ChatDrawer({
                   aria-pressed={msg.feedback === "bad"}
                   onClick={() => void submitFeedback(msg.messageId!, "bad")}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M17 14V2" />
+                    <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z" />
+                  </svg>
                 </button>
               </div>
             )}
@@ -936,7 +1049,11 @@ export default function ChatDrawer({
         className={styles.input}
         rows={1}
         placeholder={
-          chatUnavailable ? "Research terminal not running." : conversationExhausted ? "Please try again later." : "Ask about climate data…"
+          chatUnavailable
+            ? "Research terminal not running."
+            : conversationExhausted
+              ? "Please try again later."
+              : "Ask about climate data…"
         }
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -952,7 +1069,14 @@ export default function ChatDrawer({
           onClick={abortMessage}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" />
+            <rect
+              x="7"
+              y="7"
+              width="10"
+              height="10"
+              rx="1.5"
+              fill="currentColor"
+            />
           </svg>
         </button>
       ) : (
@@ -977,7 +1101,10 @@ export default function ChatDrawer({
 
   if (embedded) {
     return (
-      <div className={styles.embeddedContainer} style={embeddedVisible ? undefined : { display: "none" }}>
+      <div
+        className={styles.embeddedContainer}
+        style={embeddedVisible ? undefined : { display: "none" }}
+      >
         <div className={styles.embeddedHeader}>
           {headerControls}
           {onClose && (
@@ -1007,7 +1134,11 @@ export default function ChatDrawer({
         aria-label="Open climate data assistant"
         onClick={() => setOpen((v) => !v)}
       >
-        <svg viewBox="0 0 24 24" aria-hidden="true" className={styles.chatButtonIcon}>
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          className={styles.chatButtonIcon}
+        >
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
       </button>

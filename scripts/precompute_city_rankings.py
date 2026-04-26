@@ -100,7 +100,11 @@ def precompute_rankings(
 
         for aggregation in aggregations:
             out_path = rankings_dir / f"{aggregation}.json"
-            print(f"[rankings] computing {metric_id}/{aggregation} ...", end="", flush=True)
+            print(
+                f"[rankings] computing {metric_id}/{aggregation} ...",
+                end="",
+                flush=True,
+            )
             t0 = time.monotonic()
 
             scored: list[tuple[float, dict]] = []
@@ -125,15 +129,20 @@ def precompute_rankings(
                 if score is None:
                     continue
 
-                scored.append((score, {
-                    "name": city.label,
-                    "country": city.country_code,
-                    "lat": city.lat,
-                    "lon": city.lon,
-                    "population": city.population,
-                    "capital": getattr(city, "capital", False),
-                    "value": round(score, 4),
-                }))
+                scored.append(
+                    (
+                        score,
+                        {
+                            "name": city.label,
+                            "country": city.country_code,
+                            "lat": city.lat,
+                            "lon": city.lon,
+                            "population": city.population,
+                            "capital": getattr(city, "capital", False),
+                            "value": round(score, 4),
+                        },
+                    )
+                )
 
             scored.sort(key=lambda t: t[0], reverse=True)
             cities_sorted = [entry for _, entry in scored]

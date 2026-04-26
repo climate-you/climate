@@ -77,42 +77,37 @@ def resolver() -> PlaceResolver:
 # Either assertion field can be None to skip that check.
 _CASES: list[tuple[float, float, str, str | None, str | None]] = [
     # --- Major city centres (country-constrained lookup should win) ---
-    ( 48.8566,   2.3522, "Paris, France",           "France",       "Ocean"),
-    ( 51.5074,  -0.1278, "London, UK",              "United Kingdom","Ocean"),
-    (-33.8688, 151.2093, "Sydney, Australia",       "Australia",    "Ocean"),
-    ( 35.6762, 139.6503, "Tokyo, Japan",            "Japan",        "Ocean"),
-    ( 40.7128,  -74.006, "New York, USA",           "USA",          "Ocean"),
-    (-22.9068,  -43.173, "Rio de Janeiro, Brazil",  "Brazil",       "Ocean"),
-    ( 55.7558,   37.618, "Moscow, Russia",          "Russia",       "Ocean"),
-    ( 28.6139,   77.209, "New Delhi, India",        "India",        "Ocean"),
-    (-34.6037,  -58.382, "Buenos Aires, Argentina", "Argentina",    "Ocean"),
-    ( 30.0444,   31.236, "Cairo, Egypt",            "Egypt",        "Ocean"),
-    (-33.9249,   18.424, "Cape Town, South Africa", "South Africa", "Ocean"),
-
+    (48.8566, 2.3522, "Paris, France", "France", "Ocean"),
+    (51.5074, -0.1278, "London, UK", "United Kingdom", "Ocean"),
+    (-33.8688, 151.2093, "Sydney, Australia", "Australia", "Ocean"),
+    (35.6762, 139.6503, "Tokyo, Japan", "Japan", "Ocean"),
+    (40.7128, -74.006, "New York, USA", "USA", "Ocean"),
+    (-22.9068, -43.173, "Rio de Janeiro, Brazil", "Brazil", "Ocean"),
+    (55.7558, 37.618, "Moscow, Russia", "Russia", "Ocean"),
+    (28.6139, 77.209, "New Delhi, India", "India", "Ocean"),
+    (-34.6037, -58.382, "Buenos Aires, Argentina", "Argentina", "Ocean"),
+    (30.0444, 31.236, "Cairo, Egypt", "Egypt", "Ocean"),
+    (-33.9249, 18.424, "Cape Town, South Africa", "South Africa", "Ocean"),
     # --- Remote land (no city nearby, but correct country via global fallback) ---
-    ( 72.0,    -42.0,    "Interior Greenland",      "Greenland",    "Ocean"),
-    ( 65.0,    110.0,    "Interior Siberia",        "Russia",       "Ocean"),
-    (-25.0,    134.0,    "Central Australia",       "Australia",    "Ocean"),
-    ( 23.0,      5.0,    "Sahara Desert, Algeria",  "Algeria",      "Ocean"),
-
+    (72.0, -42.0, "Interior Greenland", "Greenland", "Ocean"),
+    (65.0, 110.0, "Interior Siberia", "Russia", "Ocean"),
+    (-25.0, 134.0, "Central Australia", "Australia", "Ocean"),
+    (23.0, 5.0, "Sahara Desert, Algeria", "Algeria", "Ocean"),
     # --- Small island territories (country mask covers them; no ocean label) ---
-    ( 78.22,    15.63,   "Longyearbyen, Svalbard",  "Svalbard",     "Ocean"),
-    (-51.7,    -57.85,   "Stanley, Falkland Islands","Falkland",    "Ocean"),
-    (-55.1,    -67.7,    "Navarino Island, Chile",  "Chile",        "Ocean"),
-
+    (78.22, 15.63, "Longyearbyen, Svalbard", "Svalbard", "Ocean"),
+    (-51.7, -57.85, "Stanley, Falkland Islands", "Falkland", "Ocean"),
+    (-55.1, -67.7, "Navarino Island, Chile", "Chile", "Ocean"),
     # --- Antarctica regression (country-name fallback for countries with no cities) ---
-    (-78.5,     16.7,    "Dronning Maud Land",      "Antarctica",   None),
-    (-81.8,    121.7,    "East Antarctica",         "Antarctica",   None),
-    (-90.0,      0.0,    "South Pole",              "Antarctica",   None),
-
+    (-78.5, 16.7, "Dronning Maud Land", "Antarctica", None),
+    (-81.8, 121.7, "East Antarctica", "Antarctica", None),
+    (-90.0, 0.0, "South Pole", "Antarctica", None),
     # --- Ocean points (country mask returns None → ocean classifier used) ---
-    (  0.0,   -140.0,    "Mid Pacific Ocean",       "Pacific",      None),
-    (  0.0,    -20.0,    "Mid Atlantic Ocean",      "Atlantic",     None),
-    (-20.0,     70.0,    "Indian Ocean",            "Indian",       None),
-    ( 85.0,      0.0,    "Arctic Ocean",            "Arctic",       None),
-
+    (0.0, -140.0, "Mid Pacific Ocean", "Pacific", None),
+    (0.0, -20.0, "Mid Atlantic Ocean", "Atlantic", None),
+    (-20.0, 70.0, "Indian Ocean", "Indian", None),
+    (85.0, 0.0, "Arctic Ocean", "Arctic", None),
     # --- Coastal ocean (within 80 km of shore → "Ocean off City" label) ---
-    (-33.87,   151.7,    "Off Sydney (Tasman Sea)", "off",          None),
+    (-33.87, 151.7, "Off Sydney (Tasman Sea)", "off", None),
 ]
 
 
@@ -131,10 +126,10 @@ def test_location_label(
 ) -> None:
     place = resolver.resolve_place(lat, lon)
     if must_contain is not None:
-        assert must_contain in place.label, (
-            f"[{description}] expected {must_contain!r} in label, got: {place.label!r}"
-        )
+        assert (
+            must_contain in place.label
+        ), f"[{description}] expected {must_contain!r} in label, got: {place.label!r}"
     if must_not_contain is not None:
-        assert must_not_contain not in place.label, (
-            f"[{description}] expected {must_not_contain!r} NOT in label, got: {place.label!r}"
-        )
+        assert (
+            must_not_contain not in place.label
+        ), f"[{description}] expected {must_not_contain!r} NOT in label, got: {place.label!r}"

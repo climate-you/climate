@@ -573,7 +573,10 @@ def _real_get_metric_series(
                 for y, vs in sorted(year_vals.items())
             ]
             return {
-                "metric_id": metric_id, "lat": lat, "lon": lon, "unit": unit,
+                "metric_id": metric_id,
+                "lat": lat,
+                "lon": lon,
+                "unit": unit,
                 "data": data,
                 "note": f"Annual means for months {month_filter}.",
             }
@@ -632,8 +635,12 @@ def _real_get_metric_series_by_location(
     if "error" in loc:
         return loc
     result = _real_get_metric_series(
-        loc["lat"], loc["lon"], metric_id,
-        start_year=start_year, end_year=end_year, month_filter=month_filter,
+        loc["lat"],
+        loc["lon"],
+        metric_id,
+        start_year=start_year,
+        end_year=end_year,
+        month_filter=month_filter,
         aggregate_by_year=aggregate_by_year,
     )
     if "error" not in result:
@@ -944,7 +951,9 @@ def dispatch_tool(name: str, arguments: dict) -> str:
                 if "error" in loc:
                     result = loc
                 else:
-                    result = _mock_get_metric_series(loc["lat"], loc["lon"], **arguments)
+                    result = _mock_get_metric_series(
+                        loc["lat"], loc["lon"], **arguments
+                    )
                     if "error" not in result:
                         result["location"] = loc["label"]
             else:
@@ -959,7 +968,9 @@ def dispatch_tool(name: str, arguments: dict) -> str:
             else:
                 result = {"error": f"Unknown tool: {name}"}
     except Exception as exc:
-        result = {"error": f"Tool '{name}' raised an unexpected error: {exc}. Check that all arguments have the correct types."}
+        result = {
+            "error": f"Tool '{name}' raised an unexpected error: {exc}. Check that all arguments have the correct types."
+        }
 
     return json.dumps(result)
 
@@ -1018,7 +1029,7 @@ def run_agent(
 ) -> str | None:
     """Run the agentic loop and return the final answer text, or None on error."""
     messages: list[dict] = [{"role": "system", "content": system_prompt}]
-    for role, text in (history or []):
+    for role, text in history or []:
         messages.append({"role": role, "content": text})
     messages.append({"role": "user", "content": user_message})
 
@@ -1070,11 +1081,13 @@ def run_agent(
         message = response.choices[0].message
         usage = response.usage
         if usage:
-            step_usages.append({
-                "step": step,
-                "prompt": usage.prompt_tokens,
-                "completion": usage.completion_tokens,
-            })
+            step_usages.append(
+                {
+                    "step": step,
+                    "prompt": usage.prompt_tokens,
+                    "completion": usage.completion_tokens,
+                }
+            )
 
         # Normalise tool calls: prefer structured tool_calls, fall back to
         # parsing the text content for the XML-style format Llama sometimes emits.
@@ -1115,7 +1128,8 @@ def run_agent(
 
             tokens_str = (
                 f"  prompt={usage.prompt_tokens:,} completion={usage.completion_tokens:,}"
-                if usage else ""
+                if usage
+                else ""
             )
             print(f"  [step {step}{tokens_str}]", flush=True)
             seen_calls: dict[str, str] = {}  # call_key → cached result
@@ -1124,8 +1138,15 @@ def run_agent(
                 name = tc["function"]["name"]
                 call_key = f"{name}:{json.dumps(args, sort_keys=True)}"
                 if call_key in seen_calls:
-                    result = json.dumps({"note": "Duplicate call — result identical to the previous call with the same arguments."})
-                    print(f"    {name}({json.dumps(args)})  [duplicate — placeholder sent]", flush=True)
+                    result = json.dumps(
+                        {
+                            "note": "Duplicate call — result identical to the previous call with the same arguments."
+                        }
+                    )
+                    print(
+                        f"    {name}({json.dumps(args)})  [duplicate — placeholder sent]",
+                        flush=True,
+                    )
                 else:
                     print(f"    {name}({json.dumps(args)})", flush=True)
                     result = dispatch_tool(name, args)
@@ -1147,10 +1168,14 @@ def run_agent(
             )
             if step_usages:
                 for u in step_usages:
-                    print(f"  step {u['step']}: prompt={u['prompt']:,}  completion={u['completion']:,}")
+                    print(
+                        f"  step {u['step']}: prompt={u['prompt']:,}  completion={u['completion']:,}"
+                    )
                 total_p = sum(u["prompt"] for u in step_usages)
                 total_c = sum(u["completion"] for u in step_usages)
-                print(f"  total tokens: {total_p:,} prompt + {total_c:,} completion = {total_p + total_c:,}")
+                print(
+                    f"  total tokens: {total_p:,} prompt + {total_c:,} completion = {total_p + total_c:,}"
+                )
             return answer
 
     print("[error] Reached maximum steps without a final answer.")
@@ -1214,11 +1239,13 @@ def main() -> None:
         if not question:
             continue
 
-        answer = run_agent(client, question, system_prompt, history=conversation_history)
+        answer = run_agent(
+            client, question, system_prompt, history=conversation_history
+        )
         if answer:
             conversation_history.append(("user", question))
             conversation_history.append(("assistant", answer))
-            conversation_history = conversation_history[-(MAX_HISTORY_TURNS * 2):]
+            conversation_history = conversation_history[-(MAX_HISTORY_TURNS * 2) :]
 
 
 if __name__ == "__main__":

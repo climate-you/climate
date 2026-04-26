@@ -201,16 +201,18 @@ def load_series_grid_from_metric(
         for tc in range(ntc):
             i_lon0 = tc * grid.tile_size
             valid_w = min(grid.tile_size, grid.nlon - i_lon0)
-            p = tile_path(series_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext)
+            p = tile_path(
+                series_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
+            )
             if not p.exists():
                 raise FileNotFoundError(f"Missing source tile: {p}")
             _hdr, arr = read_tile_array(p)
             tile_series = np.asarray(arr, dtype=np.float64)
             if tile_series.ndim != 3:
                 raise ValueError(f"Expected 3-D tile for {p}: {tile_series.shape}")
-            out[i_lat0 : i_lat0 + valid_h, i_lon0 : i_lon0 + valid_w, :] = (
-                tile_series[:valid_h, :valid_w, :]
-            )
+            out[i_lat0 : i_lat0 + valid_h, i_lon0 : i_lon0 + valid_w, :] = tile_series[
+                :valid_h, :valid_w, :
+            ]
 
     return out, grid, axis
 
@@ -835,7 +837,9 @@ def _project_texture_values(
         nlat = arr.shape[0]
         deg = 180.0 / float(nlat)
         lat_src = 90.0 - (np.arange(nlat, dtype=np.float64) + 0.5) * deg
-        lat_clip = lat_src[(lat_src >= -mercator_lat_max) & (lat_src <= mercator_lat_max)]
+        lat_clip = lat_src[
+            (lat_src >= -mercator_lat_max) & (lat_src <= mercator_lat_max)
+        ]
         if lat_clip.size >= 1:
             actual_lat_max = float(round(float(lat_clip[0]), 10))
             actual_lat_min = float(round(float(lat_clip[-1]), 10))

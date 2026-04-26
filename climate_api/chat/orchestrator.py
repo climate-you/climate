@@ -52,7 +52,9 @@ class ProviderTier:
     model: str
     is_degraded: bool = False  # True → emit disclaimer notice before answer
     degraded_notice: str = field(default="")
-    max_request_tokens: int | None = None  # If set, skip tier when estimated request exceeds this
+    max_request_tokens: int | None = (
+        None  # If set, skip tier when estimated request exceeds this
+    )
 
     def __post_init__(self):
         if self.is_degraded and not self.degraded_notice:
@@ -134,8 +136,20 @@ def _compress_series_for_context(result_json: str) -> str:
         if v > max_val:
             max_val, max_entry = v, entry
 
-    _MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    _MONTH_NAMES = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ]
     climatology = {
         _MONTH_NAMES[m - 1]: round(sum(vs) / len(vs), 2)
         for m, vs in sorted(month_values.items())
@@ -146,8 +160,16 @@ def _compress_series_for_context(result_json: str) -> str:
         "n_records": len(data),
         "monthly_climatology": climatology,
         "overall_mean": round(sum(all_values) / len(all_values), 2),
-        "record_low": {"year": min_entry["year"], "month": min_entry["month"], "value": round(min_val, 2)},
-        "record_high": {"year": max_entry["year"], "month": max_entry["month"], "value": round(max_val, 2)},
+        "record_low": {
+            "year": min_entry["year"],
+            "month": min_entry["month"],
+            "value": round(min_val, 2),
+        },
+        "record_high": {
+            "year": max_entry["year"],
+            "month": max_entry["month"],
+            "value": round(max_val, 2),
+        },
     }
     d = {k: v for k, v in d.items() if k != "data"}
     d["summary"] = summary
@@ -221,7 +243,14 @@ def _supplement_locations_from_answer(
         if key in seen_keys:
             continue
         seen_keys.add(key)
-        extra.append({"label": hit.label, "alt_names": hit.alt_names, "lat": hit.lat, "lon": hit.lon})
+        extra.append(
+            {
+                "label": hit.label,
+                "alt_names": hit.alt_names,
+                "lat": hit.lat,
+                "lon": hit.lon,
+            }
+        )
     return locations + extra
 
 
@@ -236,9 +265,21 @@ def _extract_locations(name: str, args: dict, result_dict: dict) -> list[dict]:
             return [{"label": str(args.get("location", "")), "lat": lat, "lon": lon}]
     elif name == "find_extreme_location":
         if "lat" in result_dict:
-            return [{"label": result_dict.get("nearest_city", ""), "alt_names": result_dict.get("alt_names", ""), "lat": result_dict["lat"], "lon": result_dict["lon"]}]
+            return [
+                {
+                    "label": result_dict.get("nearest_city", ""),
+                    "alt_names": result_dict.get("alt_names", ""),
+                    "lat": result_dict["lat"],
+                    "lon": result_dict["lon"],
+                }
+            ]
         return [
-            {"label": r.get("nearest_city", ""), "alt_names": r.get("alt_names", ""), "lat": r["lat"], "lon": r["lon"]}
+            {
+                "label": r.get("nearest_city", ""),
+                "alt_names": r.get("alt_names", ""),
+                "lat": r["lat"],
+                "lon": r["lon"],
+            }
             for r in result_dict.get("results", [])
             if "lat" in r
         ]
@@ -277,7 +318,13 @@ def _collect_series_for_extreme(
             if "lat" in r
         ][:_MAX_CHART_LOCATIONS]
     elif "lat" in extreme_result:
-        cities = [{"label": extreme_result.get("nearest_city", ""), "lat": extreme_result["lat"], "lon": extreme_result["lon"]}]
+        cities = [
+            {
+                "label": extreme_result.get("nearest_city", ""),
+                "lat": extreme_result["lat"],
+                "lon": extreme_result["lon"],
+            }
+        ]
     else:
         return
 
@@ -301,16 +348,27 @@ def _collect_series_for_extreme(
         if temperature_unit == "F" and spec.get("unit") == "C":
             is_delta = _tools._is_delta_metric(spec)
             series_result["data"] = [
-                {**entry, "value": _tools._convert_temp(entry["value"], spec, is_delta=is_delta, target="F")}
+                {
+                    **entry,
+                    "value": _tools._convert_temp(
+                        entry["value"], spec, is_delta=is_delta, target="F"
+                    ),
+                }
                 for entry in series_result["data"]
             ]
             series_result["unit"] = _tools._output_unit(spec, "F")
         series_result["location"] = city["label"]
         series_result["_source"] = "auto"
-        dedup_key = (series_result.get("metric_id"), series_result.get("location"), "raw")
+        dedup_key = (
+            series_result.get("metric_id"),
+            series_result.get("location"),
+            "raw",
+        )
         series_results[:] = [
-            r for r in series_results
-            if (r.get("metric_id"), r.get("location"), r.get("role", "raw")) != dedup_key
+            r
+            for r in series_results
+            if (r.get("metric_id"), r.get("location"), r.get("role", "raw"))
+            != dedup_key
         ]
         series_results.append(series_result)
 
@@ -327,12 +385,16 @@ def _collect_series_for_extreme(
                     "unit": series_result.get("unit", ""),
                     "location": city["label"],
                     "role": "trend",
-                    "data": [{"year": y, "value": v} for y, v in zip(years, trend_values)],
+                    "data": [
+                        {"year": y, "value": v} for y, v in zip(years, trend_values)
+                    ],
                 }
                 trend_dedup_key = (metric_id, city["label"], "trend")
                 series_results[:] = [
-                    r for r in series_results
-                    if (r.get("metric_id"), r.get("location"), r.get("role", "raw")) != trend_dedup_key
+                    r
+                    for r in series_results
+                    if (r.get("metric_id"), r.get("location"), r.get("role", "raw"))
+                    != trend_dedup_key
                 ]
                 series_results.append(trend_series)
 
@@ -364,7 +426,9 @@ def _collect_series_for_extreme_region(
 
     _MAX_CHART_REGIONS = 5
     if "results" in extreme_result:
-        region_ids = [r["region_id"] for r in extreme_result["results"] if "region_id" in r][:_MAX_CHART_REGIONS]
+        region_ids = [
+            r["region_id"] for r in extreme_result["results"] if "region_id" in r
+        ][:_MAX_CHART_REGIONS]
     elif "region_id" in extreme_result:
         region_ids = [extreme_result["region_id"]]
     else:
@@ -387,10 +451,16 @@ def _collect_series_for_extreme_region(
         if "error" in series_result or "data" not in series_result:
             continue
         series_result["_source"] = "auto"
-        dedup_key = (series_result.get("metric_id"), series_result.get("region_id"), "mean")
+        dedup_key = (
+            series_result.get("metric_id"),
+            series_result.get("region_id"),
+            "mean",
+        )
         series_results[:] = [
-            r for r in series_results
-            if (r.get("metric_id"), r.get("region_id"), r.get("aggregation", "mean")) != dedup_key
+            r
+            for r in series_results
+            if (r.get("metric_id"), r.get("region_id"), r.get("aggregation", "mean"))
+            != dedup_key
         ]
         series_results.append(series_result)
 
@@ -412,12 +482,15 @@ def _filter_series_results(series_results: list[dict]) -> list[dict]:
     if not metrics_with_explicit:
         return series_results
     return [
-        r for r in series_results
+        r
+        for r in series_results
         if r.get("_source") != "auto" or r.get("metric_id") not in metrics_with_explicit
     ]
 
 
-def _build_chart_payloads(series_results: list[dict], tile_store: Any, temperature_unit: str = "C") -> list[dict]:
+def _build_chart_payloads(
+    series_results: list[dict], tile_store: Any, temperature_unit: str = "C"
+) -> list[dict]:
     """Build chart payload(s) from accumulated get_metric_series results.
 
     Groups results by metric_id, producing one chart per distinct metric.
@@ -481,15 +554,21 @@ def _build_chart_payloads(series_results: list[dict], tile_store: Any, temperatu
             lat, lon = first_result.get("lat"), first_result.get("lon")
             if lat is not None and lon is not None:
                 # Match the year range already fetched
-                years_fetched = [d["year"] for d in first_result.get("data", []) if "year" in d]
+                years_fetched = [
+                    d["year"] for d in first_result.get("data", []) if "year" in d
+                ]
                 sy = min(years_fetched) if years_fetched else None
                 ey = max(years_fetched) if years_fetched else None
                 for sib_mid, sib_cg in all_siblings:
                     if sib_mid in seen_metrics:
                         continue
                     sibling = _tools._get_metric_series(
-                        lat=lat, lon=lon, metric_id=sib_mid, tile_store=tile_store,
-                        start_year=sy, end_year=ey,
+                        lat=lat,
+                        lon=lon,
+                        metric_id=sib_mid,
+                        tile_store=tile_store,
+                        start_year=sy,
+                        end_year=ey,
                     )
                     if "error" not in sibling and "data" in sibling:
                         sibling["location"] = loc
@@ -506,7 +585,11 @@ def _build_chart_payloads(series_results: list[dict], tile_store: Any, temperatu
         chart_mode = first_cg.get("chart_mode", "stacked_bar")
         chart_title_base = first_cg.get("chart_title", group_id)
         location_label = loc.split(",")[0].strip() if loc else ""
-        title = f"{chart_title_base} \u2014 {location_label}" if location_label else chart_title_base
+        title = (
+            f"{chart_title_base} \u2014 {location_label}"
+            if location_label
+            else chart_title_base
+        )
 
         series: list[dict] = []
         unit = ""
@@ -537,7 +620,9 @@ def _build_chart_payloads(series_results: list[dict], tile_store: Any, temperatu
         metric_title = spec.get("title", metric_id)
 
         # Skip results already merged into a chart group
-        results = [r for r in results if (metric_id, r.get("location", "")) not in consumed]
+        results = [
+            r for r in results if (metric_id, r.get("location", "")) not in consumed
+        ]
         if not results:
             continue
 
@@ -599,17 +684,21 @@ def _build_chart_payloads(series_results: list[dict], tile_store: Any, temperatu
                 "x": [s["label"] for s in series],
                 "y": [s["y"][0] if s["y"] else None for s in series],
             }
-            charts.append({
-                "title": metric_title,
-                "unit": unit,
-                "series": [comparison_series],
-                "chart_mode": "comparison_bar",
-            })
+            charts.append(
+                {
+                    "title": metric_title,
+                    "unit": unit,
+                    "series": [comparison_series],
+                    "chart_mode": "comparison_bar",
+                }
+            )
             continue
 
         # If a yearly series has fewer than 3 data points, re-fetch with an
         # extended range so the chart renders a proper curve rather than a dot.
-        all_x_ints = sorted({xi for s in series for xi in s["x"] if isinstance(xi, int)})
+        all_x_ints = sorted(
+            {xi for s in series for xi in s["x"] if isinstance(xi, int)}
+        )
         if 0 < len(all_x_ints) < 3:
             axis = tile_store.axis(metric_id)
             valid_min: int | None = None
@@ -643,8 +732,12 @@ def _build_chart_payloads(series_results: list[dict], tile_store: Any, temperatu
                     new_series.append(s)
                     continue
                 extended = _tools._get_metric_series(
-                    lat=lat, lon=lon, metric_id=metric_id, tile_store=tile_store,
-                    start_year=new_start, end_year=new_end,
+                    lat=lat,
+                    lon=lon,
+                    metric_id=metric_id,
+                    tile_store=tile_store,
+                    start_year=new_start,
+                    end_year=new_end,
                 )
                 if "error" in extended or "data" not in extended:
                     new_series.append(s)
@@ -652,7 +745,12 @@ def _build_chart_payloads(series_results: list[dict], tile_store: Any, temperatu
                 if temperature_unit == "F" and spec.get("unit") == "C":
                     is_delta = _tools._is_delta_metric(spec)
                     extended["data"] = [
-                        {**entry, "value": _tools._convert_temp(entry["value"], spec, is_delta=is_delta, target="F")}
+                        {
+                            **entry,
+                            "value": _tools._convert_temp(
+                                entry["value"], spec, is_delta=is_delta, target="F"
+                            ),
+                        }
                         for entry in extended["data"]
                     ]
                 new_x = [entry["year"] for entry in extended["data"]]
@@ -677,7 +775,11 @@ def _build_chart_payloads(series_results: list[dict], tile_store: Any, temperatu
             location_label = "Multiple cities"
         else:
             location_label = " & ".join(title_locations)
-        title = f"{metric_title} \u2014 {location_label}" if location_label else metric_title
+        title = (
+            f"{metric_title} \u2014 {location_label}"
+            if location_label
+            else metric_title
+        )
         unit = results[0].get("unit", "")
         charts.append({"title": title, "unit": unit, "series": series})
 
@@ -695,7 +797,7 @@ def _compute_fly_to_bbox(series_results: list[dict]) -> list[float] | None:
     from climate.geo.continents import CONTINENT_BBOXES
 
     continent_ids = {
-        r["region_id"][len("continent:"):]
+        r["region_id"][len("continent:") :]
         for r in series_results
         if r.get("region_id", "").startswith("continent:")
     }
@@ -1339,16 +1441,20 @@ class ChatOrchestrator:
         quota limit (before any events have been yielded for this question).
         Any other error is yielded as an "error" event and the generator returns.
         """
-        system_prompt = _build_system_prompt(self.tile_store, map_context, self.max_steps, temperature_unit)
+        system_prompt = _build_system_prompt(
+            self.tile_store, map_context, self.max_steps, temperature_unit
+        )
         messages: list[dict] = [{"role": "system", "content": system_prompt}]
-        for role, text in (history or []):
+        for role, text in history or []:
             messages.append({"role": role, "content": text})
         messages.append({"role": "user", "content": question})
 
         tools_called: list[str] = []
         locations: list[dict] = []
         _location_keys: set[tuple] = set()
-        series_results: list[dict] = []  # successful get_metric_series results for charting
+        series_results: list[dict] = (
+            []
+        )  # successful get_metric_series results for charting
         retried = False
         tpm_retries = 0
         events_yielded = False  # True once we've emitted at least one tool_call event
@@ -1356,7 +1462,9 @@ class ChatOrchestrator:
         t_start = _time.monotonic()
         steps_timing: list[dict] = []
         step_model_ms = 0  # accumulated model latency for current step (across retries)
-        step_usage: dict = {}  # token counts for current step (from latest API response)
+        step_usage: dict = (
+            {}
+        )  # token counts for current step (from latest API response)
         last_unique_step = 0  # last step that was newly entered (not a retry)
 
         step = 0
@@ -1370,16 +1478,16 @@ class ChatOrchestrator:
                 # Pre-flight token estimate: chars / 4 is a standard approximation.
                 # Include tool schemas in the estimate since they count against the limit.
                 if tier.max_request_tokens is not None:
-                    messages_chars = sum(
-                        len(json.dumps(m)) for m in messages
-                    )
+                    messages_chars = sum(len(json.dumps(m)) for m in messages)
                     tools_chars = sum(len(json.dumps(t)) for t in TOOL_SCHEMAS)
                     estimated_tokens = (messages_chars + tools_chars) // 4
                     if estimated_tokens > tier.max_request_tokens:
                         if not events_yielded:
                             raise _QuotaExhaustedError()
                         # Mid-conversation: can't fall back, surface a clear error
-                        steps_timing.append({"step": step, "model_ms": 0, "error": True, **step_usage})
+                        steps_timing.append(
+                            {"step": step, "model_ms": 0, "error": True, **step_usage}
+                        )
                         total_ms = int((_time.monotonic() - t_start) * 1000)
                         yield {
                             "type": "error",
@@ -1441,7 +1549,9 @@ class ChatOrchestrator:
                                 if tc_delta.function.name:
                                     entry["function"]["name"] += tc_delta.function.name
                                 if tc_delta.function.arguments:
-                                    entry["function"]["arguments"] += tc_delta.function.arguments
+                                    entry["function"][
+                                        "arguments"
+                                    ] += tc_delta.function.arguments
 
                 step_model_ms += int((_time.monotonic() - model_t0) * 1000)
             except Exception as exc:
@@ -1522,7 +1632,12 @@ class ChatOrchestrator:
 
                 if not xml_recovered:
                     steps_timing.append(
-                        {"step": step, "model_ms": step_model_ms, "error": True, **step_usage}
+                        {
+                            "step": step,
+                            "model_ms": step_model_ms,
+                            "error": True,
+                            **step_usage,
+                        }
                     )
                     total_ms = int((_time.monotonic() - t_start) * 1000)
                     if _is_context_too_large(exc):
@@ -1569,7 +1684,11 @@ class ChatOrchestrator:
                     name = tc["function"]["name"]
                     call_key = f"{name}:{json.dumps(args, sort_keys=True)}"
                     if call_key in seen_calls:
-                        result = json.dumps({"note": "Duplicate call — result identical to the previous call with the same arguments."})
+                        result = json.dumps(
+                            {
+                                "note": "Duplicate call — result identical to the previous call with the same arguments."
+                            }
+                        )
                     else:
                         yield {
                             "type": "tool_call",
@@ -1586,10 +1705,15 @@ class ChatOrchestrator:
                             if "error" not in parsed_result and "data" in parsed_result:
                                 parsed_result["_source"] = "explicit"
                                 # Deduplicate by (metric_id, location) — keep the latest call
-                                dedup_key = (parsed_result.get("metric_id"), parsed_result.get("location"))
+                                dedup_key = (
+                                    parsed_result.get("metric_id"),
+                                    parsed_result.get("location"),
+                                )
                                 series_results = [
-                                    r for r in series_results
-                                    if (r.get("metric_id"), r.get("location")) != dedup_key
+                                    r
+                                    for r in series_results
+                                    if (r.get("metric_id"), r.get("location"))
+                                    != dedup_key
                                 ]
                                 series_results.append(parsed_result)
                         elif name == "get_region_metric_series":
@@ -1604,30 +1728,40 @@ class ChatOrchestrator:
                                     parsed_result.get("aggregation", "mean"),
                                 )
                                 series_results = [
-                                    r for r in series_results
+                                    r
+                                    for r in series_results
                                     if (
                                         r.get("metric_id"),
                                         r.get("region_id"),
                                         r.get("aggregation", "mean"),
-                                    ) != dedup_key
+                                    )
+                                    != dedup_key
                                 ]
                                 series_results.append(parsed_result)
                         elif name == "find_extreme_location":
                             parsed_result = json.loads(result)
                             if "error" not in parsed_result:
                                 _collect_series_for_extreme(
-                                    parsed_result, args, self.tile_store,
-                                    temperature_unit, series_results,
+                                    parsed_result,
+                                    args,
+                                    self.tile_store,
+                                    temperature_unit,
+                                    series_results,
                                 )
                         elif name == "find_extreme_region":
                             parsed_result = json.loads(result)
                             if "error" not in parsed_result:
                                 _collect_series_for_extreme_region(
-                                    parsed_result, args, self.tile_store,
-                                    temperature_unit, series_results,
+                                    parsed_result,
+                                    args,
+                                    self.tile_store,
+                                    temperature_unit,
+                                    series_results,
                                 )
                         try:
-                            for loc in _extract_locations(name, args, json.loads(result)):
+                            for loc in _extract_locations(
+                                name, args, json.loads(result)
+                            ):
                                 key = (round(loc["lat"], 1), round(loc["lon"], 1))
                                 if key not in _location_keys:
                                     _location_keys.add(key)
@@ -1645,17 +1779,26 @@ class ChatOrchestrator:
                     )
                 tools_ms = int((_time.monotonic() - tools_t0) * 1000)
                 steps_timing.append(
-                    {"step": step, "model_ms": step_model_ms, "tools_ms": tools_ms, **step_usage}
+                    {
+                        "step": step,
+                        "model_ms": step_model_ms,
+                        "tools_ms": tools_ms,
+                        **step_usage,
+                    }
                 )
             else:
                 # Final text response
-                steps_timing.append({"step": step, "model_ms": step_model_ms, **step_usage})
+                steps_timing.append(
+                    {"step": step, "model_ms": step_model_ms, **step_usage}
+                )
                 total_ms = int((_time.monotonic() - t_start) * 1000)
                 answer = streamed_text
                 # Text geocoding is unreliable for region names (e.g. "Colombia" → "Colombia, Cuba").
                 # Skip it when find_extreme_region was used; locations come from tool data only.
                 if "find_extreme_region" not in tools_called:
-                    locations = _supplement_locations_from_answer(answer, locations, self.location_index)
+                    locations = _supplement_locations_from_answer(
+                        answer, locations, self.location_index
+                    )
                 if tier.is_degraded:
                     yield {"type": "notice", "text": tier.degraded_notice}
                 yield {"type": "answer", "text": answer}
@@ -1669,7 +1812,9 @@ class ChatOrchestrator:
                     "total_ms": total_ms,
                     "steps_timing": steps_timing,
                     "locations": locations,
-                    "charts": _build_chart_payloads(series_results, self.tile_store, temperature_unit),
+                    "charts": _build_chart_payloads(
+                        series_results, self.tile_store, temperature_unit
+                    ),
                 }
                 # Fly to continent bbox when the answer is about a single continent
                 # and there are no city-level pins that already handle camera.
@@ -1746,7 +1891,9 @@ class ChatOrchestrator:
 
         for tier in tiers:
             try:
-                for event in self._run_tier(tier, question, map_context, session_id, history, temperature_unit):
+                for event in self._run_tier(
+                    tier, question, map_context, session_id, history, temperature_unit
+                ):
                     if event["type"] == "done":
                         event = {
                             **event,

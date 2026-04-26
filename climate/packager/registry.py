@@ -2164,7 +2164,9 @@ def _package_derived_metrics(
         if fn == "trend_slope_per_decade":
             inputs = source.get("inputs", [])
             if len(inputs) != 1:
-                raise ValueError(f"{metric_id}: trend_slope_per_decade requires exactly 1 input")
+                raise ValueError(
+                    f"{metric_id}: trend_slope_per_decade requires exactly 1 input"
+                )
             input_id = inputs[0]
             input_spec = manifest[input_id]
             series, grid, axis = load_series_grid_from_metric(
@@ -2176,7 +2178,9 @@ def _package_derived_metrics(
         elif fn == "blended_preindustrial_anomaly":
             inputs = source.get("inputs", [])
             if len(inputs) != 2:
-                raise ValueError(f"{metric_id}: blended_preindustrial_anomaly requires exactly 2 inputs")
+                raise ValueError(
+                    f"{metric_id}: blended_preindustrial_anomaly requires exactly 2 inputs"
+                )
             reducer = {
                 "recent_start_year": params["recent_start_year"],
                 "recent_end_year": params["recent_end_year"],
@@ -2196,10 +2200,13 @@ def _package_derived_metrics(
             scalar_grid = scalar[:, :, np.newaxis]  # (nlat, nlon, 1)
 
         else:
-            print(f"[derived] skip metric={metric_id} fn={fn} reason=unsupported derivation fn")
+            print(
+                f"[derived] skip metric={metric_id} fn={fn} reason=unsupported derivation fn"
+            )
             continue
 
         from climate.packager.tiles import write_series_tiles, write_axis_json
+
         write_axis_json(series_root, grid, metric_id, "yearly", [label_year])
         written = write_series_tiles(
             out_root=series_root,

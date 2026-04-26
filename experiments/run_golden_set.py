@@ -130,7 +130,7 @@ def run_question(
         ctx_line = (
             f"\nMap context: the user is currently viewing [{label}]. "
             "For questions about 'here', 'this location', or 'this place', "
-            f"pass \"{label}\" as the location parameter — do not use raw coordinates.\n"
+            f'pass "{label}" as the location parameter — do not use raw coordinates.\n'
         )
         # Insert before "Available metrics:"
         system_prompt = system_prompt.replace(
@@ -520,7 +520,10 @@ def main() -> None:
         tests = [t for t in tests if t.get("id") in args.ids]
         missing = set(args.ids) - {t.get("id") for t in tests}
         if missing:
-            print(f"No test(s) found for id(s): {', '.join(sorted(missing))}", file=sys.stderr)
+            print(
+                f"No test(s) found for id(s): {', '.join(sorted(missing))}",
+                file=sys.stderr,
+            )
             sys.exit(1)
     if args.layer:
         tests = [t for t in tests if t.get("layer") == args.layer]

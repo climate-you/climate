@@ -306,10 +306,17 @@ def main() -> int:
             str(tiles_root / "series"),
         ]
         if effective_registry_release:
-            rankings_cmd.extend([
-                "--metrics",
-                str(args.releases_root / effective_registry_release / "registry" / "metrics.json"),
-            ])
+            rankings_cmd.extend(
+                [
+                    "--metrics",
+                    str(
+                        args.releases_root
+                        / effective_registry_release
+                        / "registry"
+                        / "metrics.json"
+                    ),
+                ]
+            )
         steps.append(rankings_cmd)
     if args.check_aggregates:
         aggregates_cmd = [
@@ -319,10 +326,17 @@ def main() -> int:
             str(tiles_root / "series"),
         ]
         if effective_registry_release:
-            aggregates_cmd.extend([
-                "--metrics",
-                str(args.releases_root / effective_registry_release / "registry" / "metrics.json"),
-            ])
+            aggregates_cmd.extend(
+                [
+                    "--metrics",
+                    str(
+                        args.releases_root
+                        / effective_registry_release
+                        / "registry"
+                        / "metrics.json"
+                    ),
+                ]
+            )
         steps.append(aggregates_cmd)
     if not args.skip_pytest:
         steps.append([sys.executable, "-m", "pytest", "-q"])

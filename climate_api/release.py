@@ -303,7 +303,11 @@ def _build_release_layers(
         if isinstance(output.get("mobile_filename"), str) and output.get(
             "mobile_filename"
         ):
-            if format_version >= 2 and map_artifact_roots and map_id in map_artifact_roots:
+            if (
+                format_version >= 2
+                and map_artifact_roots
+                and map_id in map_artifact_roots
+            ):
                 descriptor["mobile_asset_path"] = f"maps/{map_id}/{mobile_filename}"
             else:
                 descriptor["mobile_asset_path"] = (
@@ -328,15 +332,14 @@ def _build_release_layers(
             if dims is not None:
                 descriptor.setdefault("asset_width", dims[0])
                 descriptor.setdefault("asset_height", dims[1])
-        if (
-            "mobile_asset_path" in descriptor
-            and (
-                "mobile_asset_width" not in descriptor
-                or "mobile_asset_height" not in descriptor
-            )
+        if "mobile_asset_path" in descriptor and (
+            "mobile_asset_width" not in descriptor
+            or "mobile_asset_height" not in descriptor
         ):
             if artifact_map_root is not None:
-                mobile_dims = _read_image_dimensions(artifact_map_root / mobile_filename)
+                mobile_dims = _read_image_dimensions(
+                    artifact_map_root / mobile_filename
+                )
             elif maps_root is not None:
                 mobile_dims = _read_image_dimensions(
                     maps_root / grid_id / map_id / mobile_filename
@@ -478,8 +481,12 @@ class ReleaseResolver:
                     # Artifact layout: artifacts/series/{metric_id}/{date}/z64/...  (flat, no grid_id)
                     series_pointers: dict[str, str] = release_manifest.get("series", {})
                     for metric_id, artifact_date in series_pointers.items():
-                        artifact_dir = artifacts_root / "series" / metric_id / artifact_date
-                        artifact_manifest_path = artifact_dir / ".artifact_manifest.json"
+                        artifact_dir = (
+                            artifacts_root / "series" / metric_id / artifact_date
+                        )
+                        artifact_manifest_path = (
+                            artifact_dir / ".artifact_manifest.json"
+                        )
                         if not artifact_manifest_path.exists():
                             raise FileNotFoundError(
                                 f"Artifact manifest missing for '{metric_id}' date "
@@ -544,8 +551,13 @@ class ReleaseResolver:
             _missing = [key for key in _expected if key not in rankings]
             self._logger.info(
                 "Loaded %d/%d metric ranking(s)%s",
-                len(rankings), len(_expected),
-                f"; missing: {', '.join(f'{m}/{a}' for m, a in _missing)}" if _missing else "",
+                len(rankings),
+                len(_expected),
+                (
+                    f"; missing: {', '.join(f'{m}/{a}' for m, a in _missing)}"
+                    if _missing
+                    else ""
+                ),
             )
             tile_store = TileDataStore(
                 tiles_root=tile_store.tiles_root,
