@@ -375,7 +375,7 @@
       "op": "trend_slope"
     },
     "palette": {
-      "colors": ["#e66101", "#fdb863", "#f7f7f7", "#b2abd2", "#5e3c99"],
+      "colors": ["#e6b800", "#fee090", "#f7f7f7", "#74add1", "#313695"],
       "nan_color": "#000000",
       "nan_alpha": 0.0
     },
