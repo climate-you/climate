@@ -53,16 +53,17 @@ let c = fs.readFileSync(DIST, 'utf8');
 
 // C1 – hillshade: disable pole-mesh extension
 //   Sets extendToPoles=false (arg 4 → !1) in the hillshade render call.
-//   getMeshFromTileID signature: (context, tileID, generateBorders, extendToPoles, layerType)
-//   Arg 3 (n = useBorder/generateBorders) is left as the original variable so
-//   the two-pass bordered/borderless rendering still works correctly.
-//   Arg 4 (!0 → !1) is the extendToPoles flag; setting it false prevents the
-//   triangle-fan pole-cap mesh from being generated for the hillshade layer.
-c = applyPatch(c,
-  'getMeshFromTileID(u,p.canonical,n,!0,"raster")',
-  'getMeshFromTileID(u,p.canonical,n,!1,"raster")',
-  'C1: hillshade – disable pole-mesh extension',
-);
+//   In 5.21.0+ the minifier inlined the generateBorders variable as !1 and
+//   already emits !1 for extendToPoles, so the fix is upstream and we skip.
+if (c.includes('getMeshFromTileID(u,p.canonical,!1,!1,"raster")')) {
+  console.log('  ✓ C1: hillshade – disable pole-mesh extension (already upstream in 5.21.0+)');
+} else {
+  c = applyPatch(c,
+    'getMeshFromTileID(u,p.canonical,n,!0,"raster")',
+    'getMeshFromTileID(u,p.canonical,n,!1,"raster")',
+    'C1: hillshade – disable pole-mesh extension',
+  );
+}
 
 // C3 – hillshade fragment: discard only truly out-of-range UVs
 //   (v_pos.y outside [0,1] – plain texture bounds guard, no sentinel needed)
