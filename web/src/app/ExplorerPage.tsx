@@ -710,7 +710,7 @@ export default function ExplorerPage({
     }
   }
 
-  async function loadGlobalPanel() {
+  async function loadGlobalPanel(nextUnit = unit) {
     queueGraphRestoreFromVisible();
     setChatLocations(null);
     setChatFlyToBbox(null);
@@ -727,7 +727,7 @@ export default function ExplorerPage({
     setPanelLoading(true);
     setPanelLoadError(null);
     try {
-      const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/panel/global?unit=${unit}`;
+      const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/panel/global?unit=${nextUnit}`;
       const r = await fetch(url);
       if (!r.ok) throw new Error(await r.text());
       const data = (await r.json()) as PanelResponse;
@@ -1235,9 +1235,13 @@ export default function ExplorerPage({
                 aria-label={`Switch to ${unit === "C" ? "°F" : "°C"}`}
                 onClick={() => {
                   const nextUnit: "C" | "F" = unit === "C" ? "F" : "C";
-                  queueGraphRestoreFromVisible();
                   setUnit(nextUnit);
-                  void loadPanel(lat, lon, nextUnit);
+                  if (selectedLocation?.geonameid === 0) {
+                    void loadGlobalPanel(nextUnit);
+                  } else {
+                    queueGraphRestoreFromVisible();
+                    void loadPanel(lat, lon, nextUnit);
+                  }
                 }}
               >
                 {unit === "C" ? "°C" : "°F"}
@@ -1581,9 +1585,13 @@ export default function ExplorerPage({
                 aria-pressed={unit === "C"}
                 onClick={() => {
                   if (unit === "C") return;
-                  queueGraphRestoreFromVisible();
                   setUnit("C");
-                  void loadPanel(lat, lon, "C");
+                  if (selectedLocation?.geonameid === 0) {
+                    void loadGlobalPanel("C");
+                  } else {
+                    queueGraphRestoreFromVisible();
+                    void loadPanel(lat, lon, "C");
+                  }
                 }}
               >
                 °C
@@ -1596,9 +1604,13 @@ export default function ExplorerPage({
                 aria-pressed={unit === "F"}
                 onClick={() => {
                   if (unit === "F") return;
-                  queueGraphRestoreFromVisible();
                   setUnit("F");
-                  void loadPanel(lat, lon, "F");
+                  if (selectedLocation?.geonameid === 0) {
+                    void loadGlobalPanel("F");
+                  } else {
+                    queueGraphRestoreFromVisible();
+                    void loadPanel(lat, lon, "F");
+                  }
                 }}
               >
                 °F
