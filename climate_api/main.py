@@ -722,6 +722,8 @@ def create_app() -> FastAPI:
 
     @app.get("/api/chat/questions")
     def get_chat_questions():
+        if chat_orchestrator is None:
+            raise HTTPException(status_code=503, detail="Chat is not enabled on this server.")
         return _get_tree_metadata()
 
     @app.post("/api/chat")

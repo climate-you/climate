@@ -226,6 +226,7 @@ export default function ChatDrawer({
   const [conversationExhausted, setConversationExhausted] = useState(false);
   const [modelOverride, setModelOverride] = useState<ModelOverride>(null);
   const [questionTree, setQuestionTree] = useState<QuestionTree | null>(null);
+  const [chatUnavailable, setChatUnavailable] = useState(false);
   const [currentFollowUpIds, setCurrentFollowUpIds] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -235,9 +236,12 @@ export default function ChatDrawer({
   // Fetch question tree once on mount
   useEffect(() => {
     fetch(`${apiBase}${CHAT_QUESTIONS_API_PATH}`)
-      .then((r) => r.json())
-      .then((data: QuestionTree) => setQuestionTree(data))
-      .catch(() => {}); // fail silently — chips simply don't appear
+      .then((r) => {
+        if (!r.ok) { setChatUnavailable(true); return undefined; }
+        return r.json() as Promise<QuestionTree>;
+      })
+      .then((data) => { if (data) setQuestionTree(data); })
+      .catch(() => setChatUnavailable(true));
   }, [apiBase]);
 
   // Read persisted preferences from localStorage (client-side only)
@@ -724,10 +728,14 @@ export default function ChatDrawer({
     <div className={styles.messages}>
       {isEmpty && (
         <div className={styles.emptyState}>
-          <p className={styles.emptyStateHint}>
-            Ask a question about climate data, or try one of these:
-          </p>
-          {groupedQuestions.map(({ scope, questions }) => (
+          {chatUnavailable ? (
+            <p className={styles.emptyStateError}>Research terminal not running.</p>
+          ) : (
+            <p className={styles.emptyStateHint}>
+              Ask a question about climate data, or try one of these:
+            </p>
+          )}
+          {!chatUnavailable && groupedQuestions.map(({ scope, questions }) => (
             <div key={scope} className={styles.chipGroup}>
               <div className={styles.chipGroupHeader}>
                 {scope === "local" && cityName
@@ -928,12 +936,12 @@ export default function ChatDrawer({
         className={styles.input}
         rows={1}
         placeholder={
-          conversationExhausted ? "Please try again later." : "Ask about climate data…"
+          chatUnavailable ? "Research terminal not running." : conversationExhausted ? "Please try again later." : "Ask about climate data…"
         }
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleInputKeyDown}
-        disabled={loading || conversationExhausted}
+        disabled={loading || conversationExhausted || chatUnavailable}
         aria-label="Chat input"
       />
       {loading ? (
@@ -952,7 +960,7 @@ export default function ChatDrawer({
           type="button"
           className={styles.sendBtn}
           aria-label="Send"
-          disabled={!input.trim() || conversationExhausted}
+          disabled={!input.trim() || conversationExhausted || chatUnavailable}
           onClick={() => void sendMessage(input)}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
