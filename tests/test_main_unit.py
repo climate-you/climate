@@ -488,3 +488,73 @@ def test_rate_limit_returns_429_when_window_is_exceeded(
     assert third_status == 429
     assert "Rate limit exceeded" in third_data["detail"]
     assert third_headers["retry-after"] == "1"
+
+
+def test_chat_endpoints_return_503_when_chat_disabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = Settings(
+        release="latest",
+        releases_root=tmp_path / "releases",
+        latest_release_file=tmp_path / "releases" / "LATEST",
+        locations_csv=tmp_path / "locations.csv",
+        kdtree_path=None,
+        locations_index_csv=tmp_path / "locations.index.csv",
+        ocean_mask_npz=None,
+        ocean_names_json=None,
+        ocean_off_city_max_km=80.0,
+        ocean_city_override_max_km=2.0,
+        country_mask_npz=None,
+        country_codes_json=None,
+        country_names_json=None,
+        country_constrained_max_km=100.0,
+        redis_url=None,
+        ttl_resolve_s=60,
+        ttl_panel_s=60,
+        score_map_preload=False,
+        cors_allow_origins=["*"],
+        cors_allow_credentials=False,
+        rate_limit_enabled=False,
+        rate_limit_sustained_rps=5,
+        rate_limit_burst=20,
+        rate_limit_window_s=10,
+        # chat_enabled defaults to False
+    )
+    monkeypatch.setattr("climate_api.main.load_settings", lambda: settings)
+    monkeypatch.setattr(
+        "climate_api.main.LocationIndex",
+        lambda _path: SimpleNamespace(
+            autocomplete=lambda q, limit=10: [],
+            resolve_by_id=lambda geonameid: None,
+            resolve_by_label=lambda label: None,
+        ),
+    )
+    monkeypatch.setattr(
+        "climate_api.main.PlaceResolver",
+        lambda **kwargs: SimpleNamespace(
+            resolve_place=lambda lat, lon: SimpleNamespace(
+                geonameid=1, label="A", lat=lat, lon=lon,
+                distance_km=0.0, country_code="US", population=1,
+            )
+        ),
+    )
+
+    class _ReleaseResolver:
+        def __init__(self, settings: Settings, logger: Any):
+            pass
+
+        def resolve_release_context(self, requested_release: str):
+            raise RuntimeError("not needed for this test")
+
+        def resolve_release_alias(self, requested_release: str) -> str:
+            return "dev"
+
+        def release_root(self, canonical_release: str) -> Path:
+            return tmp_path / "releases" / canonical_release
+
+    monkeypatch.setattr("climate_api.main.ReleaseResolver", _ReleaseResolver)
+    app = create_app()
+
+    status, data, _ = asyncio.run(_asgi_get(app, "/api/chat/questions"))
+    assert status == 503
+    assert "not enabled" in data["detail"]
