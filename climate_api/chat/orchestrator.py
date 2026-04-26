@@ -803,7 +803,8 @@ def _compute_fly_to_bbox(series_results: list[dict]) -> list[float] | None:
     }
     if len(continent_ids) != 1:
         return None
-    bbox = CONTINENT_BBOXES.get(next(iter(continent_ids)))
+    key = next(iter(continent_ids)).replace("_", " ")
+    bbox = CONTINENT_BBOXES.get(key)
     return list(bbox) if bbox else None
 
 
