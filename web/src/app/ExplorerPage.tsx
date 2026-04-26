@@ -1189,7 +1189,9 @@ export default function ExplorerPage({
           onPickChatMarker={(la, lo) => void handlePick(la, lo, true)}
           backgroundImageUrl={globeBackground}
           onGraphOpen={() => {
-            if (selectedLocation !== null) {
+            if (panelOpen && panelTab === "graph") {
+              setPanelOpen(false);
+            } else if (selectedLocation !== null) {
               setPanelTab("graph");
               setPanelOpen(true);
             } else {
@@ -1198,8 +1200,12 @@ export default function ExplorerPage({
           }}
           chatEnabled={chatEnabled}
           onChatOpen={() => {
-            setPanelTab("chat");
-            if (!panelOpen) setPanelOpen(true);
+            if (panelOpen && panelTab === "chat") {
+              setPanelOpen(false);
+            } else {
+              setPanelTab("chat");
+              setPanelOpen(true);
+            }
           }}
         />
         {activeLayerLegend ? (
