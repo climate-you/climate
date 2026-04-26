@@ -1144,16 +1144,14 @@ def build_global_panels(
             graph_series_keys: list[str] = []
             graph_error: str | None = None
 
-            # For animated graphs only use the "all_years" step (no daily/monthly global data)
             animation_spec = graph.get("animation")
             if animation_spec:
                 steps = animation_spec.get("steps", [])
-                all_years_keys: set[str] = set()
+                all_animation_keys: set[str] = set()
                 for s in steps:
-                    if s.get("id") == "all_years":
-                        all_years_keys.update(s.get("series_keys", []))
+                    all_animation_keys.update(s.get("series_keys", []))
             else:
-                all_years_keys = None  # type: ignore[assignment]
+                all_animation_keys = None  # type: ignore[assignment]
 
             for series_spec in graph.get("series", []):
                 metric = series_spec.get("metric")
@@ -1162,7 +1160,7 @@ def build_global_panels(
 
                 key = _series_key(series_spec)
 
-                if all_years_keys is not None and key not in all_years_keys:
+                if all_animation_keys is not None and key not in all_animation_keys:
                     continue
 
                 if key in merged_series:
@@ -1177,8 +1175,8 @@ def build_global_panels(
                 if globe is None:
                     continue
 
-                time_axis = agg_data["time_axis"]
                 values = globe["values"]
+                time_axis = agg_data["time_axis"]
 
                 y_raw = np.asarray(
                     [float("nan") if v is None else float(v) for v in values],
@@ -1219,14 +1217,12 @@ def build_global_panels(
             if not graph_series_keys:
                 graph_error = "Global data not available for this graph."
 
-            # Build animation with only the all_years step and available series
             out_animation = None
             if animation_spec:
                 steps = animation_spec.get("steps", [])
-                global_steps = [s for s in steps if s.get("id") == "all_years"]
                 filtered_steps = [
                     {**s, "series_keys": [k for k in s.get("series_keys", []) if k in graph_series_keys]}
-                    for s in global_steps
+                    for s in steps
                     if any(k in graph_series_keys for k in s.get("series_keys", []))
                 ]
                 if filtered_steps:

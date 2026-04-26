@@ -8,15 +8,8 @@
     "missing": "nan",
     "domain": "global",
     "time_axis": "yearly",
-    "rankings": [
-      "mean",
-      "trend_slope"
-    ],
-    "aggregates": [
-      "mean",
-      "min",
-      "max"
-    ],
+    "rankings": ["mean", "trend_slope"],
+    "aggregates": ["mean", "min", "max"],
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_t2m",
@@ -44,17 +37,11 @@
     "domain": "global",
     "time_axis": "yearly",
     "llm_note": "Use this for 'fastest warming', 'most warming since 1979', or 'warming trend' ranking questions. Prefer this over t2m_yearly_mean_c with aggregation=trend_slope.",
-    "rankings": [
-      "mean"
-    ],
-    "aggregates": [
-      "mean"
-    ],
+    "rankings": ["mean"],
+    "aggregates": ["mean"],
     "source": {
       "type": "derived",
-      "inputs": [
-        "t2m_yearly_mean_c"
-      ],
+      "inputs": ["t2m_yearly_mean_c"],
       "steps": [
         {
           "fn": "trend_slope_per_decade",
@@ -81,12 +68,8 @@
     "domain": "global",
     "time_axis": "yearly",
     "llm_note": "Use this for 'warmed most since pre-industrial times' or 'total warming since 1850' questions.",
-    "rankings": [
-      "mean"
-    ],
-    "aggregates": [
-      "mean"
-    ],
+    "rankings": ["mean"],
+    "aggregates": ["mean"],
     "source": {
       "type": "derived",
       "inputs": [
@@ -124,9 +107,7 @@
     "time_axis": "yearly",
     "source": {
       "type": "derived",
-      "inputs": [
-        "t2m_yearly_mean_c"
-      ],
+      "inputs": ["t2m_yearly_mean_c"],
       "steps": [
         {
           "fn": "rolling_mean",
@@ -180,6 +161,7 @@
     "missing": "nan",
     "domain": "global",
     "time_axis": "monthly",
+    "aggregates": ["mean"],
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_t2m",
@@ -210,7 +192,6 @@
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_t2m_max",
-      "batch_tiles_override": 4,
       "agg": "monthly_max_from_daily",
       "time_range": {
         "start_year": 1979,
@@ -261,6 +242,7 @@
     "domain": "global",
     "time_axis": "daily",
     "llm_hidden": true,
+    "aggregates": ["mean"],
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_t2m",
@@ -308,9 +290,7 @@
         "level": 10
       }
     },
-    "aggregates": [
-      "mean"
-    ]
+    "aggregates": ["mean"]
   },
   "tp_annual_total_mm": {
     "id": "tp_annual_total_mm",
@@ -320,13 +300,8 @@
     "missing": "nan",
     "domain": "global",
     "time_axis": "yearly",
-    "rankings": [
-      "mean",
-      "trend_slope"
-    ],
-    "aggregates": [
-      "mean"
-    ],
+    "rankings": ["mean", "trend_slope"],
+    "aggregates": ["mean"],
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_tp",
@@ -373,9 +348,7 @@
         "level": 10
       }
     },
-    "aggregates": [
-      "mean"
-    ]
+    "aggregates": ["mean"]
   },
   "sst_yearly_mean_c": {
     "id": "sst_yearly_mean_c",
@@ -385,9 +358,7 @@
     "missing": "nan",
     "domain": "ocean",
     "time_axis": "yearly",
-    "aggregates": [
-      "mean"
-    ],
+    "aggregates": ["mean"],
     "source": {
       "type": "erddap",
       "dataset_ref": "oisst_sst_v21_daily",
@@ -425,9 +396,7 @@
         "level": 10
       }
     },
-    "aggregates": [
-      "mean"
-    ]
+    "aggregates": ["mean"]
   },
   "dhw_no_risk_days_per_year": {
     "id": "dhw_no_risk_days_per_year",
@@ -463,9 +432,7 @@
         "stack": "dhw_risk_days"
       }
     },
-    "aggregates": [
-      "mean"
-    ]
+    "aggregates": ["mean"]
   },
   "dhw_moderate_risk_days_per_year": {
     "id": "dhw_moderate_risk_days_per_year",
@@ -501,9 +468,7 @@
         "stack": "dhw_risk_days"
       }
     },
-    "aggregates": [
-      "mean"
-    ]
+    "aggregates": ["mean"]
   },
   "dhw_severe_risk_days_per_year": {
     "id": "dhw_severe_risk_days_per_year",
@@ -539,9 +504,7 @@
         "stack": "dhw_risk_days"
       }
     },
-    "aggregates": [
-      "mean"
-    ]
+    "aggregates": ["mean"]
   },
   "dhw_risk_score_per_year": {
     "id": "dhw_risk_score_per_year",

@@ -59,60 +59,6 @@ def _slugify(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Full grid loading
-# ---------------------------------------------------------------------------
-
-
-def _load_full_grid(
-    tiles_root: Path,
-    grid: GridSpec,
-    metric_id: str,
-    ext: str,
-) -> np.ndarray | None:
-    """
-    Load all tiles for a metric into a single (nlat, nlon, ntime) float32 array.
-    Returns None if no tiles are found.
-    """
-    n_tiles_lat, n_tiles_lon = tile_counts(grid)
-    ts = int(grid.tile_size)
-    nlat, nlon = grid.nlat, grid.nlon
-
-    # Try the first available tile to get ntime
-    ntime: int | None = None
-    for tr in range(n_tiles_lat):
-        for tc in range(n_tiles_lon):
-            p = tile_path(tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext)
-            if p.exists():
-                hdr, _ = read_tile_array(p)
-                ntime = hdr.nyears if hdr.nyears > 0 else 1
-                break
-        if ntime is not None:
-            break
-
-    if ntime is None:
-        return None
-
-    full = np.full((nlat, nlon, ntime), np.nan, dtype=np.float32)
-
-    for tr in range(n_tiles_lat):
-        for tc in range(n_tiles_lon):
-            p = tile_path(tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext)
-            if not p.exists():
-                continue
-            hdr, arr = read_tile_array(p)
-            # arr shape: (tile_h, tile_w) for scalar, (tile_h, tile_w, ntime) for series
-            if arr.ndim == 2:
-                arr = arr[:, :, np.newaxis]
-            r0 = tr * ts
-            c0 = tc * ts
-            r1 = min(r0 + arr.shape[0], nlat)
-            c1 = min(c0 + arr.shape[1], nlon)
-            full[r0:r1, c0:c1, :] = arr[: r1 - r0, : c1 - c0, :]
-
-    return full
-
-
-# ---------------------------------------------------------------------------
 # Region weights building
 # ---------------------------------------------------------------------------
 
@@ -164,78 +110,6 @@ def _area_weights(grid: GridSpec) -> np.ndarray:
     i_lat = np.arange(grid.nlat, dtype=np.float64)
     lat_centers = grid.lat_max - (i_lat + 0.5) * grid.deg
     return np.cos(np.deg2rad(lat_centers)).astype(np.float32)
-
-
-def _compute_mean_series(
-    grid_data: np.ndarray,
-    frac: np.ndarray,
-    w_area: np.ndarray,
-) -> list[float | None]:
-    """
-    Area-weighted mean time series for one region.
-
-    grid_data: (nlat, nlon, ntime) float32
-    frac: (nlat, nlon) float32 fractional coverage
-    w_area: (nlat,) float32 cos(lat) weights
-    """
-    rows, cols = np.where(frac > 0)
-    if len(rows) == 0:
-        return [None] * grid_data.shape[2]
-
-    cell_series = grid_data[rows, cols, :]  # (ncells, ntime)
-    combined = (w_area[rows] * frac[rows, cols])[:, np.newaxis]  # (ncells, 1)
-
-    valid = ~np.isnan(cell_series)  # (ncells, ntime)
-    w_masked = np.where(valid, combined, 0.0)
-    w_sum = w_masked.sum(axis=0)  # (ntime,)
-    weighted_sum = np.where(valid, cell_series * combined, 0.0).sum(axis=0)
-
-    with np.errstate(invalid="ignore"):
-        result = np.where(w_sum > 0, weighted_sum / w_sum, np.nan)
-    return [None if np.isnan(v) else round(float(v), 4) for v in result]
-
-
-def _compute_min_series(
-    grid_data: np.ndarray,
-    frac: np.ndarray,
-) -> list[float | None]:
-    rows, cols = np.where(frac > 0)
-    if len(rows) == 0:
-        return [None] * grid_data.shape[2]
-
-    cell_series = grid_data[rows, cols, :]  # (ncells, ntime)
-    with np.errstate(all="ignore"):
-        result = np.nanmin(cell_series, axis=0)
-    return [None if np.isnan(v) else round(float(v), 4) for v in result]
-
-
-def _compute_max_series(
-    grid_data: np.ndarray,
-    frac: np.ndarray,
-) -> list[float | None]:
-    rows, cols = np.where(frac > 0)
-    if len(rows) == 0:
-        return [None] * grid_data.shape[2]
-
-    cell_series = grid_data[rows, cols, :]  # (ncells, ntime)
-    with np.errstate(all="ignore"):
-        result = np.nanmax(cell_series, axis=0)
-    return [None if np.isnan(v) else round(float(v), 4) for v in result]
-
-
-def _compute_series(
-    aggregation: str,
-    grid_data: np.ndarray,
-    frac: np.ndarray,
-    w_area: np.ndarray,
-) -> list[float | None]:
-    if aggregation == "mean":
-        return _compute_mean_series(grid_data, frac, w_area)
-    if aggregation == "min":
-        return _compute_min_series(grid_data, frac)
-    if aggregation == "max":
-        return _compute_max_series(grid_data, frac)
-    raise ValueError(f"Unsupported aggregation: {aggregation}")
 
 
 def _compute_globe_mean_incremental(
@@ -301,6 +175,126 @@ def _compute_globe_mean_incremental(
 
     values = [None if np.isnan(v) else round(float(v), 4) for v in result]
     return values, cell_count
+
+
+def _compute_aggregates_incremental(
+    tiles_root: Path,
+    grid: GridSpec,
+    metric_id: str,
+    ext: str,
+    aggregations: list[str],
+    named_regions: list[tuple[str, np.ndarray]],
+    w_area: np.ndarray,
+) -> tuple[dict[str, dict[str, list[float | None]]], int] | None:
+    """Compute all region × aggregation time series by streaming one tile at a time.
+
+    named_regions is a list of (region_key, frac) where frac is a (nlat, nlon)
+    float32 fractional-coverage array. Cells with frac == 0 are excluded from
+    each region's computation. All aggregations are accumulated in a single tile
+    pass, so peak memory is proportional to one tile rather than the full grid.
+
+    Returns ({aggregation: {region_key: values}}, ntime), or None if no tiles found.
+    """
+    n_tiles_lat, n_tiles_lon = tile_counts(grid)
+    ts = int(grid.tile_size)
+
+    ntime: int | None = None
+    for tr in range(n_tiles_lat):
+        for tc in range(n_tiles_lon):
+            p = tile_path(tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext)
+            if p.exists():
+                hdr, _ = read_tile_array(p)
+                ntime = hdr.nyears if hdr.nyears > 0 else 1
+                break
+        if ntime is not None:
+            break
+    if ntime is None:
+        return None
+
+    do_mean = "mean" in aggregations
+    do_min = "min" in aggregations
+    do_max = "max" in aggregations
+
+    # Per-region running accumulators (float64 for numerical stability)
+    mean_wsum: dict[str, np.ndarray] = {}
+    mean_wsumw: dict[str, np.ndarray] = {}
+    min_acc: dict[str, np.ndarray] = {}
+    max_acc: dict[str, np.ndarray] = {}
+
+    for key, _ in named_regions:
+        if do_mean:
+            mean_wsum[key] = np.zeros(ntime, dtype=np.float64)
+            mean_wsumw[key] = np.zeros(ntime, dtype=np.float64)
+        if do_min:
+            min_acc[key] = np.full(ntime, np.inf, dtype=np.float64)
+        if do_max:
+            max_acc[key] = np.full(ntime, -np.inf, dtype=np.float64)
+
+    for tr in range(n_tiles_lat):
+        r0 = tr * ts
+        r1 = min(r0 + ts, grid.nlat)
+        w_row = w_area[r0:r1]  # (tile_rows,)
+
+        for tc in range(n_tiles_lon):
+            p = tile_path(tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext)
+            if not p.exists():
+                continue
+
+            _, arr = read_tile_array(p)
+            if arr.ndim == 2:
+                arr = arr[:, :, np.newaxis]
+
+            h = min(arr.shape[0], r1 - r0)
+            c0 = tc * ts
+            w = min(arr.shape[1], grid.nlon - c0)
+            arr = arr[:h, :w, :].astype(np.float32, copy=False)
+            valid = ~np.isnan(arr)  # (h, w, ntime)
+
+            for region_key, frac in named_regions:
+                frac_tile = frac[r0: r0 + h, c0: c0 + w]
+                ri, ci = np.where(frac_tile > 0)
+                if ri.size == 0:
+                    continue
+
+                cell_data = arr[ri, ci, :]     # (ncells, ntime)
+                cell_valid = valid[ri, ci, :]  # (ncells, ntime)
+
+                if do_mean:
+                    wt = (w_row[ri] * frac_tile[ri, ci])[:, np.newaxis]  # (ncells, 1)
+                    mean_wsum[region_key] += np.where(cell_valid, cell_data * wt, 0.0).sum(axis=0)
+                    mean_wsumw[region_key] += np.where(cell_valid, wt, 0.0).sum(axis=0)
+
+                if do_min:
+                    tile_min = np.where(cell_valid, cell_data, np.inf).min(axis=0)
+                    np.minimum(min_acc[region_key], tile_min, out=min_acc[region_key])
+
+                if do_max:
+                    tile_max = np.where(cell_valid, cell_data, -np.inf).max(axis=0)
+                    np.maximum(max_acc[region_key], tile_max, out=max_acc[region_key])
+
+    out: dict[str, dict[str, list[float | None]]] = {}
+
+    if do_mean:
+        res: dict[str, list[float | None]] = {}
+        for key, _ in named_regions:
+            with np.errstate(invalid="ignore"):
+                v = np.where(mean_wsumw[key] > 0, mean_wsum[key] / mean_wsumw[key], np.nan)
+            res[key] = [None if np.isnan(x) else round(float(x), 4) for x in v]
+        out["mean"] = res
+
+    if do_min:
+        res = {}
+        for key, _ in named_regions:
+            res[key] = [None if np.isinf(x) else round(float(x), 4) for x in min_acc[key]]
+        out["min"] = res
+
+    if do_max:
+        res = {}
+        for key, _ in named_regions:
+            res[key] = [None if np.isinf(x) else round(float(x), 4) for x in max_acc[key]]
+        out["max"] = res
+
+    return out, ntime
 
 
 # ---------------------------------------------------------------------------
@@ -461,26 +455,7 @@ def precompute_aggregates(
             continue
 
         # -----------------------------------------------------------------
-        # Load full grid
-        # -----------------------------------------------------------------
-        print(f"[aggregates] loading grid {metric_id} ...", end="", flush=True)
-        t0 = time.monotonic()
-        grid_data = _load_full_grid(series_root, grid, metric_id, ext)
-        if grid_data is None:
-            print(f" no tiles found, skipping")
-            continue
-        ntime = grid_data.shape[2]
-        print(f" shape={grid_data.shape}, {time.monotonic() - t0:.1f}s")
-
-        # Load time axis
-        time_axis_path = tiles_path / "time" / "yearly.json"
-        if time_axis_path.exists():
-            time_axis = json.loads(time_axis_path.read_text(encoding="utf-8"))
-        else:
-            time_axis = list(range(ntime))
-
-        # -----------------------------------------------------------------
-        # Build region weights (once per grid resolution, cached by grid_id)
+        # Build region weights
         # -----------------------------------------------------------------
         print(f"[aggregates] building weights for {metric_id} ...", end="", flush=True)
         t0 = time.monotonic()
@@ -509,77 +484,99 @@ def precompute_aggregates(
                 if np.any(cont_frac > 0):
                     continent_weights[cont_name] = cont_frac
 
-        # Globe: all cells with at least one valid time step
-        valid_cells = ~np.all(np.isnan(grid_data), axis=-1)  # (nlat, nlon)
-        globe_frac = valid_cells.astype(np.float32)
-
         print(f" {time.monotonic() - t0:.1f}s")
 
         # -----------------------------------------------------------------
-        # Compute aggregations and write output
+        # Gather all (region_key, frac) pairs and their display metadata
+        # -----------------------------------------------------------------
+        named_regions: list[tuple[str, np.ndarray]] = []
+        region_meta: dict[str, dict] = {}
+
+        for uid, frac in country_weights.items():
+            code = country_id_to_code.get(uid)
+            if code is None:
+                continue
+            key = f"country:{code}"
+            named_regions.append((key, frac))
+            region_meta[key] = {
+                "name": country_code_to_name.get(code, code),
+                "type": "country",
+                "cell_count": int(np.sum(frac > 0)),
+            }
+
+        for cont_name, frac in continent_weights.items():
+            key = f"continent:{cont_name.replace(' ', '_')}"
+            named_regions.append((key, frac))
+            region_meta[key] = {
+                "name": cont_name.title(),
+                "type": "continent",
+                "cell_count": int(np.sum(frac > 0)),
+            }
+
+        for uid, frac in ocean_weights.items():
+            name = ocean_id_to_name.get(uid, f"ocean_{uid}")
+            key = f"ocean:{_slugify(name)}"
+            named_regions.append((key, frac))
+            region_meta[key] = {
+                "name": name,
+                "type": "ocean",
+                "cell_count": int(np.sum(frac > 0)),
+            }
+
+        # Globe: frac=1 everywhere; NaN cells contribute zero weight automatically
+        globe_frac = np.ones((grid.nlat, grid.nlon), dtype=np.float32)
+        named_regions.append(("globe", globe_frac))
+        region_meta["globe"] = {
+            "name": "Global",
+            "type": "globe",
+            "cell_count": grid.nlat * grid.nlon,
+        }
+
+        # -----------------------------------------------------------------
+        # Compute all aggregations in a single tile-streaming pass
         # -----------------------------------------------------------------
         aggregates_dir = tiles_path / "aggregates"
         aggregates_dir.mkdir(parents=True, exist_ok=True)
 
+        print(
+            f"[aggregates] computing {metric_id} ({', '.join(aggregations)}) ...",
+            end="",
+            flush=True,
+        )
+        t0 = time.monotonic()
+        agg_result = _compute_aggregates_incremental(
+            tiles_root=series_root,
+            grid=grid,
+            metric_id=metric_id,
+            ext=ext,
+            aggregations=aggregations,
+            named_regions=named_regions,
+            w_area=w_area,
+        )
+        if agg_result is None:
+            print(" no tiles found, skipping")
+            continue
+        agg_values, ntime = agg_result
+        print(f" {time.monotonic() - t0:.1f}s")
+
+        # Load canonical time axis using the metric's time_axis spec field
+        axis_name = spec.get("time_axis", "yearly")
+        time_axis_path = tiles_path / "time" / f"{axis_name}.json"
+        if time_axis_path.exists():
+            time_axis = json.loads(time_axis_path.read_text(encoding="utf-8"))
+        else:
+            time_axis = list(range(ntime))
+
+        # Write one JSON file per aggregation
         for aggregation in aggregations:
-            print(
-                f"[aggregates] computing {metric_id}/{aggregation} ...",
-                end="",
-                flush=True,
-            )
-            t0 = time.monotonic()
-
-            regions: dict[str, dict] = {}
-
-            # Countries
-            for uid, frac in country_weights.items():
-                code = country_id_to_code.get(uid)
-                if code is None:
-                    continue
-                name = country_code_to_name.get(code, code)
-                values = _compute_series(aggregation, grid_data, frac, w_area)
-                cell_count = int(np.sum(frac > 0))
-                regions[f"country:{code}"] = {
-                    "name": name,
-                    "type": "country",
-                    "cell_count": cell_count,
-                    "values": values,
-                }
-
-            # Continents
-            for cont_name, frac in continent_weights.items():
-                values = _compute_series(aggregation, grid_data, frac, w_area)
-                cell_count = int(np.sum(frac > 0))
-                slug = cont_name.replace(" ", "_")
-                regions[f"continent:{slug}"] = {
-                    "name": cont_name.title(),
-                    "type": "continent",
-                    "cell_count": cell_count,
-                    "values": values,
-                }
-
-            # Oceans
-            for uid, frac in ocean_weights.items():
-                name = ocean_id_to_name.get(uid, f"ocean_{uid}")
-                values = _compute_series(aggregation, grid_data, frac, w_area)
-                cell_count = int(np.sum(frac > 0))
-                slug = _slugify(name)
-                regions[f"ocean:{slug}"] = {
-                    "name": name,
-                    "type": "ocean",
-                    "cell_count": cell_count,
-                    "values": values,
-                }
-
-            # Globe
-            globe_values = _compute_series(aggregation, grid_data, globe_frac, w_area)
-            regions["globe"] = {
-                "name": "Global",
-                "type": "globe",
-                "cell_count": int(np.sum(globe_frac > 0)),
-                "values": globe_values,
+            if aggregation not in agg_values:
+                continue
+            region_vals = agg_values[aggregation]
+            regions: dict[str, dict] = {
+                key: {**region_meta[key], "values": region_vals[key]}
+                for key, _ in named_regions
+                if key in region_vals
             }
-
             out_path = aggregates_dir / f"{aggregation}.json"
             out_path.write_text(
                 json.dumps(
@@ -595,8 +592,10 @@ def precompute_aggregates(
                 + "\n",
                 encoding="utf-8",
             )
-            elapsed = time.monotonic() - t0
-            print(f" {len(regions)} regions, {elapsed:.1f}s -> {out_path}")
+            print(
+                f"[aggregates] {metric_id}/{aggregation}:"
+                f" {len(regions)} regions -> {out_path}"
+            )
             generated += 1
 
     print(f"[aggregates] done: {generated} aggregate file(s) generated")

@@ -398,7 +398,7 @@ export function toChartTimestamp(x: number | string): number {
     return Number.isFinite(t) ? t : Date.now();
   }
   if (/^\d{4}-\d{2}$/.test(s)) {
-    const t = new Date(`${s}-01`).getTime();
+    const t = new Date(`${s}-15`).getTime();
     return Number.isFinite(t) ? t : Date.now();
   }
   const t = new Date(s).getTime();
