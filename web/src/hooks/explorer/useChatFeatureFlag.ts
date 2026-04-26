@@ -14,11 +14,9 @@ export function useChatFeatureFlag(): boolean {
   const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
-    // Check URL param first
     const params = new URLSearchParams(window.location.search);
     if (params.get("feature") === "chat_bot") {
       localStorage.setItem(CHAT_FEATURE_FLAG_KEY, "1");
-      // Strip param from URL without a full page reload
       params.delete("feature");
       const newSearch = params.toString();
       const newUrl =

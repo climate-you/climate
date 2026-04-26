@@ -1196,6 +1196,7 @@ export default function ExplorerPage({
               void loadGlobalPanel();
             }
           }}
+          chatEnabled={chatEnabled}
           onChatOpen={() => {
             setPanelTab("chat");
             if (!panelOpen) setPanelOpen(true);

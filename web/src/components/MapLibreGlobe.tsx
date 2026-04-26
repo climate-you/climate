@@ -92,6 +92,7 @@ type Props = {
   backgroundImageUrl?: string;
   onGraphOpen?: () => void;
   onChatOpen?: () => void;
+  chatEnabled?: boolean;
 };
 
 const initialView = {
@@ -329,6 +330,44 @@ function snapTargetAtLowZoom(
   return best;
 }
 
+function makeChatControl(
+  onChatOpenRef: React.MutableRefObject<(() => void) | undefined>,
+): maplibregl.IControl {
+  let container: HTMLDivElement | undefined;
+  let button: HTMLButtonElement | undefined;
+  const onClick = () => {
+    onChatOpenRef.current?.();
+  };
+  return {
+    onAdd() {
+      container = document.createElement("div");
+      container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+      button = document.createElement("button");
+      button.type = "button";
+      button.className = "maplibregl-ctrl-icon";
+      button.ariaLabel = "Open research terminal";
+      button.title = "Research terminal";
+      button.innerHTML =
+        `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
+        `<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>` +
+        `</svg>`;
+      button.style.fontSize = "16px";
+      button.style.lineHeight = "1";
+      button.style.color = "#111";
+      button.style.display = "flex";
+      button.style.alignItems = "center";
+      button.style.justifyContent = "center";
+      button.addEventListener("click", onClick);
+      container.appendChild(button);
+      return container;
+    },
+    onRemove() {
+      button?.removeEventListener("click", onClick);
+      container?.remove();
+    },
+  };
+}
+
 export default function MapLibreGlobe({
   panelOpen,
   focusLocation,
@@ -353,6 +392,7 @@ export default function MapLibreGlobe({
   backgroundImageUrl,
   onGraphOpen,
   onChatOpen,
+  chatEnabled = false,
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -369,6 +409,7 @@ export default function MapLibreGlobe({
   const layerOptionsRef = useRef(layerOptions);
   const activeLayerIdRef = useRef(activeLayerId);
   const showControlsRef = useRef(showControls);
+  const chatControlInstanceRef = useRef<maplibregl.IControl | null>(null);
   const enablePickRef = useRef(enablePick);
   const showDebugOverlayRef = useRef(showDebugOverlay);
   const debugBboxRef = useRef(debugBbox);
@@ -429,6 +470,7 @@ export default function MapLibreGlobe({
   useEffect(() => {
     showControlsRef.current = showControls;
   }, [showControls]);
+
 
   useEffect(() => {
     enablePickRef.current = enablePick;
@@ -1074,42 +1116,6 @@ export default function MapLibreGlobe({
       };
     }
 
-    function createChatControl(): maplibregl.IControl {
-      let container: HTMLDivElement | undefined;
-      let button: HTMLButtonElement | undefined;
-      const onClick = () => {
-        onChatOpenRef.current?.();
-      };
-      return {
-        onAdd() {
-          container = document.createElement("div");
-          container.className = "maplibregl-ctrl maplibregl-ctrl-group";
-
-          button = document.createElement("button");
-          button.type = "button";
-          button.className = "maplibregl-ctrl-icon";
-          button.ariaLabel = "Open research terminal";
-          button.title = "Research terminal";
-          button.innerHTML =
-            `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
-            `<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>` +
-            `</svg>`;
-          applyCtrlIconStyle(button, "16px");
-          button.style.display = "flex";
-          button.style.alignItems = "center";
-          button.style.justifyContent = "center";
-          button.addEventListener("click", onClick);
-
-          container.appendChild(button);
-          return container;
-        },
-        onRemove() {
-          button?.removeEventListener("click", onClick);
-          container?.remove();
-        },
-      };
-    }
-
     const onStyleLoad = () => {
       styleReadyRef.current = true;
     };
@@ -1131,7 +1137,6 @@ export default function MapLibreGlobe({
       layerControlRef.current = layerControl;
       map.addControl(layerControl, "top-left");
       map.addControl(createGraphControl(), "top-left");
-      map.addControl(createChatControl(), "top-left");
     }
 
     const onResize = () => {
@@ -1188,6 +1193,7 @@ export default function MapLibreGlobe({
       markerRef.current?.remove();
       markerRef.current = null;
       layerControlRef.current = null;
+      chatControlInstanceRef.current = null;
       styleReadyRef.current = false;
       applyGlobeBackgroundRef.current = null;
       onTextureDebugInfoChangeRef.current?.(null);
@@ -1195,6 +1201,23 @@ export default function MapLibreGlobe({
       mapRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (chatEnabled) {
+      if (!chatControlInstanceRef.current) {
+        const ctrl = makeChatControl(onChatOpenRef);
+        chatControlInstanceRef.current = ctrl;
+        map.addControl(ctrl, "top-left");
+      }
+    } else {
+      if (chatControlInstanceRef.current) {
+        map.removeControl(chatControlInstanceRef.current);
+        chatControlInstanceRef.current = null;
+      }
+    }
+  }, [chatEnabled]);
 
   useEffect(() => {
     const map = mapRef.current;
