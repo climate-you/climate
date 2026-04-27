@@ -1003,6 +1003,20 @@
     gap: 8px;
   }
 
+  .unitToggle {
+    flex-direction: column;
+  }
+
+  .unitOption {
+    padding: 4px 9px;
+    font-size: 12px;
+  }
+
+  .unitOption + .unitOption {
+    border-left: none;
+    border-top: 1px solid var(--surface-border);
+  }
+
   .panelScrollNav {
     display: flex;
     flex-direction: row;
