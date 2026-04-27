@@ -186,20 +186,23 @@ type PagedGraphItem = {
   data: ChartRow[];
 };
 
-const GLOBE_BACKGROUNDS = [
-  "/bg1.webp",
-  "/bg2.webp",
-  "/bg3.webp",
-  "/bg4.webp",
-  "/bg5.webp",
+type GlobeBackground = { src: string; accentColor: string };
+
+const GLOBE_BACKGROUNDS: GlobeBackground[] = [
+  { src: "/bg1.webp", accentColor: "#ff0000" },
+  { src: "/bg2.webp", accentColor: "#0000ff" },
+  { src: "/bg3.webp", accentColor: "#0000ff" },
+  { src: "/bg4.webp", accentColor: "#0000ff" },
+  { src: "/bg5.webp", accentColor: "#ff0000" },
 ];
-function pickGlobeBackground(): string {
-  const base =
+
+function pickGlobeBackground(): GlobeBackground {
+  const entry =
     GLOBE_BACKGROUNDS[Math.floor(Math.random() * GLOBE_BACKGROUNDS.length)];
   if (isMobileViewport()) {
-    return base.replace(".webp", "_mobile.webp");
+    return { ...entry, src: entry.src.replace(".webp", "_mobile.webp") };
   }
-  return base;
+  return entry;
 }
 
 type ExplorerPageProps = {
@@ -274,10 +277,15 @@ export default function ExplorerPage({
   const [introActive, setIntroActive] = useState(coldOpen);
   const [introShowMap, setIntroShowMap] = useState(!coldOpen);
   const [coldOpenAutoRotate, setColdOpenAutoRotate] = useState(false);
-  const [globeBackground, setGlobeBackground] = useState(pickGlobeBackground);
+  const [globeBackground, setGlobeBackground] = useState<GlobeBackground>(
+    GLOBE_BACKGROUNDS[0],
+  );
+  useEffect(() => {
+    setGlobeBackground(pickGlobeBackground());
+  }, []);
   useEffect(() => {
     const img = new Image();
-    img.src = globeBackground;
+    img.src = globeBackground.src;
   }, [globeBackground]);
   const { aboutOpen, sourcesOpen, setOverlayOpenWithUrl } = useOverlayRouteSync(
     {
@@ -1186,7 +1194,7 @@ export default function ExplorerPage({
           chatLocations={chatLocations}
           chatFlyToBbox={chatFlyToBbox}
           onPickChatMarker={(la, lo) => void handlePick(la, lo, true)}
-          backgroundImageUrl={globeBackground}
+          backgroundImageUrl={globeBackground.src}
           onGraphOpen={() => {
             if (panelOpen && panelTab === "graph") {
               setPanelOpen(false);
@@ -1286,6 +1294,7 @@ export default function ExplorerPage({
         onVisibleChange={setIntroActive}
         onShowMapChange={setIntroShowMap}
         onAutoRotateChange={setColdOpenAutoRotate}
+        accentColor={globeBackground.accentColor}
       />
 
       <SearchOverlay
