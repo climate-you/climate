@@ -625,6 +625,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  -webkit-tap-highlight-color: transparent;
   transition:
     background-color 140ms ease,
     border-color 140ms ease,
@@ -843,6 +844,7 @@
   align-items: center;
   justify-content: center;
   opacity: 1;
+  -webkit-tap-highlight-color: transparent;
   transition: opacity 140ms ease;
 }
 
