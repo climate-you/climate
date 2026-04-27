@@ -236,6 +236,16 @@ const GRAPH_TITLES: Record<string, string> = {
   dhw_risk_days: "Coral reef DHW risk days",
 };
 
+const GRAPH_INFO_TEXT: Record<string, string> = {
+  t2m_annual: "Annual air temperature is derived from daily air temperature at 2 meters above the surface, aggregated into monthly and yearly averages for 1979-2025. We show a zoomed-in version of the daily and monthly temperatures over 5 years (2021-2025) that reflects seasonal changes. Source: CDS.",
+  t2m_hot_days: "Number of hot days per year are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979, for 1979-2025. Source: CDS.",
+  sst_annual: "Annual sea surface temperature is derived from daily sea surface temperature, aggregated into yearly averages for 1982-2025. Source: ERDDAP.",
+  sst_hot_days: "Number of sea surface hot days per year are counted as days where the sea surface temperature is warmer than the top 10% warmest days in a 10-year baseline starting in 1982, for 1982-2025. Source: ERDDAP.",
+  tp_annual: "Annual total precipitation is derived from daily ERA5 total precipitation, summed into yearly totals for 1979-2025. Source: CDS.",
+  tp_cdd: "Maximum number of consecutive dry days (daily precipitation < 1 mm) per year for 1979-2025. Source: CDS.",
+  dhw_risk_days: "This graph shows the number of days per year that coral reefs experienced each DHW (Degree Heating Weeks) heat-stress level for 1985-2025: no risk (DHW < 4), moderate risk (4 ≤ DHW < 8), and severe risk (DHW ≥ 8). DHW measures accumulated ocean heat stress over the previous 12 weeks; more days in higher DHW categories indicate greater bleaching risk. Source: ERDDAP.",
+};
+
 type PanelStepIconProps = {
   panelId: string;
   active: boolean;
@@ -584,6 +594,7 @@ export default function ExplorerPage({
             id: graphId,
             title: GRAPH_TITLES[graphId] ?? graphId,
             series_keys: [],
+            ui: { info_text: GRAPH_INFO_TEXT[graphId] ?? null },
           },
           data: [],
           available: resp === null,
@@ -1562,6 +1573,11 @@ export default function ExplorerPage({
                     stepIndex={graphStepById[entry.graph.id] ?? 0}
                     onStepIndexChange={handleGraphStepChange}
                     available={entry.available}
+                    onSelectLayer={
+                      entry.graph.id === "dhw_risk_days"
+                        ? () => setActiveLayerId("reef_stress")
+                        : undefined
+                    }
                   />
                 ) : null,
               )}

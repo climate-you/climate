@@ -50,6 +50,7 @@ type GraphCardProps = {
   stepIndex: number;
   onStepIndexChange: (graphId: string, nextStepIndex: number) => void;
   available?: boolean;
+  onSelectLayer?: () => void;
 };
 
 export function EChartCanvas({
@@ -102,6 +103,7 @@ export default function GraphCard({
   stepIndex,
   onStepIndexChange,
   available = true,
+  onSelectLayer,
 }: GraphCardProps) {
   const chartHostRef = useRef<HTMLDivElement | null>(null);
   const [chartHeight, setChartHeight] = useState(260);
@@ -258,6 +260,11 @@ export default function GraphCard({
   ]);
 
   if (!available) {
+    const isSeaGraph = graph.id.startsWith("sst_");
+    const isCoralGraph = graph.id === "dhw_risk_days";
+    const unavailableText = isSeaGraph
+      ? "Sea surface temperature data is only available for coastal and ocean locations."
+      : "Not available for this location.";
     return (
       <div className={`${styles.graphCard} ${styles.graphCardUnavailable}`}>
         {showTitle ? (
@@ -265,9 +272,29 @@ export default function GraphCard({
             <h3 className={styles.graphTitle}>{graph.title}</h3>
           </div>
         ) : null}
-        <p className={styles.graphUnavailableText}>
-          Not available for this location.
-        </p>
+        {graphInfoText ? (
+          <p className={styles.graphUnavailableText}>{graphInfoText}</p>
+        ) : null}
+        {isCoralGraph ? (
+          <p className={styles.graphUnavailableText}>
+            Coral reef data is only available for tropical coastal and ocean
+            locations. Available locations are visible on the{" "}
+            {onSelectLayer ? (
+              <button
+                type="button"
+                className={styles.graphUnavailableLink}
+                onClick={onSelectLayer}
+              >
+                Coral heat stress trend
+              </button>
+            ) : (
+              "Coral heat stress trend"
+            )}{" "}
+            layer.
+          </p>
+        ) : (
+          <p className={styles.graphUnavailableText}>{unavailableText}</p>
+        )}
       </div>
     );
   }
