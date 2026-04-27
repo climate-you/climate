@@ -428,6 +428,7 @@ export default function MapLibreGlobe({
   const maxTextureSizeRef = useRef<number | null>(null);
   const textureBackdropRef = useRef<string>(BACKDROP_WHITE);
   const styleReadyRef = useRef(false);
+  const homeFlyingRef = useRef(false);
   const [prefersDarkMode, setPrefersDarkMode] = useState(false);
 
   const textureBackdrop =
@@ -822,6 +823,7 @@ export default function MapLibreGlobe({
         onHomeRef.current();
         const nextBaseZoom = responsiveBaseZoom();
         mapInstance?.setMinZoom(nextBaseZoom);
+        homeFlyingRef.current = true;
         mapInstance?.flyTo({
           center: initialView.center,
           zoom: nextBaseZoom,
@@ -1189,10 +1191,13 @@ export default function MapLibreGlobe({
       });
     };
     map.on("click", onMapClick);
+    const onMoveEnd = () => { homeFlyingRef.current = false; };
+    map.on("moveend", onMoveEnd);
 
     return () => {
       window.removeEventListener("resize", onResize);
       map.off("click", onMapClick);
+      map.off("moveend", onMoveEnd);
       markerRef.current?.remove();
       markerRef.current = null;
       layerControlRef.current = null;
@@ -1518,8 +1523,8 @@ export default function MapLibreGlobe({
     const applyPadding = () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
-        // Skip if the map is already animating (e.g. home button flyTo is in progress)
-        if (!panelOpen && map.isMoving()) return;
+        // Skip if the home button flyTo is in progress
+        if (!panelOpen && homeFlyingRef.current) return;
         if (panelOpen) {
           // Always reset to world view with panel padding so the globe visually
           // moves even when coming from a location panel with the same padding.
