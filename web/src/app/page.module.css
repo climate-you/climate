@@ -647,6 +647,16 @@
   stroke-linejoin: round;
 }
 
+.panelStepIconImg {
+  width: 13px;
+  height: 13px;
+  object-fit: contain;
+}
+
+.panelStepIconImgActive {
+  filter: invert(1);
+}
+
 .panelTopRow {
   position: relative;
   z-index: 2;

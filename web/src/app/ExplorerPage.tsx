@@ -255,7 +255,23 @@ function PanelStepIcon({ panelId, active, label, onClick }: PanelStepIconProps) 
       </>
     );
   } else if (panelId === "coral_reef_dhw") {
-    icon = <path d="M12 21v-7M12 14l-3-5M12 14l3-5M9 9l-1-3M15 9l1-3" />;
+    return (
+      <button
+        type="button"
+        role="tab"
+        aria-label={label}
+        aria-selected={active}
+        onClick={onClick}
+        className={`${styles.panelStepIcon} ${active ? styles.panelStepIconActive : ""}`}
+      >
+        <img
+          src="/coral_icon.png"
+          alt=""
+          aria-hidden="true"
+          className={`${styles.panelStepIconImg} ${active ? styles.panelStepIconImgActive : ""}`}
+        />
+      </button>
+    );
   } else {
     icon = <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />;
   }
