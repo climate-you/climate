@@ -107,6 +107,17 @@ export default function AboutOverlay({
             </a>
             .
           </p>
+          <p className={styles.aboutText}>
+            Background art by{" "}
+            <a
+              href="https://www.instagram.com/about_dunja_jankovic/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Dunja Janković
+            </a>
+            .
+          </p>
           <h3 className={styles.aboutSectionTitle}>Authors</h3>
           <p className={`${styles.aboutText} ${styles.aboutParagraph}`}>
             <b>Benoit Leveau</b> and <b>Fanny Chaleon</b>, two software
