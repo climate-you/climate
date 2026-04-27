@@ -771,6 +771,14 @@
     border-color: #ffffff;
     color: #000000;
   }
+
+  .panelStepIconImg {
+    filter: invert(1);
+  }
+
+  .panelStepIconImgActive {
+    filter: none;
+  }
 }
 
 .graphCard {
