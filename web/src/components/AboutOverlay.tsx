@@ -77,7 +77,7 @@ export default function AboutOverlay({
             simple question: how do these changes translate at the local level?
           </p>
           <p className={`${styles.aboutText} ${styles.aboutParagraph}`}>
-            We focus only on temperature change, over land and sea, to show how
+            We display the temperature change and precipitations, over land and sea, to show how
             warming is already affecting people everywhere. It is now
             unequivocally established that this warming is caused by{" "}
             <b>human activities</b>. The numbers we have seen while working on
