@@ -205,6 +205,45 @@ function pickGlobeBackground(): GlobeBackground {
   return entry;
 }
 
+type PanelStepIconProps = {
+  panelId: string;
+  active: boolean;
+  label: string;
+  onClick: () => void;
+};
+
+function PanelStepIcon({ panelId, active, label, onClick }: PanelStepIconProps) {
+  let icon: React.ReactNode;
+  if (panelId === "precipitation") {
+    icon = <path d="M12 2C8.5 7.5 5 12 5 15.5a7 7 0 0 0 14 0C19 12 15.5 7.5 12 2z" />;
+  } else if (panelId === "sea_temperature") {
+    icon = (
+      <>
+        <path d="M2 10c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />
+        <path d="M2 16c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />
+      </>
+    );
+  } else if (panelId === "coral_reef_dhw") {
+    icon = <path d="M12 21v-7M12 14l-3-5M12 14l3-5M9 9l-1-3M15 9l1-3" />;
+  } else {
+    icon = <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />;
+  }
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-label={label}
+      aria-selected={active}
+      onClick={onClick}
+      className={`${styles.panelStepIcon} ${active ? styles.panelStepIconActive : ""}`}
+    >
+      <svg className={styles.panelStepIconSvg} viewBox="0 0 24 24" aria-hidden="true">
+        {icon}
+      </svg>
+    </button>
+  );
+}
+
 type ExplorerPageProps = {
   coldOpen?: boolean;
   initialOverlay?: "about" | "sources" | null;
@@ -1356,25 +1395,26 @@ export default function ExplorerPage({
             role="tablist"
             aria-label="Graph steps"
           >
-            {Array.from({ length: stepCount }, (_, idx) => (
-              <button
-                key={`step-dot-${idx}`}
-                type="button"
-                role="tab"
-                aria-label={`Go to step ${idx + 1} of ${stepCount}`}
-                aria-selected={idx === graphPage}
-                onClick={() => {
-                  const changed = goToGraphPage(idx);
-                  if (!changed) return;
-                  wheelAccumRef.current = 0;
-                  wheelGestureConsumedRef.current = false;
-                  wheelGestureConsumedAtRef.current = 0;
-                }}
-                className={`${styles.panelStepDot} ${
-                  idx === graphPage ? styles.panelStepDotActive : ""
-                }`}
-              />
-            ))}
+            {Array.from({ length: stepCount }, (_, idx) => {
+              const handleStepClick = () => {
+                const changed = goToGraphPage(idx);
+                if (!changed) return;
+                wheelAccumRef.current = 0;
+                wheelGestureConsumedRef.current = false;
+                wheelGestureConsumedAtRef.current = 0;
+              };
+              const panelId =
+                pagedGraphs[idx * graphsPerPage]?.panelId ?? "";
+              return (
+                <PanelStepIcon
+                  key={`step-icon-${idx}`}
+                  panelId={panelId}
+                  active={idx === graphPage}
+                  label={`Go to step ${idx + 1} of ${stepCount}`}
+                  onClick={handleStepClick}
+                />
+              );
+            })}
           </div>
         ) : null}
 

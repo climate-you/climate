@@ -613,6 +613,40 @@
   border-color: var(--text-primary);
 }
 
+.panelStepIcon {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1.5px solid currentColor;
+  background: #ffffff;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.panelStepIconActive {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+  color: var(--surface);
+}
+
+.panelStepIconSvg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .panelTopRow {
   position: relative;
   z-index: 2;
@@ -716,6 +750,16 @@
   .searchMetaLink:focus-visible {
     background: #343434;
     border-color: rgba(255, 255, 255, 0.28);
+  }
+
+  .panelStepIcon {
+    background: transparent;
+  }
+
+  .panelStepIconActive {
+    background: #ffffff;
+    border-color: #ffffff;
+    color: #000000;
   }
 }
 
