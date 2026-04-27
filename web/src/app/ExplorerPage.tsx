@@ -184,6 +184,7 @@ type PagedGraphItem = {
   panelId: string;
   graph: GraphPayload;
   data: ChartRow[];
+  available: boolean;
 };
 
 type GlobeBackground = { src: string; accentColor: string };
@@ -204,6 +205,36 @@ function pickGlobeBackground(): GlobeBackground {
   }
   return entry;
 }
+
+const FIXED_GRAPH_ORDER = [
+  "t2m_annual",
+  "t2m_hot_days",
+  "sst_annual",
+  "sst_hot_days",
+  "tp_annual",
+  "tp_cdd",
+  "dhw_risk_days",
+] as const;
+
+const GRAPH_PANEL_ID: Record<string, string> = {
+  t2m_annual: "air_temperature",
+  t2m_hot_days: "air_temperature",
+  sst_annual: "sea_temperature",
+  sst_hot_days: "sea_temperature",
+  tp_annual: "precipitation",
+  tp_cdd: "precipitation",
+  dhw_risk_days: "coral_reef_dhw",
+};
+
+const GRAPH_TITLES: Record<string, string> = {
+  t2m_annual: "Annual air temperature",
+  t2m_hot_days: "Number of hot days",
+  sst_annual: "Annual sea surface temperature",
+  sst_hot_days: "Number of sea surface hot days",
+  tp_annual: "Annual total precipitation",
+  tp_cdd: "Consecutive dry days",
+  dhw_risk_days: "Coral reef DHW risk days",
+};
 
 type PanelStepIconProps = {
   panelId: string;
@@ -304,7 +335,7 @@ export default function ExplorerPage({
     panelViewportRef.current = el;
     setPanelViewportEl(el);
   }, []);
-  const pendingGraphRestoreIdsRef = useRef<string[] | null>(null);
+  const prevActiveLayerIdRef = useRef<string>("");
   const lastGraphViewFingerprintRef = useRef<string | null>(null);
   const lastTrackedLayerIdRef = useRef<string | null>(null);
   const [graphsPerPage, setGraphsPerPage] = useState(2);
@@ -517,32 +548,33 @@ export default function ExplorerPage({
     }));
   }, [resp]);
 
-  const basePagedGraphs = useMemo<PagedGraphItem[]>(
-    () =>
-      panelData.flatMap(({ panel, graphs }) =>
-        graphs.map(({ graph, data }) => ({ panelId: panel.id, graph, data })),
-      ),
-    [panelData],
-  );
   const pagedGraphs = useMemo<PagedGraphItem[]>(() => {
-    const orderedIds = activeLayerOverride?.default_graph_ids ?? [];
-    if (!orderedIds.length) return basePagedGraphs;
-    const picked = new Set<string>();
-    const out: PagedGraphItem[] = [];
-    orderedIds.forEach((graphId) => {
-      const match = basePagedGraphs.find(
-        (entry) => entry.graph.id === graphId && !picked.has(entry.graph.id),
+    const graphLookup = new Map<string, PagedGraphItem>();
+    panelData.forEach(({ panel, graphs }) => {
+      graphs.forEach(({ graph, data }) => {
+        graphLookup.set(graph.id, {
+          panelId: panel.id,
+          graph,
+          data,
+          available: true,
+        });
+      });
+    });
+    return FIXED_GRAPH_ORDER.map((graphId) => {
+      return (
+        graphLookup.get(graphId) ?? {
+          panelId: GRAPH_PANEL_ID[graphId] ?? "",
+          graph: {
+            id: graphId,
+            title: GRAPH_TITLES[graphId] ?? graphId,
+            series_keys: [],
+          },
+          data: [],
+          available: resp === null,
+        }
       );
-      if (!match) return;
-      out.push(match);
-      picked.add(match.graph.id);
     });
-    basePagedGraphs.forEach((entry) => {
-      if (picked.has(entry.graph.id)) return;
-      out.push(entry);
-    });
-    return out;
-  }, [activeLayerOverride?.default_graph_ids, basePagedGraphs]);
+  }, [panelData, resp]);
   const maxGraphPage = Math.max(
     0,
     Math.ceil(pagedGraphs.length / graphsPerPage) - 1,
@@ -558,17 +590,6 @@ export default function ExplorerPage({
       ),
     [graphsPerPage, visibleGraphs],
   );
-  const queueGraphRestoreFromVisible = useCallback(() => {
-    if (!panelOpen) {
-      pendingGraphRestoreIdsRef.current = null;
-      return;
-    }
-    const visibleIds = visibleGraphs
-      .map((entry) => entry?.graph.id)
-      .filter((id): id is string => typeof id === "string" && id.length > 0);
-    pendingGraphRestoreIdsRef.current =
-      visibleIds.length > 0 ? visibleIds : null;
-  }, [panelOpen, visibleGraphs]);
 
   const trackGoatEvent = useCallback((path: string, title: string) => {
     if (typeof window === "undefined") return;
@@ -647,9 +668,19 @@ export default function ExplorerPage({
   }, [graphsPerPage]);
 
   useEffect(() => {
-    if (pendingGraphRestoreIdsRef.current) return;
-    setGraphPage(0);
-  }, [activeLayerId]);
+    const prevLayerId = prevActiveLayerIdRef.current;
+    prevActiveLayerIdRef.current = activeLayerId;
+    if (prevLayerId === activeLayerId) return;
+    if (!activeLayerId || activeLayerId === "none") {
+      setGraphPage(0);
+      return;
+    }
+    const firstGraphId = activeLayerOverride?.default_graph_ids?.[0];
+    if (!firstGraphId) return;
+    const graphIndex = (FIXED_GRAPH_ORDER as readonly string[]).indexOf(firstGraphId);
+    if (graphIndex < 0) return;
+    setGraphPage(Math.floor(graphIndex / Math.max(1, graphsPerPage)));
+  }, [activeLayerId, activeLayerOverride, graphsPerPage]);
 
   const goGraphPage = useCallback(
     (direction: 1 | -1): boolean => {
@@ -744,7 +775,6 @@ export default function ExplorerPage({
       setPanelLoadError(null);
       return data;
     } catch {
-      pendingGraphRestoreIdsRef.current = null;
       setResp(null);
       setSelectedLocation((prev) =>
         prev ? { ...prev, population: null } : prev,
@@ -757,7 +787,6 @@ export default function ExplorerPage({
   }
 
   async function loadGlobalPanel(nextUnit = unit) {
-    queueGraphRestoreFromVisible();
     setChatLocations(null);
     setChatFlyToBbox(null);
     setPicked(null);
@@ -804,7 +833,6 @@ export default function ExplorerPage({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lat: item.lat, lon: item.lon }),
     }).catch(() => {});
-    queueGraphRestoreFromVisible();
     setLat(item.lat);
     setLon(item.lon);
     setPicked({ lat: item.lat, lon: item.lon });
@@ -832,7 +860,6 @@ export default function ExplorerPage({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lat: la, lon: lo }),
     }).catch(() => {});
-    queueGraphRestoreFromVisible();
     setLat(la);
     setLon(lo);
     setPicked({ lat: la, lon: lo });
@@ -933,7 +960,6 @@ export default function ExplorerPage({
 
   useEffect(() => {
     if (panelOpen) return;
-    pendingGraphRestoreIdsRef.current = null;
     setGraphPage(0);
     setPanelDragOffsetPx(0);
     setPanelDragActive(false);
@@ -962,27 +988,6 @@ export default function ExplorerPage({
     });
   }, [resp?.location.place]);
 
-  useEffect(() => {
-    const pendingIds = pendingGraphRestoreIdsRef.current;
-    if (!pendingIds) return;
-    const indexByGraphId = new Map<string, number>();
-    pagedGraphs.forEach((entry, index) => {
-      indexByGraphId.set(entry.graph.id, index);
-    });
-    const matchedIndexes = pendingIds
-      .map((id) => indexByGraphId.get(id))
-      .filter((index): index is number => index !== undefined);
-    const nextPage =
-      matchedIndexes.length > 0
-        ? Math.floor(matchedIndexes[0] / Math.max(1, graphsPerPage))
-        : 0;
-    setGraphPage(Math.max(0, Math.min(maxGraphPage, nextPage)));
-    pendingGraphRestoreIdsRef.current = null;
-    wheelAccumRef.current = 0;
-    wheelLastEventTsRef.current = 0;
-    wheelGestureConsumedRef.current = false;
-    wheelGestureConsumedAtRef.current = 0;
-  }, [graphsPerPage, maxGraphPage, pagedGraphs]);
 
   useEffect(
     () => () => {
@@ -1285,7 +1290,6 @@ export default function ExplorerPage({
                   if (selectedLocation?.geonameid === 0) {
                     void loadGlobalPanel(nextUnit);
                   } else {
-                    queueGraphRestoreFromVisible();
                     void loadPanel(lat, lon, nextUnit);
                   }
                 }}
@@ -1507,7 +1511,6 @@ export default function ExplorerPage({
                     className={styles.panelRetryButton}
                     onClick={async () => {
                       if (panelRetrying) return;
-                      queueGraphRestoreFromVisible();
                       setPanelRetrying(true);
                       await loadPanel(
                         lat,
@@ -1542,6 +1545,7 @@ export default function ExplorerPage({
                     unit={unit}
                     stepIndex={graphStepById[entry.graph.id] ?? 0}
                     onStepIndexChange={handleGraphStepChange}
+                    available={entry.available}
                   />
                 ) : null,
               )}
@@ -1644,7 +1648,6 @@ export default function ExplorerPage({
                   if (selectedLocation?.geonameid === 0) {
                     void loadGlobalPanel("C");
                   } else {
-                    queueGraphRestoreFromVisible();
                     void loadPanel(lat, lon, "C");
                   }
                 }}
@@ -1663,7 +1666,6 @@ export default function ExplorerPage({
                   if (selectedLocation?.geonameid === 0) {
                     void loadGlobalPanel("F");
                   } else {
-                    queueGraphRestoreFromVisible();
                     void loadPanel(lat, lon, "F");
                   }
                 }}

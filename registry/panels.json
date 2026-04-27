@@ -2,15 +2,7 @@
   "version": "0.1",
   "layer_overrides": {
     "warming_air": {
-      "default_graph_ids": [
-        "t2m_annual",
-        "t2m_hot_days",
-        "tp_annual",
-        "tp_cdd",
-        "sst_annual",
-        "sst_hot_days",
-        "dhw_risk_days"
-      ],
+      "default_graph_ids": ["t2m_annual"],
       "title_mode": "recent_trend",
       "title_metric_key": "t2m_recent_local",
       "title_suffix": "since 1979.",
@@ -18,15 +10,7 @@
       "title_action_text_non_positive": "the air has not warmed"
     },
     "warming_vs_preindustrial_air": {
-      "default_graph_ids": [
-        "t2m_annual",
-        "t2m_hot_days",
-        "tp_annual",
-        "tp_cdd",
-        "sst_annual",
-        "sst_hot_days",
-        "dhw_risk_days"
-      ],
+      "default_graph_ids": ["t2m_annual"],
       "title_mode": "preindustrial",
       "title_metric_key": "t2m_vs_preindustrial_local",
       "title_suffix": "since 1850-1900.",
@@ -34,15 +18,7 @@
       "title_action_text_non_positive": "the air has not warmed"
     },
     "warming_sst": {
-      "default_graph_ids": [
-        "sst_annual",
-        "sst_hot_days",
-        "dhw_risk_days",
-        "t2m_annual",
-        "t2m_hot_days",
-        "tp_annual",
-        "tp_cdd"
-      ],
+      "default_graph_ids": ["sst_annual"],
       "title_mode": "recent_trend",
       "title_metric_key": "sst_recent_local",
       "title_suffix": "since 1982.",
@@ -50,15 +26,7 @@
       "title_action_text_non_positive": "the sea has not warmed"
     },
     "reef_stress": {
-      "default_graph_ids": [
-        "dhw_risk_days",
-        "sst_annual",
-        "sst_hot_days",
-        "t2m_annual",
-        "t2m_hot_days",
-        "tp_annual",
-        "tp_cdd"
-      ],
+      "default_graph_ids": ["dhw_risk_days"],
       "title_mode": "recent_trend",
       "title_metric_key": "sst_recent_local",
       "title_suffix": "since 1982.",
@@ -66,15 +34,7 @@
       "title_action_text_non_positive": "the sea has not warmed"
     },
     "precipitation_trend": {
-      "default_graph_ids": [
-        "tp_annual",
-        "tp_cdd",
-        "t2m_annual",
-        "t2m_hot_days",
-        "sst_annual",
-        "sst_hot_days",
-        "dhw_risk_days"
-      ],
+      "default_graph_ids": ["tp_annual"],
       "title_mode": "recent_trend",
       "title_metric_key": "t2m_recent_local",
       "title_suffix": "since 1979.",

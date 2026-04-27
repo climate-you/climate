@@ -768,6 +768,16 @@
   padding-right: 18px;
 }
 
+.graphCardUnavailable {
+  opacity: 0.35;
+}
+
+.graphUnavailableText {
+  margin-top: 10px;
+  font-size: 13px;
+  font-style: italic;
+}
+
 .panelViewport {
   height: 100%;
   overflow: hidden;

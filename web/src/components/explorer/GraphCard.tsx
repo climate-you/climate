@@ -49,6 +49,7 @@ type GraphCardProps = {
   showTitle?: boolean;
   stepIndex: number;
   onStepIndexChange: (graphId: string, nextStepIndex: number) => void;
+  available?: boolean;
 };
 
 export function EChartCanvas({
@@ -100,6 +101,7 @@ export default function GraphCard({
   showTitle = true,
   stepIndex,
   onStepIndexChange,
+  available = true,
 }: GraphCardProps) {
   const chartHostRef = useRef<HTMLDivElement | null>(null);
   const [chartHeight, setChartHeight] = useState(260);
@@ -254,6 +256,21 @@ export default function GraphCard({
     xMax,
     xMin,
   ]);
+
+  if (!available) {
+    return (
+      <div className={`${styles.graphCard} ${styles.graphCardUnavailable}`}>
+        {showTitle ? (
+          <div className={styles.graphTitleRow}>
+            <h3 className={styles.graphTitle}>{graph.title}</h3>
+          </div>
+        ) : null}
+        <p className={styles.graphUnavailableText}>
+          Not available for this location.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.graphCard}>
