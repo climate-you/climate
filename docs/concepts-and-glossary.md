@@ -61,6 +61,23 @@ A metric is a computed climate variable published to the release artifacts, for 
 
 In this project, metrics are defined in registries and materialized by the packager into tile-based outputs under `data/releases/<release>/series/`.
 
+#### Metric families
+
+Metrics are grouped by variable family:
+
+| Prefix | Variable | Grid | Examples |
+|---|---|---|---|
+| `t2m_*` | 2-meter air temperature | `global_0p25` | `t2m_yearly_mean_c`, `t2m_yearly_trend` |
+| `sst_*` | Sea surface temperature | `global_0p25` | `sst_yearly_mean_c`, `sst_yearly_trend` |
+| `dhw_*` | Degree Heating Weeks (coral stress) | `global_0p05` | `dhw_risk_days_per_year` |
+| `tp_*` | Total precipitation | `global_0p25` | `tp_annual_total_mm`, `tp_cdd_per_year` |
+
+Common threshold indicators computed within each family:
+
+- `t2m_hotdays_per_year` — number of hot days per year (air temperature above threshold)
+- `sst_hotdays_per_year` — number of hot days per year (sea surface temperature above threshold)
+- `tp_cdd_per_year` — maximum consecutive dry days per year (precipitation below 1 mm/day)
+
 #### Derived metrics
 
 A metric can be declared with `"source": {"type": "derived"}` and `"storage": {"tiled": true}` in `registry/metrics.json`. The packager computes these automatically from already-packaged input tiles after the main download loop, without fetching any external data. Supported derivation functions include `trend_slope_per_decade` (OLS warming trend) and `blended_preindustrial_anomaly` (total warming since pre-industrial baseline).
@@ -87,7 +104,10 @@ data/releases/<release>/series/<grid_id>/<metric_id>/aggregates/<aggregation>.js
 
 Each file contains a time series (not a scalar) for every region — country, continent, ocean, or globe. Weights are derived by sub-cell counting against the 0.05° country and ocean masks, giving fractional coverage per 0.25° metric cell. Country means are area-weighted by `cos(lat)`; min/max are unweighted cell extremes.
 
-These files are loaded into memory at API startup and used by the `get_region_metric_series` chat tool to answer regional questions like "How is temperature changing in France?" or "What is the mean temperature across the Indian Ocean?" in a single lookup.
+These files are loaded into memory at API startup and serve two purposes:
+
+1. **Global view graphs** — the web application's "Global" panel reads the globe-scoped aggregate to render metric time series for the whole world without scanning individual tiles.
+2. **Chat tool** — when the chat assistant is enabled, the `get_region_metric_series` tool uses these files to answer regional questions like "How is temperature changing in France?" or "What is the mean temperature across the Indian Ocean?" in a single lookup.
 
 ### Maps and Layers
 
@@ -132,6 +152,7 @@ A v2 release manifest declares which artifact version to use for each metric and
 
 ## Acronyms
 
+- `CDD`: Consecutive Dry Days — the longest unbroken run of days with less than 1 mm of rainfall in a given year.
 - `CDS`: Climate Data Store (Copernicus) used to access datasets such as ERA5.  
   Link: <https://cds.climate.copernicus.eu/>
 - `DHW`: Degree Heating Weeks, a coral heat-stress indicator used in reef workflows.  
@@ -145,6 +166,7 @@ A v2 release manifest declares which artifact version to use for each metric and
 - `NHD`: Number of Hot Days (metric acronym used in this project context).
 - `SST`: Sea Surface Temperature.
 - `t2m`: 2-meter air temperature (near-surface air temperature variable name).
+- `tp`: Total Precipitation (ERA5 variable name). Stored in metres per day by ERA5, converted to mm/day in this project.
 
 ## Related Docs
 

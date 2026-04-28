@@ -107,13 +107,18 @@ To see the dev model toggle in the chat UI, append `&debug=on` to the URL.
 
 ## 5. Activating the Feature for Users
 
-The chat widget is hidden behind a localStorage feature flag. Users activate it by visiting the site with `?feature=chat_bot` in the URL:
+Two conditions must both be true for chat to work:
+
+1. **Backend**: `CHAT_ENABLED=1` must be set in the backend environment (default is `0`).
+2. **Browser**: the user must opt in via a localStorage feature flag.
+
+The chat widget is hidden by default. Users activate it by visiting the site with `?feature=chat_bot` in the URL:
 
 ```
 https://your-domain.com?feature=chat_bot
 ```
 
-The flag is written to `localStorage` and the param is stripped from the URL. The widget stays active until `localStorage` is cleared.
+The flag is written to `localStorage` and the param is stripped from the URL. The widget stays active until `localStorage` is cleared. If the browser flag is set but the backend has `CHAT_ENABLED=0`, the chat UI will show an error message rather than a response.
 
 To deactivate for a specific user, they can clear their browser's localStorage for the site.
 
