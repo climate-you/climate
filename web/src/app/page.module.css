@@ -801,6 +801,12 @@
   opacity: 0.5;
 }
 
+@media (min-width: 901px) {
+  .graphCardUnavailable {
+    max-width: 95%;
+  }
+}
+
 .graphUnavailableText {
   margin-top: 10px;
   font-size: 13px;
