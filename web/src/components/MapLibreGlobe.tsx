@@ -1026,8 +1026,11 @@ export default function MapLibreGlobe({
           button.className = "maplibregl-ctrl-icon";
           button.ariaLabel = "Select map layer";
           button.title = "Layers";
-          button.textContent = "◫";
+          button.innerHTML = `<img src="/icons/layers_icon.png" width="24" height="24" aria-hidden="true" style="display:block;" />`;
           applyCtrlIconStyle(button, "24px");
+          button.style.display = "flex";
+          button.style.alignItems = "center";
+          button.style.justifyContent = "center";
           button.addEventListener("pointerenter", onButtonPointerEnter);
           button.addEventListener("click", onButtonClick);
 
@@ -1099,13 +1102,8 @@ export default function MapLibreGlobe({
           button.ariaLabel = "Open climate graphs";
           button.title = "Graphs";
           button.innerHTML =
-            `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
-            `<line x1="18" y1="20" x2="18" y2="10"/>` +
-            `<line x1="12" y1="20" x2="12" y2="4"/>` +
-            `<line x1="6" y1="20" x2="6" y2="14"/>` +
-            `<line x1="2" y1="20" x2="22" y2="20"/>` +
-            `</svg>`;
-          applyCtrlIconStyle(button, "16px");
+            `<img src="/icons/graph_icon.png" width="24" height="24" aria-hidden="true" style="display:block;" />`;
+          applyCtrlIconStyle(button, "24px");
           button.style.display = "flex";
           button.style.alignItems = "center";
           button.style.justifyContent = "center";

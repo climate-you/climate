@@ -272,6 +272,16 @@
     color: var(--map-ui-dark-text) !important;
   }
 
+  .map
+    :global(
+      .maplibregl-ctrl-top-left
+        .maplibregl-ctrl-group
+        > button.maplibregl-ctrl-icon
+        img
+    ) {
+    filter: var(--map-ui-dark-icon-filter);
+  }
+
   .globeLegend {
     background: var(--map-ui-dark-control-bg);
     border: 0;
