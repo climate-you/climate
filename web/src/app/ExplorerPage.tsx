@@ -54,6 +54,33 @@ import { isMobileViewport } from "@/lib/explorer/chartOptions";
 import { defaultTemperatureUnitForLocale } from "@/lib/temperatureUnit";
 import styles from "./page.module.css";
 
+const CORAL_REEF_CENTERS: [number, number][] = [
+  [-18, 147], // Great Barrier Reef
+  [0, 122], // Coral Triangle (SE Asia)
+  [20, 38], // Red Sea
+  [4, 73], // Maldives / Indian Ocean
+  [15, -70], // Caribbean
+  [21, -157], // Hawaii
+  [-17, 178], // Pacific (Fiji)
+  [25, -81], // Florida Keys
+];
+
+function nearestCoralBbox(lat: number, lon: number): [number, number, number, number] {
+  let best = CORAL_REEF_CENTERS[0];
+  let bestDist = Infinity;
+  for (const center of CORAL_REEF_CENTERS) {
+    const dLat = center[0] - lat;
+    const dLon = ((center[1] - lon + 540) % 360) - 180;
+    const dist = dLat * dLat + dLon * dLon;
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = center;
+    }
+  }
+  const [cLat, cLon] = best;
+  return [cLon - 20, cLat - 12, cLon + 20, cLat + 12];
+}
+
 type TimeDuration = {
   value: number;
   unit: "points" | "days" | "months" | "years";
@@ -1575,7 +1602,14 @@ export default function ExplorerPage({
                     available={entry.available}
                     onSelectLayer={
                       entry.graph.id === "dhw_risk_days"
-                        ? () => setActiveLayerId("reef_stress")
+                        ? () => {
+                            setActiveLayerId("reef_stress");
+                            const bbox = nearestCoralBbox(
+                              picked?.lat ?? 0,
+                              picked?.lon ?? 0,
+                            );
+                            setChatFlyToBbox(bbox);
+                          }
                         : undefined
                     }
                   />
