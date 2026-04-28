@@ -40,7 +40,7 @@
   "precipitation_trend": {
     "id": "precipitation_trend",
     "label": "Annual precipitation trend",
-    "description": "Trend in annual total precipitation (mm/year) from 1979 to 2025; blue = wetter, yellow = drier.",
+    "description": "Trend in annual total precipitation (mm/year) from 1979 to 2025; blue = wetter, yellow = drier. Note: ERA5 precipitation trends may be inflated by changes in the satellite observing system over time.",
     "map_id": "tp_annual_trend_mercator_texture",
     "opacity": 0.72,
     "resampling": "nearest"

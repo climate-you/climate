@@ -296,7 +296,7 @@
           "id": "tp_annual",
           "title": "Annual total precipitation",
           "ui": {
-            "info_text": "Annual total precipitation is derived from daily ERA5 total precipitation, summed into yearly totals for 1979-2025. Source: CDS.",
+            "info_text": "Annual total precipitation is derived from daily ERA5 total precipitation, summed into yearly totals for 1979-2025. Source: CDS. Note: ERA5 precipitation trends may be inflated by changes in the satellite observing system over time.",
             "chart_mode": "temperature_line",
             "axis_title_mode": "year"
           },
@@ -343,7 +343,7 @@
           "id": "tp_cdd",
           "title": "Consecutive dry days",
           "ui": {
-            "info_text": "Maximum number of consecutive dry days (daily precipitation < 1 mm) per year for 1979-2025. Source: CDS.",
+            "info_text": "Maximum number of consecutive dry days (daily precipitation < 1 mm) per year for 1979-2025. Source: CDS. Note: ERA5 precipitation trends may be inflated by changes in the satellite observing system over time.",
             "chart_mode": "hot_days_combo",
             "axis_title_mode": "year"
           },
