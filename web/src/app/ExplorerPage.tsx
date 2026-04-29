@@ -1279,8 +1279,21 @@ export default function ExplorerPage({
   const locationLabel =
     selectedLocation?.label ?? resp?.location.place.label ?? "";
   const titleLocationLabel = locationLabel || "this location";
-  const panelTitleInfoText =
-    "Headline values are derived from local climate trend data. See the chart below for the full time series.";
+  const panelTitleInfoText = (() => {
+    if (panelHeadline?.type === "air_temp") {
+      return "The warming since the pre-industrial era (1850–1900) is estimated by combining two sources: the local ERA5 warming since the 1979–2000 reference period, plus a pre-1979 offset derived from a 5-model CMIP mean that estimates how much warming occurred between 1850–1900 and 1979–2000 before the ERA5 record begins.";
+    }
+    if (panelHeadline?.type === "coral_factor" || panelHeadline?.type === "coral_absolute") {
+      return "The number of severe heat stress days is estimated from a linear trend (OLS) fitted to annual data since 1985. The multiplication factor compares the trend at the current year to the trend at 1985, making it robust to year-to-year variability.";
+    }
+    if (panelHeadline?.type === "coral_stable" || panelHeadline?.type === "coral_no_days") {
+      return "Stability is assessed from a linear trend (OLS) fitted to moderate heat stress days (4 ≤ DHW < 8) since 1985. OLS smooths out episodic bleaching spikes to capture the long-term direction.";
+    }
+    if (panelHeadline?.type === "coral_moderate_absolute") {
+      return "The number of moderate heat stress days is the average of the last 5 years of observed data (4 ≤ DHW < 8). A recent mean is used here because the linear trend is unreliable for episodic bleaching patterns where most warming occurs in spike years.";
+    }
+    return "Headline values are derived from local climate trend data. See the chart below for the full time series.";
+  })();
   const populationText = formatPopulation(selectedLocation?.population);
   const debugBbox = resp?.location?.panel_valid_bbox ?? null;
   const debugInBbox = inBbox(lat, lon, debugBbox);
