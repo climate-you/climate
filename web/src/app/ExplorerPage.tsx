@@ -1394,7 +1394,7 @@ export default function ExplorerPage({
                   setUnit(nextUnit);
                   if (selectedLocation?.geonameid === 0) {
                     void loadGlobalPanel(nextUnit);
-                  } else {
+                  } else if (selectedLocation !== null) {
                     void loadPanel(lat, lon, nextUnit);
                   }
                 }}
