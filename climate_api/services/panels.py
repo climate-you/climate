@@ -657,15 +657,49 @@ def _compute_t2m_recent_headline(
     lon: float,
     unit: str,
 ) -> HeadlinePayload:
-    return _compute_recent_headline(
-        tile_store=tile_store,
-        lat=lat,
-        lon=lon,
-        unit=unit,
-        metric="t2m_yearly_mean_c",
-        key="t2m_recent_local",
-        label="Air temperature recent change",
-        baseline_year=1979,
+    key = "t2m_recent_local"
+    label = "Air temperature recent change"
+    baseline_label = "1979-2000"
+    method = (
+        f"Latest {_HEADLINE_RECENT_YEARS}-year local annual mean minus local mean 1979-2000"
+    )
+    try:
+        vec = tile_store.try_get_metric_vector("t2m_yearly_mean_c", lat, lon)
+    except FileNotFoundError:
+        vec = None
+    if vec is None:
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit.upper(), baseline=baseline_label, method=method)
+
+    y = np.asarray(vec, dtype=np.float64).reshape(-1)
+    axis_vals = _series_axis(tile_store, "t2m_yearly_mean_c", y.size)
+    year_vals = np.asarray([_axis_to_numeric(v) for v in axis_vals], dtype=np.float64)
+    finite = np.isfinite(y) & np.isfinite(year_vals)
+    years = year_vals.astype(np.int32, copy=False)
+
+    finite_years = years[finite]
+    if finite_years.size == 0:
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit.upper(), baseline=baseline_label, method=method)
+
+    latest_year = int(np.max(finite_years))
+    recent_start = latest_year - (_HEADLINE_RECENT_YEARS - 1)
+    recent_mask = finite & (years >= recent_start) & (years <= latest_year)
+    ref_mask = finite & (years >= 1979) & (years <= 2000)
+
+    if int(np.count_nonzero(recent_mask)) < max(2, _HEADLINE_RECENT_YEARS - 1):
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit.upper(), baseline=baseline_label, method=method)
+    if int(np.count_nonzero(ref_mask)) < 10:
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit.upper(), baseline=baseline_label, method=method)
+
+    delta_c = float(np.mean(y[recent_mask])) - float(np.mean(y[ref_mask]))
+    delta = _to_unit_delta(delta_c, unit)
+    return HeadlinePayload(
+        key=key,
+        label=label,
+        value=float(delta),
+        unit=unit.upper(),
+        baseline=baseline_label,
+        period=f"{recent_start}-{latest_year}",
+        method=method,
     )
 
 
@@ -686,6 +720,171 @@ def _compute_sst_recent_headline(
         label="Sea surface temperature recent change",
         baseline_year=1982,
     )
+
+
+def _compute_trend_at_last_headline(
+    *,
+    tile_store: TileDataStore,
+    lat: float,
+    lon: float,
+    metric: str,
+    key: str,
+    label: str,
+    unit: str,
+    baseline_year: int,
+) -> HeadlinePayload:
+    baseline = str(baseline_year)
+    method = f"OLS trend value at last year of local annual {metric} series"
+    try:
+        vec = tile_store.try_get_metric_vector(metric, lat, lon)
+    except FileNotFoundError:
+        vec = None
+    if vec is None:
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+    y = np.asarray(vec, dtype=np.float64).reshape(-1)
+    axis_vals = _series_axis(tile_store, metric, y.size)
+    x = np.asarray([_axis_to_numeric(v) for v in axis_vals], dtype=np.float64)
+    trend = linear_trend_line(x, y)
+    trend_at_last = float(trend[-1])
+    if not np.isfinite(trend_at_last):
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+    baseline_mask = x.astype(int) == baseline_year
+    trend_at_baseline = float(trend[baseline_mask][-1]) if baseline_mask.any() else None
+    return HeadlinePayload(
+        key=key,
+        label=label,
+        value=round(trend_at_last, 1),
+        baseline_value=round(trend_at_baseline, 1) if trend_at_baseline is not None and np.isfinite(trend_at_baseline) else None,
+        unit=unit,
+        baseline=baseline,
+        period=str(int(x[-1])),
+        method=method,
+    )
+
+
+def _compute_t2m_hotdays_headline(
+    *,
+    tile_store: TileDataStore,
+    lat: float,
+    lon: float,
+) -> HeadlinePayload:
+    return _compute_trend_at_last_headline(
+        tile_store=tile_store,
+        lat=lat,
+        lon=lon,
+        metric="t2m_hotdays_per_year",
+        key="t2m_hotdays_local",
+        label="Air hot days per year",
+        unit="days",
+        baseline_year=1979,
+    )
+
+
+def _compute_sst_hotdays_headline(
+    *,
+    tile_store: TileDataStore,
+    lat: float,
+    lon: float,
+) -> HeadlinePayload:
+    return _compute_trend_at_last_headline(
+        tile_store=tile_store,
+        lat=lat,
+        lon=lon,
+        metric="sst_hotdays_per_year",
+        key="sst_hotdays_local",
+        label="Sea surface hot days per year",
+        unit="days",
+        baseline_year=1982,
+    )
+
+
+def _compute_precip_headline(
+    *,
+    tile_store: TileDataStore,
+    lat: float,
+    lon: float,
+) -> HeadlinePayload:
+    return _compute_trend_at_last_headline(
+        tile_store=tile_store,
+        lat=lat,
+        lon=lon,
+        metric="tp_annual_total_mm",
+        key="precip_local",
+        label="Annual precipitation",
+        unit="mm",
+        baseline_year=1979,
+    )
+
+
+def _compute_cdd_headline(
+    *,
+    tile_store: TileDataStore,
+    lat: float,
+    lon: float,
+) -> HeadlinePayload:
+    return _compute_trend_at_last_headline(
+        tile_store=tile_store,
+        lat=lat,
+        lon=lon,
+        metric="tp_cdd_per_year",
+        key="cdd_local",
+        label="Consecutive dry days per year",
+        unit="days",
+        baseline_year=1979,
+    )
+
+
+def _compute_coral_local_headlines(
+    *,
+    tile_store: TileDataStore,
+    lat: float,
+    lon: float,
+) -> list[HeadlinePayload]:
+    metric = "dhw_severe_risk_days_per_year"
+    method = "OLS trend value at last year and multiplication factor vs 1985 baseline"
+    no_data = [
+        HeadlinePayload(key="dhw_severe_local", label="Severe coral heat stress days", value=None, unit="days", baseline="1985", method=method),
+        HeadlinePayload(key="dhw_factor_local", label="Coral heat stress factor vs 1985", value=None, unit="x", baseline="1985", method=method),
+    ]
+    try:
+        vec = tile_store.try_get_metric_vector(metric, lat, lon)
+    except FileNotFoundError:
+        vec = None
+    if vec is None:
+        return no_data
+    y = np.asarray(vec, dtype=np.float64).reshape(-1)
+    axis_vals = _series_axis(tile_store, metric, y.size)
+    x = np.asarray([_axis_to_numeric(v) for v in axis_vals], dtype=np.float64)
+    trend = linear_trend_line(x, y)
+    if not np.any(np.isfinite(trend)):
+        return no_data
+    trend_at_last = float(trend[-1])
+    baseline_mask = x.astype(int) == 1985
+    trend_at_baseline = float(trend[baseline_mask][-1]) if baseline_mask.any() else float("nan")
+    severe_headline = HeadlinePayload(
+        key="dhw_severe_local",
+        label="Severe coral heat stress days",
+        value=round(max(0.0, trend_at_last), 1) if np.isfinite(trend_at_last) else None,
+        unit="days",
+        baseline="1985",
+        period=str(int(x[-1])),
+        method=method,
+    )
+    if np.isfinite(trend_at_baseline) and trend_at_baseline > 0 and np.isfinite(trend_at_last):
+        factor = trend_at_last / trend_at_baseline
+        factor_value = round(max(0.0, factor), 1)
+    else:
+        factor_value = None
+    factor_headline = HeadlinePayload(
+        key="dhw_factor_local",
+        label="Coral heat stress factor vs 1985",
+        value=factor_value,
+        unit="x",
+        baseline="1985",
+        period=str(int(x[-1])),
+        method=method,
+    )
+    return [severe_headline, factor_headline]
 
 
 def _layer_overrides_from_manifest(
@@ -967,12 +1166,89 @@ def build_panel_tiles_registry(
             lon=lon,
             unit=unit,
         ),
+        _compute_t2m_hotdays_headline(
+            tile_store=tile_store,
+            lat=lat,
+            lon=lon,
+        ),
         _compute_sst_recent_headline(
             tile_store=tile_store,
             lat=lat,
             lon=lon,
             unit=unit,
         ),
+        _compute_sst_hotdays_headline(
+            tile_store=tile_store,
+            lat=lat,
+            lon=lon,
+        ),
+        _compute_precip_headline(
+            tile_store=tile_store,
+            lat=lat,
+            lon=lon,
+        ),
+        _compute_cdd_headline(
+            tile_store=tile_store,
+            lat=lat,
+            lon=lon,
+        ),
+        *_compute_coral_local_headlines(
+            tile_store=tile_store,
+            lat=lat,
+            lon=lon,
+        ),
+        _compute_global_t2m_preindustrial_headline(tile_store=tile_store, unit=unit),
+        _global_aggregate_recent_delta_headline(
+            tile_store=tile_store,
+            metric="t2m_yearly_mean_c",
+            key="t2m_recent_global",
+            label="Air temperature recent change (global)",
+            unit_in="C",
+            unit_out=unit,
+            baseline_year=1979,
+        ),
+        _global_aggregate_trend_headline(
+            tile_store=tile_store,
+            metric="t2m_hotdays_per_year",
+            key="t2m_hotdays_global",
+            label="Air hot days per year (global)",
+            unit="days",
+            baseline_year=1979,
+        ),
+        _global_aggregate_recent_delta_headline(
+            tile_store=tile_store,
+            metric="sst_yearly_mean_c",
+            key="sst_recent_global",
+            label="Sea surface temperature recent change (global)",
+            unit_in="C",
+            unit_out=unit,
+            baseline_year=1982,
+        ),
+        _global_aggregate_trend_headline(
+            tile_store=tile_store,
+            metric="sst_hotdays_per_year",
+            key="sst_hotdays_global",
+            label="Sea hot days per year (global)",
+            unit="days",
+            baseline_year=1982,
+        ),
+        _global_aggregate_trend_headline(
+            tile_store=tile_store,
+            metric="tp_annual_total_mm",
+            key="precip_global",
+            label="Annual precipitation (global)",
+            unit="mm",
+            baseline_year=1979,
+        ),
+        _global_aggregate_trend_headline(
+            tile_store=tile_store,
+            metric="tp_cdd_per_year",
+            key="cdd_global",
+            label="Consecutive dry days per year (global)",
+            unit="days",
+            baseline_year=1979,
+        ),
+        _compute_coral_global_headline(tile_store=tile_store),
     ]
     layer_overrides = _layer_overrides_from_manifest(panels_manifest)
 
@@ -1106,12 +1382,89 @@ def build_scored_panels_tiles_registry(
             lon=lon,
             unit=unit,
         ),
+        _compute_t2m_hotdays_headline(
+            tile_store=tile_store,
+            lat=lat,
+            lon=lon,
+        ),
         _compute_sst_recent_headline(
             tile_store=tile_store,
             lat=lat,
             lon=lon,
             unit=unit,
         ),
+        _compute_sst_hotdays_headline(
+            tile_store=tile_store,
+            lat=lat,
+            lon=lon,
+        ),
+        _compute_precip_headline(
+            tile_store=tile_store,
+            lat=lat,
+            lon=lon,
+        ),
+        _compute_cdd_headline(
+            tile_store=tile_store,
+            lat=lat,
+            lon=lon,
+        ),
+        *_compute_coral_local_headlines(
+            tile_store=tile_store,
+            lat=lat,
+            lon=lon,
+        ),
+        _compute_global_t2m_preindustrial_headline(tile_store=tile_store, unit=unit),
+        _global_aggregate_recent_delta_headline(
+            tile_store=tile_store,
+            metric="t2m_yearly_mean_c",
+            key="t2m_recent_global",
+            label="Air temperature recent change (global)",
+            unit_in="C",
+            unit_out=unit,
+            baseline_year=1979,
+        ),
+        _global_aggregate_trend_headline(
+            tile_store=tile_store,
+            metric="t2m_hotdays_per_year",
+            key="t2m_hotdays_global",
+            label="Air hot days per year (global)",
+            unit="days",
+            baseline_year=1979,
+        ),
+        _global_aggregate_recent_delta_headline(
+            tile_store=tile_store,
+            metric="sst_yearly_mean_c",
+            key="sst_recent_global",
+            label="Sea surface temperature recent change (global)",
+            unit_in="C",
+            unit_out=unit,
+            baseline_year=1982,
+        ),
+        _global_aggregate_trend_headline(
+            tile_store=tile_store,
+            metric="sst_hotdays_per_year",
+            key="sst_hotdays_global",
+            label="Sea hot days per year (global)",
+            unit="days",
+            baseline_year=1982,
+        ),
+        _global_aggregate_trend_headline(
+            tile_store=tile_store,
+            metric="tp_annual_total_mm",
+            key="precip_global",
+            label="Annual precipitation (global)",
+            unit="mm",
+            baseline_year=1979,
+        ),
+        _global_aggregate_trend_headline(
+            tile_store=tile_store,
+            metric="tp_cdd_per_year",
+            key="cdd_global",
+            label="Consecutive dry days per year (global)",
+            unit="days",
+            baseline_year=1979,
+        ),
+        _compute_coral_global_headline(tile_store=tile_store),
     ]
     layer_overrides = _layer_overrides_from_manifest(panels_manifest)
 
@@ -1123,6 +1476,158 @@ def build_scored_panels_tiles_registry(
         series=merged_series,
         headlines=headlines,
         layer_overrides=layer_overrides,
+    )
+
+
+def _global_aggregate_recent_delta_headline(
+    *,
+    tile_store: TileDataStore,
+    metric: str,
+    key: str,
+    label: str,
+    unit_in: str,
+    unit_out: str,
+    baseline_year: int,
+) -> HeadlinePayload:
+    baseline = str(baseline_year)
+    method = (
+        f"Global area-weighted mean: latest {_HEADLINE_RECENT_YEARS}-year mean minus {baseline_year} value"
+    )
+    agg_data = tile_store.aggregates.get((metric, "mean"))
+    if agg_data is None:
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit_out, baseline=baseline, method=method)
+    globe = agg_data["regions"].get("globe")
+    if globe is None:
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit_out, baseline=baseline, method=method)
+    x = np.asarray([_axis_to_numeric(v) for v in agg_data["time_axis"]], dtype=np.float64)
+    y = np.asarray(
+        [float("nan") if v is None else float(v) for v in globe["values"]], dtype=np.float64
+    )
+    years = x.astype(int)
+    finite = np.isfinite(y)
+    latest_year = int(x[-1])
+    recent_start = latest_year - _HEADLINE_RECENT_YEARS + 1
+    recent_mask = finite & (years >= recent_start) & (years <= latest_year)
+    base_mask = finite & (years == baseline_year)
+    if not recent_mask.any() or not base_mask.any():
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit_out, baseline=baseline, method=method)
+    delta = float(np.mean(y[recent_mask])) - float(y[base_mask][-1])
+    if unit_in.upper() in ("C", "F"):
+        delta = _to_unit_delta(delta, unit_out)
+    return HeadlinePayload(
+        key=key,
+        label=label,
+        value=round(float(delta), 2),
+        unit=unit_out,
+        baseline=baseline,
+        period=f"{recent_start}-{latest_year}",
+        method=method,
+    )
+
+
+def _global_aggregate_trend_headline(
+    *,
+    tile_store: TileDataStore,
+    metric: str,
+    key: str,
+    label: str,
+    unit: str,
+    baseline_year: int,
+) -> HeadlinePayload:
+    baseline = str(baseline_year)
+    method = "OLS trend value at last year of global area-weighted mean"
+    agg_data = tile_store.aggregates.get((metric, "mean"))
+    if agg_data is None:
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+    globe = agg_data["regions"].get("globe")
+    if globe is None:
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+    x = np.asarray([_axis_to_numeric(v) for v in agg_data["time_axis"]], dtype=np.float64)
+    y = np.asarray(
+        [float("nan") if v is None else float(v) for v in globe["values"]], dtype=np.float64
+    )
+    trend = linear_trend_line(x, y)
+    trend_at_last = float(trend[-1])
+    if not np.isfinite(trend_at_last):
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+    baseline_mask = x.astype(int) == baseline_year
+    trend_at_baseline = float(trend[baseline_mask][-1]) if baseline_mask.any() else None
+    return HeadlinePayload(
+        key=key,
+        label=label,
+        value=round(trend_at_last, 1),
+        baseline_value=round(trend_at_baseline, 1) if trend_at_baseline is not None and np.isfinite(trend_at_baseline) else None,
+        unit=unit,
+        baseline=baseline,
+        period=str(int(x[-1])),
+        method=method,
+    )
+
+
+def _compute_global_t2m_preindustrial_headline(
+    *,
+    tile_store: TileDataStore,
+    unit: str,
+) -> HeadlinePayload:
+    key = "t2m_vs_preindustrial_global"
+    label = "Air temperature change vs pre-industrial (global)"
+    baseline = "1850-1900"
+    method = "Precomputed CMIP+ERA5 global mean warming vs 1850-1900"
+    agg_data = tile_store.aggregates.get(("t2m_total_warming_vs_preindustrial_c", "mean"))
+    if agg_data is None:
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+    globe = agg_data["regions"].get("globe")
+    if globe is None:
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+    values = globe["values"]
+    if not values:
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+    val_c = float(values[-1])
+    if not np.isfinite(val_c):
+        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+    val = _to_unit_delta(val_c, unit)
+    time_axis = agg_data["time_axis"]
+    return HeadlinePayload(
+        key=key,
+        label=label,
+        value=round(float(val), 2),
+        unit=unit,
+        baseline=baseline,
+        period=str(time_axis[-1]) if time_axis else None,
+        method=method,
+    )
+
+
+def _compute_coral_global_headline(
+    *,
+    tile_store: TileDataStore,
+) -> HeadlinePayload:
+    key = "dhw_severe_global"
+    label = "Severe coral heat stress days (global)"
+    baseline = "1985"
+    method = "OLS trend value at last year of global area-weighted mean severe DHW days since 1985"
+    agg_data = tile_store.aggregates.get(("dhw_severe_risk_days_per_year", "mean"))
+    if agg_data is None:
+        return HeadlinePayload(key=key, label=label, value=None, unit="days", baseline=baseline, method=method)
+    globe = agg_data["regions"].get("globe")
+    if globe is None:
+        return HeadlinePayload(key=key, label=label, value=None, unit="days", baseline=baseline, method=method)
+    x = np.asarray([_axis_to_numeric(v) for v in agg_data["time_axis"]], dtype=np.float64)
+    y = np.asarray(
+        [float("nan") if v is None else float(v) for v in globe["values"]], dtype=np.float64
+    )
+    trend = linear_trend_line(x, y)
+    trend_at_last = float(trend[-1])
+    if not np.isfinite(trend_at_last) or trend_at_last < 0:
+        return HeadlinePayload(key=key, label=label, value=None, unit="days", baseline=baseline, method=method)
+    return HeadlinePayload(
+        key=key,
+        label=label,
+        value=round(trend_at_last, 1),
+        unit="days",
+        baseline=baseline,
+        period=str(int(x[-1])),
+        method=method,
     )
 
 
@@ -1287,7 +1792,60 @@ def build_global_panels(
         location=location,
         panels=scored_panels,
         series=merged_series,
-        headlines=[],
+        headlines=[
+            _compute_global_t2m_preindustrial_headline(tile_store=tile_store, unit=unit),
+            _global_aggregate_recent_delta_headline(
+                tile_store=tile_store,
+                metric="t2m_yearly_mean_c",
+                key="t2m_recent_global",
+                label="Air temperature recent change (global)",
+                unit_in="C",
+                unit_out=unit,
+                baseline_year=1979,
+            ),
+            _global_aggregate_trend_headline(
+                tile_store=tile_store,
+                metric="t2m_hotdays_per_year",
+                key="t2m_hotdays_global",
+                label="Air hot days per year (global)",
+                unit="days",
+                baseline_year=1979,
+            ),
+            _global_aggregate_recent_delta_headline(
+                tile_store=tile_store,
+                metric="sst_yearly_mean_c",
+                key="sst_recent_global",
+                label="Sea surface temperature recent change (global)",
+                unit_in="C",
+                unit_out=unit,
+                baseline_year=1982,
+            ),
+            _global_aggregate_trend_headline(
+                tile_store=tile_store,
+                metric="sst_hotdays_per_year",
+                key="sst_hotdays_global",
+                label="Sea hot days per year (global)",
+                unit="days",
+                baseline_year=1982,
+            ),
+            _global_aggregate_trend_headline(
+                tile_store=tile_store,
+                metric="tp_annual_total_mm",
+                key="precip_global",
+                label="Annual precipitation (global)",
+                unit="mm",
+                baseline_year=1979,
+            ),
+            _global_aggregate_trend_headline(
+                tile_store=tile_store,
+                metric="tp_cdd_per_year",
+                key="cdd_global",
+                label="Consecutive dry days per year (global)",
+                unit="days",
+                baseline_year=1979,
+            ),
+            _compute_coral_global_headline(tile_store=tile_store),
+        ],
         layer_overrides={},
     )
 

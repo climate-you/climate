@@ -43,6 +43,7 @@ class HeadlinePayload(BaseModel):
     key: str
     label: str
     value: float | None = None
+    baseline_value: float | None = None
     unit: str
     baseline: Optional[str] = None
     period: Optional[str] = None
@@ -51,11 +52,6 @@ class HeadlinePayload(BaseModel):
 
 class LayerOverridePayload(BaseModel):
     default_graph_ids: List[str] = []
-    title_mode: str
-    title_metric_key: Optional[str] = None
-    title_suffix: Optional[str] = None
-    title_action_text: Optional[str] = None
-    title_action_text_non_positive: Optional[str] = None
 
 
 class LocationInfo(BaseModel):

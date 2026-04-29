@@ -28,11 +28,7 @@ import { useReleaseResolution } from "@/hooks/explorer/useReleaseResolution";
 import {
   CLIMATE_DATA_LOAD_ERROR,
   DEFAULT_OVERLAY_BASE_PATH,
-  DEFAULT_TITLE_ACTION_TEXT,
   MIN_PANEL_VIEWPORT_HEIGHT_FOR_TWO_GRAPHS,
-  PANEL_TITLE_INFO_PREINDUSTRIAL,
-  PANEL_TITLE_INFO_RECENT,
-  PREINDUSTRIAL_TITLE_SUFFIX,
   TOUCH_CLOSE_PANEL_THRESHOLD_PX,
   TOUCH_PANEL_LIFT_MAX_PX,
   TOUCH_PANEL_PULL_MAX_PX,
@@ -166,22 +162,13 @@ type PanelResponse = {
     key: string;
     label: string;
     value: number | null;
+    baseline_value?: number | null;
     unit: string;
     baseline?: string | null;
     period?: string | null;
     method?: string | null;
   }>;
-  layer_overrides?: Record<
-    string,
-    {
-      default_graph_ids: string[];
-      title_mode: "preindustrial" | "recent_trend";
-      title_metric_key?: string | null;
-      title_suffix?: string | null;
-      title_action_text?: string | null;
-      title_action_text_non_positive?: string | null;
-    }
-  >;
+  layer_overrides?: Record<string, { default_graph_ids: string[] }>;
 };
 
 type NearestLocationResponse = {
@@ -522,53 +509,7 @@ export default function ExplorerPage({
     const spec = resp.layer_overrides[activeLayerId];
     return spec ?? null;
   }, [activeLayerId, resp?.layer_overrides]);
-  const activeTitleMode = activeLayerOverride?.title_mode ?? "preindustrial";
-  const activeTitleMetricKey =
-    activeLayerOverride?.title_metric_key ??
-    (activeTitleMode === "preindustrial" ? "t2m_vs_preindustrial_local" : null);
-  const activeTitleSuffix =
-    activeLayerOverride?.title_suffix ??
-    (activeTitleMode === "preindustrial" ? PREINDUSTRIAL_TITLE_SUFFIX : "");
-  const requestedTitleHeadline = useMemo(() => {
-    if (!resp?.headlines?.length || !activeTitleMetricKey) return null;
-    return resp.headlines.find((h) => h.key === activeTitleMetricKey) ?? null;
-  }, [activeTitleMetricKey, resp]);
-  const preindustrialHeadline = useMemo(() => {
-    if (!resp?.headlines?.length) return null;
-    return (
-      resp.headlines.find((h) => h.key === "t2m_vs_preindustrial_local") ?? null
-    );
-  }, [resp]);
-  const shouldFallbackToPreindustrial =
-    activeTitleMetricKey === "sst_recent_local" &&
-    !(
-      typeof requestedTitleHeadline?.value === "number" &&
-      Number.isFinite(requestedTitleHeadline.value)
-    );
-  const effectiveTitleMode = shouldFallbackToPreindustrial
-    ? "preindustrial"
-    : activeTitleMode;
-  const effectiveTitleSuffix = shouldFallbackToPreindustrial
-    ? PREINDUSTRIAL_TITLE_SUFFIX
-    : activeTitleSuffix;
-  const effectiveTitleActionText = shouldFallbackToPreindustrial
-    ? DEFAULT_TITLE_ACTION_TEXT
-    : (activeLayerOverride?.title_action_text ?? DEFAULT_TITLE_ACTION_TEXT);
-  const effectiveTitleActionTextNonPositive = shouldFallbackToPreindustrial
-    ? null
-    : (activeLayerOverride?.title_action_text_non_positive ?? null);
-  const tempHeadline = shouldFallbackToPreindustrial
-    ? preindustrialHeadline
-    : requestedTitleHeadline;
-  const shouldUseNoWarmingWording =
-    typeof tempHeadline?.value === "number" &&
-    Number.isFinite(tempHeadline.value) &&
-    tempHeadline.value <= 0 &&
-    typeof effectiveTitleActionTextNonPositive === "string" &&
-    effectiveTitleActionTextNonPositive.trim().length > 0;
-  const resolvedTitleActionText = shouldUseNoWarmingWording
-    ? (effectiveTitleActionTextNonPositive?.trim() ?? effectiveTitleActionText)
-    : effectiveTitleActionText;
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (
@@ -636,6 +577,96 @@ export default function ExplorerPage({
   const stepCount = maxGraphPage + 1;
   const pageStart = graphPage * graphsPerPage;
   const visibleGraphs = pagedGraphs.slice(pageStart, pageStart + graphsPerPage);
+
+  const panelHeadline = useMemo(() => {
+    if (!resp) return null;
+    const headlines = resp.headlines ?? [];
+    const h = (key: string) => headlines.find((hd) => hd.key === key) ?? null;
+    const graphId = visibleGraphs[0]?.graph.id ?? null;
+    const isGlobal = resp.location.place.geonameid === 0;
+    const trendDir = (hd: { value: number | null; baseline_value?: number | null }) =>
+      typeof hd.value === "number" && typeof hd.baseline_value === "number"
+        ? hd.value >= hd.baseline_value ? "risen" : "fallen"
+        : "risen";
+
+    switch (graphId) {
+      case "t2m_annual": {
+        const pi = h(isGlobal ? "t2m_vs_preindustrial_global" : "t2m_vs_preindustrial_local");
+        const recent = h(isGlobal ? "t2m_recent_global" : "t2m_recent_local");
+        const piVal = typeof pi?.value === "number" && Number.isFinite(pi.value) ? pi.value : null;
+        if (piVal === null) return null;
+        const recentVal =
+          typeof recent?.value === "number" && Number.isFinite(recent.value) && recent.value >= 0.05
+            ? recent.value : null;
+        return { type: "air_temp", warming: piVal > 0, preindustrial: piVal, recent: recentVal } as const;
+      }
+      case "t2m_hot_days": {
+        const hd = h(isGlobal ? "t2m_hotdays_global" : "t2m_hotdays_local");
+        if (typeof hd?.value !== "number" || !Number.isFinite(hd.value)) return null;
+        return { type: "trend", direction: trendDir(hd), label: "the number of hot days has", value: hd.value, suffix: " days since 1979" } as const;
+      }
+      case "sst_annual": {
+        const sst = h(isGlobal ? "sst_recent_global" : "sst_recent_local");
+        const sstVal = typeof sst?.value === "number" && Number.isFinite(sst.value) ? sst.value : null;
+        if (sstVal !== null) {
+          return sstVal > 0
+            ? { type: "temp_delta", action: "the sea has warmed by", value: sstVal, suffix: "since 1982" } as const
+            : { type: "no_warming", text: "the sea has not warmed since 1982." } as const;
+        }
+        if (!isGlobal) {
+          const globalSst = h("sst_recent_global");
+          const globalDelta = typeof globalSst?.value === "number" && Number.isFinite(globalSst.value) ? globalSst.value : null;
+          return { type: "sst_unavailable", globalDelta } as const;
+        }
+        return null;
+      }
+      case "sst_hot_days": {
+        const hd = h(isGlobal ? "sst_hotdays_global" : "sst_hotdays_local");
+        if (typeof hd?.value === "number" && Number.isFinite(hd.value)) {
+          return { type: "trend", direction: trendDir(hd), label: "the number of sea hot days has", value: hd.value, suffix: " days since 1982" } as const;
+        }
+        if (!isGlobal) {
+          const globalSst = h("sst_recent_global");
+          const globalDelta = typeof globalSst?.value === "number" && Number.isFinite(globalSst.value) ? globalSst.value : null;
+          return { type: "sst_unavailable", globalDelta } as const;
+        }
+        return null;
+      }
+      case "tp_annual": {
+        const hd = h(isGlobal ? "precip_global" : "precip_local");
+        if (typeof hd?.value !== "number" || !Number.isFinite(hd.value)) return null;
+        return { type: "trend", direction: trendDir(hd), label: "the precipitation level has", value: hd.value, suffix: " mm since 1979" } as const;
+      }
+      case "tp_cdd": {
+        const hd = h(isGlobal ? "cdd_global" : "cdd_local");
+        if (typeof hd?.value !== "number" || !Number.isFinite(hd.value)) return null;
+        return { type: "trend", direction: trendDir(hd), label: "the number of consecutive dry days has", value: hd.value, suffix: " days since 1979" } as const;
+      }
+      case "dhw_risk_days": {
+        if (isGlobal) {
+          const hd = h("dhw_severe_global");
+          if (typeof hd?.value !== "number" || !Number.isFinite(hd.value)) return null;
+          return { type: "coral_absolute", days: hd.value } as const;
+        }
+        const factor = h("dhw_factor_local");
+        const severe = h("dhw_severe_local");
+        const factorVal = typeof factor?.value === "number" && Number.isFinite(factor.value) ? factor.value : null;
+        const severeVal = typeof severe?.value === "number" && Number.isFinite(severe.value) ? severe.value : null;
+        if (severeVal === null) {
+          const globalCoral = h("dhw_severe_global");
+          const globalDays = typeof globalCoral?.value === "number" && Number.isFinite(globalCoral.value) ? globalCoral.value : null;
+          return { type: "coral_unavailable", globalDays } as const;
+        }
+        if (factorVal === 0 || severeVal === 0) return { type: "coral_no_days" } as const;
+        if (factorVal !== null && factorVal > 1.2) return { type: "coral_factor", factor: factorVal } as const;
+        if (factorVal !== null && factorVal >= 0.8) return { type: "coral_stable" } as const;
+        return { type: "coral_absolute", days: severeVal } as const;
+      }
+      default:
+        return null;
+    }
+  }, [resp, visibleGraphs]);
+
   const graphSlots = useMemo(
     () =>
       Array.from(
@@ -1240,9 +1271,7 @@ export default function ExplorerPage({
     selectedLocation?.label ?? resp?.location.place.label ?? "";
   const titleLocationLabel = locationLabel || "this location";
   const panelTitleInfoText =
-    effectiveTitleMode === "preindustrial"
-      ? PANEL_TITLE_INFO_PREINDUSTRIAL
-      : PANEL_TITLE_INFO_RECENT;
+    "Headline values are derived from local climate trend data. See the chart below for the full time series.";
   const populationText = formatPopulation(selectedLocation?.population);
   const debugBbox = resp?.location?.panel_valid_bbox ?? null;
   const debugInBbox = inBbox(lat, lon, debugBbox);
@@ -1504,41 +1533,126 @@ export default function ExplorerPage({
                     </span>
                   ) : panelLoading ? (
                     <span>Loading climate data...</span>
-                  ) : selectedLocation?.geonameid === 0 && resp ? (
+                  ) : panelHeadline?.type === "air_temp" ? (
                     <>
-                      Globally,{" "}
-                      <span className={styles.panelTitleSmall}>
-                        human activities have caused{" "}
-                      </span>
-                      <span className={styles.panelTitleTempAccent}>
-                        {formatHeadlineDelta(
-                          unit === "F" ? 1.1 * 1.8 : 1.1,
-                          unit,
-                        )}
-                      </span>
-                      <span className={styles.panelTitleSmall}>
-                        {" "}
-                        since 1850–1900
-                      </span>
-                    </>
-                  ) : typeof tempHeadline?.value === "number" &&
-                    Number.isFinite(tempHeadline.value) ? (
-                    <>
-                      <span className={styles.panelTitleSmall}>In</span>{" "}
-                      {titleLocationLabel},{" "}
-                      <span className={styles.panelTitleSmall}>
-                        {resolvedTitleActionText}
-                        {!shouldUseNoWarmingWording ? " " : ""}
-                      </span>
-                      {!shouldUseNoWarmingWording ? (
-                        <span className={styles.panelTitleTempAccent}>
-                          {formatHeadlineDelta(tempHeadline.value, unit)}
+                      {resp?.location.place.geonameid === 0 ? (
+                        <>Globally,{" "}</>
+                      ) : (
+                        <><span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}</>
+                      )}
+                      {panelHeadline.warming ? (
+                        <>
+                          <span className={styles.panelTitleSmall}>the air has warmed by </span>
+                          <span className={styles.panelTitleTempAccent}>
+                            {formatHeadlineDelta(panelHeadline.preindustrial, unit)}
+                          </span>
+                          <span className={styles.panelTitleSmall}>
+                            {" "}since the pre-industrial era (1850–1900)
+                            {panelHeadline.recent !== null
+                              ? `, of which ${formatHeadlineDelta(panelHeadline.recent, unit)} since 1979`
+                              : ""}.
+                          </span>
+                        </>
+                      ) : panelHeadline.recent !== null ? (
+                        <>
+                          <span className={styles.panelTitleSmall}>the air has warmed by </span>
+                          <span className={styles.panelTitleTempAccent}>
+                            {formatHeadlineDelta(panelHeadline.recent, unit)}
+                          </span>
+                          <span className={styles.panelTitleSmall}> since 1979.</span>
+                        </>
+                      ) : (
+                        <span className={styles.panelTitleSmall}>
+                          the air has not warmed since the pre-industrial era (1850–1900).
                         </span>
-                      ) : null}
-                      <span className={styles.panelTitleSmall}>
-                        {" "}
-                        {effectiveTitleSuffix}
+                      )}
+                    </>
+                  ) : panelHeadline?.type === "temp_delta" ? (
+                    <>
+                      {resp?.location.place.geonameid === 0 ? (
+                        <>Globally,{" "}</>
+                      ) : (
+                        <><span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}</>
+                      )}
+                      <span className={styles.panelTitleSmall}>{panelHeadline.action} </span>
+                      <span className={styles.panelTitleTempAccent}>
+                        {formatHeadlineDelta(panelHeadline.value, unit)}
                       </span>
+                      <span className={styles.panelTitleSmall}> {panelHeadline.suffix}.</span>
+                    </>
+                  ) : panelHeadline?.type === "no_warming" ? (
+                    <>
+                      {resp?.location.place.geonameid === 0 ? (
+                        <>Globally,{" "}</>
+                      ) : (
+                        <><span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}</>
+                      )}
+                      <span className={styles.panelTitleSmall}>{panelHeadline.text}</span>
+                    </>
+                  ) : panelHeadline?.type === "trend" ? (
+                    <>
+                      {resp?.location.place.geonameid === 0 ? (
+                        <>Globally,{" "}</>
+                      ) : (
+                        <><span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}</>
+                      )}
+                      <span className={styles.panelTitleSmall}>{panelHeadline.label} {panelHeadline.direction} to </span>
+                      <span className={styles.panelTitleTempAccent}>
+                        {panelHeadline.value >= 0 ? "+" : ""}{Math.round(panelHeadline.value)}
+                      </span>
+                      <span className={styles.panelTitleSmall}>{panelHeadline.suffix}.</span>
+                    </>
+                  ) : panelHeadline?.type === "coral_factor" ? (
+                    <>
+                      <span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}
+                      <span className={styles.panelTitleSmall}>the number of days of severe coral heat stress has multiplied by </span>
+                      <span className={styles.panelTitleTempAccent}>{panelHeadline.factor.toFixed(1)}×</span>
+                      <span className={styles.panelTitleSmall}> since 1985.</span>
+                    </>
+                  ) : panelHeadline?.type === "coral_stable" ? (
+                    <>
+                      <span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}
+                      <span className={styles.panelTitleSmall}>the number of days of severe coral heat stress has remained stable since 1985.</span>
+                    </>
+                  ) : panelHeadline?.type === "coral_no_days" ? (
+                    <>
+                      <span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}
+                      <span className={styles.panelTitleSmall}>no days of severe coral heat stress have been recorded in recent years.</span>
+                    </>
+                  ) : panelHeadline?.type === "coral_absolute" ? (
+                    <>
+                      {resp?.location.place.geonameid === 0 ? (
+                        <>Globally,{" "}</>
+                      ) : (
+                        <><span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}</>
+                      )}
+                      <span className={styles.panelTitleSmall}>there are now </span>
+                      <span className={styles.panelTitleTempAccent}>+{Math.round(panelHeadline.days)}</span>
+                      <span className={styles.panelTitleSmall}> days of severe coral heat stress per year.</span>
+                    </>
+                  ) : panelHeadline?.type === "sst_unavailable" ? (
+                    <>
+                      <span className={styles.panelTitleSmall}>Sea temperature data not available in</span>{" "}
+                      {titleLocationLabel}.{" "}
+                      {panelHeadline.globalDelta !== null ? (
+                        <>
+                          <span className={styles.panelTitleSmall}>Globally, the sea has warmed of </span>
+                          <span className={styles.panelTitleTempAccent}>{formatHeadlineDelta(panelHeadline.globalDelta, unit)}</span>
+                          <span className={styles.panelTitleSmall}> since 1982.</span>
+                        </>
+                      ) : null}
+                    </>
+                  ) : panelHeadline?.type === "coral_unavailable" ? (
+                    <>
+                      <span className={styles.panelTitleSmall}>Coral stress data not available in</span>{" "}
+                      {titleLocationLabel}.{" "}
+                      {panelHeadline.globalDays !== null ? (
+                        <>
+                          <span className={styles.panelTitleSmall}>Globally, there are now </span>
+                          <span className={styles.panelTitleTempAccent}>+{Math.round(panelHeadline.globalDays)}</span>
+                          <span className={styles.panelTitleSmall}> days of severe coral heat stress per year.</span>
+                        </>
+                      ) : null}
                     </>
                   ) : resp ? (
                     <span>{titleLocationLabel}</span>

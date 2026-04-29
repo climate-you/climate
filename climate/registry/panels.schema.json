@@ -45,20 +45,9 @@
           "type": "array",
           "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
           "minItems": 1
-        },
-        "title_mode": {
-          "type": "string",
-          "enum": ["preindustrial", "recent_trend"]
-        },
-        "title_metric_key": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9_]*$"
-        },
-        "title_suffix": { "type": "string" },
-        "title_action_text": { "type": "string" },
-        "title_action_text_non_positive": { "type": "string" }
+        }
       },
-      "required": ["default_graph_ids", "title_mode"],
+      "required": ["default_graph_ids"],
       "additionalProperties": false
     },
     "graph": {
