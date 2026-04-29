@@ -603,7 +603,9 @@ export default function ExplorerPage({
       case "t2m_hot_days": {
         const hd = h(isGlobal ? "t2m_hotdays_global" : "t2m_hotdays_local");
         if (typeof hd?.value !== "number" || !Number.isFinite(hd.value)) return null;
-        return { type: "trend", direction: trendDir(hd), label: "the number of hot days has", value: hd.value, suffix: " days since 1979" } as const;
+        const delta = typeof hd.baseline_value === "number" && Number.isFinite(hd.baseline_value)
+          ? hd.value - hd.baseline_value : hd.value;
+        return { type: "trend", direction: trendDir(hd), label: "the number of hot days has", value: delta, preposition: "by", unit: " days", suffix: "since 1979" } as const;
       }
       case "sst_annual": {
         const sst = h(isGlobal ? "sst_recent_global" : "sst_recent_local");
@@ -623,7 +625,9 @@ export default function ExplorerPage({
       case "sst_hot_days": {
         const hd = h(isGlobal ? "sst_hotdays_global" : "sst_hotdays_local");
         if (typeof hd?.value === "number" && Number.isFinite(hd.value)) {
-          return { type: "trend", direction: trendDir(hd), label: "the number of sea hot days has", value: hd.value, suffix: " days since 1982" } as const;
+          const delta = typeof hd.baseline_value === "number" && Number.isFinite(hd.baseline_value)
+            ? hd.value - hd.baseline_value : hd.value;
+          return { type: "trend", direction: trendDir(hd), label: "the number of sea hot days has", value: delta, preposition: "by", unit: " days", suffix: "since 1982" } as const;
         }
         if (!isGlobal) {
           const globalSst = h("sst_recent_global");
@@ -635,12 +639,16 @@ export default function ExplorerPage({
       case "tp_annual": {
         const hd = h(isGlobal ? "precip_global" : "precip_local");
         if (typeof hd?.value !== "number" || !Number.isFinite(hd.value)) return null;
-        return { type: "trend", direction: trendDir(hd), label: "the precipitation level has", value: hd.value, suffix: " mm since 1979" } as const;
+        const precipDelta = typeof hd.baseline_value === "number" && Number.isFinite(hd.baseline_value)
+          ? hd.value - hd.baseline_value : hd.value;
+        return { type: "trend", direction: trendDir(hd), label: "the precipitation level has", value: precipDelta, preposition: "by", unit: " mm", suffix: "since 1979" } as const;
       }
       case "tp_cdd": {
         const hd = h(isGlobal ? "cdd_global" : "cdd_local");
         if (typeof hd?.value !== "number" || !Number.isFinite(hd.value)) return null;
-        return { type: "trend", direction: trendDir(hd), label: "the number of consecutive dry days has", value: hd.value, suffix: " days since 1979" } as const;
+        const delta = typeof hd.baseline_value === "number" && Number.isFinite(hd.baseline_value)
+          ? hd.value - hd.baseline_value : hd.value;
+        return { type: "trend", direction: trendDir(hd), label: "the number of consecutive dry days has", value: delta, preposition: "by", unit: " days", suffix: "since 1979" } as const;
       }
       case "dhw_risk_days": {
         if (isGlobal) {
@@ -1618,11 +1626,11 @@ export default function ExplorerPage({
                       ) : (
                         <><span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}</>
                       )}
-                      <span className={styles.panelTitleSmall}>{panelHeadline.label} {panelHeadline.direction} to </span>
+                      <span className={styles.panelTitleSmall}>{panelHeadline.label} {panelHeadline.direction} {panelHeadline.preposition ?? "to"} </span>
                       <span className={styles.panelTitleTempAccent}>
-                        {panelHeadline.value >= 0 ? "+" : ""}{Math.round(panelHeadline.value)}
+                        {panelHeadline.value >= 0 ? "+" : ""}{Math.round(panelHeadline.value)}{panelHeadline.unit ?? ""}
                       </span>
-                      <span className={styles.panelTitleSmall}>{panelHeadline.suffix}.</span>
+                      <span className={styles.panelTitleSmall}> {panelHeadline.suffix}.</span>
                     </>
                   ) : panelHeadline?.type === "coral_factor" ? (
                     <>
