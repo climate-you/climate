@@ -636,6 +636,7 @@
   align-items: center;
   justify-content: center;
   -webkit-tap-highlight-color: transparent;
+  outline: none;
   transition:
     background-color 140ms ease,
     border-color 140ms ease,
@@ -662,6 +663,8 @@
   width: 13px;
   height: 13px;
   object-fit: contain;
+  pointer-events: none;
+  user-select: none;
 }
 
 .panelStepIconImgActive {
