@@ -712,11 +712,15 @@ export function buildTimeSeriesOption({
     yMax = max + 0.2;
   }
 
+  const scaffold = sharedChartScaffold();
   return {
     animationDuration: CHART_ANIMATION_DURATION_MS,
     animationDurationUpdate: transitionMs,
     animationEasing: "cubicOut",
-    ...sharedChartScaffold(),
+    ...scaffold,
+    ...(!isDateBasedView && {
+      grid: { ...scaffold.grid, right: isMobile ? 14 : 40 },
+    }),
     tooltip: {
       trigger: "axis",
       backgroundColor: theme.tooltipBg,
@@ -774,6 +778,17 @@ export function buildTimeSeriesOption({
       min: xMin,
       max: xMax,
       ...sharedXAxisStyle(),
+      axisLabel: {
+        color: theme.axisLabelColor,
+        ...(isDateBasedView
+          ? {}
+          : {
+              showMinLabel: true,
+              showMaxLabel: true,
+              formatter: (value: number) =>
+                String(new Date(value).getUTCFullYear()),
+            }),
+      },
     },
     yAxis: {
       type: "value",
