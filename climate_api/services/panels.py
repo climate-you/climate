@@ -840,51 +840,64 @@ def _compute_coral_local_headlines(
     lat: float,
     lon: float,
 ) -> list[HeadlinePayload]:
-    metric = "dhw_severe_risk_days_per_year"
     method = "OLS trend value at last year and multiplication factor vs 1985 baseline"
-    no_data = [
-        HeadlinePayload(key="dhw_severe_local", label="Severe coral heat stress days", value=None, unit="days", baseline="1985", method=method),
-        HeadlinePayload(key="dhw_factor_local", label="Coral heat stress factor vs 1985", value=None, unit="x", baseline="1985", method=method),
+
+    def _dhw_ols_headlines(metric: str, key_days: str, key_factor: str, label_days: str, label_factor: str) -> list[HeadlinePayload]:
+        no_data = [
+            HeadlinePayload(key=key_days, label=label_days, value=None, unit="days", baseline="1985", method=method),
+            HeadlinePayload(key=key_factor, label=label_factor, value=None, unit="x", baseline="1985", method=method),
+        ]
+        try:
+            vec = tile_store.try_get_metric_vector(metric, lat, lon)
+        except FileNotFoundError:
+            vec = None
+        if vec is None:
+            return no_data
+        y = np.asarray(vec, dtype=np.float64).reshape(-1)
+        axis_vals = _series_axis(tile_store, metric, y.size)
+        x = np.asarray([_axis_to_numeric(v) for v in axis_vals], dtype=np.float64)
+        trend = linear_trend_line(x, y)
+        if not np.any(np.isfinite(trend)):
+            return no_data
+        trend_at_last = float(trend[-1])
+        baseline_mask = x.astype(int) == 1985
+        trend_at_baseline = float(trend[baseline_mask][-1]) if baseline_mask.any() else float("nan")
+        days_headline = HeadlinePayload(
+            key=key_days,
+            label=label_days,
+            value=round(max(0.0, trend_at_last), 1) if np.isfinite(trend_at_last) else None,
+            unit="days",
+            baseline="1985",
+            period=str(int(x[-1])),
+            method=method,
+        )
+        if np.isfinite(trend_at_baseline) and trend_at_baseline > 0 and np.isfinite(trend_at_last):
+            factor_value: float | None = round(max(0.0, trend_at_last / trend_at_baseline), 1)
+        else:
+            factor_value = None
+        factor_headline = HeadlinePayload(
+            key=key_factor,
+            label=label_factor,
+            value=factor_value,
+            unit="x",
+            baseline="1985",
+            period=str(int(x[-1])),
+            method=method,
+        )
+        return [days_headline, factor_headline]
+
+    return [
+        *_dhw_ols_headlines(
+            "dhw_severe_risk_days_per_year",
+            "dhw_severe_local", "dhw_factor_local",
+            "Severe coral heat stress days", "Coral severe heat stress factor vs 1985",
+        ),
+        *_dhw_ols_headlines(
+            "dhw_moderate_risk_days_per_year",
+            "dhw_moderate_local", "dhw_factor_moderate_local",
+            "Moderate coral heat stress days", "Coral moderate heat stress factor vs 1985",
+        ),
     ]
-    try:
-        vec = tile_store.try_get_metric_vector(metric, lat, lon)
-    except FileNotFoundError:
-        vec = None
-    if vec is None:
-        return no_data
-    y = np.asarray(vec, dtype=np.float64).reshape(-1)
-    axis_vals = _series_axis(tile_store, metric, y.size)
-    x = np.asarray([_axis_to_numeric(v) for v in axis_vals], dtype=np.float64)
-    trend = linear_trend_line(x, y)
-    if not np.any(np.isfinite(trend)):
-        return no_data
-    trend_at_last = float(trend[-1])
-    baseline_mask = x.astype(int) == 1985
-    trend_at_baseline = float(trend[baseline_mask][-1]) if baseline_mask.any() else float("nan")
-    severe_headline = HeadlinePayload(
-        key="dhw_severe_local",
-        label="Severe coral heat stress days",
-        value=round(max(0.0, trend_at_last), 1) if np.isfinite(trend_at_last) else None,
-        unit="days",
-        baseline="1985",
-        period=str(int(x[-1])),
-        method=method,
-    )
-    if np.isfinite(trend_at_baseline) and trend_at_baseline > 0 and np.isfinite(trend_at_last):
-        factor = trend_at_last / trend_at_baseline
-        factor_value = round(max(0.0, factor), 1)
-    else:
-        factor_value = None
-    factor_headline = HeadlinePayload(
-        key="dhw_factor_local",
-        label="Coral heat stress factor vs 1985",
-        value=factor_value,
-        unit="x",
-        baseline="1985",
-        period=str(int(x[-1])),
-        method=method,
-    )
-    return [severe_headline, factor_headline]
 
 
 def _layer_overrides_from_manifest(

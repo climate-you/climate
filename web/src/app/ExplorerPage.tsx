@@ -657,10 +657,19 @@ export default function ExplorerPage({
           const globalDays = typeof globalCoral?.value === "number" && Number.isFinite(globalCoral.value) ? globalCoral.value : null;
           return { type: "coral_unavailable", globalDays } as const;
         }
-        if (factorVal === 0 || severeVal === 0) return { type: "coral_no_days" } as const;
         if (factorVal !== null && factorVal > 1.2) return { type: "coral_factor", factor: factorVal } as const;
-        if (factorVal !== null && factorVal >= 0.8) return { type: "coral_stable" } as const;
-        return { type: "coral_absolute", days: severeVal } as const;
+        // Severe is stable (factor ≈ 1) or zero — fall back to moderate
+        const moderateFactor = h("dhw_factor_moderate_local");
+        const moderate = h("dhw_moderate_local");
+        const moderateFactorVal = typeof moderateFactor?.value === "number" && Number.isFinite(moderateFactor.value) ? moderateFactor.value : null;
+        const moderateVal = typeof moderate?.value === "number" && Number.isFinite(moderate.value) ? moderate.value : null;
+        if (moderateVal !== null) {
+          if (moderateVal === 0 || moderateFactorVal === 0) return { type: "coral_no_days" } as const;
+          if (moderateFactorVal !== null && moderateFactorVal >= 0.8 && moderateFactorVal <= 1.2) return { type: "coral_stable" } as const;
+          if (moderateVal > 0) return { type: "coral_moderate_absolute", days: moderateVal } as const;
+        }
+        if (severeVal > 0) return { type: "coral_absolute", days: severeVal } as const;
+        return { type: "coral_no_days" } as const;
       }
       default:
         return null;
@@ -1612,12 +1621,12 @@ export default function ExplorerPage({
                   ) : panelHeadline?.type === "coral_stable" ? (
                     <>
                       <span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}
-                      <span className={styles.panelTitleSmall}>the number of days of severe coral heat stress has remained stable since 1985.</span>
+                      <span className={styles.panelTitleSmall}>the number of days of coral heat stress has remained stable since 1985.</span>
                     </>
                   ) : panelHeadline?.type === "coral_no_days" ? (
                     <>
                       <span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}
-                      <span className={styles.panelTitleSmall}>no days of severe coral heat stress have been recorded in recent years.</span>
+                      <span className={styles.panelTitleSmall}>no days of coral heat stress have been recorded in recent years.</span>
                     </>
                   ) : panelHeadline?.type === "coral_absolute" ? (
                     <>
@@ -1629,6 +1638,13 @@ export default function ExplorerPage({
                       <span className={styles.panelTitleSmall}>there are now </span>
                       <span className={styles.panelTitleTempAccent}>+{Math.round(panelHeadline.days)}</span>
                       <span className={styles.panelTitleSmall}> days of severe coral heat stress per year.</span>
+                    </>
+                  ) : panelHeadline?.type === "coral_moderate_absolute" ? (
+                    <>
+                      <span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}
+                      <span className={styles.panelTitleSmall}>there are now </span>
+                      <span className={styles.panelTitleTempAccent}>+{Math.round(panelHeadline.days)}</span>
+                      <span className={styles.panelTitleSmall}> days of moderate coral heat stress per year.</span>
                     </>
                   ) : panelHeadline?.type === "sst_unavailable" ? (
                     <>
