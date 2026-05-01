@@ -744,12 +744,12 @@
 }
 
 .searchMetaLink {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-primary);
   background: var(--surface);
   border: 1px solid var(--surface-border);
   border-radius: 999px;
-  padding: 4px 10px;
+  padding: 7px 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1123,6 +1123,8 @@
   }
 
   .searchMetaLink {
+    font-size: 12px;
+    padding: 4px 10px;
     width: var(--meta-dock-width);
     text-align: center;
   }
