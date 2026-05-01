@@ -51,17 +51,21 @@ type GraphCardProps = {
   onStepIndexChange: (graphId: string, nextStepIndex: number) => void;
   available?: boolean;
   onSelectLayer?: () => void;
+  animationRevision?: number;
 };
 
 export function EChartCanvas({
   option,
   height = 420,
+  animationRevision = 0,
 }: {
   option: EChartsOption;
   height?: number;
+  animationRevision?: number;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
+  const prevAnimationRevision = useRef(0);
 
   useEffect(() => {
     if (!rootRef.current) return;
@@ -77,13 +81,23 @@ export function EChartCanvas({
   }, []);
 
   useEffect(() => {
-    if (!chartRef.current) return;
-    chartRef.current.setOption(option, {
-      notMerge: false,
-      replaceMerge: ["series", "xAxis", "yAxis"],
-      lazyUpdate: true,
-    });
-  }, [option]);
+    const chart = chartRef.current;
+    if (!chart) return;
+    const revisionChanged = animationRevision !== prevAnimationRevision.current;
+    prevAnimationRevision.current = animationRevision;
+    if (revisionChanged) {
+      // Draw-from-scratch animation (panel open, graph navigation)
+      chart.clear();
+      chart.setOption(option, { notMerge: true });
+    } else {
+      // Transition animation: data morphs in place (step change, location change)
+      chart.setOption(option, {
+        notMerge: false,
+        replaceMerge: ["series", "xAxis", "yAxis"],
+        lazyUpdate: true,
+      });
+    }
+  }, [option, animationRevision]);
 
   return (
     <div
@@ -104,6 +118,7 @@ export default function GraphCard({
   onStepIndexChange,
   available = true,
   onSelectLayer,
+  animationRevision = 0,
 }: GraphCardProps) {
   const chartHostRef = useRef<HTMLDivElement | null>(null);
   const [chartHeight, setChartHeight] = useState(260);
@@ -375,7 +390,7 @@ export default function GraphCard({
 
       {!hasGraphError ? (
         <div ref={chartHostRef}>
-          <EChartCanvas option={option} height={chartHeight} />
+          <EChartCanvas option={option} height={chartHeight} animationRevision={animationRevision} />
         </div>
       ) : null}
 

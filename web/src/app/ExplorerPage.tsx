@@ -347,6 +347,7 @@ export default function ExplorerPage({
   const [panelLoading, setPanelLoading] = useState<boolean>(false);
   const [panelRetrying, setPanelRetrying] = useState<boolean>(false);
   const [panelOpen, setPanelOpen] = useState<boolean>(false);
+  const [panelOpenKey, setPanelOpenKey] = useState(0);
   const [panelTab, setPanelTab] = useState<"graph" | "chat">("graph");
   const [panelDragOffsetPx, setPanelDragOffsetPx] = useState(0);
   const [panelDragActive, setPanelDragActive] = useState(false);
@@ -1078,6 +1079,11 @@ export default function ExplorerPage({
     touchGestureAxisRef.current = null;
   }, [panelOpen]);
 
+  useEffect(() => {
+    if (!panelOpen) return;
+    setPanelOpenKey((k) => k + 1);
+  }, [graphPage, panelOpen]);
+
   const keepPanelFocused = useCallback(() => {
     if (!panelOpen || introActive) return;
     window.requestAnimationFrame(() => {
@@ -1763,6 +1769,7 @@ export default function ExplorerPage({
                     stepIndex={graphStepById[entry.graph.id] ?? 0}
                     onStepIndexChange={handleGraphStepChange}
                     available={entry.available}
+                    animationRevision={panelOpenKey}
                     onSelectLayer={
                       entry.graph.id === "dhw_risk_days"
                         ? () => {
