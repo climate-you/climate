@@ -1149,18 +1149,18 @@ export default function ExplorerPage({
 
   const handlePanelKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLElement>) => {
-      if (e.key === "ArrowDown" || e.key === "PageDown") {
+      if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === "ArrowRight") {
         e.preventDefault();
-        goGraphPage(1);
-      } else if (e.key === "ArrowUp" || e.key === "PageUp") {
+        goToGraphPage(graphPage < maxGraphPage ? graphPage + 1 : 0);
+      } else if (e.key === "ArrowUp" || e.key === "PageUp" || e.key === "ArrowLeft") {
         e.preventDefault();
-        goGraphPage(-1);
+        goToGraphPage(graphPage > 0 ? graphPage - 1 : maxGraphPage);
       } else if (e.key === "Escape") {
         e.preventDefault();
         setPanelOpen(false);
       }
     },
-    [goGraphPage],
+    [goToGraphPage, graphPage, maxGraphPage],
   );
 
   const handlePanelTouchStart = useCallback(
