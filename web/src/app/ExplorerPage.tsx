@@ -260,6 +260,13 @@ const GRAPH_INFO_TEXT: Record<string, string> = {
   dhw_risk_days: "This graph shows the number of days per year that coral reefs experienced each DHW (Degree Heating Weeks) heat-stress level for 1985-2025: no risk (DHW < 4), moderate risk (4 ≤ DHW < 8), and severe risk (DHW ≥ 8). DHW measures accumulated ocean heat stress over the previous 12 weeks; more days in higher DHW categories indicate greater bleaching risk. Source: ERDDAP.",
 };
 
+const PANEL_STEP_TITLE: Record<string, string> = {
+  air_temperature: "Temperature",
+  sea_temperature: "Sea Temperature",
+  precipitation: "Precipitations",
+  coral_reef_dhw: "Coral",
+};
+
 type PanelStepIconProps = {
   panelId: string;
   active: boolean;
@@ -268,6 +275,7 @@ type PanelStepIconProps = {
 };
 
 function PanelStepIcon({ panelId, active, label, onClick }: PanelStepIconProps) {
+  const titleLabel = PANEL_STEP_TITLE[panelId];
   let icon: React.ReactNode;
   if (panelId === "precipitation") {
     icon = <path d="M12 2C8.5 7.5 5 12 5 15.5a7 7 0 0 0 14 0C19 12 15.5 7.5 12 2z" />;
@@ -286,6 +294,7 @@ function PanelStepIcon({ panelId, active, label, onClick }: PanelStepIconProps) 
         aria-label={label}
         aria-selected={active}
         onClick={onClick}
+        title={titleLabel}
         className={`${styles.panelStepIcon} ${active ? styles.panelStepIconActive : ""}`}
       >
         <img
@@ -306,6 +315,7 @@ function PanelStepIcon({ panelId, active, label, onClick }: PanelStepIconProps) 
       aria-label={label}
       aria-selected={active}
       onClick={onClick}
+      title={titleLabel}
       className={`${styles.panelStepIcon} ${active ? styles.panelStepIconActive : ""}`}
     >
       <svg className={styles.panelStepIconSvg} viewBox="0 0 24 24" aria-hidden="true">
@@ -1397,6 +1407,7 @@ export default function ExplorerPage({
                 type="button"
                 className={styles.globeLegendUnitSwitch}
                 aria-label={`Switch to ${unit === "C" ? "°F" : "°C"}`}
+                title={`Switch to ${unit === "C" ? "°F" : "°C"}`}
                 onClick={() => {
                   const nextUnit: "C" | "F" = unit === "C" ? "F" : "C";
                   setUnit(nextUnit);
@@ -1541,6 +1552,7 @@ export default function ExplorerPage({
               className={styles.panelClose}
               type="button"
               aria-label="Close panel"
+              title="Close"
               onClick={() => setPanelOpen(false)}
             >
               <svg
@@ -1773,6 +1785,7 @@ export default function ExplorerPage({
                   type="button"
                   className={`${styles.panelScrollArrow} ${styles.panelScrollArrowPrev}`}
                   aria-label="Previous graphs"
+                  title="Previous"
                   onClick={() => {
                     const next = graphPage > 0 ? graphPage - 1 : maxGraphPage;
                     goToGraphPage(next);
@@ -1795,6 +1808,7 @@ export default function ExplorerPage({
                   type="button"
                   className={`${styles.panelScrollArrow} ${styles.panelScrollArrowNext}`}
                   aria-label="Next graphs"
+                  title="Next"
                   onClick={() => {
                     const next = graphPage < maxGraphPage ? graphPage + 1 : 0;
                     goToGraphPage(next);
@@ -1859,6 +1873,7 @@ export default function ExplorerPage({
                   unit === "C" ? styles.unitOptionActive : ""
                 }`}
                 aria-pressed={unit === "C"}
+                title="Switch to °F"
                 onClick={() => {
                   if (unit === "C") return;
                   setUnit("C");
@@ -1877,6 +1892,7 @@ export default function ExplorerPage({
                   unit === "F" ? styles.unitOptionActive : ""
                 }`}
                 aria-pressed={unit === "F"}
+                title="Switch to °C"
                 onClick={() => {
                   if (unit === "F") return;
                   setUnit("F");
