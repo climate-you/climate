@@ -608,6 +608,7 @@ export function buildStackedBarOption({
         formatter: (value: number) => `${Math.round(value)}`,
       },
       min: 0,
+      ...(graph.id === "dhw_risk_days" ? { max: 400 } : {}),
     },
     series: chartSeries,
   };

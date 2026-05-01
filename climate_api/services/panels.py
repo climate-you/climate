@@ -841,90 +841,39 @@ def _compute_coral_local_headlines(
     lon: float,
 ) -> list[HeadlinePayload]:
 
-    def _dhw_headlines(
-        metric: str,
-        key_days: str,
-        key_factor: str,
-        label_days: str,
-        label_factor: str,
-        days_method: str,
-        use_recent_mean: bool = False,
-    ) -> list[HeadlinePayload]:
-        ols_method = "OLS trend value at last year and multiplication factor vs 1985 baseline"
+    def _dhw_local_headlines() -> list[HeadlinePayload]:
         no_data = [
-            HeadlinePayload(key=key_days, label=label_days, value=None, unit="days", baseline="1985", method=days_method),
-            HeadlinePayload(key=key_factor, label=label_factor, value=None, unit="x", baseline="1985", method=ols_method),
+            HeadlinePayload(key="dhw_severe_local", label="Severe coral heat stress data available", value=None, unit="flag", baseline="1985"),
+            HeadlinePayload(key="dhw_worst_year_local", label="Worst coral heat stress year", value=None, unit="year", baseline="1985"),
+            HeadlinePayload(key="dhw_worst_year_days_local", label="Coral heat stress days in worst year", value=None, unit="days", baseline="1985"),
         ]
         try:
-            vec = tile_store.try_get_metric_vector(metric, lat, lon)
+            severe_vec = tile_store.try_get_metric_vector("dhw_severe_risk_days_per_year", lat, lon)
+            moderate_vec = tile_store.try_get_metric_vector("dhw_moderate_risk_days_per_year", lat, lon)
         except FileNotFoundError:
-            vec = None
-        if vec is None:
             return no_data
-        y = np.asarray(vec, dtype=np.float64).reshape(-1)
-        axis_vals = _series_axis(tile_store, metric, y.size)
+        if severe_vec is None:
+            return no_data
+        severe = np.asarray(severe_vec, dtype=np.float64).reshape(-1)
+        if not np.any(np.isfinite(severe)):
+            return no_data
+        axis_vals = _series_axis(tile_store, "dhw_severe_risk_days_per_year", severe.size)
         x = np.asarray([_axis_to_numeric(v) for v in axis_vals], dtype=np.float64)
-        finite = np.isfinite(y) & np.isfinite(x)
-        trend = linear_trend_line(x, y)
-        if not np.any(np.isfinite(trend)):
-            return no_data
+        moderate = np.asarray(moderate_vec, dtype=np.float64).reshape(-1) if moderate_vec is not None else np.zeros_like(severe)
+        if moderate.size != severe.size:
+            moderate = np.zeros_like(severe)
+        total = np.where(np.isfinite(severe), severe, 0.0) + np.where(np.isfinite(moderate), moderate, 0.0)
+        finite_mask = np.isfinite(severe) | np.isfinite(moderate)
+        worst_idx = int(np.argmax(np.where(finite_mask, total, -np.inf)))
+        worst_year = int(x[worst_idx])
+        worst_days = round(float(total[worst_idx]))
+        return [
+            HeadlinePayload(key="dhw_severe_local", label="Severe coral heat stress data available", value=1.0, unit="flag", baseline="1985"),
+            HeadlinePayload(key="dhw_worst_year_local", label="Worst coral heat stress year", value=float(worst_year), unit="year", baseline="1985", period=str(worst_year)),
+            HeadlinePayload(key="dhw_worst_year_days_local", label="Coral heat stress days in worst year", value=float(worst_days), unit="days", baseline="1985", period=str(worst_year)),
+        ]
 
-        if use_recent_mean:
-            finite_x = x[finite]
-            if finite_x.size == 0:
-                days_value = None
-            else:
-                last_year = int(finite_x.max())
-                recent_mask = finite & (x.astype(int) >= last_year - (_HEADLINE_RECENT_YEARS - 1))
-                days_value = round(float(np.mean(y[recent_mask])), 1) if recent_mask.any() else None
-        else:
-            trend_at_last = float(trend[-1])
-            days_value = round(max(0.0, trend_at_last), 1) if np.isfinite(trend_at_last) else None
-
-        days_headline = HeadlinePayload(
-            key=key_days,
-            label=label_days,
-            value=days_value,
-            unit="days",
-            baseline="1985",
-            period=str(int(x[-1])),
-            method=days_method,
-        )
-
-        trend_at_last_ols = float(trend[-1])
-        baseline_mask = x.astype(int) == 1985
-        trend_at_baseline = float(trend[baseline_mask][-1]) if baseline_mask.any() else float("nan")
-        if np.isfinite(trend_at_baseline) and trend_at_baseline > 0 and np.isfinite(trend_at_last_ols):
-            factor_value: float | None = round(max(0.0, trend_at_last_ols / trend_at_baseline), 1)
-        else:
-            factor_value = None
-        factor_headline = HeadlinePayload(
-            key=key_factor,
-            label=label_factor,
-            value=factor_value,
-            unit="x",
-            baseline="1985",
-            period=str(int(x[-1])),
-            method=ols_method,
-        )
-        return [days_headline, factor_headline]
-
-    return [
-        *_dhw_headlines(
-            "dhw_severe_risk_days_per_year",
-            "dhw_severe_local", "dhw_factor_local",
-            "Severe coral heat stress days", "Coral severe heat stress factor vs 1985",
-            days_method="OLS trend value at last year",
-            use_recent_mean=False,
-        ),
-        *_dhw_headlines(
-            "dhw_moderate_risk_days_per_year",
-            "dhw_moderate_local", "dhw_factor_moderate_local",
-            "Moderate coral heat stress days", "Coral moderate heat stress factor vs 1985",
-            days_method=f"Mean of last {_HEADLINE_RECENT_YEARS} years of observed data",
-            use_recent_mean=True,
-        ),
-    ]
+    return _dhw_local_headlines()
 
 
 def _layer_overrides_from_manifest(

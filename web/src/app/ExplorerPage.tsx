@@ -662,27 +662,20 @@ export default function ExplorerPage({
           if (typeof hd?.value !== "number" || !Number.isFinite(hd.value)) return null;
           return { type: "coral_absolute", days: hd.value } as const;
         }
-        const factor = h("dhw_factor_local");
         const severe = h("dhw_severe_local");
-        const factorVal = typeof factor?.value === "number" && Number.isFinite(factor.value) ? factor.value : null;
         const severeVal = typeof severe?.value === "number" && Number.isFinite(severe.value) ? severe.value : null;
         if (severeVal === null) {
           const globalCoral = h("dhw_severe_global");
           const globalDays = typeof globalCoral?.value === "number" && Number.isFinite(globalCoral.value) ? globalCoral.value : null;
           return { type: "coral_unavailable", globalDays } as const;
         }
-        if (factorVal !== null && factorVal > 1.2) return { type: "coral_factor", factor: factorVal } as const;
-        // Severe is stable (factor ≈ 1) or zero — fall back to moderate
-        const moderateFactor = h("dhw_factor_moderate_local");
-        const moderate = h("dhw_moderate_local");
-        const moderateFactorVal = typeof moderateFactor?.value === "number" && Number.isFinite(moderateFactor.value) ? moderateFactor.value : null;
-        const moderateVal = typeof moderate?.value === "number" && Number.isFinite(moderate.value) ? moderate.value : null;
-        if (moderateVal !== null) {
-          if (moderateVal === 0 || moderateFactorVal === 0) return { type: "coral_no_days" } as const;
-          if (moderateFactorVal !== null && moderateFactorVal >= 0.8 && moderateFactorVal <= 1.2) return { type: "coral_stable" } as const;
-          if (moderateVal > 0) return { type: "coral_moderate_absolute", days: moderateVal } as const;
+        const worstYear = h("dhw_worst_year_local");
+        const worstDays = h("dhw_worst_year_days_local");
+        const worstYearVal = typeof worstYear?.value === "number" && Number.isFinite(worstYear.value) ? Math.round(worstYear.value) : null;
+        const worstDaysVal = typeof worstDays?.value === "number" && Number.isFinite(worstDays.value) ? worstDays.value : null;
+        if (worstYearVal !== null && worstDaysVal !== null && worstDaysVal > 0) {
+          return { type: "coral_worst_year", days: worstDaysVal, year: worstYearVal } as const;
         }
-        if (severeVal > 0) return { type: "coral_absolute", days: severeVal } as const;
         return { type: "coral_no_days" } as const;
       }
       default:
@@ -1302,14 +1295,11 @@ export default function ExplorerPage({
     if (panelHeadline?.type === "air_temp") {
       return "The warming since the pre-industrial era (1850–1900) is estimated by combining two sources: the local ERA5 warming since the 1979–2000 reference period, plus a pre-1979 offset derived from a 5-model CMIP mean that estimates how much warming occurred between 1850–1900 and 1979–2000 before the ERA5 record begins.";
     }
-    if (panelHeadline?.type === "coral_factor" || panelHeadline?.type === "coral_absolute") {
-      return "The number of severe heat stress days is estimated from a linear trend (OLS) fitted to annual data since 1985. The multiplication factor compares the trend at the current year to the trend at 1985, making it robust to year-to-year variability.";
+    if (panelHeadline?.type === "coral_absolute") {
+      return "The number of severe heat stress days is estimated from a linear trend (OLS) fitted to annual data since 1985.";
     }
-    if (panelHeadline?.type === "coral_stable" || panelHeadline?.type === "coral_no_days") {
-      return "Stability is assessed from a linear trend (OLS) fitted to moderate heat stress days (4 ≤ DHW < 8) since 1985. OLS smooths out episodic bleaching spikes to capture the long-term direction.";
-    }
-    if (panelHeadline?.type === "coral_moderate_absolute") {
-      return "The number of moderate heat stress days is the average of the last 5 years of observed data (4 ≤ DHW < 8). A recent mean is used here because the linear trend is unreliable for episodic bleaching patterns where most warming occurs in spike years.";
+    if (panelHeadline?.type === "coral_worst_year" || panelHeadline?.type === "coral_no_days") {
+      return "The worst year is the calendar year with the highest total of moderate (4 ≤ DHW < 8) and severe (DHW ≥ 8) heat stress days since 1985.";
     }
     return "Headline values are derived from local climate trend data. See the chart below for the full time series.";
   })();
@@ -1645,40 +1635,27 @@ export default function ExplorerPage({
                       </span>
                       <span className={styles.panelTitleSmall}> {panelHeadline.suffix}.</span>
                     </>
-                  ) : panelHeadline?.type === "coral_factor" ? (
+                  ) : panelHeadline?.type === "coral_worst_year" ? (
                     <>
                       <span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}
-                      <span className={styles.panelTitleSmall}>the number of </span><span className={styles.panelTitleTempAccent}>days</span><span className={styles.panelTitleSmall}> of severe coral heat stress has multiplied by </span>
-                      <span className={styles.panelTitleTempAccent}>{panelHeadline.factor.toFixed(1)}×</span>
-                      <span className={styles.panelTitleSmall}> since 1985.</span>
-                    </>
-                  ) : panelHeadline?.type === "coral_stable" ? (
-                    <>
-                      <span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}
-                      <span className={styles.panelTitleSmall}>the number of </span><span className={styles.panelTitleTempAccent}>days</span><span className={styles.panelTitleSmall}> of coral heat stress has remained stable since 1985.</span>
+                      <span className={styles.panelTitleSmall}>there was </span>
+                      <span className={styles.panelTitleTempAccent}>{Math.round(panelHeadline.days)}</span>{" "}
+                      <span className={styles.panelTitleTempAccent}>days</span>
+                      <span className={styles.panelTitleSmall}> of coral heat stress in </span>
+                      <span className={styles.panelTitleTempAccent}>{panelHeadline.year}</span>
+                      <span className={styles.panelTitleSmall}>, the worst year since 1985.</span>
                     </>
                   ) : panelHeadline?.type === "coral_no_days" ? (
                     <>
                       <span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}
-                      <span className={styles.panelTitleSmall}>no </span><span className={styles.panelTitleTempAccent}>days</span><span className={styles.panelTitleSmall}> of coral heat stress have been recorded in recent years.</span>
+                      <span className={styles.panelTitleSmall}>no days of coral heat stress have been recorded since 1985.</span>
                     </>
                   ) : panelHeadline?.type === "coral_absolute" ? (
                     <>
-                      {resp?.location.place.geonameid === 0 ? (
-                        <>Globally,{" "}</>
-                      ) : (
-                        <><span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}</>
-                      )}
+                      <>Globally,{" "}</>
                       <span className={styles.panelTitleSmall}>there are now </span>
                       <span className={styles.panelTitleTempAccent}>+{Math.round(panelHeadline.days)}</span>{" "}
                       <span className={styles.panelTitleTempAccent}>days</span><span className={styles.panelTitleSmall}> of severe coral heat stress per year.</span>
-                    </>
-                  ) : panelHeadline?.type === "coral_moderate_absolute" ? (
-                    <>
-                      <span className={styles.panelTitleSmall}>In</span>{" "}{titleLocationLabel},{" "}
-                      <span className={styles.panelTitleSmall}>there are now </span>
-                      <span className={styles.panelTitleTempAccent}>+{Math.round(panelHeadline.days)}</span>{" "}
-                      <span className={styles.panelTitleTempAccent}>days</span><span className={styles.panelTitleSmall}> of coral heat stress per year.</span>
                     </>
                   ) : panelHeadline?.type === "sst_unavailable" ? (
                     <>
