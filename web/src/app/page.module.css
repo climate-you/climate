@@ -486,6 +486,10 @@
   color: #ff0000;
 }
 
+.panelTitleTempAccentNegative {
+  color: #0000ff;
+}
+
 .panelTitleSmall {
   font-size: 0.65em;
 }

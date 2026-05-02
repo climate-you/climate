@@ -1685,7 +1685,7 @@ export default function ExplorerPage({
                           <span className={styles.panelTitleSmall}>
                             the air has warmed by{" "}
                           </span>
-                          <span className={styles.panelTitleTempAccent}>
+                          <span className={panelHeadline.preindustrial < 0 ? styles.panelTitleTempAccentNegative : styles.panelTitleTempAccent}>
                             {formatHeadlineDelta(
                               panelHeadline.preindustrial,
                               unit,
@@ -1705,7 +1705,7 @@ export default function ExplorerPage({
                           <span className={styles.panelTitleSmall}>
                             the air has warmed by{" "}
                           </span>
-                          <span className={styles.panelTitleTempAccent}>
+                          <span className={panelHeadline.recent < 0 ? styles.panelTitleTempAccentNegative : styles.panelTitleTempAccent}>
                             {formatHeadlineDelta(panelHeadline.recent, unit)}
                           </span>
                           <span className={styles.panelTitleSmall}>
@@ -1733,7 +1733,7 @@ export default function ExplorerPage({
                       <span className={styles.panelTitleSmall}>
                         {panelHeadline.action}{" "}
                       </span>
-                      <span className={styles.panelTitleTempAccent}>
+                      <span className={panelHeadline.value < 0 ? styles.panelTitleTempAccentNegative : styles.panelTitleTempAccent}>
                         {formatHeadlineDelta(panelHeadline.value, unit)}
                       </span>
                       <span className={styles.panelTitleSmall}>
@@ -1777,7 +1777,7 @@ export default function ExplorerPage({
                             {panelHeadline.label} shifted{" "}
                             {panelHeadline.preposition ?? "to"}{" "}
                           </span>
-                          <span className={styles.panelTitleTempAccent}>
+                          <span className={panelHeadline.value < 0 ? styles.panelTitleTempAccentNegative : styles.panelTitleTempAccent}>
                             {panelHeadline.value >= 0 ? "+" : ""}
                             {Math.round(panelHeadline.value)}
                             {panelHeadline.unit ?? ""}
@@ -1829,7 +1829,7 @@ export default function ExplorerPage({
                           <span className={styles.panelTitleSmall}>
                             Globally, the sea has warmed of{" "}
                           </span>
-                          <span className={styles.panelTitleTempAccent}>
+                          <span className={panelHeadline.globalDelta < 0 ? styles.panelTitleTempAccentNegative : styles.panelTitleTempAccent}>
                             {formatHeadlineDelta(
                               panelHeadline.globalDelta,
                               unit,
@@ -1853,7 +1853,7 @@ export default function ExplorerPage({
                           <span className={styles.panelTitleSmall}>
                             Globally, the number of coral heat stress days has shifted by{" "}
                           </span>
-                          <span className={styles.panelTitleTempAccent}>
+                          <span className={panelHeadline.globalDelta < 0 ? styles.panelTitleTempAccentNegative : styles.panelTitleTempAccent}>
                             {panelHeadline.globalDelta >= 0 ? "+" : ""}
                             {Math.round(panelHeadline.globalDelta)} days
                           </span>
