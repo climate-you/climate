@@ -21,6 +21,7 @@ class GraphAnnotation(BaseModel):
 class GraphPayload(BaseModel):
     id: str
     title: str
+    headline: Optional[Dict[str, Any]] = None
     ui: Optional[Dict[str, Any]] = None
     series_keys: List[str]
     annotations: List[GraphAnnotation] = []

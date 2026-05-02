@@ -26,6 +26,7 @@ import { useDebugTextureSync } from "@/hooks/explorer/useDebugTextureSync";
 import { useOverlayRouteSync } from "@/hooks/explorer/useOverlayRouteSync";
 import { useReleaseResolution } from "@/hooks/explorer/useReleaseResolution";
 import {
+  AIR_TEMP_RECENT_THRESHOLD,
   CLIMATE_DATA_LOAD_ERROR,
   DEFAULT_OVERLAY_BASE_PATH,
   MIN_PANEL_VIEWPORT_HEIGHT_FOR_TWO_GRAPHS,
@@ -112,9 +113,53 @@ type SeriesPayload = {
   ui?: { role?: "raw" | "mean" | "trend" | "category" } | null;
   style?: { type?: "line" | "bar"; color?: string; stack?: string } | null;
 };
+type GraphHeadlineVariant =
+  | {
+      type: "air_temp";
+      primary_metric_local: string;
+      primary_metric_global: string;
+      recent_metric_local: string;
+      recent_metric_global: string;
+      recent_threshold?: number;
+    }
+  | {
+      type: "sea_temp";
+      metric_local: string;
+      metric_global: string;
+      positive_action: string;
+      no_warming_text: string;
+      suffix: string;
+    }
+  | {
+      type: "trend";
+      metric_local: string;
+      metric_global: string;
+      label: string;
+      unit: string;
+      preposition: string;
+      suffix: string;
+      no_change_connector?: string;
+      unavailable_global_metric?: string;
+    }
+  | {
+      type: "coral";
+      global_trend_metric: string;
+      local_check_metric: string;
+      worst_year_metric: string;
+      worst_year_days_metric: string;
+      select_layer_id?: string;
+      select_layer_fly_to_reef?: boolean;
+    };
+
+type GraphHeadlineConfig = GraphHeadlineVariant & {
+  // Maps returned headline type → info bubble text shown next to the panel title.
+  info_bubble_texts?: Record<string, string>;
+};
+
 type GraphPayload = {
   id: string;
   title: string;
+  headline?: GraphHeadlineConfig | null;
   ui?: {
     info_text?: string | null;
     chart_mode?: "temperature_line" | "hot_days_combo" | "stacked_bar";
@@ -233,42 +278,6 @@ const FIXED_GRAPH_ORDER = [
   "dhw_risk_days",
 ] as const;
 
-const GRAPH_PANEL_ID: Record<string, string> = {
-  t2m_annual: "air_temperature",
-  t2m_hot_days: "air_temperature",
-  sst_annual: "sea_temperature",
-  sst_hot_days: "sea_temperature",
-  tp_annual: "precipitation",
-  tp_cdd: "precipitation",
-  dhw_risk_days: "coral_reef_dhw",
-};
-
-const GRAPH_TITLES: Record<string, string> = {
-  t2m_annual: "Annual air temperature",
-  t2m_hot_days: "Number of hot days",
-  sst_annual: "Annual sea surface temperature",
-  sst_hot_days: "Number of sea surface hot days",
-  tp_annual: "Annual total precipitation",
-  tp_cdd: "Consecutive dry days",
-  dhw_risk_days: "Coral reef DHW risk days",
-};
-
-const GRAPH_INFO_TEXT: Record<string, string> = {
-  t2m_annual:
-    "Annual air temperature is derived from daily air temperature at 2 meters above the surface, aggregated into monthly and yearly averages for 1979-2025. We show a zoomed-in version of the daily and monthly temperatures over 5 years (2021-2025) that reflects seasonal changes. Source: CDS.",
-  t2m_hot_days:
-    "Number of hot days per year are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979, for 1979-2025. Source: CDS.",
-  sst_annual:
-    "Annual sea surface temperature is derived from daily sea surface temperature, aggregated into yearly averages for 1982-2025. Source: ERDDAP.",
-  sst_hot_days:
-    "Number of sea surface hot days per year are counted as days where the sea surface temperature is warmer than the top 10% warmest days in a 10-year baseline starting in 1982, for 1982-2025. Source: ERDDAP.",
-  tp_annual:
-    "Annual total precipitation is derived from daily ERA5 total precipitation, summed into yearly totals for 1979-2025. Source: CDS.",
-  tp_cdd:
-    "Maximum number of consecutive dry days (daily precipitation < 1 mm) per year for 1979-2025. Source: CDS.",
-  dhw_risk_days:
-    "This graph shows the number of days per year that coral reefs experienced each DHW (Degree Heating Weeks) heat-stress level for 1985-2025: no risk (DHW < 4), moderate risk (4 ≤ DHW < 8), and severe risk (DHW ≥ 8). DHW measures accumulated ocean heat stress over the previous 12 weeks; more days in higher DHW categories indicate greater bleaching risk. Source: ERDDAP.",
-};
 
 const PANEL_STEP_TITLE: Record<string, string> = {
   air_temperature: "Temperature",
@@ -584,26 +593,21 @@ export default function ExplorerPage({
           panelId: panel.id,
           graph,
           data,
-          available: true,
+          available: graph.series_keys.length > 0,
         });
       });
     });
     return FIXED_GRAPH_ORDER.map((graphId) => {
       return (
         graphLookup.get(graphId) ?? {
-          panelId: GRAPH_PANEL_ID[graphId] ?? "",
-          graph: {
-            id: graphId,
-            title: GRAPH_TITLES[graphId] ?? graphId,
-            series_keys: [],
-            ui: { info_text: GRAPH_INFO_TEXT[graphId] ?? null },
-          },
+          panelId: "",
+          graph: { id: graphId, title: "", series_keys: [] },
           data: [],
-          available: resp === null,
+          available: true,
         }
       );
     });
-  }, [panelData, resp]);
+  }, [panelData]);
   const maxGraphPage = Math.max(
     0,
     Math.ceil(pagedGraphs.length / graphsPerPage) - 1,
@@ -616,25 +620,29 @@ export default function ExplorerPage({
     if (!resp) return null;
     const headlines = resp.headlines ?? [];
     const h = (key: string) => headlines.find((hd) => hd.key === key) ?? null;
-    const graphId = visibleGraphs[0]?.graph.id ?? null;
+    const graph = visibleGraphs[0]?.graph ?? null;
+    const config = graph?.headline ?? null;
+    if (!config) return null;
     const isGlobal = resp.location.place.geonameid === 0;
-    switch (graphId) {
-      case "t2m_annual": {
+
+    switch (config.type) {
+      case "air_temp": {
         const pi = h(
-          isGlobal
-            ? "t2m_vs_preindustrial_global"
-            : "t2m_vs_preindustrial_local",
+          isGlobal ? config.primary_metric_global : config.primary_metric_local,
         );
-        const recent = h(isGlobal ? "t2m_recent_global" : "t2m_recent_local");
+        const recent = h(
+          isGlobal ? config.recent_metric_global : config.recent_metric_local,
+        );
         const piVal =
           typeof pi?.value === "number" && Number.isFinite(pi.value)
             ? pi.value
             : null;
         if (piVal === null) return null;
+        const threshold = config.recent_threshold ?? AIR_TEMP_RECENT_THRESHOLD;
         const recentVal =
           typeof recent?.value === "number" &&
           Number.isFinite(recent.value) &&
-          recent.value >= 0.05
+          recent.value >= threshold
             ? recent.value
             : null;
         return {
@@ -644,26 +652,8 @@ export default function ExplorerPage({
           recent: recentVal,
         } as const;
       }
-      case "t2m_hot_days": {
-        const hd = h(isGlobal ? "t2m_hotdays_global" : "t2m_hotdays_local");
-        if (typeof hd?.value !== "number" || !Number.isFinite(hd.value))
-          return null;
-        const delta =
-          typeof hd.baseline_value === "number" &&
-          Number.isFinite(hd.baseline_value)
-            ? hd.value - hd.baseline_value
-            : hd.value;
-        return {
-          type: "trend",
-          label: "the number of hot days has",
-          value: delta,
-          preposition: "by",
-          unit: " days",
-          suffix: "since 1979",
-        } as const;
-      }
-      case "sst_annual": {
-        const sst = h(isGlobal ? "sst_recent_global" : "sst_recent_local");
+      case "sea_temp": {
+        const sst = h(isGlobal ? config.metric_global : config.metric_local);
         const sstVal =
           typeof sst?.value === "number" && Number.isFinite(sst.value)
             ? sst.value
@@ -672,17 +662,17 @@ export default function ExplorerPage({
           return sstVal > 0
             ? ({
                 type: "temp_delta",
-                action: "the sea has warmed by",
+                action: config.positive_action,
                 value: sstVal,
-                suffix: "since 1982",
+                suffix: config.suffix,
               } as const)
             : ({
                 type: "no_warming",
-                text: "the sea has not warmed since 1982.",
+                text: config.no_warming_text,
               } as const);
         }
         if (!isGlobal) {
-          const globalSst = h("sst_recent_global");
+          const globalSst = h(config.metric_global);
           const globalDelta =
             typeof globalSst?.value === "number" &&
             Number.isFinite(globalSst.value)
@@ -692,8 +682,8 @@ export default function ExplorerPage({
         }
         return null;
       }
-      case "sst_hot_days": {
-        const hd = h(isGlobal ? "sst_hotdays_global" : "sst_hotdays_local");
+      case "trend": {
+        const hd = h(isGlobal ? config.metric_global : config.metric_local);
         if (typeof hd?.value === "number" && Number.isFinite(hd.value)) {
           const delta =
             typeof hd.baseline_value === "number" &&
@@ -702,15 +692,16 @@ export default function ExplorerPage({
               : hd.value;
           return {
             type: "trend",
-            label: "the number of sea hot days has",
+            label: config.label,
             value: delta,
-            preposition: "by",
-            unit: " days",
-            suffix: "since 1982",
+            preposition: config.preposition,
+            unit: config.unit,
+            suffix: config.suffix,
+            no_change_connector: config.no_change_connector ?? "not changed",
           } as const;
         }
-        if (!isGlobal) {
-          const globalSst = h("sst_recent_global");
+        if (!isGlobal && config.unavailable_global_metric) {
+          const globalSst = h(config.unavailable_global_metric);
           const globalDelta =
             typeof globalSst?.value === "number" &&
             Number.isFinite(globalSst.value)
@@ -720,45 +711,9 @@ export default function ExplorerPage({
         }
         return null;
       }
-      case "tp_annual": {
-        const hd = h(isGlobal ? "precip_global" : "precip_local");
-        if (typeof hd?.value !== "number" || !Number.isFinite(hd.value))
-          return null;
-        const precipDelta =
-          typeof hd.baseline_value === "number" &&
-          Number.isFinite(hd.baseline_value)
-            ? hd.value - hd.baseline_value
-            : hd.value;
-        return {
-          type: "trend",
-          label: "the precipitation level has",
-          value: precipDelta,
-          preposition: "by",
-          unit: "mm",
-          suffix: "since 1979",
-        } as const;
-      }
-      case "tp_cdd": {
-        const hd = h(isGlobal ? "cdd_global" : "cdd_local");
-        if (typeof hd?.value !== "number" || !Number.isFinite(hd.value))
-          return null;
-        const delta =
-          typeof hd.baseline_value === "number" &&
-          Number.isFinite(hd.baseline_value)
-            ? hd.value - hd.baseline_value
-            : hd.value;
-        return {
-          type: "trend",
-          label: "the number of consecutive dry days has",
-          value: delta,
-          preposition: "by",
-          unit: " days",
-          suffix: "since 1979",
-        } as const;
-      }
-      case "dhw_risk_days": {
+      case "coral": {
         if (isGlobal) {
-          const hd = h("dhw_combined_global");
+          const hd = h(config.global_trend_metric);
           if (typeof hd?.value !== "number" || !Number.isFinite(hd.value))
             return null;
           const delta =
@@ -775,13 +730,13 @@ export default function ExplorerPage({
             suffix: "since 1985",
           } as const;
         }
-        const severe = h("dhw_severe_local");
+        const severe = h(config.local_check_metric);
         const severeVal =
           typeof severe?.value === "number" && Number.isFinite(severe.value)
             ? severe.value
             : null;
         if (severeVal === null) {
-          const globalCoral = h("dhw_combined_global");
+          const globalCoral = h(config.global_trend_metric);
           const globalValue =
             typeof globalCoral?.value === "number" &&
             Number.isFinite(globalCoral.value)
@@ -800,8 +755,8 @@ export default function ExplorerPage({
               : null;
           return { type: "coral_unavailable", globalDelta } as const;
         }
-        const worstYear = h("dhw_worst_year_local");
-        const worstDays = h("dhw_worst_year_days_local");
+        const worstYear = h(config.worst_year_metric);
+        const worstDays = h(config.worst_year_days_metric);
         const worstYearVal =
           typeof worstYear?.value === "number" &&
           Number.isFinite(worstYear.value)
@@ -812,11 +767,7 @@ export default function ExplorerPage({
           Number.isFinite(worstDays.value)
             ? worstDays.value
             : null;
-        if (
-          worstYearVal !== null &&
-          worstDaysVal !== null &&
-          worstDaysVal > 0
-        ) {
+        if (worstYearVal !== null && worstDaysVal !== null && worstDaysVal > 0) {
           return {
             type: "coral_worst_year",
             days: worstDaysVal,
@@ -1448,19 +1399,14 @@ export default function ExplorerPage({
     selectedLocation?.label ?? resp?.location.place.label ?? "";
   const titleLocationLabel = locationLabel || "this location";
   const panelTitleInfoText = (() => {
-    if (panelHeadline?.type === "air_temp") {
-      return "The warming since the pre-industrial era (1850–1900) is estimated by combining two sources: the local ERA5 warming since the 1979–2000 reference period, plus a pre-1979 offset derived from a 5-model CMIP mean that estimates how much warming occurred between 1850–1900 and 1979–2000 before the ERA5 record begins.";
+    if (!panelHeadline) {
+      return "Headline values are derived from local climate trend data. See the chart below for the full time series.";
     }
-    if (panelHeadline?.type === "coral_worst_year") {
-      return "The worst year is the calendar year with the highest combined total of moderate (4 ≤ DHW < 8) and severe (DHW ≥ 8) heat stress days in the observed record since 1985.";
-    }
-    if (
-      (panelHeadline?.type === "trend" || panelHeadline?.type === "coral_unavailable") &&
-      visibleGraphs.some((g) => g.graph.id === "dhw_risk_days")
-    ) {
-      return "The change is estimated from a linear trend fitted to global coral heat stress data since 1985, counting combined moderate (4 ≤ DHW < 8) and severe (DHW ≥ 8) days per year.";
-    }
-    return "Headline values are derived from local climate trend data. See the chart below for the full time series.";
+    const visibleConfig = visibleGraphs[0]?.graph.headline ?? null;
+    return (
+      visibleConfig?.info_bubble_texts?.[panelHeadline.type] ??
+      "Headline values are derived from local climate trend data. See the chart below for the full time series."
+    );
   })();
   const populationText = formatPopulation(selectedLocation?.population);
   const debugBbox = resp?.location?.panel_valid_bbox ?? null;
@@ -1819,19 +1765,29 @@ export default function ExplorerPage({
                           {titleLocationLabel},{" "}
                         </>
                       )}
-                      <span className={styles.panelTitleSmall}>
-                        {panelHeadline.label} shifted{" "}
-                        {panelHeadline.preposition ?? "to"}{" "}
-                      </span>
-                      <span className={styles.panelTitleTempAccent}>
-                        {panelHeadline.value >= 0 ? "+" : ""}
-                        {Math.round(panelHeadline.value)}
-                        {panelHeadline.unit ?? ""}
-                      </span>
-                      <span className={styles.panelTitleSmall}>
-                        {" "}
-                        {panelHeadline.suffix}.
-                      </span>
+                      {Math.round(panelHeadline.value) === 0 ? (
+                        <span className={styles.panelTitleSmall}>
+                          {panelHeadline.label}{" "}
+                          {panelHeadline.no_change_connector ?? "not changed"}{" "}
+                          {panelHeadline.suffix}.
+                        </span>
+                      ) : (
+                        <>
+                          <span className={styles.panelTitleSmall}>
+                            {panelHeadline.label} shifted{" "}
+                            {panelHeadline.preposition ?? "to"}{" "}
+                          </span>
+                          <span className={styles.panelTitleTempAccent}>
+                            {panelHeadline.value >= 0 ? "+" : ""}
+                            {Math.round(panelHeadline.value)}
+                            {panelHeadline.unit ?? ""}
+                          </span>
+                          <span className={styles.panelTitleSmall}>
+                            {" "}
+                            {panelHeadline.suffix}.
+                          </span>
+                        </>
+                      )}
                     </>
                   ) : panelHeadline?.type === "coral_worst_year" ? (
                     <>
@@ -1894,9 +1850,8 @@ export default function ExplorerPage({
                       {titleLocationLabel}.{" "}
                       {panelHeadline.globalDelta !== null ? (
                         <>
-                          <>Globally, </>
                           <span className={styles.panelTitleSmall}>
-                            the number of coral heat stress days has shifted by{" "}
+                            Globally, the number of coral heat stress days has shifted by{" "}
                           </span>
                           <span className={styles.panelTitleTempAccent}>
                             {panelHeadline.globalDelta >= 0 ? "+" : ""}
@@ -1970,18 +1925,24 @@ export default function ExplorerPage({
                     onStepIndexChange={handleGraphStepChange}
                     available={entry.available}
                     animationRevision={panelOpenKey}
-                    onSelectLayer={
-                      entry.graph.id === "dhw_risk_days"
-                        ? () => {
-                            setActiveLayerId("reef_stress");
-                            const bbox = nearestCoralBbox(
+                    onSelectLayer={(() => {
+                      const hc = entry.graph.headline ?? null;
+                      if (hc?.type !== "coral" || !hc.select_layer_id)
+                        return undefined;
+                      const layerId = hc.select_layer_id;
+                      const flyToReef = hc.select_layer_fly_to_reef ?? false;
+                      return () => {
+                        setActiveLayerId(layerId);
+                        if (flyToReef) {
+                          setChatFlyToBbox(
+                            nearestCoralBbox(
                               picked?.lat ?? 0,
                               picked?.lon ?? 0,
-                            );
-                            setChatFlyToBbox(bbox);
-                          }
-                        : undefined
-                    }
+                            ),
+                          );
+                        }
+                      };
+                    })()}
                   />
                 ) : null,
               )}

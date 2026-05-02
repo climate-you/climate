@@ -1095,6 +1095,7 @@ def build_panel_tiles_registry(
             GraphPayload(
                 id=graph.get("id", ""),
                 title=graph.get("title", ""),
+                headline=graph.get("headline"),
                 ui=graph.get("ui"),
                 series_keys=graph_series_keys,
                 annotations=graph_annotations,
@@ -1283,7 +1284,7 @@ def build_scored_panels_tiles_registry(
         for key, spec in maps_manifest.items()
         if key != "version" and isinstance(spec, dict)
     }
-    scored_panel_ids: list[tuple[int, str]] = []
+    all_panel_ids: list[tuple[int, str]] = []
     for panel_id, panel_spec in panels.items():
         score_map_id = panel_spec.get("score_map_id")
         if not isinstance(score_map_id, str) or not score_map_id:
@@ -1307,35 +1308,60 @@ def build_scored_panels_tiles_registry(
             maps_root=maps_root,
             map_artifact_roots=map_artifact_roots,
         )
-        if score > 0:
-            scored_panel_ids.append((score, panel_id))
+        all_panel_ids.append((score, panel_id))
 
-    scored_panel_ids.sort(key=lambda item: item[0], reverse=True)
+    all_panel_ids.sort(key=lambda item: item[0], reverse=True)
 
     merged_series: dict[str, SeriesPayload] = {}
     scored_panels: list[ScoredPanelPayload] = []
     location: LocationInfo | None = None
-    for score, panel_id in scored_panel_ids:
-        panel_resp = build_panel_tiles_registry(
-            place_resolver=place_resolver,
-            tile_store=tile_store,
-            cache=cache,
-            ttl_panel_s=ttl_panel_s,
-            release=release,
-            lat=lat,
-            lon=lon,
-            unit=unit,
-            panel_id=panel_id,
-            panels_manifest=panels_manifest,
-            selected_place=selected_place,
-            release_root=release_root,
-        )
-        if location is None:
-            location = panel_resp.location
-        for key, payload in panel_resp.series.items():
-            if key not in merged_series:
-                merged_series[key] = payload
-        scored_panels.append(ScoredPanelPayload(score=score, panel=panel_resp.panel))
+    for score, panel_id in all_panel_ids:
+        if score > 0:
+            panel_resp = build_panel_tiles_registry(
+                place_resolver=place_resolver,
+                tile_store=tile_store,
+                cache=cache,
+                ttl_panel_s=ttl_panel_s,
+                release=release,
+                lat=lat,
+                lon=lon,
+                unit=unit,
+                panel_id=panel_id,
+                panels_manifest=panels_manifest,
+                selected_place=selected_place,
+                release_root=release_root,
+            )
+            if location is None:
+                location = panel_resp.location
+            for key, payload in panel_resp.series.items():
+                if key not in merged_series:
+                    merged_series[key] = payload
+            scored_panels.append(ScoredPanelPayload(score=score, panel=panel_resp.panel))
+        else:
+            # Score=0 means no data at this location, but include stub graph definitions
+            # so the frontend always receives headline config and can show the unavailable state.
+            panel_spec = panels[panel_id]
+            stub_graphs = [
+                GraphPayload(
+                    id=g.get("id", ""),
+                    title=g.get("title", ""),
+                    headline=g.get("headline"),
+                    ui=g.get("ui"),
+                    series_keys=[],
+                    error="Data not available at this location.",
+                )
+                for g in panel_spec.get("graphs", [])
+            ]
+            scored_panels.append(
+                ScoredPanelPayload(
+                    score=score,
+                    panel=PanelPayload(
+                        id=panel_id,
+                        title=panel_spec.get("title", panel_id),
+                        graphs=stub_graphs,
+                    ),
+                )
+            )
 
     if location is None:
         if selected_place is not None:
@@ -1750,6 +1776,7 @@ def build_global_panels(
                 GraphPayload(
                     id=graph.get("id", ""),
                     title=graph.get("title", ""),
+                    headline=graph.get("headline"),
                     ui=graph.get("ui"),
                     series_keys=graph_series_keys,
                     caption=None,

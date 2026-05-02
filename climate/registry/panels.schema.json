@@ -55,6 +55,7 @@
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "title": { "type": "string" },
+        "headline": { "type": "object", "additionalProperties": true },
         "ui": { "$ref": "#/$defs/graph_ui" },
         "caption": { "$ref": "#/$defs/caption" },
         "source": { "type": "string" },

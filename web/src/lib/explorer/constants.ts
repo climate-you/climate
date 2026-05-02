@@ -13,6 +13,10 @@ export const HOME_FLY_DURATION_MS = 1200;
 
 export const CLIMATE_DATA_LOAD_ERROR = "Couldn't load climate data.";
 
+// Minimum recent warming (in display units) to show the "of which X since 1979" clause
+// in the air temperature headline — suppresses near-zero deltas that read as noise.
+export const AIR_TEMP_RECENT_THRESHOLD = 0.05;
+
 export const DEFAULT_TITLE_ACTION_TEXT = "human activities have caused";
 export const PREINDUSTRIAL_TITLE_SUFFIX = "since 1850-1900.";
 export const PANEL_TITLE_INFO_PREINDUSTRIAL =

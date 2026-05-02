@@ -14,6 +14,16 @@
       "graphs": [
         {
           "id": "t2m_annual",
+          "headline": {
+            "type": "air_temp",
+            "primary_metric_local": "t2m_vs_preindustrial_local",
+            "primary_metric_global": "t2m_vs_preindustrial_global",
+            "recent_metric_local": "t2m_recent_local",
+            "recent_metric_global": "t2m_recent_global",
+            "info_bubble_texts": {
+              "air_temp": "The warming since the pre-industrial era (1850–1900) is estimated by combining two sources: the local ERA5 warming since the 1979–2000 reference period, plus a pre-1979 offset derived from a 5-model CMIP mean that estimates how much warming occurred between 1850–1900 and 1979–2000 before the ERA5 record begins."
+            }
+          },
           "title": "Annual air temperature",
           "ui": {
             "info_text": "Annual air temperature is derived from daily air temperature at 2 meters above the surface, aggregated into monthly and yearly averages for 1979-2025. We show a zoomed-in version of the daily and monthly temperatures over 5 years (2021-2025) that reflects seasonal changes. Source: CDS.",
@@ -114,6 +124,16 @@
         },
         {
           "id": "t2m_hot_days",
+          "headline": {
+            "type": "trend",
+            "metric_local": "t2m_hotdays_local",
+            "metric_global": "t2m_hotdays_global",
+            "label": "the number of hot days has",
+            "unit": " days",
+            "preposition": "by",
+            "suffix": "since 1979",
+            "no_change_connector": "not changed"
+          },
           "title": "Number of hot days",
           "ui": {
             "info_text": "Number of hot days per year are counted as days warmer than the top 10% warmest days in a 10-year baseline starting in 1979, for 1979-2025. Source: CDS.",
@@ -163,6 +183,14 @@
       "graphs": [
         {
           "id": "sst_annual",
+          "headline": {
+            "type": "sea_temp",
+            "metric_local": "sst_recent_local",
+            "metric_global": "sst_recent_global",
+            "positive_action": "the sea has warmed by",
+            "no_warming_text": "the sea has not warmed since 1982.",
+            "suffix": "since 1982"
+          },
           "title": "Annual sea surface temperature",
           "ui": {
             "info_text": "Annual sea surface temperature is derived from daily sea surface temperature, aggregated into yearly averages for 1982-2025. Source: ERDDAP.",
@@ -210,6 +238,17 @@
         },
         {
           "id": "sst_hot_days",
+          "headline": {
+            "type": "trend",
+            "metric_local": "sst_hotdays_local",
+            "metric_global": "sst_hotdays_global",
+            "label": "the number of sea hot days has",
+            "unit": " days",
+            "preposition": "by",
+            "suffix": "since 1982",
+            "no_change_connector": "not changed",
+            "unavailable_global_metric": "sst_recent_global"
+          },
           "title": "Number of sea surface hot days",
           "ui": {
             "info_text": "Number of sea surface hot days per year are counted as days where the sea surface temperature is warmer than the top 10% warmest days in a 10-year baseline starting in 1982, for 1982-2025. Source: ERDDAP.",
@@ -259,6 +298,16 @@
       "graphs": [
         {
           "id": "tp_annual",
+          "headline": {
+            "type": "trend",
+            "metric_local": "precip_local",
+            "metric_global": "precip_global",
+            "label": "the precipitation level has",
+            "unit": "mm",
+            "preposition": "by",
+            "suffix": "since 1979",
+            "no_change_connector": "not changed"
+          },
           "title": "Annual total precipitation",
           "ui": {
             "info_text": "Annual total precipitation is derived from daily ERA5 total precipitation, summed into yearly totals for 1979-2025. Source: CDS. Note: ERA5 precipitation trends may be inflated by changes in the satellite observing system over time.",
@@ -306,6 +355,16 @@
         },
         {
           "id": "tp_cdd",
+          "headline": {
+            "type": "trend",
+            "metric_local": "cdd_local",
+            "metric_global": "cdd_global",
+            "label": "the number of consecutive dry days has",
+            "unit": " days",
+            "preposition": "by",
+            "suffix": "since 1979",
+            "no_change_connector": "not changed"
+          },
           "title": "Consecutive dry days",
           "ui": {
             "info_text": "Maximum number of consecutive dry days (daily precipitation < 1 mm) per year for 1979-2025. Source: CDS. Note: ERA5 precipitation trends may be inflated by changes in the satellite observing system over time.",
@@ -359,6 +418,20 @@
       "graphs": [
         {
           "id": "dhw_risk_days",
+          "headline": {
+            "type": "coral",
+            "global_trend_metric": "dhw_combined_global",
+            "local_check_metric": "dhw_severe_local",
+            "worst_year_metric": "dhw_worst_year_local",
+            "worst_year_days_metric": "dhw_worst_year_days_local",
+            "select_layer_id": "reef_stress",
+            "select_layer_fly_to_reef": true,
+            "info_bubble_texts": {
+              "coral_worst_year": "The worst year is the calendar year with the highest combined total of moderate (4 ≤ DHW < 8) and severe (DHW ≥ 8) heat stress days in the observed record since 1985.",
+              "trend": "The change is estimated from a linear trend fitted to global coral heat stress data since 1985, counting combined moderate (4 ≤ DHW < 8) and severe (DHW ≥ 8) days per year.",
+              "coral_unavailable": "The change is estimated from a linear trend fitted to global coral heat stress data since 1985, counting combined moderate (4 ≤ DHW < 8) and severe (DHW ≥ 8) days per year."
+            }
+          },
           "title": "Coral reef DHW risk days",
           "ui": {
             "info_text": "This graph shows the number of days per year that coral reefs experienced each DHW (Degree Heating Weeks) heat-stress level for 1985-2025: no risk (DHW < 4), moderate risk (4 <= DHW < 8), and severe risk (DHW >= 8). DHW measures accumulated ocean heat stress over the previous 12 weeks; more days in higher DHW categories indicate greater bleaching risk. Note: 1985 shows fewer total days because the dataset begins in March 1985. Source: ERDDAP.",
