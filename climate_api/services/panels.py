@@ -1591,28 +1591,43 @@ def _compute_coral_global_headline(
     *,
     tile_store: TileDataStore,
 ) -> HeadlinePayload:
-    key = "dhw_severe_global"
-    label = "Severe coral heat stress days (global)"
+    key = "dhw_combined_global"
+    label = "Moderate+severe coral heat stress days (global)"
     baseline = "1985"
-    method = "OLS trend value at last year of global area-weighted mean severe DHW days since 1985"
-    agg_data = tile_store.aggregates.get(("dhw_severe_risk_days_per_year", "mean"))
-    if agg_data is None:
+    method = "OLS trend delta from 1985 baseline of global area-weighted mean combined moderate+severe DHW days"
+    severe_agg = tile_store.aggregates.get(("dhw_severe_risk_days_per_year", "mean"))
+    moderate_agg = tile_store.aggregates.get(("dhw_moderate_risk_days_per_year", "mean"))
+    if severe_agg is None:
         return HeadlinePayload(key=key, label=label, value=None, unit="days", baseline=baseline, method=method)
-    globe = agg_data["regions"].get("globe")
-    if globe is None:
+    severe_globe = severe_agg["regions"].get("globe")
+    if severe_globe is None:
         return HeadlinePayload(key=key, label=label, value=None, unit="days", baseline=baseline, method=method)
-    x = np.asarray([_axis_to_numeric(v) for v in agg_data["time_axis"]], dtype=np.float64)
-    y = np.asarray(
-        [float("nan") if v is None else float(v) for v in globe["values"]], dtype=np.float64
+    x = np.asarray([_axis_to_numeric(v) for v in severe_agg["time_axis"]], dtype=np.float64)
+    severe_y = np.asarray(
+        [float("nan") if v is None else float(v) for v in severe_globe["values"]], dtype=np.float64
     )
+    if moderate_agg is not None:
+        moderate_globe = moderate_agg["regions"].get("globe")
+        if moderate_globe is not None:
+            moderate_y = np.asarray(
+                [float("nan") if v is None else float(v) for v in moderate_globe["values"]], dtype=np.float64
+            )
+            y = severe_y + moderate_y
+        else:
+            y = severe_y
+    else:
+        y = severe_y
     trend = linear_trend_line(x, y)
     trend_at_last = float(trend[-1])
-    if not np.isfinite(trend_at_last) or trend_at_last < 0:
+    if not np.isfinite(trend_at_last):
         return HeadlinePayload(key=key, label=label, value=None, unit="days", baseline=baseline, method=method)
+    baseline_mask = x.astype(int) == 1985
+    trend_at_baseline = float(trend[baseline_mask][-1]) if baseline_mask.any() else None
     return HeadlinePayload(
         key=key,
         label=label,
         value=round(trend_at_last, 1),
+        baseline_value=round(trend_at_baseline, 1) if trend_at_baseline is not None and np.isfinite(trend_at_baseline) else None,
         unit="days",
         baseline=baseline,
         period=str(int(x[-1])),

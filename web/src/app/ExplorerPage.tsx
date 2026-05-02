@@ -758,10 +758,22 @@ export default function ExplorerPage({
       }
       case "dhw_risk_days": {
         if (isGlobal) {
-          const hd = h("dhw_severe_global");
+          const hd = h("dhw_combined_global");
           if (typeof hd?.value !== "number" || !Number.isFinite(hd.value))
             return null;
-          return { type: "coral_absolute", days: hd.value } as const;
+          const delta =
+            typeof hd.baseline_value === "number" &&
+            Number.isFinite(hd.baseline_value)
+              ? hd.value - hd.baseline_value
+              : hd.value;
+          return {
+            type: "trend",
+            label: "the number of coral heat stress days has",
+            value: delta,
+            preposition: "by",
+            unit: " days",
+            suffix: "since 1985",
+          } as const;
         }
         const severe = h("dhw_severe_local");
         const severeVal =
@@ -769,13 +781,24 @@ export default function ExplorerPage({
             ? severe.value
             : null;
         if (severeVal === null) {
-          const globalCoral = h("dhw_severe_global");
-          const globalDays =
+          const globalCoral = h("dhw_combined_global");
+          const globalValue =
             typeof globalCoral?.value === "number" &&
             Number.isFinite(globalCoral.value)
               ? globalCoral.value
               : null;
-          return { type: "coral_unavailable", globalDays } as const;
+          const globalBaseline =
+            typeof globalCoral?.baseline_value === "number" &&
+            Number.isFinite(globalCoral.baseline_value)
+              ? globalCoral.baseline_value
+              : null;
+          const globalDelta =
+            globalValue !== null
+              ? globalBaseline !== null
+                ? globalValue - globalBaseline
+                : globalValue
+              : null;
+          return { type: "coral_unavailable", globalDelta } as const;
         }
         const worstYear = h("dhw_worst_year_local");
         const worstDays = h("dhw_worst_year_days_local");
@@ -1428,11 +1451,14 @@ export default function ExplorerPage({
     if (panelHeadline?.type === "air_temp") {
       return "The warming since the pre-industrial era (1850–1900) is estimated by combining two sources: the local ERA5 warming since the 1979–2000 reference period, plus a pre-1979 offset derived from a 5-model CMIP mean that estimates how much warming occurred between 1850–1900 and 1979–2000 before the ERA5 record begins.";
     }
-    if (panelHeadline?.type === "coral_absolute") {
-      return "The number of severe heat stress days is estimated from a linear trend (OLS) fitted to annual data since 1985.";
-    }
     if (panelHeadline?.type === "coral_worst_year") {
       return "The worst year is the calendar year with the highest combined total of moderate (4 ≤ DHW < 8) and severe (DHW ≥ 8) heat stress days in the observed record since 1985.";
+    }
+    if (
+      (panelHeadline?.type === "trend" || panelHeadline?.type === "coral_unavailable") &&
+      visibleGraphs.some((g) => g.graph.id === "dhw_risk_days")
+    ) {
+      return "The change is estimated from a linear trend fitted to global coral heat stress data since 1985, counting combined moderate (4 ≤ DHW < 8) and severe (DHW ≥ 8) days per year.";
     }
     return "Headline values are derived from local climate trend data. See the chart below for the full time series.";
   })();
@@ -1836,21 +1862,6 @@ export default function ExplorerPage({
                         1985.
                       </span>
                     </>
-                  ) : panelHeadline?.type === "coral_absolute" ? (
-                    <>
-                      <>Globally, </>
-                      <span className={styles.panelTitleSmall}>
-                        there are now{" "}
-                      </span>
-                      <span className={styles.panelTitleTempAccent}>
-                        +{Math.round(panelHeadline.days)}
-                      </span>{" "}
-                      <span className={styles.panelTitleTempAccent}>days</span>
-                      <span className={styles.panelTitleSmall}>
-                        {" "}
-                        of severe coral heat stress per year.
-                      </span>
-                    </>
                   ) : panelHeadline?.type === "sst_unavailable" ? (
                     <>
                       <span className={styles.panelTitleSmall}>
@@ -1881,20 +1892,19 @@ export default function ExplorerPage({
                         Coral stress data not available in
                       </span>{" "}
                       {titleLocationLabel}.{" "}
-                      {panelHeadline.globalDays !== null ? (
+                      {panelHeadline.globalDelta !== null ? (
                         <>
+                          <>Globally, </>
                           <span className={styles.panelTitleSmall}>
-                            Globally, there are now{" "}
+                            the number of coral heat stress days has shifted by{" "}
                           </span>
                           <span className={styles.panelTitleTempAccent}>
-                            +{Math.round(panelHeadline.globalDays)}
-                          </span>{" "}
-                          <span className={styles.panelTitleTempAccent}>
-                            days
+                            {panelHeadline.globalDelta >= 0 ? "+" : ""}
+                            {Math.round(panelHeadline.globalDelta)} days
                           </span>
                           <span className={styles.panelTitleSmall}>
                             {" "}
-                            of severe coral heat stress per year.
+                            since 1985.
                           </span>
                         </>
                       ) : null}
