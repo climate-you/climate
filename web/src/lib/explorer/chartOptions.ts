@@ -539,6 +539,11 @@ export function buildStackedBarOption({
     barKeys.some(
       (key) => String(series[key]?.unit ?? "").toLowerCase() === "days",
     ) || /day/i.test(String(graph.y_axis_label ?? ""));
+  const hasRiskDays = data.some(
+    (row) =>
+      (row["dhw_moderate_risk_days"] as number | null | undefined) ||
+      (row["dhw_severe_risk_days"] as number | null | undefined),
+  );
   const defaultStack = "stacked-bars";
   const chartSeries: NonNullable<EChartsOption["series"]> = barKeys.map(
     (key) => {
@@ -566,7 +571,18 @@ export function buildStackedBarOption({
     animationDurationUpdate: transitionMs,
     animationEasing: "cubicOut",
     ...chartScaffold,
-    legend: chartScaffold.legend,
+    legend: {
+      ...chartScaffold.legend,
+      ...(barKeys.includes("dhw_no_risk_days")
+        ? {
+            selected: {
+              [seriesLabel(series, "dhw_no_risk_days", {
+                preferShort: isMobile,
+              })]: !hasRiskDays,
+            },
+          }
+        : {}),
+    },
     tooltip: {
       trigger: "axis",
       axisPointer: { type: "shadow" },
