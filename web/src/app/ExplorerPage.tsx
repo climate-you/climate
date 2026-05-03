@@ -374,6 +374,7 @@ export default function ExplorerPage({
   const [lat, setLat] = useState<number>(-20.32556);
   const [lon, setLon] = useState<number>(57.37056);
   const [unit, setUnit] = useState<"C" | "F">("C");
+  const [respUnit, setRespUnit] = useState<"C" | "F">("C");
   const [resp, setResp] = useState<PanelResponse | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [panelLoadError, setPanelLoadError] = useState<string | null>(null);
@@ -625,6 +626,8 @@ export default function ExplorerPage({
     const config = graph?.headline ?? null;
     if (!config) return null;
     const isGlobal = resp.location.place.geonameid === 0;
+    const convertDelta = (v: number) =>
+      unit === respUnit ? v : unit === "F" ? v * (9 / 5) : v * (5 / 9);
 
     switch (config.type) {
       case "air_temp": {
@@ -649,8 +652,8 @@ export default function ExplorerPage({
         return {
           type: "air_temp",
           warming: piVal > 0,
-          preindustrial: piVal,
-          recent: recentVal,
+          preindustrial: convertDelta(piVal),
+          recent: recentVal !== null ? convertDelta(recentVal) : null,
         } as const;
       }
       case "sea_temp": {
@@ -664,7 +667,7 @@ export default function ExplorerPage({
             ? ({
                 type: "temp_delta",
                 action: config.positive_action,
-                value: sstVal,
+                value: convertDelta(sstVal),
                 suffix: config.suffix,
               } as const)
             : ({
@@ -679,7 +682,10 @@ export default function ExplorerPage({
             Number.isFinite(globalSst.value)
               ? globalSst.value
               : null;
-          return { type: "sst_unavailable", globalDelta } as const;
+          return {
+            type: "sst_unavailable",
+            globalDelta: globalDelta !== null ? convertDelta(globalDelta) : null,
+          } as const;
         }
         return null;
       }
@@ -709,7 +715,10 @@ export default function ExplorerPage({
             Number.isFinite(globalSst.value)
               ? globalSst.value
               : null;
-          return { type: "sst_unavailable", globalDelta } as const;
+          return {
+            type: "sst_unavailable",
+            globalDelta: globalDelta !== null ? convertDelta(globalDelta) : null,
+          } as const;
         }
         return null;
       }
@@ -782,7 +791,7 @@ export default function ExplorerPage({
       default:
         return null;
     }
-  }, [resp, visibleGraphs]);
+  }, [resp, respUnit, unit, visibleGraphs]);
 
   const graphSlots = useMemo(
     () =>
@@ -958,6 +967,7 @@ export default function ExplorerPage({
     const data = (await r.json()) as PanelResponse;
     pinSessionRelease(data.release);
     setResp(data);
+    setRespUnit(nextUnit);
     return data;
   }
 
@@ -1012,6 +1022,7 @@ export default function ExplorerPage({
       const data = (await r.json()) as PanelResponse;
       pinSessionRelease(data.release);
       setResp(data);
+      setRespUnit(nextUnit);
       setPanelLoadError(null);
     } catch {
       setResp(null);
@@ -1671,7 +1682,7 @@ export default function ExplorerPage({
                     <span className={styles.panelTitleTempAccent}>
                       {CLIMATE_DATA_LOAD_ERROR}
                     </span>
-                  ) : panelLoading ? (
+                  ) : (panelLoading && unit === respUnit) ? (
                     <span>Loading climate data...</span>
                   ) : panelHeadline?.type === "air_temp" ? (
                     <>
