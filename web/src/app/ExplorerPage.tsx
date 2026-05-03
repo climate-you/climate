@@ -304,13 +304,13 @@ function PanelStepIcon({
   let icon: React.ReactNode;
   if (panelId === "precipitation") {
     icon = (
-      <path d="M12 2C8.5 7.5 5 12 5 15.5a7 7 0 0 0 14 0C19 12 15.5 7.5 12 2z" />
+      <path d="M12 2C8.5 7.5 5 12 5 15a7 7 0 0 0 14 0C19 12 15.5 7.5 12 2z" />
     );
   } else if (panelId === "sea_temperature") {
     icon = (
       <>
-        <path d="M2 10c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />
-        <path d="M2 16c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />
+        <path d="M3 9c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />
+        <path d="M3 15c2-4 4-4 6 0s4 4 6 0 4-4 6 0" />
       </>
     );
   } else if (panelId === "coral_reef_dhw") {
