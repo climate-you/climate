@@ -128,12 +128,9 @@
             "type": "trend",
             "metric_local": "t2m_hotdays_local",
             "metric_global": "t2m_hotdays_global",
-            "label": "the number of hot days has",
-            "unit": " days",
-            "unit_singular": " day",
-            "preposition": "by",
-            "suffix": "since 1979",
-            "no_change_connector": "not changed"
+            "unit": "day",
+            "label": "the number of hot days has shifted by",
+            "label_no_change": "the number of hot days has not changed"
           },
           "title": "Number of hot days",
           "ui": {
@@ -189,8 +186,7 @@
             "metric_local": "sst_recent_local",
             "metric_global": "sst_recent_global",
             "positive_action": "the sea has warmed by",
-            "no_warming_text": "the sea has not warmed since 1982.",
-            "suffix": "since 1982"
+            "no_warming_text": "the sea has not warmed since 1982."
           },
           "title": "Annual sea surface temperature",
           "ui": {
@@ -243,12 +239,9 @@
             "type": "trend",
             "metric_local": "sst_hotdays_local",
             "metric_global": "sst_hotdays_global",
-            "label": "the number of sea hot days has",
-            "unit": " days",
-            "unit_singular": " day",
-            "preposition": "by",
-            "suffix": "since 1982",
-            "no_change_connector": "not changed",
+            "unit": "day",
+            "label": "the number of sea hot days has shifted by",
+            "label_no_change": "the number of sea hot days has not changed",
             "unavailable_global_metric": "sst_recent_global"
           },
           "title": "Number of sea surface hot days",
@@ -304,11 +297,9 @@
             "type": "trend",
             "metric_local": "precip_local",
             "metric_global": "precip_global",
-            "label": "the precipitation level has",
             "unit": "mm",
-            "preposition": "by",
-            "suffix": "since 1979",
-            "no_change_connector": "not changed"
+            "label": "the precipitation level has shifted by",
+            "label_no_change": "the precipitation level has not changed"
           },
           "title": "Annual total precipitation",
           "ui": {
@@ -361,12 +352,9 @@
             "type": "trend",
             "metric_local": "cdd_local",
             "metric_global": "cdd_global",
-            "label": "the number of consecutive dry days has",
-            "unit": " days",
-            "unit_singular": " day",
-            "preposition": "by",
-            "suffix": "since 1979",
-            "no_change_connector": "not changed"
+            "unit": "day",
+            "label": "the number of consecutive dry days has shifted by",
+            "label_no_change": "the number of consecutive dry days has not changed"
           },
           "title": "Consecutive dry days",
           "ui": {

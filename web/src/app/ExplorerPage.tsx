@@ -51,6 +51,13 @@ import { isMobileViewport } from "@/lib/explorer/chartOptions";
 import { defaultTemperatureUnitForLocale } from "@/lib/temperatureUnit";
 import styles from "./page.module.css";
 
+const INVARIANT_UNITS = new Set(["mm"]);
+
+function pluralizeUnit(unit: string, count: number): string {
+  if (count === 1 || INVARIANT_UNITS.has(unit)) return unit;
+  return `${unit}s`;
+}
+
 const CORAL_REEF_CENTERS: [number, number][] = [
   [-18, 147], // Great Barrier Reef
   [0, 122], // Coral Triangle (SE Asia)
@@ -128,18 +135,14 @@ type GraphHeadlineVariant =
       metric_global: string;
       positive_action: string;
       no_warming_text: string;
-      suffix: string;
     }
   | {
       type: "trend";
       metric_local: string;
       metric_global: string;
       label: string;
+      label_no_change?: string;
       unit: string;
-      unit_singular?: string;
-      preposition: string;
-      suffix: string;
-      no_change_connector?: string;
       unavailable_global_metric?: string;
     }
   | {
@@ -667,7 +670,7 @@ export default function ExplorerPage({
                 type: "temp_delta",
                 action: config.positive_action,
                 value: convertDelta(sstVal),
-                suffix: config.suffix,
+                suffix: sst?.baseline ? `since ${sst.baseline}` : "",
               } as const)
             : ({
                 type: "no_warming",
@@ -700,12 +703,10 @@ export default function ExplorerPage({
           return {
             type: "trend",
             label: config.label,
+            label_no_change: config.label_no_change,
             value: delta,
-            preposition: config.preposition,
             unit: config.unit,
-            unit_singular: config.unit_singular,
-            suffix: config.suffix,
-            no_change_connector: config.no_change_connector ?? "not changed",
+            suffix: hd.baseline ? `since ${hd.baseline}` : "",
           } as const;
         }
         if (!isGlobal && config.unavailable_global_metric) {
@@ -735,12 +736,11 @@ export default function ExplorerPage({
               : hd.value;
           return {
             type: "trend",
-            label: "the number of coral heat stress days has",
+            label: "the number of coral heat stress days has shifted by",
+            label_no_change: "the number of coral heat stress days has not changed",
             value: delta,
-            preposition: "by",
-            unit: " days",
-            unit_singular: " day",
-            suffix: "since 1985",
+            unit: "day",
+            suffix: hd.baseline ? `since ${hd.baseline}` : "since 1985",
           } as const;
         }
         const severe = h(config.local_check_metric);
@@ -1804,15 +1804,13 @@ export default function ExplorerPage({
                       )}
                       {Math.round(panelHeadline.value) === 0 ? (
                         <span className={styles.panelTitleSmall}>
-                          {panelHeadline.label}{" "}
-                          {panelHeadline.no_change_connector ?? "not changed"}{" "}
+                          {panelHeadline.label_no_change}{" "}
                           {panelHeadline.suffix}.
                         </span>
                       ) : (
                         <>
                           <span className={styles.panelTitleSmall}>
-                            {panelHeadline.label} shifted{" "}
-                            {panelHeadline.preposition ?? "to"}{" "}
+                            {panelHeadline.label}{" "}
                           </span>
                           <span
                             className={
@@ -1823,11 +1821,7 @@ export default function ExplorerPage({
                           >
                             {panelHeadline.value >= 0 ? "+" : ""}
                             {Math.round(panelHeadline.value)}
-                            {Math.abs(Math.round(panelHeadline.value)) === 1
-                              ? (panelHeadline.unit_singular ??
-                                panelHeadline.unit ??
-                                "")
-                              : (panelHeadline.unit ?? "")}
+                            {" "}{pluralizeUnit(panelHeadline.unit, Math.abs(Math.round(panelHeadline.value)))}
                           </span>
                           <span className={styles.panelTitleSmall}>
                             {" "}
