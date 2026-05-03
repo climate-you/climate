@@ -136,6 +136,7 @@ type GraphHeadlineVariant =
       metric_global: string;
       label: string;
       unit: string;
+      unit_singular?: string;
       preposition: string;
       suffix: string;
       no_change_connector?: string;
@@ -696,6 +697,7 @@ export default function ExplorerPage({
             value: delta,
             preposition: config.preposition,
             unit: config.unit,
+            unit_singular: config.unit_singular,
             suffix: config.suffix,
             no_change_connector: config.no_change_connector ?? "not changed",
           } as const;
@@ -727,6 +729,7 @@ export default function ExplorerPage({
             value: delta,
             preposition: "by",
             unit: " days",
+            unit_singular: " day",
             suffix: "since 1985",
           } as const;
         }
@@ -1780,7 +1783,9 @@ export default function ExplorerPage({
                           <span className={panelHeadline.value < 0 ? styles.panelTitleTempAccentNegative : styles.panelTitleTempAccent}>
                             {panelHeadline.value >= 0 ? "+" : ""}
                             {Math.round(panelHeadline.value)}
-                            {panelHeadline.unit ?? ""}
+                            {Math.abs(Math.round(panelHeadline.value)) === 1
+                              ? (panelHeadline.unit_singular ?? panelHeadline.unit ?? "")
+                              : (panelHeadline.unit ?? "")}
                           </span>
                           <span className={styles.panelTitleSmall}>
                             {" "}
@@ -1793,11 +1798,17 @@ export default function ExplorerPage({
                     <>
                       <span className={styles.panelTitleSmall}>In</span>{" "}
                       {titleLocationLabel},{" "}
-                      <span className={styles.panelTitleSmall}>there was </span>
+                      <span className={styles.panelTitleSmall}>
+                        {Math.round(panelHeadline.days) === 1
+                          ? "there was "
+                          : "there were "}
+                      </span>
                       <span className={styles.panelTitleTempAccent}>
                         {Math.round(panelHeadline.days)}
                       </span>{" "}
-                      <span className={styles.panelTitleTempAccent}>days</span>
+                      <span className={styles.panelTitleTempAccent}>
+                        {Math.round(panelHeadline.days) === 1 ? "day" : "days"}
+                      </span>
                       <span className={styles.panelTitleSmall}>
                         {" "}
                         of coral heat stress in{" "}

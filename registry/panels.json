@@ -130,6 +130,7 @@
             "metric_global": "t2m_hotdays_global",
             "label": "the number of hot days has",
             "unit": " days",
+            "unit_singular": " day",
             "preposition": "by",
             "suffix": "since 1979",
             "no_change_connector": "not changed"
@@ -244,6 +245,7 @@
             "metric_global": "sst_hotdays_global",
             "label": "the number of sea hot days has",
             "unit": " days",
+            "unit_singular": " day",
             "preposition": "by",
             "suffix": "since 1982",
             "no_change_connector": "not changed",
@@ -361,6 +363,7 @@
             "metric_global": "cdd_global",
             "label": "the number of consecutive dry days has",
             "unit": " days",
+            "unit_singular": " day",
             "preposition": "by",
             "suffix": "since 1979",
             "no_change_connector": "not changed"
