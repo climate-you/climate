@@ -692,6 +692,11 @@ export default function ExplorerPage({
         return null;
       }
       case "trend": {
+        const isPrecipGraph =
+          graph?.id === "tp_annual" || graph?.id === "tp_cdd";
+        if (isGlobal && isPrecipGraph) {
+          return { type: "global_precip_unavailable" } as const;
+        }
         const hd = h(isGlobal ? config.metric_global : config.metric_local);
         if (typeof hd?.value === "number" && Number.isFinite(hd.value)) {
           const delta =
@@ -1915,12 +1920,19 @@ export default function ExplorerPage({
                         </>
                       ) : null}
                     </>
+                  ) : panelHeadline?.type === "global_precip_unavailable" ? (
+                    <span className={styles.panelTitleSmall}>
+                      A global average for annual precipitation and consecutive
+                      dry days is not a meaningful climate indicator — these
+                      metrics only make sense at a regional or local level.
+                    </span>
                   ) : resp ? (
                     <span>{titleLocationLabel}</span>
                   ) : (
                     <span>Pick a location to load climate data.</span>
                   )}
-                  {!panelLoadError ? (
+                  {!panelLoadError &&
+                  panelHeadline?.type !== "global_precip_unavailable" ? (
                     <InfoBubble
                       label="Panel title information"
                       text={panelTitleInfoText}
@@ -1965,7 +1977,8 @@ export default function ExplorerPage({
               className={styles.panelViewport}
             >
               {graphSlots.map((entry, slotIndex) =>
-                entry ? (
+                entry &&
+                panelHeadline?.type !== "global_precip_unavailable" ? (
                   <GraphCard
                     key={`slot-${slotIndex}`}
                     graph={entry.graph}

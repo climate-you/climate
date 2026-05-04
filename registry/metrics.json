@@ -218,7 +218,6 @@
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_t2m_min",
-      "batch_tiles_override": 4,
       "agg": "monthly_min_from_daily",
       "time_range": {
         "start_year": 1979,
@@ -347,8 +346,7 @@
         "codec": "zstd",
         "level": 10
       }
-    },
-    "aggregates": ["mean"]
+    }
   },
   "sst_yearly_mean_c": {
     "id": "sst_yearly_mean_c",
