@@ -380,7 +380,6 @@ export default function ExplorerPage({
   const [resp, setResp] = useState<PanelResponse | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [panelLoadError, setPanelLoadError] = useState<string | null>(null);
-  const [panelLoading, setPanelLoading] = useState<boolean>(false);
   const [panelRetrying, setPanelRetrying] = useState<boolean>(false);
   const [panelOpen, setPanelOpen] = useState<boolean>(false);
   const [panelOpenKey, setPanelOpenKey] = useState(0);
@@ -982,7 +981,6 @@ export default function ExplorerPage({
     nextUnit = unit,
     nextSelectedGeonameid = selectedGeonameidForPanel,
   ) {
-    setPanelLoading(true);
     setPanelLoadError(null);
     try {
       const data = await load(
@@ -1000,8 +998,6 @@ export default function ExplorerPage({
       );
       setPanelLoadError(CLIMATE_DATA_LOAD_ERROR);
       return null;
-    } finally {
-      setPanelLoading(false);
     }
   }
 
@@ -1018,7 +1014,6 @@ export default function ExplorerPage({
     });
     setPanelTab("graph");
     setPanelOpen(true);
-    setPanelLoading(true);
     setPanelLoadError(null);
     try {
       const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/panel/global?unit=${nextUnit}`;
@@ -1032,8 +1027,6 @@ export default function ExplorerPage({
     } catch {
       setResp(null);
       setPanelLoadError(CLIMATE_DATA_LOAD_ERROR);
-    } finally {
-      setPanelLoading(false);
     }
   }
 
@@ -1687,8 +1680,6 @@ export default function ExplorerPage({
                     <span className={styles.panelTitleTempAccent}>
                       {CLIMATE_DATA_LOAD_ERROR}
                     </span>
-                  ) : panelLoading && unit === respUnit ? (
-                    <span>Loading climate data...</span>
                   ) : panelHeadline?.type === "air_temp" ? (
                     <>
                       {resp?.location.place.geonameid === 0 ? (
