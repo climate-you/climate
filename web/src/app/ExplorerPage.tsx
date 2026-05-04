@@ -977,6 +977,19 @@ export default function ExplorerPage({
     pinSessionRelease(data.release);
     setResp(data);
     setRespUnit(nextUnit);
+    const place = data.location.place;
+    if (place?.geonameid) {
+      setSelectedLocation({
+        geonameid: place.geonameid,
+        label: place.label ?? "",
+        countryCode: place.country_code ?? "",
+        population:
+          typeof place.population === "number" &&
+          Number.isFinite(place.population)
+            ? place.population
+            : null,
+      });
+    }
     return data;
   }
 
@@ -1195,21 +1208,6 @@ export default function ExplorerPage({
       panelRef.current?.focus({ preventScroll: true });
     });
   }, [introActive, panelOpen]);
-
-  useEffect(() => {
-    const place = resp?.location.place;
-    if (!place?.geonameid) return;
-    setSelectedLocation({
-      geonameid: place.geonameid,
-      label: place.label ?? "",
-      countryCode: place.country_code ?? "",
-      population:
-        typeof place.population === "number" &&
-        Number.isFinite(place.population)
-          ? place.population
-          : null,
-    });
-  }, [resp?.location.place]);
 
   useEffect(
     () => () => {
