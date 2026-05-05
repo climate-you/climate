@@ -53,6 +53,7 @@ export const FOCUS_LOCATION_ZOOM = 5.5;
 export const FOCUS_FLY_DURATION_MS = 1900;
 export const FOCUS_RECENTER_DURATION_MS = 650;
 export const PANEL_TRANSITION_MS = 300;
+export const PANEL_OPEN_AWAIT_MS = 600;
 
 // MapLibreGlobe — geography
 export const MERCATOR_MAX_LAT = 85.05112878;

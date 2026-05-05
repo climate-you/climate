@@ -1182,7 +1182,7 @@ export default function MapLibreGlobe({
         zoom: focusZoomTarget(map),
         pitch: 0,
         bearing: 0,
-        padding: getPanelPadding(),
+        padding: panelPaddingForViewport(map, true),
         duration: FOCUS_FLY_DURATION_MS,
         easing: cubicOut,
         essential: true,
@@ -1453,12 +1453,13 @@ export default function MapLibreGlobe({
       zoom: focusZoomTarget(map),
       pitch: 0,
       bearing: 0,
-      padding: panelPaddingForViewport(map, panelOpen),
+      padding: panelPaddingForViewport(map, true),
       duration: FOCUS_FLY_DURATION_MS,
       easing: cubicOut,
       essential: true,
     });
-  }, [focusLocation, panelOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusLocation]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1468,7 +1469,6 @@ export default function MapLibreGlobe({
 
     const { lat, lon } = focusLocation;
     let rafId: number | null = null;
-    let timerId: number | null = null;
     const recenterToVisibleArea = () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
@@ -1484,12 +1484,10 @@ export default function MapLibreGlobe({
     };
 
     const media = window.matchMedia(`(max-width: ${PANEL_BREAKPOINT_PX}px)`);
-    timerId = window.setTimeout(recenterToVisibleArea, PANEL_TRANSITION_MS);
     window.addEventListener("resize", recenterToVisibleArea);
     media.addEventListener?.("change", recenterToVisibleArea);
 
     return () => {
-      if (timerId !== null) window.clearTimeout(timerId);
       if (rafId !== null) cancelAnimationFrame(rafId);
       window.removeEventListener("resize", recenterToVisibleArea);
       media.removeEventListener?.("change", recenterToVisibleArea);

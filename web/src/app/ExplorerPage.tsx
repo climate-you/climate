@@ -30,6 +30,7 @@ import {
   CLIMATE_DATA_LOAD_ERROR,
   DEFAULT_OVERLAY_BASE_PATH,
   MIN_PANEL_VIEWPORT_HEIGHT_FOR_TWO_GRAPHS,
+  PANEL_OPEN_AWAIT_MS,
   TOUCH_CLOSE_PANEL_THRESHOLD_PX,
   TOUCH_PANEL_LIFT_MAX_PX,
   TOUCH_PANEL_PULL_MAX_PX,
@@ -1099,7 +1100,23 @@ export default function ExplorerPage({
       setChatFlyToBbox(null);
     }
     setSelectedGeonameidForPanel(null);
-    if (openPanel) setPanelOpen(true);
+
+    // When the panel is closed, wait up to PANEL_OPEN_AWAIT_MS for the API so
+    // the panel can open with data already populated rather than flashing a
+    // stale or empty location. If the API doesn't respond in time, open with a
+    // cleared location and update once the response arrives.
+    const delayOpen = openPanel && !panelOpen;
+    let timerFired = false;
+    let timer: number | null = null;
+    if (delayOpen) {
+      timer = window.setTimeout(() => {
+        timerFired = true;
+        setSelectedLocation(null);
+        setPanelOpen(true);
+      }, PANEL_OPEN_AWAIT_MS);
+    } else if (openPanel) {
+      setPanelOpen(true);
+    }
 
     try {
       const bbox = resp?.location?.panel_valid_bbox;
@@ -1136,9 +1153,17 @@ export default function ExplorerPage({
           };
         });
         setPanelLoadError(null);
+        if (delayOpen) {
+          window.clearTimeout(timer!);
+          if (!timerFired) setPanelOpen(true);
+        }
         return;
       }
       await loadPanel(la, lo, unit, null);
+      if (delayOpen) {
+        window.clearTimeout(timer!);
+        if (!timerFired) setPanelOpen(true);
+      }
     } catch (err) {
       setResp(null);
       setSelectedLocation((prev) =>
@@ -1148,6 +1173,10 @@ export default function ExplorerPage({
       setLocationError(
         err instanceof Error ? err.message : "Failed to load location data",
       );
+      if (delayOpen) {
+        window.clearTimeout(timer!);
+        if (!timerFired) setPanelOpen(true);
+      }
     }
   }
 
