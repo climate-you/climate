@@ -890,6 +890,16 @@ def _layer_overrides_from_manifest(
     return out
 
 
+def _local_graph_ui(graph: dict) -> dict | None:
+    ui = graph.get("ui")
+    local_info_text = graph.get("local_info_text")
+    if local_info_text is None:
+        return ui
+    if ui is None:
+        return {"info_text": local_info_text}
+    return {**ui, "info_text": local_info_text}
+
+
 def build_panel_tiles_registry(
     *,
     place_resolver: PlaceResolver,
@@ -980,6 +990,9 @@ def build_panel_tiles_registry(
         missing = False
 
         for series_spec in graph.get("series", []):
+            if series_spec.get("global_only"):
+                continue
+
             metric = series_spec.get("metric")
             if not metric:
                 continue
@@ -1091,12 +1104,23 @@ def build_panel_tiles_registry(
                 graph.get("caption"), context=caption_ctx
             )
 
+        local_animation = None
+        animation_spec = graph.get("animation")
+        if animation_spec:
+            filtered = [
+                {**s, "series_keys": [k for k in s.get("series_keys", []) if k in graph_series_keys]}
+                for s in animation_spec.get("steps", [])
+                if any(k in graph_series_keys for k in s.get("series_keys", []))
+            ]
+            if len(filtered) > 1:
+                local_animation = {**animation_spec, "steps": filtered}
+
         graphs_out.append(
             GraphPayload(
                 id=graph.get("id", ""),
                 title=graph.get("title", ""),
-                headline=graph.get("headline"),
-                ui=graph.get("ui"),
+                headline=_with_coral_info_bubble(graph.get("headline"), tile_store),
+                ui=_local_graph_ui(graph),
                 series_keys=graph_series_keys,
                 annotations=graph_annotations,
                 caption=graph_caption,
@@ -1104,7 +1128,7 @@ def build_panel_tiles_registry(
                 x_axis_label=graph.get("x_axis_label"),
                 y_axis_label=graph.get("y_axis_label"),
                 time_range=graph.get("time_range"),
-                animation=graph.get("animation"),
+                animation=local_animation,
             )
         )
 
@@ -1238,7 +1262,6 @@ def build_panel_tiles_registry(
             unit="days",
             baseline_year=1979,
         ),
-        _compute_coral_global_headline(tile_store=tile_store),
     ]
     layer_overrides = _layer_overrides_from_manifest(panels_manifest)
 
@@ -1346,7 +1369,7 @@ def build_scored_panels_tiles_registry(
                     id=g.get("id", ""),
                     title=g.get("title", ""),
                     headline=g.get("headline"),
-                    ui=g.get("ui"),
+                    ui=_local_graph_ui(g),
                     series_keys=[],
                     error="Data not available at this location.",
                 )
@@ -1479,7 +1502,6 @@ def build_scored_panels_tiles_registry(
             unit="days",
             baseline_year=1979,
         ),
-        _compute_coral_global_headline(tile_store=tile_store),
     ]
     layer_overrides = _layer_overrides_from_manifest(panels_manifest)
 
@@ -1613,52 +1635,41 @@ def _compute_global_t2m_preindustrial_headline(
     )
 
 
-def _compute_coral_global_headline(
-    *,
-    tile_store: TileDataStore,
-) -> HeadlinePayload:
-    key = "dhw_combined_global"
-    label = "Moderate+severe coral heat stress days (global)"
-    baseline = "1985"
-    method = "OLS trend delta from 1985 baseline of global area-weighted mean combined moderate+severe DHW days"
-    severe_agg = tile_store.aggregates.get(("dhw_severe_risk_days_per_year", "mean"))
-    moderate_agg = tile_store.aggregates.get(("dhw_moderate_risk_days_per_year", "mean"))
-    if severe_agg is None:
-        return HeadlinePayload(key=key, label=label, value=None, unit="days", baseline=baseline, method=method)
-    severe_globe = severe_agg["regions"].get("globe")
-    if severe_globe is None:
-        return HeadlinePayload(key=key, label=label, value=None, unit="days", baseline=baseline, method=method)
-    x = np.asarray([_axis_to_numeric(v) for v in severe_agg["time_axis"]], dtype=np.float64)
-    severe_y = np.asarray(
-        [float("nan") if v is None else float(v) for v in severe_globe["values"]], dtype=np.float64
-    )
-    if moderate_agg is not None:
-        moderate_globe = moderate_agg["regions"].get("globe")
-        if moderate_globe is not None:
-            moderate_y = np.asarray(
-                [float("nan") if v is None else float(v) for v in moderate_globe["values"]], dtype=np.float64
+def _dhw_info_bubble_text(tile_store: TileDataStore) -> str | None:
+    agg = tile_store.aggregates.get(("dhw_severe_risk_days_per_year", "fraction_1pct"))
+    if not agg:
+        return None
+    aggregation = agg.get("aggregation") or ""
+    if aggregation.startswith("fraction_") and aggregation.endswith("pct"):
+        pct_str = aggregation[len("fraction_") : -len("pct")]
+        try:
+            pct_val = float(pct_str)
+            percentile = int(100 - pct_val)
+            return (
+                f"The change is estimated from a linear trend fitted to global coral heat stress "
+                f"data since 1985, using the {percentile}th percentile threshold: a day is counted "
+                f"as at risk when at least {pct_str}% of coral reef locations globally exceed the "
+                f"DHW threshold (moderate: DHW ≥ 4, severe: DHW ≥ 8)."
             )
-            y = severe_y + moderate_y
-        else:
-            y = severe_y
-    else:
-        y = severe_y
-    trend = linear_trend_line(x, y)
-    trend_at_last = float(trend[-1])
-    if not np.isfinite(trend_at_last):
-        return HeadlinePayload(key=key, label=label, value=None, unit="days", baseline=baseline, method=method)
-    baseline_mask = x.astype(int) == 1985
-    trend_at_baseline = float(trend[baseline_mask][-1]) if baseline_mask.any() else None
-    return HeadlinePayload(
-        key=key,
-        label=label,
-        value=round(trend_at_last, 1),
-        baseline_value=round(trend_at_baseline, 1) if trend_at_baseline is not None and np.isfinite(trend_at_baseline) else None,
-        unit="days",
-        baseline=baseline,
-        period=str(int(x[-1])),
-        method=method,
-    )
+        except ValueError:
+            pass
+    return None
+
+
+def _with_coral_info_bubble(
+    headline_spec: dict | None,
+    tile_store: TileDataStore,
+) -> dict | None:
+    if not headline_spec or headline_spec.get("type") != "coral":
+        return headline_spec
+    text = _dhw_info_bubble_text(tile_store)
+    if not text:
+        return headline_spec
+    existing = headline_spec.get("info_bubble_texts", {})
+    return {
+        **headline_spec,
+        "info_bubble_texts": {**existing, "trend": text, "coral_unavailable": text},
+    }
 
 
 def build_global_panels(
@@ -1704,7 +1715,8 @@ def build_global_panels(
                     graph_series_keys.append(key)
                     continue
 
-                agg_data = tile_store.aggregates.get((metric, "mean"))
+                aggregation = series_spec.get("aggregation", "mean")
+                agg_data = tile_store.aggregates.get((metric, aggregation))
                 if agg_data is None:
                     continue
 
@@ -1776,7 +1788,7 @@ def build_global_panels(
                 GraphPayload(
                     id=graph.get("id", ""),
                     title=graph.get("title", ""),
-                    headline=graph.get("headline"),
+                    headline=_with_coral_info_bubble(graph.get("headline"), tile_store),
                     ui=graph.get("ui"),
                     series_keys=graph_series_keys,
                     caption=None,
@@ -1859,7 +1871,6 @@ def build_global_panels(
                 unit="days",
                 baseline_year=1982,
             ),
-            _compute_coral_global_headline(tile_store=tile_store),
         ],
         layer_overrides={},
     )

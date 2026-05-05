@@ -429,8 +429,7 @@
         "color": "#ccccff",
         "stack": "dhw_risk_days"
       }
-    },
-    "aggregates": ["mean"]
+    }
   },
   "dhw_moderate_risk_days_per_year": {
     "id": "dhw_moderate_risk_days_per_year",
@@ -465,8 +464,7 @@
         "color": "#fdd835",
         "stack": "dhw_risk_days"
       }
-    },
-    "aggregates": ["mean"]
+    }
   },
   "dhw_severe_risk_days_per_year": {
     "id": "dhw_severe_risk_days_per_year",
@@ -501,8 +499,7 @@
         "color": "#ff0000",
         "stack": "dhw_risk_days"
       }
-    },
-    "aggregates": ["mean"]
+    }
   },
   "dhw_risk_score_per_year": {
     "id": "dhw_risk_score_per_year",

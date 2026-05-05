@@ -59,6 +59,7 @@
         "ui": { "$ref": "#/$defs/graph_ui" },
         "caption": { "$ref": "#/$defs/caption" },
         "source": { "type": "string" },
+        "local_info_text": { "type": "string" },
         "x_axis_label": { "type": "string" },
         "y_axis_label": { "type": "string" },
         "time_range": { "$ref": "#/$defs/time_range" },
@@ -107,6 +108,13 @@
         "loop": { "type": "boolean", "default": true },
         "step_duration_ms": { "type": "integer", "minimum": 200, "default": 2600 },
         "transition_ms": { "type": "integer", "minimum": 100, "default": 900 },
+        "default_step_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "mobile_steps": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+        },
         "steps": {
           "type": "array",
           "minItems": 2,
@@ -136,6 +144,8 @@
       "properties": {
         "key": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
         "metric": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "aggregation": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "global_only": { "type": "boolean" },
         "label": { "type": "string" },
         "shortLabel": { "type": "string" },
         "ui": { "$ref": "#/$defs/series_ui" },

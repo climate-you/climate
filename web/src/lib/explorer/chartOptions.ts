@@ -573,15 +573,18 @@ export function buildStackedBarOption({
     ...chartScaffold,
     legend: {
       ...chartScaffold.legend,
-      ...(barKeys.includes("dhw_no_risk_days")
-        ? {
-            selected: {
-              [seriesLabel(series, "dhw_no_risk_days", {
-                preferShort: isMobile,
-              })]: !hasRiskDays,
-            },
-          }
-        : {}),
+      ...((() => {
+        const noRiskKey = barKeys.find((key) => key.startsWith("dhw_no_risk_"));
+        return noRiskKey
+          ? {
+              selected: {
+                [seriesLabel(series, noRiskKey, {
+                  preferShort: isMobile,
+                })]: !hasRiskDays,
+              },
+            }
+          : {};
+      })()),
     },
     tooltip: {
       trigger: "axis",

@@ -140,14 +140,14 @@ def _load_aggregates(
                     loaded[(metric_id, aggregation)] = {
                         "time_axis": data.get("time_axis", []),
                         "regions": data["regions"],
+                        "mode": data.get("mode"),
                     }
             except Exception as exc:
                 logger.warning("Failed to load aggregate file %s: %s", p, exc)
     missing = [key for key in expected if key not in loaded]
     logger.info(
-        "Loaded %d/%d metric aggregate(s)%s",
+        "Loaded %d metric aggregate(s)%s",
         len(loaded),
-        len(expected),
         f"; missing: {', '.join(f'{m}/{a}' for m, a in missing)}" if missing else "",
     )
     return loaded

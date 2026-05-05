@@ -110,6 +110,7 @@ type GraphAnimation = {
   loop?: boolean;
   step_duration_ms?: number;
   transition_ms?: number;
+  default_step_id?: string;
   steps: GraphAnimationStep[];
 };
 type SeriesPayload = {
@@ -731,22 +732,7 @@ export default function ExplorerPage({
       }
       case "coral": {
         if (isGlobal) {
-          const hd = h(config.global_trend_metric);
-          if (typeof hd?.value !== "number" || !Number.isFinite(hd.value))
-            return null;
-          const delta =
-            typeof hd.baseline_value === "number" &&
-            Number.isFinite(hd.baseline_value)
-              ? hd.value - hd.baseline_value
-              : hd.value;
-          return {
-            type: "trend",
-            label: "the number of coral heat stress days has shifted by",
-            label_no_change: "the number of coral heat stress days has not changed",
-            value: delta,
-            unit: "day",
-            suffix: hd.baseline ? `since ${hd.baseline}` : "since 1985",
-          } as const;
+          return { type: "coral_global" } as const;
         }
         const severe = h(config.local_check_metric);
         const severeVal =
@@ -1853,6 +1839,19 @@ export default function ExplorerPage({
                         </>
                       )}
                     </>
+                  ) : panelHeadline?.type === "coral_global" ? (
+                    <>
+                      <>Globally, </>
+                      <span className={styles.panelTitleTempAccent}>10%</span>
+                      <span className={styles.panelTitleSmall}>
+                        {" "}of coral reefs experienced heat stress every
+                        single day of{" "}
+                      </span>
+                      <span className={styles.panelTitleTempAccent}>2024</span>
+                      <span className={styles.panelTitleSmall}>
+                        , the worst year on record.
+                      </span>
+                    </>
                   ) : panelHeadline?.type === "coral_worst_year" ? (
                     <>
                       <span className={styles.panelTitleSmall}>In</span>{" "}
@@ -1924,28 +1923,14 @@ export default function ExplorerPage({
                         Coral stress data not available in
                       </span>{" "}
                       {titleLocationLabel}.{" "}
-                      {panelHeadline.globalDelta !== null ? (
-                        <>
-                          <span className={styles.panelTitleSmall}>
-                            Globally, the number of coral heat stress days has
-                            shifted by{" "}
-                          </span>
-                          <span
-                            className={
-                              panelHeadline.globalDelta < 0
-                                ? styles.panelTitleTempAccentNegative
-                                : styles.panelTitleTempAccent
-                            }
-                          >
-                            {panelHeadline.globalDelta >= 0 ? "+" : ""}
-                            {Math.round(panelHeadline.globalDelta)} days
-                          </span>
-                          <span className={styles.panelTitleSmall}>
-                            {" "}
-                            since 1985.
-                          </span>
-                        </>
-                      ) : null}
+                      <span className={styles.panelTitleSmall}>Globally, </span>
+                      <span className={styles.panelTitleTempAccent}>10%</span>
+                      <span className={styles.panelTitleSmall}>
+                        {" "}of coral reefs experienced heat stress every
+                        single day of{" "}
+                      </span>
+                      <span className={styles.panelTitleTempAccent}>2024</span>
+                      <span className={styles.panelTitleSmall}>.</span>
                     </>
                   ) : panelHeadline?.type === "global_precip_unavailable" ? (
                     <span className={styles.panelTitleSmall}>
@@ -2012,7 +1997,7 @@ export default function ExplorerPage({
                     data={entry.data}
                     series={resp?.series ?? {}}
                     unit={unit}
-                    stepIndex={graphStepById[entry.graph.id] ?? 0}
+                    stepIndex={graphStepById[entry.graph.id] ?? (entry.graph.animation?.steps.findIndex(s => s.id === entry.graph.animation?.default_step_id) ?? 0)}
                     onStepIndexChange={handleGraphStepChange}
                     available={entry.available}
                     animationRevision={panelOpenKey}

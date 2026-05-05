@@ -34,6 +34,8 @@ type GraphAnimation = {
   loop?: boolean;
   step_duration_ms?: number;
   transition_ms?: number;
+  default_step_id?: string;
+  mobile_steps?: string[];
   steps: GraphAnimationStep[];
 };
 
@@ -134,6 +136,11 @@ export default function GraphCard({
     return () => mq.removeEventListener("change", handler);
   }, []);
   const steps = graph.animation?.steps ?? [];
+  const mobileStepIds = graph.animation?.mobile_steps;
+  const effectiveSteps =
+    isMobileViewport() && mobileStepIds?.length
+      ? steps.filter((s) => mobileStepIds.includes(s.id))
+      : steps;
   const hasAnimation = steps.length >= 2;
   const chartMaxHeight = 260;
   const chartMinAspectRatio = 1.5;
@@ -183,12 +190,19 @@ export default function GraphCard({
 
   const activeStep = hasAnimation ? steps[safeStepIndex] : null;
   const showMobileStepToggle =
-    isMobileViewport() && hasAnimation && steps.length === 2;
-  const mobileToggleStepIndex =
-    showMobileStepToggle && safeStepIndex === 0 ? 1 : 0;
+    isMobileViewport() && hasAnimation && effectiveSteps.length === 2;
+  const effectiveStepIdx = effectiveSteps.findIndex(
+    (s) => s.id === steps[safeStepIndex]?.id,
+  );
+  const safeEffectiveStepIdx = effectiveStepIdx >= 0 ? effectiveStepIdx : 0;
+  const mobileToggleEffectiveIdx = safeEffectiveStepIdx === 0 ? 1 : 0;
+  const mobileToggleStepIndex = steps.findIndex(
+    (s) => s.id === effectiveSteps[mobileToggleEffectiveIdx]?.id,
+  );
   const mobileToggleStepLabel =
-    showMobileStepToggle && steps[safeStepIndex]
-      ? (steps[safeStepIndex].title ?? steps[safeStepIndex].id)
+    showMobileStepToggle && effectiveSteps[safeEffectiveStepIdx]
+      ? (effectiveSteps[safeEffectiveStepIdx].title ??
+        effectiveSteps[safeEffectiveStepIdx].id)
       : "";
   const visibleKeys = activeStep?.series_keys?.length
     ? activeStep.series_keys
@@ -341,12 +355,13 @@ export default function GraphCard({
                   {mobileToggleStepLabel}
                 </button>
               ) : (
-                steps.map((step, idx) => {
-                  const active = idx === safeStepIndex;
+                effectiveSteps.map((step) => {
+                  const fullIdx = steps.findIndex((s) => s.id === step.id);
+                  const active = step.id === steps[safeStepIndex]?.id;
                   return (
                     <button
                       key={`${graph.id}:${step.id}`}
-                      onClick={() => onStepIndexChange(graph.id, idx)}
+                      onClick={() => onStepIndexChange(graph.id, fullIdx)}
                       className={`${styles.stepButton} ${
                         active ? styles.stepButtonActive : ""
                       }`}
@@ -370,12 +385,13 @@ export default function GraphCard({
               {mobileToggleStepLabel}
             </button>
           ) : (
-            steps.map((step, idx) => {
-              const active = idx === safeStepIndex;
+            effectiveSteps.map((step) => {
+              const fullIdx = steps.findIndex((s) => s.id === step.id);
+              const active = step.id === steps[safeStepIndex]?.id;
               return (
                 <button
                   key={`${graph.id}:${step.id}`}
-                  onClick={() => onStepIndexChange(graph.id, idx)}
+                  onClick={() => onStepIndexChange(graph.id, fullIdx)}
                   className={`${styles.stepButton} ${
                     active ? styles.stepButtonActive : ""
                   }`}
