@@ -96,7 +96,7 @@ class PlaceResolver:
         self._country_names: dict[str, str] = country_names or {}
         self._logger = logging.getLogger("uvicorn.error")
 
-        df = pd.read_csv(self.locations_csv)
+        df = pd.read_csv(self.locations_csv, keep_default_na=False, na_values=[""])
 
         for col in ("geonameid", "lat", "lon"):
             if col not in df.columns:
