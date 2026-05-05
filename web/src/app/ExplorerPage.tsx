@@ -29,6 +29,7 @@ import {
   AIR_TEMP_RECENT_THRESHOLD,
   CLIMATE_DATA_LOAD_ERROR,
   DEFAULT_OVERLAY_BASE_PATH,
+  FETCH_TIMEOUT_MS,
   MIN_PANEL_VIEWPORT_HEIGHT_FOR_TWO_GRAPHS,
   PANEL_OPEN_AWAIT_MS,
   TOUCH_CLOSE_PANEL_THRESHOLD_PX,
@@ -405,6 +406,7 @@ export default function ExplorerPage({
   const [selectedGeonameidForPanel, setSelectedGeonameidForPanel] = useState<
     number | null
   >(null);
+  const panelAbortControllerRef = useRef<AbortController | null>(null);
   const wheelAccumRef = useRef(0);
   const wheelLastEventTsRef = useRef(0);
   const wheelGestureConsumedRef = useRef(false);
@@ -948,6 +950,7 @@ export default function ExplorerPage({
     nextLon = lon,
     nextUnit = unit,
     nextSelectedGeonameid = selectedGeonameidForPanel,
+    signal?: AbortSignal,
   ) {
     const params = new URLSearchParams({
       lat: String(nextLat),
@@ -958,7 +961,7 @@ export default function ExplorerPage({
       params.set("selected_geonameid", String(nextSelectedGeonameid));
     }
     const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/panel?${params.toString()}`;
-    const r = await fetch(url);
+    const r = await fetch(url, { signal });
     if (!r.ok) throw new Error(await r.text());
     const data = (await r.json()) as PanelResponse;
     pinSessionRelease(data.release);
@@ -986,6 +989,13 @@ export default function ExplorerPage({
     nextUnit = unit,
     nextSelectedGeonameid = selectedGeonameidForPanel,
   ) {
+    panelAbortControllerRef.current?.abort("superseded");
+    const controller = new AbortController();
+    panelAbortControllerRef.current = controller;
+    const timeoutId = window.setTimeout(
+      () => controller.abort("timeout"),
+      FETCH_TIMEOUT_MS,
+    );
     setPanelLoadError(null);
     try {
       const data = await load(
@@ -993,11 +1003,14 @@ export default function ExplorerPage({
         nextLon,
         nextUnit,
         nextSelectedGeonameid,
+        controller.signal,
       );
+      window.clearTimeout(timeoutId);
       setPanelLoadError(null);
       return data;
     } catch {
-      setResp(null);
+      window.clearTimeout(timeoutId);
+      if (controller.signal.reason === "superseded") return null;
       setSelectedLocation((prev) =>
         prev ? { ...prev, population: null } : prev,
       );
@@ -1007,6 +1020,13 @@ export default function ExplorerPage({
   }
 
   async function loadGlobalPanel(nextUnit = unit) {
+    panelAbortControllerRef.current?.abort("superseded");
+    const controller = new AbortController();
+    panelAbortControllerRef.current = controller;
+    const timeoutId = window.setTimeout(
+      () => controller.abort("timeout"),
+      FETCH_TIMEOUT_MS,
+    );
     setChatLocations(null);
     setChatFlyToBbox(null);
     setPicked(null);
@@ -1022,15 +1042,17 @@ export default function ExplorerPage({
     setPanelLoadError(null);
     try {
       const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/panel/global?unit=${nextUnit}`;
-      const r = await fetch(url);
+      const r = await fetch(url, { signal: controller.signal });
       if (!r.ok) throw new Error(await r.text());
       const data = (await r.json()) as PanelResponse;
+      window.clearTimeout(timeoutId);
       pinSessionRelease(data.release);
       setResp(data);
       setRespUnit(nextUnit);
       setPanelLoadError(null);
     } catch {
-      setResp(null);
+      window.clearTimeout(timeoutId);
+      if (controller.signal.reason === "superseded") return;
       setPanelLoadError(CLIMATE_DATA_LOAD_ERROR);
     }
   }
@@ -1039,7 +1061,7 @@ export default function ExplorerPage({
     const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
       nextLon,
     )}`;
-    const r = await fetch(url);
+    const r = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!r.ok) throw new Error(await r.text());
     const data = (await r.json()) as NearestLocationResponse;
     return data.result;
@@ -1151,7 +1173,6 @@ export default function ExplorerPage({
         if (!timerFired) setPanelOpen(true);
       }
     } catch (err) {
-      setResp(null);
       setSelectedLocation((prev) =>
         prev ? { ...prev, population: null } : prev,
       );

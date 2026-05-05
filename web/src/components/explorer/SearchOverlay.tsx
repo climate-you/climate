@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FETCH_TIMEOUT_MS } from "@/lib/explorer/constants";
 import styles from "./SearchOverlay.module.css";
 
 export type AutocompleteItem = {
@@ -42,14 +43,15 @@ export default function SearchOverlay({
   const [suggestLoading, setSuggestLoading] = useState<boolean>(false);
   const [internalError, setInternalError] = useState<string | null>(null);
   const debounceRef = useRef<number | null>(null);
+  const autocompleteAbortControllerRef = useRef<AbortController | null>(null);
   const searchWrapRef = useRef<HTMLDivElement | null>(null);
 
   const fetchAutocomplete = useCallback(
-    async (q: string) => {
+    async (q: string, signal?: AbortSignal) => {
       const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/autocomplete?q=${encodeURIComponent(
         q,
       )}&limit=8`;
-      const r = await fetch(url);
+      const r = await fetch(url, { signal });
       if (!r.ok) throw new Error(await r.text());
       const data = (await r.json()) as AutocompleteResponse;
       return data.results ?? [];
@@ -59,7 +61,7 @@ export default function SearchOverlay({
 
   async function resolveByLabel(label: string) {
     const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/resolve?label=${encodeURIComponent(label)}`;
-    const r = await fetch(url);
+    const r = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!r.ok) throw new Error(await r.text());
     const data = (await r.json()) as ResolveLocationResponse;
     return data.result ?? null;
@@ -87,12 +89,23 @@ export default function SearchOverlay({
     setSuggestLoading(true);
     setInternalError(null);
     debounceRef.current = window.setTimeout(async () => {
+      autocompleteAbortControllerRef.current?.abort("superseded");
+      const controller = new AbortController();
+      autocompleteAbortControllerRef.current = controller;
+      const timeoutId = window.setTimeout(
+        () => controller.abort("timeout"),
+        FETCH_TIMEOUT_MS,
+      );
       try {
-        const results = await fetchAutocomplete(search.trim());
+        const results = await fetchAutocomplete(search.trim(), controller.signal);
+        window.clearTimeout(timeoutId);
+        if (controller.signal.reason === "superseded") return;
         setSuggestions(results);
         setSuggestOpen(true);
         setSuggestIndex(results.length ? 0 : -1);
       } catch (err: unknown) {
+        window.clearTimeout(timeoutId);
+        if (controller.signal.reason === "superseded") return;
         setInternalError(
           err instanceof Error ? err.message : "Autocomplete failed",
         );
