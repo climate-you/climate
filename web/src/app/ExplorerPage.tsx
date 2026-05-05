@@ -1643,7 +1643,7 @@ export default function ExplorerPage({
         onTouchEnd={handlePanelTouchEnd}
         onTouchCancel={handlePanelTouchCancel}
       >
-        {panelTab === "graph" && stepCount >= 2 ? (
+        {panelTab === "graph" && stepCount >= 2 && !panelLoadError ? (
           <div
             className={styles.panelSteps}
             role="tablist"
@@ -1982,7 +1982,7 @@ export default function ExplorerPage({
           </div>
         </div>
 
-        {panelTab === "graph" ? (
+        {panelTab === "graph" && !panelLoadError ? (
           <>
             <div
               ref={panelViewportCallbackRef}
