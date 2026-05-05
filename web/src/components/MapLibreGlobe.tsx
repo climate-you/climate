@@ -1483,6 +1483,8 @@ export default function MapLibreGlobe({
       });
     };
 
+    recenterToVisibleArea();
+
     const media = window.matchMedia(`(max-width: ${PANEL_BREAKPOINT_PX}px)`);
     window.addEventListener("resize", recenterToVisibleArea);
     media.addEventListener?.("change", recenterToVisibleArea);
