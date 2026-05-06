@@ -291,6 +291,8 @@ export default function GraphCard({
   if (!available) {
     const isSeaGraph = graph.id.startsWith("sst_");
     const isCoralGraph = graph.id === "dhw_risk_days";
+    const isPrecipGraph =
+      graph.id === "tp_annual" || graph.id === "tp_cdd";
     const unavailableText = isSeaGraph
       ? "Sea surface temperature data is only available for coastal and ocean locations."
       : "Not available for this location.";
@@ -320,6 +322,22 @@ export default function GraphCard({
               "Coral heat stress trend"
             )}{" "}
             layer.
+          </p>
+        ) : isPrecipGraph ? (
+          <p className={styles.graphUnavailableText}>
+            Precipitation data is visible on the{" "}
+            {onSelectLayer ? (
+              <button
+                type="button"
+                className={styles.graphUnavailableLink}
+                onClick={onSelectLayer}
+              >
+                Annual precipitation trend
+              </button>
+            ) : (
+              "Annual precipitation trend"
+            )}{" "}
+            layer. Select a location on the map to see local data.
           </p>
         ) : (
           <p className={styles.graphUnavailableText}>{unavailableText}</p>

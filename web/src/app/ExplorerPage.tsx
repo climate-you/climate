@@ -1539,9 +1539,9 @@ export default function ExplorerPage({
             } else {
               applyLayerDefaultGraphPage(resp?.layer_overrides);
               if (selectedLocation !== null) {
-              setPanelTab("graph");
-              setPanelOpen(true);
-            } else {
+                setPanelTab("graph");
+                setPanelOpen(true);
+              } else {
                 void loadGlobalPanel(unit, true);
               }
             }
@@ -1986,11 +1986,14 @@ export default function ExplorerPage({
                       <span className={styles.panelTitleSmall}>.</span>
                     </>
                   ) : panelHeadline?.type === "global_precip_unavailable" ? (
-                    <span className={styles.panelTitleSmall}>
-                      A global average for annual precipitation and consecutive
-                      dry days is not a meaningful climate indicator — these
-                      metrics only make sense at a regional or local level.
-                    </span>
+                    <>
+                      Globally,{" "}
+                      <span className={styles.panelTitleSmall}>
+                        average precipitation data is not a meaningful climate
+                        indicator, these metrics only make sense at a regional
+                        or local level.
+                      </span>
+                    </>
                   ) : resp ? (
                     <span>{titleLocationLabel}</span>
                   ) : (
@@ -2042,35 +2045,53 @@ export default function ExplorerPage({
               className={styles.panelViewport}
             >
               {graphSlots.map((entry, slotIndex) =>
-                entry &&
-                panelHeadline?.type !== "global_precip_unavailable" ? (
+                entry ? (
                   <GraphCard
                     key={`slot-${slotIndex}`}
                     graph={entry.graph}
                     data={entry.data}
                     series={resp?.series ?? {}}
                     unit={unit}
-                    stepIndex={graphStepById[entry.graph.id] ?? (entry.graph.animation?.steps.findIndex(s => s.id === entry.graph.animation?.default_step_id) ?? 0)}
+                    stepIndex={
+                      graphStepById[entry.graph.id] ??
+                      entry.graph.animation?.steps.findIndex(
+                        (s) => s.id === entry.graph.animation?.default_step_id,
+                      ) ??
+                      0
+                    }
                     onStepIndexChange={handleGraphStepChange}
-                    available={entry.available}
+                    available={
+                      panelHeadline?.type === "global_precip_unavailable"
+                        ? false
+                        : entry.available
+                    }
                     animationRevision={panelOpenKey}
                     onSelectLayer={(() => {
                       const hc = entry.graph.headline ?? null;
-                      if (hc?.type !== "coral" || !hc.select_layer_id)
-                        return undefined;
-                      const layerId = hc.select_layer_id;
-                      const flyToReef = hc.select_layer_fly_to_reef ?? false;
-                      return () => {
-                        setActiveLayerId(layerId);
-                        if (flyToReef) {
-                          setChatFlyToBbox(
-                            nearestCoralBbox(
-                              picked?.lat ?? 0,
-                              picked?.lon ?? 0,
-                            ),
-                          );
-                        }
-                      };
+                      if (hc?.type === "coral" && hc.select_layer_id) {
+                        const layerId = hc.select_layer_id;
+                        const flyToReef =
+                          hc.select_layer_fly_to_reef ?? false;
+                        return () => {
+                          setActiveLayerId(layerId);
+                          if (flyToReef) {
+                            setChatFlyToBbox(
+                              nearestCoralBbox(
+                                picked?.lat ?? 0,
+                                picked?.lon ?? 0,
+                              ),
+                            );
+                          }
+                        };
+                      }
+                      if (
+                        panelHeadline?.type === "global_precip_unavailable" &&
+                        (entry.graph.id === "tp_annual" ||
+                          entry.graph.id === "tp_cdd")
+                      ) {
+                        return () => setActiveLayerId("precipitation_trend");
+                      }
+                      return undefined;
                     })()}
                   />
                 ) : null,
