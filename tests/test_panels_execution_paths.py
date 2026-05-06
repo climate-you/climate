@@ -34,6 +34,7 @@ class _TileStore:
     def __init__(self, grid: GridSpec) -> None:
         self.grid = grid
         self.start_year_fallback = 1979
+        self.aggregates: dict = {}
 
     def _metric_grid(self, metric: str) -> GridSpec:
         return self.grid
@@ -276,6 +277,46 @@ def test_build_scored_panels_tiles_registry_success_and_fallback(
             "method": None,
         },
     )
+    monkeypatch.setattr(
+        panels_module,
+        "_compute_t2m_hotdays_headline",
+        lambda tile_store, lat, lon: {"key": "t2m_hotdays_local", "label": "Air hot days per year", "value": None, "unit": "days", "baseline": "1979", "period": None, "method": None},
+    )
+    monkeypatch.setattr(
+        panels_module,
+        "_compute_sst_hotdays_headline",
+        lambda tile_store, lat, lon: {"key": "sst_hotdays_local", "label": "Sea surface hot days per year", "value": None, "unit": "days", "baseline": "1982", "period": None, "method": None},
+    )
+    monkeypatch.setattr(
+        panels_module,
+        "_compute_precip_headline",
+        lambda tile_store, lat, lon: {"key": "precip_local", "label": "Annual precipitation", "value": None, "unit": "mm", "baseline": "1979", "period": None, "method": None},
+    )
+    monkeypatch.setattr(
+        panels_module,
+        "_compute_cdd_headline",
+        lambda tile_store, lat, lon: {"key": "cdd_local", "label": "Consecutive dry days per year", "value": None, "unit": "days", "baseline": "1979", "period": None, "method": None},
+    )
+    monkeypatch.setattr(
+        panels_module,
+        "_compute_coral_local_headlines",
+        lambda tile_store, lat, lon: [],
+    )
+    monkeypatch.setattr(
+        panels_module,
+        "_compute_global_t2m_preindustrial_headline",
+        lambda tile_store, unit: {"key": "t2m_vs_preindustrial_global", "label": "Air temperature change vs pre-industrial (global)", "value": None, "unit": unit, "baseline": "1850-1900", "period": None, "method": None},
+    )
+    monkeypatch.setattr(
+        panels_module,
+        "_global_aggregate_recent_delta_headline",
+        lambda **kwargs: {"key": kwargs["key"], "label": kwargs["label"], "value": None, "unit": kwargs["unit_out"], "baseline": str(kwargs["baseline_year"]), "period": None, "method": None},
+    )
+    monkeypatch.setattr(
+        panels_module,
+        "_global_aggregate_trend_headline",
+        lambda **kwargs: {"key": kwargs["key"], "label": kwargs["label"], "value": None, "unit": kwargs["unit"], "baseline": str(kwargs["baseline_year"]), "period": None, "method": None},
+    )
 
     scored = panels_module.build_scored_panels_tiles_registry(
         place_resolver=_place_resolver(),
@@ -315,7 +356,9 @@ def test_build_scored_panels_tiles_registry_success_and_fallback(
         maps_root=Path("/tmp"),
         selected_place=place,
     )
-    assert empty.panels == []
+    assert len(empty.panels) == 1
+    assert empty.panels[0].score == 0
+    assert empty.panels[0].panel.id == "p1"
     assert empty.location.place.geonameid == place.geonameid
 
     # No selected place and no scored panels -> resolve_place fallback branch.
@@ -346,6 +389,7 @@ def test_build_panel_tiles_registry_misc_internal_branches(
         def __init__(self) -> None:
             self.start_year_fallback = 1979
             self.calls = 0
+            self.aggregates: dict = {}
 
         def _metric_grid(self, metric: str):
             self.calls += 1
@@ -461,6 +505,7 @@ def test_build_panel_tiles_registry_uses_0p05_bbox_in_sparse_risk_zone(
     class _MixedGridStore:
         def __init__(self) -> None:
             self.start_year_fallback = 1979
+            self.aggregates: dict = {}
 
         def _metric_grid(self, metric: str) -> GridSpec:
             if metric == "m_reef":
