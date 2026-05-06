@@ -223,6 +223,21 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
                     to wildfires
                   </a>
                 </li>
+                <li>
+                  <a
+                    href="https://doi.org/10.1038/s41467-025-67506-w"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Nature: Severe and widespread coral reef damage during the
+                    2014-2017 Global Coral Bleaching Event
+                  </a>
+                  <br />
+                  <i>
+                    Eakin, C.M., Heron, S.F., Connolly, S.R. et al. Nat Commun
+                    17, 1318 (2026).
+                  </i>
+                </li>
               </ul>
             </section>
           </div>
