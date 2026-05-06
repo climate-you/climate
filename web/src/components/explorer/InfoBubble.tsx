@@ -32,6 +32,7 @@ export default function InfoBubble({
     const rect = btn.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const tooltipMinWidth = 170;
+    const tooltipMaxWidth = 260;
     const spaceRight = viewportWidth - rect.right;
     const spaceLeft = rect.left;
     const useAbovePlacement = preferAboveOnMobile && viewportWidth <= 900;
@@ -44,12 +45,14 @@ export default function InfoBubble({
         });
         return;
       }
-      setCoords({
-        left: Math.round(rect.left),
-        top: Math.round(rect.bottom),
-        placement: "left",
-      });
-      return;
+      if (spaceLeft >= tooltipMaxWidth) {
+        setCoords({
+          left: Math.round(rect.left),
+          top: Math.round(rect.bottom),
+          placement: "left",
+        });
+        return;
+      }
     }
     const fallbackLeft = Math.min(
       Math.max(Math.round(rect.left), 0),
