@@ -418,7 +418,7 @@
             "select_layer_id": "reef_stress",
             "select_layer_fly_to_reef": true,
             "info_bubble_texts": {
-              "coral_global": "A day is counted as globally at risk when at least 10% of coral reef cells exceed the DHW threshold (moderate: DHW ≥ 4, severe: DHW ≥ 8). 2024 is the first year in the 40-year record where every single day met this threshold.",
+              "coral_global": "A day is counted as globally at risk when at least 10% of coral reef cells exceed the DHW threshold (moderate: DHW ≥ 4, severe: DHW ≥ 8). In 2024, every single day in the 40-year record exceeded the moderate stress threshold (DHW ≥ 4).",
               "coral_worst_year": "The worst year is the calendar year with the highest combined total of moderate (4 ≤ DHW < 8) and severe (DHW ≥ 8) heat stress days in the observed record since 1985.",
               "trend": "The change is estimated from a linear trend fitted to global coral heat stress data since 1985, counting combined moderate (4 ≤ DHW < 8) and severe (DHW ≥ 8) days per year.",
               "coral_unavailable": "The change is estimated from a linear trend fitted to global coral heat stress data since 1985, counting combined moderate (4 ≤ DHW < 8) and severe (DHW ≥ 8) days per year."
@@ -426,7 +426,7 @@
           },
           "title": "Coral reef DHW risk days",
           "ui": {
-            "info_text": "This graph shows the number of days per year that coral reefs globally experienced each DHW heat-stress level: no risk (DHW < 4), moderate risk (4 ≤ DHW < 8), and severe risk (DHW ≥ 8). A day is counted at a given level when the fraction of coral reef cells globally exceeding that threshold reaches the selected percentile: 99th percentile (≥1% of cells), 95th percentile (≥5%), or 90th percentile (≥10%). DHW measures accumulated ocean heat stress over the previous 12 weeks. Note: 1985 shows fewer total days because the dataset begins in March 1985. Source: NOAA Coral Reef Watch.",
+            "info_text": "DHW (Degree Heating Weeks) measures accumulated ocean heat above the bleaching threshold over 12 weeks. This graph shows days per year when at least 1%, 5%, or 10% of coral reef cells globally exceeded each stress level: moderate (DHW ≥ 4) or severe (DHW ≥ 8). Note: 1985 shows fewer days because the dataset begins in March. Source: NOAA Coral Reef Watch.",
             "chart_mode": "stacked_bar",
             "axis_title_mode": "year"
           },
