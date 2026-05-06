@@ -599,3 +599,203 @@ def test_build_panel_tiles_registry_loads_default_manifest(
         panels_manifest=None,
     )
     assert resp.panel.id == "p_auto"
+
+
+# ---------------------------------------------------------------------------
+# Score=0 panels produce stub graphs (new behaviour)
+# ---------------------------------------------------------------------------
+
+def test_build_scored_panels_score_zero_produces_stub_panels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Panels with score=0 must appear as stub ScoredPanelPayloads with empty
+    series_keys and an error string, not be silently dropped."""
+    monkeypatch.setattr(panels_module, "_read_score_value", lambda *_a, **_kw: 0)
+
+    _nh = {"key": "x", "label": "x", "value": None, "unit": "C", "baseline": None, "period": None, "method": None}
+    _nhd = {**_nh, "unit": "days"}
+
+    # Stub all headline functions so SimpleNamespace tile_store is sufficient.
+    for _name in (
+        "_compute_t2m_preindustrial_headline",
+        "_compute_t2m_recent_headline",
+        "_compute_sst_recent_headline",
+        "_compute_t2m_hotdays_headline",
+        "_compute_sst_hotdays_headline",
+        "_compute_precip_headline",
+        "_compute_cdd_headline",
+        "_compute_global_t2m_preindustrial_headline",
+    ):
+        monkeypatch.setattr(panels_module, _name, lambda *_a, **_kw: _nh)
+    monkeypatch.setattr(panels_module, "_compute_coral_local_headlines", lambda *_a, **_kw: [])
+    monkeypatch.setattr(panels_module, "_global_aggregate_recent_delta_headline", lambda *_a, **_kw: _nh)
+    monkeypatch.setattr(panels_module, "_global_aggregate_trend_headline", lambda *_a, **_kw: _nhd)
+
+    from types import SimpleNamespace
+    result = panels_module.build_scored_panels_tiles_registry(
+        place_resolver=_place_resolver(),
+        tile_store=SimpleNamespace(aggregates={}),
+        cache=None,
+        ttl_panel_s=60,
+        release="dev",
+        lat=0.0,
+        lon=0.0,
+        unit="C",
+        panels_manifest={
+            "panels": {
+                "p_coral": {
+                    "title": "Coral",
+                    "score_map_id": "m_coral",
+                    "graphs": [
+                        {"id": "g1", "title": "Graph 1"},
+                        {"id": "g2", "title": "Graph 2"},
+                    ],
+                }
+            }
+        },
+        maps_manifest={"m_coral": {"type": "score", "constant_score": 0}},
+        maps_root=Path("/tmp"),
+    )
+    assert len(result.panels) == 1
+    panel = result.panels[0]
+    assert panel.score == 0
+    assert panel.panel.id == "p_coral"
+    assert len(panel.panel.graphs) == 2
+    for g in panel.panel.graphs:
+        assert g.series_keys == []
+        assert g.error is not None
+
+
+# ---------------------------------------------------------------------------
+# global_only series are skipped in local panel build (new behaviour)
+# ---------------------------------------------------------------------------
+
+def test_build_panel_tiles_registry_skips_global_only_series() -> None:
+    grid = GridSpec.global_0p25(tile_size=64)
+    store = _TileStore(grid)
+    manifest = {
+        "panels": {
+            "p_mixed": {
+                "title": "Mixed",
+                "graphs": [
+                    {
+                        "id": "g",
+                        "title": "G",
+                        "series": [
+                            {"metric": "m_temp", "unit": "C"},
+                            {"metric": "m_temp", "unit": "C", "global_only": True},
+                        ],
+                    }
+                ],
+            }
+        }
+    }
+    resp = panels_module.build_panel_tiles_registry(
+        place_resolver=_place_resolver(),
+        tile_store=store,
+        cache=None,
+        ttl_panel_s=60,
+        release="dev",
+        lat=0.0,
+        lon=0.0,
+        unit="C",
+        panel_id="p_mixed",
+        panels_manifest=manifest,
+    )
+    # The global_only series must NOT appear in series_keys
+    keys = resp.panel.graphs[0].series_keys
+    assert len(keys) == 1
+    assert keys[0] == "m_temp"
+
+
+# ---------------------------------------------------------------------------
+# Animation steps filtered to only include locally-available series (new behaviour)
+# ---------------------------------------------------------------------------
+
+def test_build_panel_tiles_registry_animation_filtering() -> None:
+    grid = GridSpec.global_0p25(tile_size=64)
+    store = _TileStore(grid)
+
+    # m_temp is available; missing_metric raises FileNotFoundError (not available)
+    manifest = {
+        "panels": {
+            "p_anim": {
+                "title": "Animated",
+                "graphs": [
+                    {
+                        "id": "g_anim",
+                        "title": "G Anim",
+                        "series": [
+                            {"metric": "m_temp", "unit": "C"},
+                        ],
+                        "animation": {
+                            "steps": [
+                                {"series_keys": ["m_temp"], "label": "Step A"},
+                                {"series_keys": ["missing_metric"], "label": "Step B"},
+                                {"series_keys": ["m_temp"], "label": "Step C"},
+                            ]
+                        },
+                    }
+                ],
+            }
+        }
+    }
+    resp = panels_module.build_panel_tiles_registry(
+        place_resolver=_place_resolver(),
+        tile_store=store,
+        cache=None,
+        ttl_panel_s=60,
+        release="dev",
+        lat=0.0,
+        lon=0.0,
+        unit="C",
+        panel_id="p_anim",
+        panels_manifest=manifest,
+    )
+    graph = resp.panel.graphs[0]
+    # Two steps reference m_temp (available) so animation should be kept with those two steps
+    assert graph.animation is not None
+    steps = graph.animation["steps"]
+    assert len(steps) == 2
+    for step in steps:
+        assert "missing_metric" not in step["series_keys"]
+
+
+def test_build_panel_tiles_registry_animation_dropped_when_only_one_step_survives() -> None:
+    grid = GridSpec.global_0p25(tile_size=64)
+    store = _TileStore(grid)
+
+    manifest = {
+        "panels": {
+            "p_anim2": {
+                "title": "Anim2",
+                "graphs": [
+                    {
+                        "id": "g2",
+                        "title": "G2",
+                        "series": [{"metric": "m_temp", "unit": "C"}],
+                        "animation": {
+                            "steps": [
+                                {"series_keys": ["m_temp"], "label": "Only Step"},
+                                {"series_keys": ["missing_metric"], "label": "Missing"},
+                            ]
+                        },
+                    }
+                ],
+            }
+        }
+    }
+    resp = panels_module.build_panel_tiles_registry(
+        place_resolver=_place_resolver(),
+        tile_store=store,
+        cache=None,
+        ttl_panel_s=60,
+        release="dev",
+        lat=0.0,
+        lon=0.0,
+        unit="C",
+        panel_id="p_anim2",
+        panels_manifest=manifest,
+    )
+    # Only one valid step survives → animation should be None (can't animate a single step)
+    assert resp.panel.graphs[0].animation is None

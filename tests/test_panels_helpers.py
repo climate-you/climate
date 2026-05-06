@@ -494,3 +494,571 @@ def test_grid_and_read_score_misc_branches() -> None:
         panels_module._grid_from_id = old_grid_from_id
         panels_module.locate_tile = old_locate_tile
         panels_module._load_score_map_values_cached = old_loader
+
+
+# ---------------------------------------------------------------------------
+# _compute_t2m_recent_headline  (significantly refactored)
+# ---------------------------------------------------------------------------
+
+def test_compute_t2m_recent_headline_success() -> None:
+    years = list(range(1979, 2024))
+
+    class _Store:
+        def axis(self, metric: str):
+            return years
+
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            return np.linspace(10.0, 12.2, num=len(years), dtype=np.float32)
+
+    h = panels_module._compute_t2m_recent_headline(
+        tile_store=_Store(), lat=0.0, lon=0.0, unit="C"
+    )
+    assert h.value is not None
+    assert h.unit == "C"
+    assert h.baseline == "1979-2000"
+    assert h.period is not None and "-" in h.period
+
+
+def test_compute_t2m_recent_headline_unit_conversion() -> None:
+    years = list(range(1979, 2024))
+
+    class _Store:
+        def axis(self, metric: str):
+            return years
+
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            return np.linspace(10.0, 12.2, num=len(years), dtype=np.float32)
+
+    h_c = panels_module._compute_t2m_recent_headline(
+        tile_store=_Store(), lat=0.0, lon=0.0, unit="C"
+    )
+    h_f = panels_module._compute_t2m_recent_headline(
+        tile_store=_Store(), lat=0.0, lon=0.0, unit="F"
+    )
+    assert h_f.unit == "F"
+    assert h_f.value == pytest.approx(h_c.value * 1.8, abs=1e-3)
+
+
+def test_compute_t2m_recent_headline_missing_cases() -> None:
+    class _FileNotFound:
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            raise FileNotFoundError("missing")
+
+    assert panels_module._compute_t2m_recent_headline(
+        tile_store=_FileNotFound(), lat=0.0, lon=0.0, unit="C"
+    ).value is None
+
+    class _NoneVec:
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            return None
+
+    assert panels_module._compute_t2m_recent_headline(
+        tile_store=_NoneVec(), lat=0.0, lon=0.0, unit="C"
+    ).value is None
+
+    # All-NaN axis values -> finite_years empty
+    class _BadAxis:
+        start_year_fallback = 1979
+
+        def axis(self, metric: str):
+            return ["not-a-date", "also-not"]
+
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            return np.array([10.0, 11.0], dtype=np.float32)
+
+    assert panels_module._compute_t2m_recent_headline(
+        tile_store=_BadAxis(), lat=0.0, lon=0.0, unit="C"
+    ).value is None
+
+    # Only 2 recent years (< _HEADLINE_RECENT_YEARS - 1 = 4)
+    class _TooShortRecent:
+        def axis(self, metric: str):
+            return list(range(1979, 2000)) + [2022, 2023]
+
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            return np.ones(21 + 2, dtype=np.float32)
+
+    assert panels_module._compute_t2m_recent_headline(
+        tile_store=_TooShortRecent(), lat=0.0, lon=0.0, unit="C"
+    ).value is None
+
+    # Ref period 1979-2000 has fewer than 10 years
+    class _TooShortRef:
+        def axis(self, metric: str):
+            return [1995, 1996, 2019, 2020, 2021, 2022, 2023]
+
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            return np.ones(7, dtype=np.float32)
+
+    assert panels_module._compute_t2m_recent_headline(
+        tile_store=_TooShortRef(), lat=0.0, lon=0.0, unit="C"
+    ).value is None
+
+
+# ---------------------------------------------------------------------------
+# _compute_trend_at_last_headline  (new generic helper)
+# ---------------------------------------------------------------------------
+
+def _trend_store(years, values):
+    class _Store:
+        start_year_fallback = years[0]
+
+        def axis(self, metric: str):
+            return years
+
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            return np.asarray(values, dtype=np.float32)
+
+    return _Store()
+
+
+def test_compute_trend_at_last_headline_success() -> None:
+    years = list(range(1979, 2024))
+    values = np.linspace(5.0, 10.0, num=len(years))
+    store = _trend_store(years, values)
+
+    h = panels_module._compute_trend_at_last_headline(
+        tile_store=store,
+        lat=0.0,
+        lon=0.0,
+        metric="t2m_hotdays_per_year",
+        key="t2m_hotdays_local",
+        label="Air hot days per year",
+        unit="days",
+        baseline_year=1979,
+    )
+    assert h.value is not None
+    assert h.key == "t2m_hotdays_local"
+    assert h.unit == "days"
+    assert h.baseline_value is not None
+    assert h.period == str(years[-1])
+
+
+def test_compute_trend_at_last_headline_missing() -> None:
+    class _FileNotFound:
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            raise FileNotFoundError("missing")
+
+    h = panels_module._compute_trend_at_last_headline(
+        tile_store=_FileNotFound(), lat=0.0, lon=0.0,
+        metric="m", key="k", label="L", unit="days", baseline_year=1979,
+    )
+    assert h.value is None
+
+    class _NoneVec:
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            return None
+
+    h2 = panels_module._compute_trend_at_last_headline(
+        tile_store=_NoneVec(), lat=0.0, lon=0.0,
+        metric="m", key="k", label="L", unit="days", baseline_year=1979,
+    )
+    assert h2.value is None
+
+
+def test_compute_trend_at_last_headline_no_baseline_year() -> None:
+    years = list(range(2010, 2024))
+    values = np.linspace(1.0, 5.0, num=len(years))
+    store = _trend_store(years, values)
+
+    h = panels_module._compute_trend_at_last_headline(
+        tile_store=store, lat=0.0, lon=0.0,
+        metric="m", key="k", label="L", unit="days", baseline_year=1979,
+    )
+    assert h.value is not None
+    assert h.baseline_value is None
+
+
+# ---------------------------------------------------------------------------
+# _compute_coral_local_headlines  (new)
+# ---------------------------------------------------------------------------
+
+def test_compute_coral_local_headlines_file_not_found() -> None:
+    class _Store:
+        start_year_fallback = 1985
+
+        def axis(self, metric: str):
+            return list(range(1985, 2024))
+
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            raise FileNotFoundError("missing")
+
+    result = panels_module._compute_coral_local_headlines(
+        tile_store=_Store(), lat=0.0, lon=0.0
+    )
+    assert len(result) == 3
+    assert all(h.value is None for h in result)
+
+
+def test_compute_coral_local_headlines_none_severe() -> None:
+    class _Store:
+        start_year_fallback = 1985
+
+        def axis(self, metric: str):
+            return list(range(1985, 2024))
+
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            return None
+
+    result = panels_module._compute_coral_local_headlines(
+        tile_store=_Store(), lat=0.0, lon=0.0
+    )
+    assert all(h.value is None for h in result)
+
+
+def test_compute_coral_local_headlines_all_nan_severe() -> None:
+    class _Store:
+        start_year_fallback = 1985
+
+        def axis(self, metric: str):
+            return list(range(1985, 2024))
+
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            n = len(list(range(1985, 2024)))
+            return np.full(n, np.nan, dtype=np.float32)
+
+    result = panels_module._compute_coral_local_headlines(
+        tile_store=_Store(), lat=0.0, lon=0.0
+    )
+    assert all(h.value is None for h in result)
+
+
+def test_compute_coral_local_headlines_severe_only() -> None:
+    years = list(range(1985, 2024))
+    severe = np.zeros(len(years), dtype=np.float32)
+    severe[10] = 30.0  # worst year = 1985+10 = 1995
+
+    class _Store:
+        start_year_fallback = 1985
+
+        def axis(self, metric: str):
+            return years
+
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            if "severe" in metric:
+                return severe
+            return None  # no moderate
+
+    result = panels_module._compute_coral_local_headlines(
+        tile_store=_Store(), lat=0.0, lon=0.0
+    )
+    assert result[0].value == 1.0  # flag
+    assert result[1].value == 1995.0  # worst year
+    assert result[2].value == 30.0  # days
+
+
+def test_compute_coral_local_headlines_severe_plus_moderate() -> None:
+    years = list(range(1985, 2024))
+    n = len(years)
+    severe = np.zeros(n, dtype=np.float32)
+    moderate = np.zeros(n, dtype=np.float32)
+    severe[5] = 10.0
+    moderate[5] = 15.0  # combined 25 at year 1990, larger than any other year
+
+    class _Store:
+        start_year_fallback = 1985
+
+        def axis(self, metric: str):
+            return years
+
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            if "severe" in metric:
+                return severe
+            return moderate
+
+    result = panels_module._compute_coral_local_headlines(
+        tile_store=_Store(), lat=0.0, lon=0.0
+    )
+    assert result[1].value == 1990.0
+    assert result[2].value == 25.0
+
+
+def test_compute_coral_local_headlines_mismatched_moderate_size() -> None:
+    years = list(range(1985, 2024))
+    n = len(years)
+    severe = np.zeros(n, dtype=np.float32)
+    severe[0] = 5.0
+    mismatched_moderate = np.ones(n + 3, dtype=np.float32)  # wrong size
+
+    class _Store:
+        start_year_fallback = 1985
+
+        def axis(self, metric: str):
+            return years
+
+        def try_get_metric_vector(self, metric: str, lat: float, lon: float):
+            if "severe" in metric:
+                return severe
+            return mismatched_moderate
+
+    result = panels_module._compute_coral_local_headlines(
+        tile_store=_Store(), lat=0.0, lon=0.0
+    )
+    # Mismatched moderate is treated as zeros; severe[0]=5.0 is still the worst year
+    assert result[0].value == 1.0  # flag
+    assert result[2].value == 5.0
+
+
+# ---------------------------------------------------------------------------
+# _local_graph_ui  (new)
+# ---------------------------------------------------------------------------
+
+def test_local_graph_ui() -> None:
+    assert panels_module._local_graph_ui({}) is None
+    assert panels_module._local_graph_ui({"ui": {"x": 1}}) == {"x": 1}
+    assert panels_module._local_graph_ui({"local_info_text": "hello"}) == {"info_text": "hello"}
+    assert panels_module._local_graph_ui({"ui": {"x": 1}, "local_info_text": "hi"}) == {
+        "x": 1,
+        "info_text": "hi",
+    }
+
+
+# ---------------------------------------------------------------------------
+# _global_aggregate_recent_delta_headline  (new)
+# ---------------------------------------------------------------------------
+
+def _make_agg_store(metric, aggregation, time_axis, values):
+    class _Store:
+        aggregates = {
+            (metric, aggregation): {
+                "time_axis": time_axis,
+                "regions": {"globe": {"values": values}},
+            }
+        }
+
+    return _Store()
+
+
+def test_global_aggregate_recent_delta_headline_success() -> None:
+    years = list(range(1979, 2024))
+    values = [float(10 + i * 0.05) for i in range(len(years))]
+    store = _make_agg_store("tp_annual_total_mm", "mean", years, values)
+
+    h = panels_module._global_aggregate_recent_delta_headline(
+        tile_store=store,
+        metric="tp_annual_total_mm",
+        key="precip_global",
+        label="Precip global",
+        unit_in="mm",
+        unit_out="mm",
+        baseline_year=1979,
+    )
+    assert h.value is not None
+    assert h.unit == "mm"
+    assert h.period is not None
+
+
+def test_global_aggregate_recent_delta_headline_temperature_unit_conversion() -> None:
+    years = list(range(1979, 2024))
+    values = [float(15 + i * 0.05) for i in range(len(years))]
+    store = _make_agg_store("t2m_yearly_mean_c", "mean", years, values)
+
+    h_c = panels_module._global_aggregate_recent_delta_headline(
+        tile_store=store,
+        metric="t2m_yearly_mean_c",
+        key="t2m_recent_global",
+        label="T global",
+        unit_in="C",
+        unit_out="C",
+        baseline_year=1979,
+    )
+    store2 = _make_agg_store("t2m_yearly_mean_c", "mean", years, values)
+    h_f = panels_module._global_aggregate_recent_delta_headline(
+        tile_store=store2,
+        metric="t2m_yearly_mean_c",
+        key="t2m_recent_global",
+        label="T global",
+        unit_in="C",
+        unit_out="F",
+        baseline_year=1979,
+    )
+    assert h_f.unit == "F"
+    assert h_f.value == pytest.approx(h_c.value * 1.8, abs=1e-3)
+
+
+def test_global_aggregate_recent_delta_headline_missing() -> None:
+    class _Empty:
+        aggregates: dict = {}
+
+    h = panels_module._global_aggregate_recent_delta_headline(
+        tile_store=_Empty(),
+        metric="m",
+        key="k",
+        label="L",
+        unit_in="mm",
+        unit_out="mm",
+        baseline_year=1979,
+    )
+    assert h.value is None
+
+    class _NoGlobe:
+        aggregates = {("m", "mean"): {"time_axis": [2020], "regions": {}}}
+
+    h2 = panels_module._global_aggregate_recent_delta_headline(
+        tile_store=_NoGlobe(),
+        metric="m",
+        key="k",
+        label="L",
+        unit_in="mm",
+        unit_out="mm",
+        baseline_year=1979,
+    )
+    assert h2.value is None
+
+
+# ---------------------------------------------------------------------------
+# _global_aggregate_trend_headline  (new)
+# ---------------------------------------------------------------------------
+
+def test_global_aggregate_trend_headline_success() -> None:
+    years = list(range(1979, 2024))
+    values = [float(5 + i * 0.1) for i in range(len(years))]
+    store = _make_agg_store("t2m_hotdays_per_year", "mean", years, values)
+
+    h = panels_module._global_aggregate_trend_headline(
+        tile_store=store,
+        metric="t2m_hotdays_per_year",
+        key="t2m_hotdays_global",
+        label="Hot days global",
+        unit="days",
+        baseline_year=1979,
+    )
+    assert h.value is not None
+    assert h.baseline_value is not None
+    assert h.period == str(years[-1])
+
+
+def test_global_aggregate_trend_headline_missing() -> None:
+    class _Empty:
+        aggregates: dict = {}
+
+    h = panels_module._global_aggregate_trend_headline(
+        tile_store=_Empty(),
+        metric="m",
+        key="k",
+        label="L",
+        unit="days",
+        baseline_year=1979,
+    )
+    assert h.value is None
+
+
+# ---------------------------------------------------------------------------
+# _compute_global_t2m_preindustrial_headline  (new)
+# ---------------------------------------------------------------------------
+
+def test_compute_global_t2m_preindustrial_headline_success() -> None:
+    class _Store:
+        aggregates = {
+            ("t2m_total_warming_vs_preindustrial_c", "mean"): {
+                "time_axis": [2020, 2021, 2022, 2023],
+                "regions": {"globe": {"values": [1.1, 1.15, 1.18, 1.2]}},
+            }
+        }
+
+    h = panels_module._compute_global_t2m_preindustrial_headline(
+        tile_store=_Store(), unit="C"
+    )
+    assert h.value == pytest.approx(1.2)
+    assert h.period == "2023"
+
+    h_f = panels_module._compute_global_t2m_preindustrial_headline(
+        tile_store=_Store(), unit="F"
+    )
+    assert h_f.value == pytest.approx(1.2 * 1.8, abs=1e-3)
+
+
+def test_compute_global_t2m_preindustrial_headline_missing() -> None:
+    class _Empty:
+        aggregates: dict = {}
+
+    assert panels_module._compute_global_t2m_preindustrial_headline(
+        tile_store=_Empty(), unit="C"
+    ).value is None
+
+    class _NoGlobe:
+        aggregates = {
+            ("t2m_total_warming_vs_preindustrial_c", "mean"): {
+                "time_axis": [],
+                "regions": {},
+            }
+        }
+
+    assert panels_module._compute_global_t2m_preindustrial_headline(
+        tile_store=_NoGlobe(), unit="C"
+    ).value is None
+
+    class _EmptyValues:
+        aggregates = {
+            ("t2m_total_warming_vs_preindustrial_c", "mean"): {
+                "time_axis": [],
+                "regions": {"globe": {"values": []}},
+            }
+        }
+
+    assert panels_module._compute_global_t2m_preindustrial_headline(
+        tile_store=_EmptyValues(), unit="C"
+    ).value is None
+
+
+# ---------------------------------------------------------------------------
+# _dhw_info_bubble_text  (new)
+# ---------------------------------------------------------------------------
+
+def test_dhw_info_bubble_text_success() -> None:
+    class _Store:
+        aggregates = {
+            ("dhw_severe_risk_days_per_year", "fraction_1pct"): {
+                "aggregation": "fraction_1pct"
+            }
+        }
+
+    text = panels_module._dhw_info_bubble_text(_Store())
+    assert text is not None
+    assert "99th percentile" in text
+    assert "1%" in text
+
+
+def test_dhw_info_bubble_text_missing() -> None:
+    class _Empty:
+        aggregates: dict = {}
+
+    assert panels_module._dhw_info_bubble_text(_Empty()) is None
+
+    class _WrongFormat:
+        aggregates = {
+            ("dhw_severe_risk_days_per_year", "fraction_1pct"): {
+                "aggregation": "mean"
+            }
+        }
+
+    assert panels_module._dhw_info_bubble_text(_WrongFormat()) is None
+
+
+# ---------------------------------------------------------------------------
+# _with_coral_info_bubble  (new)
+# ---------------------------------------------------------------------------
+
+def test_with_coral_info_bubble() -> None:
+    class _NoAgg:
+        aggregates: dict = {}
+
+    assert panels_module._with_coral_info_bubble(None, _NoAgg()) is None
+    assert panels_module._with_coral_info_bubble({"type": "temperature"}, _NoAgg()) == {"type": "temperature"}
+
+    # Coral type but no aggregate -> spec returned unchanged
+    spec = {"type": "coral", "info_bubble_texts": {"foo": "bar"}}
+    assert panels_module._with_coral_info_bubble(spec, _NoAgg()) is spec
+
+    class _WithAgg:
+        aggregates = {
+            ("dhw_severe_risk_days_per_year", "fraction_1pct"): {
+                "aggregation": "fraction_1pct"
+            }
+        }
+
+    result = panels_module._with_coral_info_bubble({"type": "coral", "info_bubble_texts": {"existing": "x"}}, _WithAgg())
+    assert result is not None
+    assert "trend" in result["info_bubble_texts"]
+    assert "coral_unavailable" in result["info_bubble_texts"]
+    assert result["info_bubble_texts"]["existing"] == "x"

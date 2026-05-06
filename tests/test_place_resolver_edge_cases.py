@@ -184,3 +184,32 @@ def test_place_resolver_ocean_open_ocean_label_and_city_fallback(
     place = resolver.resolve_place(40.0, -120.0)
     assert place.label == "Open Ocean"
     assert place.population is None
+
+
+def test_place_resolver_namibia_country_code_not_parsed_as_nan(
+    tmp_path: Path,
+) -> None:
+    """Country code 'NA' (Namibia) must not be silently coerced to NaN by pandas.
+
+    Before the fix (keep_default_na=False), pandas treated 'NA' as a missing value,
+    so all Namibian cities had no country_code, causing the country-constrained lookup
+    to return no results and falling back to just "Namibia" without a city name.
+    """
+    csv_path = tmp_path / "locations.csv"
+    csv_path.write_text(
+        "geonameid,lat,lon,label,country_code,population,city_name,country_name\n"
+        '10,10.0,20.0,"Other City, ZZ",ZZ,5000,Other City,Some Country\n'
+        '11,-22.56,17.08,"Windhoek, NA",NA,400000,Windhoek,Namibia\n',
+        encoding="utf-8",
+    )
+    resolver = PlaceResolver(
+        locations_csv=csv_path,
+        country_classifier=_AlwaysCountry("NA"),
+        country_names={"NA": "Namibia"},
+        cache=None,
+    )
+    place = resolver.resolve_place(-22.56, 17.08)
+    assert "Windhoek" in place.label, (
+        f"Expected city name in label, got {place.label!r}. "
+        "This likely means 'NA' country_code was parsed as NaN."
+    )

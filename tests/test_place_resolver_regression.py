@@ -108,6 +108,9 @@ _CASES: list[tuple[float, float, str, str | None, str | None]] = [
     (85.0, 0.0, "Arctic Ocean", "Arctic", None),
     # --- Coastal ocean (within 80 km of shore → "Ocean off City" label) ---
     (-33.87, 151.7, "Off Sydney (Tasman Sea)", "off", None),
+    # --- Namibia regression: country code "NA" must not be parsed as NaN by pandas ---
+    (-22.5597, 17.0832, "Windhoek, Namibia", "Windhoek", None),
+    (-22.6784, 14.5257, "Swakopmund, Namibia", "Swakopmund", None),
 ]
 
 
