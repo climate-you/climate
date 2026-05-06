@@ -1872,7 +1872,7 @@ def build_global_panels(
                 baseline_year=1982,
             ),
         ],
-        layer_overrides={},
+        layer_overrides=_layer_overrides_from_manifest(panels_manifest),
     )
 
 

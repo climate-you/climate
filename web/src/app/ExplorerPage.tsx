@@ -1019,7 +1019,24 @@ export default function ExplorerPage({
     }
   }
 
-  async function loadGlobalPanel(nextUnit = unit) {
+  function applyLayerDefaultGraphPage(
+    layerOverrides:
+      | Record<string, { default_graph_ids: string[] }>
+      | undefined
+      | null,
+  ) {
+    const firstGraphId =
+      layerOverrides?.[activeLayerId]?.default_graph_ids?.[0];
+    if (!firstGraphId) return;
+    const graphIndex = (FIXED_GRAPH_ORDER as readonly string[]).indexOf(
+      firstGraphId,
+    );
+    if (graphIndex >= 0) {
+      setGraphPage(Math.floor(graphIndex / Math.max(1, graphsPerPage)));
+    }
+  }
+
+  async function loadGlobalPanel(nextUnit = unit, setDefaultGraph = false) {
     panelAbortControllerRef.current?.abort("superseded");
     const controller = new AbortController();
     panelAbortControllerRef.current = controller;
@@ -1047,6 +1064,9 @@ export default function ExplorerPage({
       const data = (await r.json()) as PanelResponse;
       window.clearTimeout(timeoutId);
       pinSessionRelease(data.release);
+      if (setDefaultGraph) {
+        applyLayerDefaultGraphPage(data.layer_overrides);
+      }
       setResp(data);
       setRespUnit(nextUnit);
       setPanelLoadError(null);
@@ -1061,7 +1081,9 @@ export default function ExplorerPage({
     const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
       nextLon,
     )}`;
-    const r = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    const r = await fetch(url, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
     if (!r.ok) throw new Error(await r.text());
     const data = (await r.json()) as NearestLocationResponse;
     return data.result;
@@ -1162,13 +1184,15 @@ export default function ExplorerPage({
         });
         setPanelLoadError(null);
         if (delayOpen) {
+          applyLayerDefaultGraphPage(resp?.layer_overrides);
           window.clearTimeout(timer!);
           if (!timerFired) setPanelOpen(true);
         }
         return;
       }
-      await loadPanel(la, lo, unit, null);
+      const panelData = await loadPanel(la, lo, unit, null);
       if (delayOpen) {
+        applyLayerDefaultGraphPage(panelData?.layer_overrides);
         window.clearTimeout(timer!);
         if (!timerFired) setPanelOpen(true);
       }
@@ -1512,11 +1536,14 @@ export default function ExplorerPage({
           onGraphOpen={() => {
             if (panelOpen && panelTab === "graph") {
               setPanelOpen(false);
-            } else if (selectedLocation !== null) {
+            } else {
+              applyLayerDefaultGraphPage(resp?.layer_overrides);
+              if (selectedLocation !== null) {
               setPanelTab("graph");
               setPanelOpen(true);
             } else {
-              void loadGlobalPanel();
+                void loadGlobalPanel(unit, true);
+              }
             }
           }}
           chatEnabled={chatEnabled}
@@ -1834,8 +1861,8 @@ export default function ExplorerPage({
                       )}
                       {Math.round(panelHeadline.value) === 0 ? (
                         <span className={styles.panelTitleSmall}>
-                          {panelHeadline.label_no_change}{" "}
-                          {panelHeadline.suffix}.
+                          {panelHeadline.label_no_change} {panelHeadline.suffix}
+                          .
                         </span>
                       ) : (
                         <>
@@ -1850,8 +1877,11 @@ export default function ExplorerPage({
                             }
                           >
                             {panelHeadline.value >= 0 ? "+" : ""}
-                            {Math.round(panelHeadline.value)}
-                            {" "}{pluralizeUnit(panelHeadline.unit, Math.abs(Math.round(panelHeadline.value)))}
+                            {Math.round(panelHeadline.value)}{" "}
+                            {pluralizeUnit(
+                              panelHeadline.unit,
+                              Math.abs(Math.round(panelHeadline.value)),
+                            )}
                           </span>
                           <span className={styles.panelTitleSmall}>
                             {" "}
@@ -1865,8 +1895,9 @@ export default function ExplorerPage({
                       <>Globally, </>
                       <span className={styles.panelTitleTempAccent}>10%</span>
                       <span className={styles.panelTitleSmall}>
-                        {" "}of coral reefs experienced heat stress every
-                        single day of{" "}
+                        {" "}
+                        of coral reefs experienced heat stress every single day
+                        of{" "}
                       </span>
                       <span className={styles.panelTitleTempAccent}>2024</span>
                       <span className={styles.panelTitleSmall}>
@@ -1947,8 +1978,9 @@ export default function ExplorerPage({
                       <span className={styles.panelTitleSmall}>Globally, </span>
                       <span className={styles.panelTitleTempAccent}>10%</span>
                       <span className={styles.panelTitleSmall}>
-                        {" "}of coral reefs experienced heat stress every
-                        single day of{" "}
+                        {" "}
+                        of coral reefs experienced heat stress every single day
+                        of{" "}
                       </span>
                       <span className={styles.panelTitleTempAccent}>2024</span>
                       <span className={styles.panelTitleSmall}>.</span>
@@ -2179,7 +2211,10 @@ export default function ExplorerPage({
         className={`${styles.panelOpenTab} ${!panelOpen && selectedLocation !== null ? styles.panelOpenTabVisible : ""}`}
         type="button"
         aria-label={`Open ${selectedLocation?.label ?? ""} location panel`}
-        onClick={() => setPanelOpen(true)}
+        onClick={() => {
+          applyLayerDefaultGraphPage(resp?.layer_overrides);
+          setPanelOpen(true);
+        }}
       >
         <svg
           className={styles.panelOpenTabIcon}
