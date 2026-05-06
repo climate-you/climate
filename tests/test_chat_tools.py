@@ -191,12 +191,23 @@ class TestResolveRegionId:
         assert _resolve_region_id("world", ts, "t2m", "mean") == "globe"
 
     def test_continent_slug_north_america(self):
-        regions = {"continent:north_america": {"name": "North America", "type": "continent", "values": []}}
+        regions = {
+            "continent:north_america": {
+                "name": "North America",
+                "type": "continent",
+                "values": [],
+            }
+        }
         ts = _make_ts(regions)
-        assert _resolve_region_id("north america", ts, "t2m", "mean") == "continent:north_america"
+        assert (
+            _resolve_region_id("north america", ts, "t2m", "mean")
+            == "continent:north_america"
+        )
 
     def test_continent_slug_europe(self):
-        regions = {"continent:europe": {"name": "Europe", "type": "continent", "values": []}}
+        regions = {
+            "continent:europe": {"name": "Europe", "type": "continent", "values": []}
+        }
         ts = _make_ts(regions)
         assert _resolve_region_id("europe", ts, "t2m", "mean") == "continent:europe"
 
@@ -220,7 +231,16 @@ class TestResolveRegionId:
         assert _resolve_region_id("narnia", ts, "t2m", "mean") is None
 
     def test_ocean_slug_resolution(self):
-        regions = {"ocean:indian_ocean": {"name": "Indian Ocean", "type": "ocean", "values": []}}
+        regions = {
+            "ocean:indian_ocean": {
+                "name": "Indian Ocean",
+                "type": "ocean",
+                "values": [],
+            }
+        }
         ts = _make_ts(regions)
         # "indian ocean" → slug "indian_ocean" → "ocean:indian_ocean"
-        assert _resolve_region_id("indian ocean", ts, "t2m", "mean") == "ocean:indian_ocean"
+        assert (
+            _resolve_region_id("indian ocean", ts, "t2m", "mean")
+            == "ocean:indian_ocean"
+        )

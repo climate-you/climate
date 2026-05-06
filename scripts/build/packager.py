@@ -10,6 +10,7 @@ from climate.registry.metrics import DEFAULT_METRICS_PATH, DEFAULT_SCHEMA_PATH
 from climate.registry.maps import DEFAULT_MAPS_PATH, DEFAULT_MAPS_SCHEMA_PATH
 from climate.registry.panels import DEFAULT_PANELS_PATH, DEFAULT_PANELS_SCHEMA_PATH
 
+
 def _parse_ids(ids_csv: str | None, ids_list: list[str]) -> list[str] | None:
     ids: list[str] = []
     if ids_csv:
@@ -20,10 +21,17 @@ def _parse_ids(ids_csv: str | None, ids_list: list[str]) -> list[str] | None:
 
 def _parse_tile_range(args: argparse.Namespace) -> TileRange | None:
     if args.all:
-        if any(v is not None for v in (args.tile_r0, args.tile_r1, args.tile_c0, args.tile_c1)):
-            raise SystemExit("Do not combine --all with --tile-r0/--tile-r1/--tile-c0/--tile-c1.")
+        if any(
+            v is not None
+            for v in (args.tile_r0, args.tile_r1, args.tile_c0, args.tile_c1)
+        ):
+            raise SystemExit(
+                "Do not combine --all with --tile-r0/--tile-r1/--tile-c0/--tile-c1."
+            )
         return None
-    if any(v is not None for v in (args.tile_r0, args.tile_r1, args.tile_c0, args.tile_c1)):
+    if any(
+        v is not None for v in (args.tile_r0, args.tile_r1, args.tile_c0, args.tile_c1)
+    ):
         if None in (args.tile_r0, args.tile_r1, args.tile_c0, args.tile_c1):
             raise SystemExit(
                 "When using --tile-r0/--tile-r1/--tile-c0/--tile-c1, you must provide all four."
@@ -43,17 +51,25 @@ def main() -> None:
         default=None,
         help="Output series root (default: data/releases/<release>/series)",
     )
-    ap.add_argument("--metrics", type=str, default=None, help="Comma list of metric ids")
-    ap.add_argument("--metric", action="append", default=[], help="Metric id (repeatable)")
+    ap.add_argument(
+        "--metrics", type=str, default=None, help="Comma list of metric ids"
+    )
+    ap.add_argument(
+        "--metric", action="append", default=[], help="Metric id (repeatable)"
+    )
     ap.add_argument("--metrics-path", type=Path, default=DEFAULT_METRICS_PATH)
     ap.add_argument("--schema-path", type=Path, default=DEFAULT_SCHEMA_PATH)
     ap.add_argument("--datasets-path", type=Path, default=None)
     ap.add_argument("--maps-path", type=Path, default=DEFAULT_MAPS_PATH)
     ap.add_argument("--maps-schema-path", type=Path, default=DEFAULT_MAPS_SCHEMA_PATH)
     ap.add_argument("--layers-path", type=Path, default=DEFAULT_LAYERS_PATH)
-    ap.add_argument("--layers-schema-path", type=Path, default=DEFAULT_LAYERS_SCHEMA_PATH)
+    ap.add_argument(
+        "--layers-schema-path", type=Path, default=DEFAULT_LAYERS_SCHEMA_PATH
+    )
     ap.add_argument("--panels-path", type=Path, default=DEFAULT_PANELS_PATH)
-    ap.add_argument("--panels-schema-path", type=Path, default=DEFAULT_PANELS_SCHEMA_PATH)
+    ap.add_argument(
+        "--panels-schema-path", type=Path, default=DEFAULT_PANELS_SCHEMA_PATH
+    )
     ap.add_argument(
         "--maps-out-root",
         type=Path,
@@ -144,7 +160,6 @@ def main() -> None:
         all_maps=args.all_maps,
         skip_maps=args.skip_maps,
     )
-
 
 
 if __name__ == "__main__":

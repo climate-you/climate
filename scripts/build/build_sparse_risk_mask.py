@@ -83,7 +83,9 @@ def build_sparse_risk_mask(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Build sparse-risk mask at coarse resolution.")
+    ap = argparse.ArgumentParser(
+        description="Build sparse-risk mask at coarse resolution."
+    )
     ap.add_argument(
         "--source-mask",
         type=Path,

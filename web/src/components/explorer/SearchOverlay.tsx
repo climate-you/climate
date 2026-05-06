@@ -61,7 +61,9 @@ export default function SearchOverlay({
 
   async function resolveByLabel(label: string) {
     const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/resolve?label=${encodeURIComponent(label)}`;
-    const r = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    const r = await fetch(url, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
     if (!r.ok) throw new Error(await r.text());
     const data = (await r.json()) as ResolveLocationResponse;
     return data.result ?? null;
@@ -97,7 +99,10 @@ export default function SearchOverlay({
         FETCH_TIMEOUT_MS,
       );
       try {
-        const results = await fetchAutocomplete(search.trim(), controller.signal);
+        const results = await fetchAutocomplete(
+          search.trim(),
+          controller.signal,
+        );
         window.clearTimeout(timeoutId);
         if (controller.signal.reason === "superseded") return;
         setSuggestions(results);

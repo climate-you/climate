@@ -2087,8 +2087,7 @@ export default function ExplorerPage({
                       const hc = entry.graph.headline ?? null;
                       if (hc?.type === "coral" && hc.select_layer_id) {
                         const layerId = hc.select_layer_id;
-                        const flyToReef =
-                          hc.select_layer_fly_to_reef ?? false;
+                        const flyToReef = hc.select_layer_fly_to_reef ?? false;
                         return () => {
                           setActiveLayerId(layerId);
                           if (flyToReef) {

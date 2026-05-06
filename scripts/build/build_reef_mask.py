@@ -121,7 +121,6 @@ def _iter_shapes(input_path: Path) -> list[tuple[dict, int]]:
     return shapes
 
 
-
 def _prepare_input(
     *,
     input_path: Path | None,

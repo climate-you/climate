@@ -98,7 +98,9 @@ def test_record_chat_message_all_optional_fields(tmp_path: Path) -> None:
     assert m["steps_timing"] == [{"step": 1, "model_ms": 400, "tools_ms": 50}]
 
 
-def test_record_chat_message_with_error_sets_feedback_status_new(tmp_path: Path) -> None:
+def test_record_chat_message_with_error_sets_feedback_status_new(
+    tmp_path: Path,
+) -> None:
     db = _db(tmp_path)
     _record(db, answer=None, error="API error: timeout")
     msgs = db.get_chat_messages()
@@ -106,7 +108,9 @@ def test_record_chat_message_with_error_sets_feedback_status_new(tmp_path: Path)
     assert msgs[0]["error"] == "API error: timeout"
 
 
-def test_record_chat_message_without_error_has_no_feedback_status(tmp_path: Path) -> None:
+def test_record_chat_message_without_error_has_no_feedback_status(
+    tmp_path: Path,
+) -> None:
     db = _db(tmp_path)
     _record(db)
     msgs = db.get_chat_messages()
@@ -205,10 +209,10 @@ def test_get_chat_bad_answers_returns_new_status_only(tmp_path: Path) -> None:
     _record(db, message_id="msg-a")
     _record(db, message_id="msg-b")
     _record(db, message_id="msg-c")
-    db.record_chat_feedback("msg-a", "bad")   # feedback_status='new'
+    db.record_chat_feedback("msg-a", "bad")  # feedback_status='new'
     db.record_chat_feedback("msg-b", "bad")
-    db.mark_bad_answer_reviewed("msg-b")       # feedback_status='reviewed'
-    db.record_chat_feedback("msg-c", "good")   # feedback_status=None
+    db.mark_bad_answer_reviewed("msg-b")  # feedback_status='reviewed'
+    db.record_chat_feedback("msg-c", "good")  # feedback_status=None
 
     bad = db.get_chat_bad_answers()
     assert len(bad) == 1

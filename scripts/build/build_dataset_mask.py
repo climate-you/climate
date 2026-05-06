@@ -65,7 +65,6 @@ def _expected_coords(grid: GridSpec) -> tuple[np.ndarray, np.ndarray]:
     return lat_vals, lon_vals
 
 
-
 def _pick_data_var(ds: xr.Dataset, preferred: str | None) -> str:
     if preferred and preferred in ds.data_vars:
         return preferred
@@ -104,8 +103,7 @@ def _download_erddap_full_grid(
     north, west, south, east = _compute_full_grid_area(grid)
     cache_dir.mkdir(parents=True, exist_ok=True)
     out_path = (
-        cache_dir
-        / f"mask_seed_{dataset_key}_{grid.grid_id}_{start_date}_{end_date}.nc"
+        cache_dir / f"mask_seed_{dataset_key}_{grid.grid_id}_{start_date}_{end_date}.nc"
     )
     if out_path.exists() and out_path.stat().st_size > 0:
         print(f"Using cached seed download: {out_path}")
@@ -149,7 +147,9 @@ def _download_erddap_full_grid(
                     last_err = exc
                     continue
 
-    raise RuntimeError(f"Failed to download ERDDAP seed file for {dataset_key}: {last_err}")
+    raise RuntimeError(
+        f"Failed to download ERDDAP seed file for {dataset_key}: {last_err}"
+    )
 
 
 def _build_mask_from_seed(
@@ -193,7 +193,9 @@ def main() -> None:
             "download window."
         )
     )
-    ap.add_argument("--dataset-id", required=True, help="Dataset id from registry/datasets.json")
+    ap.add_argument(
+        "--dataset-id", required=True, help="Dataset id from registry/datasets.json"
+    )
     ap.add_argument(
         "--datasets-path",
         type=Path,
@@ -212,7 +214,9 @@ def main() -> None:
         default=Path("data/cache/erddap_masks"),
         help='Download cache directory (default: "data/cache/erddap_masks").',
     )
-    ap.add_argument("--start-date", required=True, help="Seed period start date YYYY-MM-DD")
+    ap.add_argument(
+        "--start-date", required=True, help="Seed period start date YYYY-MM-DD"
+    )
     ap.add_argument("--end-date", required=True, help="Seed period end date YYYY-MM-DD")
     ap.add_argument(
         "--min-finite-days",
@@ -221,10 +225,16 @@ def main() -> None:
         help="Minimum number of finite timesteps to mark a cell valid (default: 1).",
     )
     ap.add_argument(
-        "--stride-time", type=int, default=1, help="Temporal stride for ERDDAP query (default: 1)."
+        "--stride-time",
+        type=int,
+        default=1,
+        help="Temporal stride for ERDDAP query (default: 1).",
     )
     ap.add_argument(
-        "--stride-lat", type=int, default=1, help="Latitude stride for ERDDAP query (default: 1)."
+        "--stride-lat",
+        type=int,
+        default=1,
+        help="Latitude stride for ERDDAP query (default: 1).",
     )
     ap.add_argument(
         "--stride-lon",
@@ -245,7 +255,9 @@ def main() -> None:
 
     dataset_key = source.get("dataset_key")
     if not isinstance(dataset_key, str) or dataset_key not in ERDDAP_DATASETS:
-        raise SystemExit(f"Invalid/unknown dataset_key for {args.dataset_id}: {dataset_key}")
+        raise SystemExit(
+            f"Invalid/unknown dataset_key for {args.dataset_id}: {dataset_key}"
+        )
 
     grid_id = str(ds_spec.get("grid_id"))
     tile_size = int(ds_spec.get("tile_size", 64))

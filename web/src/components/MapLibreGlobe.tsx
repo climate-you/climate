@@ -1101,8 +1101,7 @@ export default function MapLibreGlobe({
           button.className = "maplibregl-ctrl-icon";
           button.ariaLabel = "Open climate graphs";
           button.title = "Graphs";
-          button.innerHTML =
-            `<img src="/icons/graph_icon.png" width="24" height="24" aria-hidden="true" style="display:block;" />`;
+          button.innerHTML = `<img src="/icons/graph_icon.png" width="24" height="24" aria-hidden="true" style="display:block;" />`;
           applyCtrlIconStyle(button, "24px");
           button.style.display = "flex";
           button.style.alignItems = "center";
@@ -1189,7 +1188,9 @@ export default function MapLibreGlobe({
       });
     };
     map.on("click", onMapClick);
-    const onMoveEnd = () => { homeFlyingRef.current = false; };
+    const onMoveEnd = () => {
+      homeFlyingRef.current = false;
+    };
     map.on("moveend", onMoveEnd);
 
     return () => {

@@ -7,10 +7,16 @@ from climate_api.chat.canned import _apply_unit, lookup
 
 class TestApplyUnit:
     def test_celsius_returns_first_token(self):
-        assert _apply_unit("Temperature is [[20|68]] degrees.", "C") == "Temperature is 20 degrees."
+        assert (
+            _apply_unit("Temperature is [[20|68]] degrees.", "C")
+            == "Temperature is 20 degrees."
+        )
 
     def test_fahrenheit_returns_second_token(self):
-        assert _apply_unit("Temperature is [[20|68]] degrees.", "F") == "Temperature is 68 degrees."
+        assert (
+            _apply_unit("Temperature is [[20|68]] degrees.", "F")
+            == "Temperature is 68 degrees."
+        )
 
     def test_no_tokens_unchanged(self):
         text = "No temperature here."
@@ -40,7 +46,9 @@ class TestLookup:
         from climate_api.chat import canned as canned_module
 
         monkeypatch.setattr(
-            canned_module, "CANNED", {"how warm is earth": ("The Earth is warming.", [], None, [])}
+            canned_module,
+            "CANNED",
+            {"how warm is earth": ("The Earth is warming.", [], None, [])},
         )
         assert lookup("How Warm Is Earth") is not None
 
@@ -55,12 +63,19 @@ class TestLookup:
     def test_exact_match_returns_full_tuple(self, monkeypatch):
         from climate_api.chat import canned as canned_module
 
-        expected = ("It's the long-term weather.", [{"lat": 0.0, "lon": 0.0}], {"metric_id": "t2m"}, ["q2"])
+        expected = (
+            "It's the long-term weather.",
+            [{"lat": 0.0, "lon": 0.0}],
+            {"metric_id": "t2m"},
+            ["q2"],
+        )
         monkeypatch.setattr(canned_module, "CANNED", {"what is climate": expected})
         assert lookup("what is climate") == expected
 
     def test_missing_key_returns_none(self, monkeypatch):
         from climate_api.chat import canned as canned_module
 
-        monkeypatch.setattr(canned_module, "CANNED", {"known question": ("answer", [], None, [])})
+        monkeypatch.setattr(
+            canned_module, "CANNED", {"known question": ("answer", [], None, [])}
+        )
         assert lookup("unknown question") is None

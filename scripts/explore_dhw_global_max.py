@@ -24,8 +24,8 @@ import numpy as np
 import xarray as xr
 
 CACHE_ROOT = Path("/Volumes/SDCard/Climate/cache/erddap/crw_dhw_daily")
-MAX_CACHE    = Path("/tmp/dhw_global_max_cache.json")
-FRAC_CACHE   = Path("/tmp/dhw_global_fraction_cache.json")
+MAX_CACHE = Path("/tmp/dhw_global_max_cache.json")
+FRAC_CACHE = Path("/tmp/dhw_global_fraction_cache.json")
 MODERATE_THRESHOLD = 4.0
 SEVERE_THRESHOLD = 8.0
 YEARS = list(range(1985, 2026))
@@ -47,6 +47,7 @@ def nc_pattern(year: int) -> str:
 
 # --- Max mode ------------------------------------------------------------------
 
+
 def compute_max_year(year: int) -> np.ndarray | None:
     """Daily global max DHW across all tiles."""
     daily_max = None
@@ -64,9 +65,9 @@ def compute_max_year(year: int) -> np.ndarray | None:
 
 def classify_max(daily_max: np.ndarray) -> tuple[int, int, int]:
     valid = daily_max[~np.isnan(daily_max)]
-    severe   = int(np.sum(valid >= SEVERE_THRESHOLD))
+    severe = int(np.sum(valid >= SEVERE_THRESHOLD))
     moderate = int(np.sum((valid >= MODERATE_THRESHOLD) & (valid < SEVERE_THRESHOLD)))
-    no_risk  = len(valid) - moderate - severe
+    no_risk = len(valid) - moderate - severe
     return no_risk, moderate, severe
 
 
@@ -93,7 +94,10 @@ def load_or_compute_max(force: bool) -> dict[int, tuple[int, int, int]]:
 
 # --- Fraction mode -------------------------------------------------------------
 
-def compute_fraction_year(year: int) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+
+def compute_fraction_year(
+    year: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
     """
     For each day: count of cells in severe risk, moderate risk, and total valid.
     Returned as three int arrays of shape (n_days,).
@@ -104,20 +108,20 @@ def compute_fraction_year(year: int) -> tuple[np.ndarray, np.ndarray, np.ndarray
         if not files:
             continue
         ds = xr.open_dataset(files[0], engine="netcdf4")
-        dhw = ds["degree_heating_week"].values          # (time, lat, lon)
-        flat = dhw.reshape(dhw.shape[0], -1)            # (time, cells)
+        dhw = ds["degree_heating_week"].values  # (time, lat, lon)
+        flat = dhw.reshape(dhw.shape[0], -1)  # (time, cells)
         valid_mask = ~np.isnan(flat)
 
-        tile_valid    = valid_mask.sum(axis=1)
-        tile_severe   = (flat >= SEVERE_THRESHOLD).sum(axis=1)
+        tile_valid = valid_mask.sum(axis=1)
+        tile_severe = (flat >= SEVERE_THRESHOLD).sum(axis=1)
         tile_moderate = (flat >= MODERATE_THRESHOLD).sum(axis=1)  # includes severe
 
         if n_valid is None:
             n_severe, n_moderate, n_valid = tile_severe, tile_moderate, tile_valid
         else:
-            n_severe   = n_severe   + tile_severe
+            n_severe = n_severe + tile_severe
             n_moderate = n_moderate + tile_moderate
-            n_valid    = n_valid    + tile_valid
+            n_valid = n_valid + tile_valid
         ds.close()
 
     if n_valid is None:
@@ -133,12 +137,12 @@ def classify_fraction(
 ) -> tuple[int, int, int]:
     thresh = threshold_pct / 100.0
     has_data = n_valid > 0
-    frac_severe   = np.where(has_data, n_severe   / np.maximum(n_valid, 1), np.nan)
+    frac_severe = np.where(has_data, n_severe / np.maximum(n_valid, 1), np.nan)
     frac_moderate = np.where(has_data, n_moderate / np.maximum(n_valid, 1), np.nan)
 
-    severe_days   = has_data & (frac_severe >= thresh)
+    severe_days = has_data & (frac_severe >= thresh)
     moderate_days = has_data & (~severe_days) & (frac_moderate >= thresh)
-    no_risk_days  = has_data & (~severe_days) & (~moderate_days)
+    no_risk_days = has_data & (~severe_days) & (~moderate_days)
 
     return int(no_risk_days.sum()), int(moderate_days.sum()), int(severe_days.sum())
 
@@ -148,10 +152,7 @@ def load_or_compute_fraction(force: bool) -> dict[int, dict]:
     if not force and FRAC_CACHE.exists():
         print(f"Loading cached fraction counts from {FRAC_CACHE}")
         raw = json.loads(FRAC_CACHE.read_text())
-        return {
-            int(y): {k: np.array(v) for k, v in d.items()}
-            for y, d in raw.items()
-        }
+        return {int(y): {k: np.array(v) for k, v in d.items()} for y, d in raw.items()}
 
     results = {}
     for i, year in enumerate(YEARS):
@@ -164,28 +165,45 @@ def load_or_compute_fraction(force: bool) -> dict[int, dict]:
         results[year] = {"severe": n_severe, "moderate": n_moderate, "valid": n_valid}
         print(f"total valid cells/day: {int(n_valid.mean()):,}")
 
-    FRAC_CACHE.write_text(json.dumps(
-        {str(y): {k: v.tolist() for k, v in d.items()} for y, d in results.items()}
-    ))
+    FRAC_CACHE.write_text(
+        json.dumps(
+            {str(y): {k: v.tolist() for k, v in d.items()} for y, d in results.items()}
+        )
+    )
     return results
 
 
 # --- Plotting ------------------------------------------------------------------
 
+
 def plot(results: dict[int, tuple[int, int, int]], title: str) -> None:
     years = sorted(results)
-    no_risk  = np.array([results[y][0] for y in years], dtype=float)
+    no_risk = np.array([results[y][0] for y in years], dtype=float)
     moderate = np.array([results[y][1] for y in years], dtype=float)
-    severe   = np.array([results[y][2] for y in years], dtype=float)
+    severe = np.array([results[y][2] for y in years], dtype=float)
 
     fig, ax = plt.subplots(figsize=(14, 6))
     x = np.arange(len(years))
 
-    ax.bar(x, no_risk,  0.8, label="No risk (DHW < 4)",       color=COLOR_NO_RISK,  zorder=2)
-    ax.bar(x, moderate, 0.8, bottom=no_risk,
-           label="Moderate risk (4 ≤ DHW < 8)", color=COLOR_MODERATE, zorder=2)
-    ax.bar(x, severe,   0.8, bottom=no_risk + moderate,
-           label="Severe risk (DHW ≥ 8)",        color=COLOR_SEVERE,   zorder=2)
+    ax.bar(x, no_risk, 0.8, label="No risk (DHW < 4)", color=COLOR_NO_RISK, zorder=2)
+    ax.bar(
+        x,
+        moderate,
+        0.8,
+        bottom=no_risk,
+        label="Moderate risk (4 ≤ DHW < 8)",
+        color=COLOR_MODERATE,
+        zorder=2,
+    )
+    ax.bar(
+        x,
+        severe,
+        0.8,
+        bottom=no_risk + moderate,
+        label="Severe risk (DHW ≥ 8)",
+        color=COLOR_SEVERE,
+        zorder=2,
+    )
 
     ax.set_xticks(x)
     ax.set_xticklabels([str(y) for y in years], rotation=45, ha="right", fontsize=8)
@@ -200,16 +218,21 @@ def plot(results: dict[int, tuple[int, int, int]], title: str) -> None:
 
 # --- Entry point ---------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--fraction", type=float, default=None, metavar="PCT",
+        "--fraction",
+        type=float,
+        default=None,
+        metavar="PCT",
         help="Fraction mode: classify a day as severe/moderate if at least PCT%% "
-             "of coral reef cells exceed the threshold (e.g. --fraction 10). "
-             "Omit to use max-across-all-cells mode.",
+        "of coral reef cells exceed the threshold (e.g. --fraction 10). "
+        "Omit to use max-across-all-cells mode.",
     )
     parser.add_argument(
-        "--no-cache", action="store_true",
+        "--no-cache",
+        action="store_true",
         help="Ignore cached results and recompute from raw files",
     )
     args = parser.parse_args()
@@ -228,7 +251,9 @@ def main():
             y: classify_fraction(d["severe"], d["moderate"], d["valid"], pct)
             for y, d in raw_counts.items()
         }
-        title = f"Coral reef DHW risk days — ≥{pct}% of cells exceed threshold (1985–2025)"
+        title = (
+            f"Coral reef DHW risk days — ≥{pct}% of cells exceed threshold (1985–2025)"
+        )
 
     plot(raw, title)
 

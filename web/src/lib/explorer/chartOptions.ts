@@ -573,7 +573,7 @@ export function buildStackedBarOption({
     ...chartScaffold,
     legend: {
       ...chartScaffold.legend,
-      ...((() => {
+      ...(() => {
         const noRiskKey = barKeys.find((key) => key.startsWith("dhw_no_risk_"));
         return noRiskKey
           ? {
@@ -584,7 +584,7 @@ export function buildStackedBarOption({
               },
             }
           : {};
-      })()),
+      })(),
     },
     tooltip: {
       trigger: "axis",

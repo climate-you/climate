@@ -291,8 +291,7 @@ export default function GraphCard({
   if (!available) {
     const isSeaGraph = graph.id.startsWith("sst_");
     const isCoralGraph = graph.id === "dhw_risk_days";
-    const isPrecipGraph =
-      graph.id === "tp_annual" || graph.id === "tp_cdd";
+    const isPrecipGraph = graph.id === "tp_annual" || graph.id === "tp_cdd";
     const unavailableText = isSeaGraph
       ? "Sea surface temperature data is only available for coastal and ocean locations."
       : "Not available for this location.";
@@ -424,7 +423,11 @@ export default function GraphCard({
 
       {!hasGraphError ? (
         <div ref={chartHostRef}>
-          <EChartCanvas option={option} height={chartHeight} animationRevision={animationRevision} />
+          <EChartCanvas
+            option={option}
+            height={chartHeight}
+            animationRevision={animationRevision}
+          />
         </div>
       ) : null}
 

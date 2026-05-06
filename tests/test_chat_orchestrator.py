@@ -28,8 +28,15 @@ from climate_api.chat.orchestrator import (
 
 def _year_series(metric_id, location, start=2000, end=2024, unit="°C", **extra):
     data = [{"year": y, "value": float(y - 1990)} for y in range(start, end + 1)]
-    return {"metric_id": metric_id, "location": location, "unit": unit, "data": data,
-            "lat": 48.8, "lon": 2.3, **extra}
+    return {
+        "metric_id": metric_id,
+        "location": location,
+        "unit": unit,
+        "data": data,
+        "lat": 48.8,
+        "lon": 2.3,
+        **extra,
+    }
 
 
 def _monthly_series(metric_id, location, n_years=6, unit="°C"):
@@ -37,8 +44,14 @@ def _monthly_series(metric_id, location, n_years=6, unit="°C"):
         {"year": 2000 + (i // 12), "month": (i % 12) + 1, "value": float(i)}
         for i in range(n_years * 12)
     ]
-    return {"metric_id": metric_id, "location": location, "unit": unit, "data": data,
-            "lat": 48.8, "lon": 2.3}
+    return {
+        "metric_id": metric_id,
+        "location": location,
+        "unit": unit,
+        "data": data,
+        "lat": 48.8,
+        "lon": 2.3,
+    }
 
 
 class _MockTileStore:
@@ -51,6 +64,7 @@ class _MockTileStore:
 
 def _make_location_index(hits: dict):
     """hits maps name → (label, lat, lon, alt_names)."""
+
     class _Index:
         def resolve_by_any_name(self, name):
             hit = hits.get(name)
@@ -58,6 +72,7 @@ def _make_location_index(hits: dict):
                 return None
             label, lat, lon, alt_names = hit
             return SimpleNamespace(label=label, lat=lat, lon=lon, alt_names=alt_names)
+
     return _Index()
 
 
@@ -109,7 +124,9 @@ class TestCompressSeriesForContext:
             {"year": 2000 + (i // 12), "month": (i % 12) + 1, "value": float(i)}
             for i in range(72)
         ]
-        raw = json.dumps({"metric_id": "prcp", "unit": "mm", "location": "Paris", "data": data})
+        raw = json.dumps(
+            {"metric_id": "prcp", "unit": "mm", "location": "Paris", "data": data}
+        )
         result = json.loads(_compress_series_for_context(raw))
         assert result["metric_id"] == "prcp"
         assert result["unit"] == "mm"
@@ -117,7 +134,11 @@ class TestCompressSeriesForContext:
 
     def test_none_values_skipped_without_crashing(self):
         data = [
-            {"year": 2000 + (i // 12), "month": (i % 12) + 1, "value": None if i % 5 == 0 else float(i)}
+            {
+                "year": 2000 + (i // 12),
+                "month": (i % 12) + 1,
+                "value": None if i % 5 == 0 else float(i),
+            }
             for i in range(72)
         ]
         raw = json.dumps({"metric_id": "t2m", "data": data})
@@ -147,10 +168,14 @@ class TestStripInternalFields:
         assert result["lat"] == 48.8
 
     def test_removes_alt_names_from_each_result_in_list(self):
-        d = json.dumps({"results": [
-            {"nearest_city": "Paris", "alt_names": "Lutetia"},
-            {"nearest_city": "Berlin", "alt_names": ""},
-        ]})
+        d = json.dumps(
+            {
+                "results": [
+                    {"nearest_city": "Paris", "alt_names": "Lutetia"},
+                    {"nearest_city": "Berlin", "alt_names": ""},
+                ]
+            }
+        )
         result = json.loads(_strip_internal_fields(d))
         for r in result["results"]:
             assert "alt_names" not in r
@@ -180,10 +205,20 @@ class TestExtractLocations:
         assert locs == [{"label": "Paris", "lat": 48.8, "lon": 2.3}]
 
     def test_get_metric_series_with_error_returns_empty(self):
-        assert _extract_locations("get_metric_series", {"location": "Paris"}, {"error": "not found"}) == []
+        assert (
+            _extract_locations(
+                "get_metric_series", {"location": "Paris"}, {"error": "not found"}
+            )
+            == []
+        )
 
     def test_find_extreme_location_single_result(self):
-        result = {"lat": 51.5, "lon": -0.1, "nearest_city": "London", "alt_names": "Londen"}
+        result = {
+            "lat": 51.5,
+            "lon": -0.1,
+            "nearest_city": "London",
+            "alt_names": "Londen",
+        }
         locs = _extract_locations("find_extreme_location", {}, result)
         assert len(locs) == 1
         assert locs[0]["label"] == "London"
@@ -191,20 +226,24 @@ class TestExtractLocations:
         assert locs[0]["alt_names"] == "Londen"
 
     def test_find_extreme_location_results_list(self):
-        result = {"results": [
-            {"lat": 51.5, "lon": -0.1, "nearest_city": "London", "alt_names": ""},
-            {"lat": 48.8, "lon": 2.3, "nearest_city": "Paris", "alt_names": ""},
-        ]}
+        result = {
+            "results": [
+                {"lat": 51.5, "lon": -0.1, "nearest_city": "London", "alt_names": ""},
+                {"lat": 48.8, "lon": 2.3, "nearest_city": "Paris", "alt_names": ""},
+            ]
+        }
         locs = _extract_locations("find_extreme_location", {}, result)
         assert len(locs) == 2
         assert locs[0]["label"] == "London"
         assert locs[1]["label"] == "Paris"
 
     def test_find_extreme_location_results_without_lat_skipped(self):
-        result = {"results": [
-            {"nearest_city": "Unknown"},  # no lat/lon
-            {"lat": 48.8, "lon": 2.3, "nearest_city": "Paris", "alt_names": ""},
-        ]}
+        result = {
+            "results": [
+                {"nearest_city": "Unknown"},  # no lat/lon
+                {"lat": 48.8, "lon": 2.3, "nearest_city": "Paris", "alt_names": ""},
+            ]
+        }
         locs = _extract_locations("find_extreme_location", {}, result)
         assert len(locs) == 1
         assert locs[0]["label"] == "Paris"
@@ -218,7 +257,9 @@ class TestExtractLocations:
         assert _extract_locations("unknown_tool", {}, {"lat": 0, "lon": 0}) == []
 
     def test_find_extreme_location_with_error_returns_empty(self):
-        assert _extract_locations("find_extreme_location", {}, {"error": "no data"}) == []
+        assert (
+            _extract_locations("find_extreme_location", {}, {"error": "no data"}) == []
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -286,7 +327,14 @@ class TestSupplementLocationsFromAnswer:
         assert len(locs) == 1
 
     def test_city_covered_by_alt_name_not_duplicated(self):
-        existing = [{"label": "Köln, Germany", "lat": 50.9, "lon": 6.96, "alt_names": "Cologne,Koeln"}]
+        existing = [
+            {
+                "label": "Köln, Germany",
+                "lat": 50.9,
+                "lon": 6.96,
+                "alt_names": "Cologne,Koeln",
+            }
+        ]
         idx = _make_location_index({"Cologne": ("Cologne, Germany", 50.9, 6.96, "")})
         locs = _supplement_locations_from_answer("**Cologne** is warm.", existing, idx)
         assert len(locs) == 1  # not appended, already covered by alt_name
@@ -298,23 +346,31 @@ class TestSupplementLocationsFromAnswer:
 
     def test_lowercase_first_char_bold_word_skipped(self):
         idx = _make_location_index({"warming": ("warming", 0.0, 0.0, "")})
-        locs = _supplement_locations_from_answer("The **warming** trend continues.", [], idx)
+        locs = _supplement_locations_from_answer(
+            "The **warming** trend continues.", [], idx
+        )
         assert locs == []
 
     def test_multi_word_city_resolved(self):
         # The bold regex excludes commas, so only the bare city name appears between **
         idx = _make_location_index({"New York": ("New York, US", 40.7, -74.0, "")})
-        locs = _supplement_locations_from_answer("**New York** recorded record highs.", [], idx)
+        locs = _supplement_locations_from_answer(
+            "**New York** recorded record highs.", [], idx
+        )
         assert len(locs) == 1
         assert locs[0]["lat"] == 40.7
 
     def test_duplicate_rounded_coords_not_added_twice(self):
         # Two distinct names that resolve to the same approximate location
-        idx = _make_location_index({
-            "Berlin": ("Berlin, Germany", 52.51, 13.41, ""),
-            "Berlino": ("Berlino", 52.52, 13.42, ""),  # rounds to same (52.5, 13.4)
-        })
-        locs = _supplement_locations_from_answer("**Berlin** and **Berlino** are similar.", [], idx)
+        idx = _make_location_index(
+            {
+                "Berlin": ("Berlin, Germany", 52.51, 13.41, ""),
+                "Berlino": ("Berlino", 52.52, 13.42, ""),  # rounds to same (52.5, 13.4)
+            }
+        )
+        locs = _supplement_locations_from_answer(
+            "**Berlin** and **Berlino** are similar.", [], idx
+        )
         assert len(locs) == 1
 
     def test_original_locations_always_prepended(self):
@@ -360,19 +416,25 @@ class TestBuildChartPayloads:
             _year_series("t2m", "Paris", start=2020, end=2024),
             _year_series("prcp", "Paris", start=2020, end=2024, unit="mm"),
         ]
-        ts = _MockTileStore({
-            "t2m": {"title": "Temperature", "unit": "°C"},
-            "prcp": {"title": "Precipitation", "unit": "mm"},
-        })
+        ts = _MockTileStore(
+            {
+                "t2m": {"title": "Temperature", "unit": "°C"},
+                "prcp": {"title": "Precipitation", "unit": "mm"},
+            }
+        )
         charts = _build_chart_payloads(series, ts)
         assert len(charts) == 2
 
     def test_trend_role_preserved_in_output_series(self):
         raw = _year_series("t2m", "Tokyo", start=2020, end=2024)
         trend = {
-            "metric_id": "t2m", "location": "Tokyo", "unit": "°C", "role": "trend",
+            "metric_id": "t2m",
+            "location": "Tokyo",
+            "unit": "°C",
+            "role": "trend",
             "data": [{"year": y, "value": float(y)} for y in range(2020, 2025)],
-            "lat": 35.7, "lon": 139.7,
+            "lat": 35.7,
+            "lon": 139.7,
         }
         ts = _MockTileStore({"t2m": {"title": "Temperature", "unit": "°C"}})
         charts = _build_chart_payloads([raw, trend], ts)
@@ -381,19 +443,37 @@ class TestBuildChartPayloads:
         assert "trend" in roles
 
     def test_single_scalar_region_result_suppressed(self):
-        series = [{
-            "metric_id": "t2m", "region_id": "country:FR", "aggregation": "mean",
-            "unit": "°C", "location": "France", "data": [{"year": 2020, "value": 12.0}],
-        }]
+        series = [
+            {
+                "metric_id": "t2m",
+                "region_id": "country:FR",
+                "aggregation": "mean",
+                "unit": "°C",
+                "location": "France",
+                "data": [{"year": 2020, "value": 12.0}],
+            }
+        ]
         ts = _MockTileStore({"t2m": {"title": "Temperature", "unit": "°C"}})
         assert _build_chart_payloads(series, ts) == []
 
     def test_scalar_comparison_two_regions_produces_comparison_bar(self):
         series = [
-            {"metric_id": "t2m", "region_id": "country:FR", "aggregation": "mean",
-             "unit": "°C", "location": "France", "data": [{"year": 2020, "value": 12.0}]},
-            {"metric_id": "t2m", "region_id": "country:DE", "aggregation": "mean",
-             "unit": "°C", "location": "Germany", "data": [{"year": 2020, "value": 10.0}]},
+            {
+                "metric_id": "t2m",
+                "region_id": "country:FR",
+                "aggregation": "mean",
+                "unit": "°C",
+                "location": "France",
+                "data": [{"year": 2020, "value": 12.0}],
+            },
+            {
+                "metric_id": "t2m",
+                "region_id": "country:DE",
+                "aggregation": "mean",
+                "unit": "°C",
+                "location": "Germany",
+                "data": [{"year": 2020, "value": 10.0}],
+            },
         ]
         ts = _MockTileStore({"t2m": {"title": "Temperature", "unit": "°C"}})
         charts = _build_chart_payloads(series, ts)
@@ -403,35 +483,73 @@ class TestBuildChartPayloads:
     def test_multi_agg_same_region_gets_bauhaus_colors(self):
         def _region_series(agg, offset):
             return {
-                "metric_id": "t2m", "region_id": "globe", "aggregation": agg,
-                "unit": "°C", "location": "Globe",
-                "data": [{"year": y, "value": float(y) + offset} for y in range(2000, 2025)],
+                "metric_id": "t2m",
+                "region_id": "globe",
+                "aggregation": agg,
+                "unit": "°C",
+                "location": "Globe",
+                "data": [
+                    {"year": y, "value": float(y) + offset} for y in range(2000, 2025)
+                ],
             }
-        series = [_region_series("min", 0), _region_series("mean", 5), _region_series("max", 10)]
+
+        series = [
+            _region_series("min", 0),
+            _region_series("mean", 5),
+            _region_series("max", 10),
+        ]
         ts = _MockTileStore({"t2m": {"title": "Temperature", "unit": "°C"}})
         charts = _build_chart_payloads(series, ts)
         assert len(charts) == 1
-        colors = {s["label"]: s.get("style", {}).get("color") for s in charts[0]["series"]}
+        colors = {
+            s["label"]: s.get("style", {}).get("color") for s in charts[0]["series"]
+        }
         assert colors.get("Min") == "#0000FF"
         assert colors.get("Mean") == "#000000"
         assert colors.get("Max") == "#FF0000"
 
     def test_chart_group_two_metrics_merged_into_one_chart(self):
-        cg1 = {"id": "dhw", "order": 1, "label": "DHW 4+", "chart_mode": "stacked_bar",
-               "chart_title": "DHW Risk Days", "style": {}}
-        cg2 = {"id": "dhw", "order": 2, "label": "DHW 8+", "chart_mode": "stacked_bar",
-               "chart_title": "DHW Risk Days", "style": {}}
+        cg1 = {
+            "id": "dhw",
+            "order": 1,
+            "label": "DHW 4+",
+            "chart_mode": "stacked_bar",
+            "chart_title": "DHW Risk Days",
+            "style": {},
+        }
+        cg2 = {
+            "id": "dhw",
+            "order": 2,
+            "label": "DHW 8+",
+            "chart_mode": "stacked_bar",
+            "chart_title": "DHW Risk Days",
+            "style": {},
+        }
         metrics = {
             "dhw_4": {"title": "DHW 4+", "unit": "days", "chart_group": cg1},
             "dhw_8": {"title": "DHW 8+", "unit": "days", "chart_group": cg2},
         }
         series = [
-            {"metric_id": "dhw_4", "location": "Reef", "unit": "days",
-             "data": [{"year": y, "value": float(y - 2000)} for y in range(2000, 2010)],
-             "lat": -18.0, "lon": 147.0},
-            {"metric_id": "dhw_8", "location": "Reef", "unit": "days",
-             "data": [{"year": y, "value": float(y - 2003)} for y in range(2000, 2010)],
-             "lat": -18.0, "lon": 147.0},
+            {
+                "metric_id": "dhw_4",
+                "location": "Reef",
+                "unit": "days",
+                "data": [
+                    {"year": y, "value": float(y - 2000)} for y in range(2000, 2010)
+                ],
+                "lat": -18.0,
+                "lon": 147.0,
+            },
+            {
+                "metric_id": "dhw_8",
+                "location": "Reef",
+                "unit": "days",
+                "data": [
+                    {"year": y, "value": float(y - 2003)} for y in range(2000, 2010)
+                ],
+                "lat": -18.0,
+                "lon": 147.0,
+            },
         ]
         charts = _build_chart_payloads(series, _MockTileStore(metrics))
         assert len(charts) == 1
@@ -502,7 +620,15 @@ class TestComputeFlyToBbox:
         assert bbox is not None
 
     def test_all_known_continents_have_bbox(self):
-        for continent in ["africa", "antarctica", "asia", "europe", "north_america", "oceania", "south_america"]:
+        for continent in [
+            "africa",
+            "antarctica",
+            "asia",
+            "europe",
+            "north_america",
+            "oceania",
+            "south_america",
+        ]:
             bbox = _compute_fly_to_bbox([{"region_id": f"continent:{continent}"}])
             assert bbox is not None, f"Missing bbox for {continent}"
 
@@ -531,7 +657,9 @@ class TestIsQuotaExhausted:
     def test_false_for_429_with_tokens_per_minute_in_body(self):
         exc = Exception("rate limit")
         exc.status_code = 429
-        exc.body = {"error": {"message": "you have exceeded your tokens per minute limit"}}
+        exc.body = {
+            "error": {"message": "you have exceeded your tokens per minute limit"}
+        }
         assert not _is_quota_exhausted(exc)
 
     def test_false_for_non_429_status(self):
@@ -559,7 +687,9 @@ class TestIsContextTooLarge:
         assert _is_context_too_large(Exception("Request too large for model"))
 
     def test_true_for_reduce_message_size_phrase(self):
-        assert _is_context_too_large(Exception("Please reduce your message size and try again"))
+        assert _is_context_too_large(
+            Exception("Please reduce your message size and try again")
+        )
 
     def test_false_for_generic_exception(self):
         assert not _is_context_too_large(Exception("something unrelated"))
@@ -586,10 +716,16 @@ class TestIsTpmError:
         assert not _is_tpm_error(Exception("tokens per minute exceeded"))
 
     def test_false_for_request_too_large(self):
-        assert not _is_tpm_error(Exception("request too large, please reduce your message size. Try again in 1s."))
+        assert not _is_tpm_error(
+            Exception(
+                "request too large, please reduce your message size. Try again in 1s."
+            )
+        )
 
     def test_false_for_tokens_per_day(self):
-        assert not _is_tpm_error(Exception("tokens per day limit reached. Try again in 30s."))
+        assert not _is_tpm_error(
+            Exception("tokens per day limit reached. Try again in 30s.")
+        )
 
     def test_false_for_generic_error(self):
         assert not _is_tpm_error(Exception("connection reset by peer"))
@@ -611,7 +747,9 @@ class TestParseRetryAfterS:
         assert _parse_retry_after_s(Exception("Try again in 1m 30s")) == 90.0
 
     def test_fractional_seconds(self):
-        assert _parse_retry_after_s(Exception("Try again in 5.5s")) == pytest.approx(5.5)
+        assert _parse_retry_after_s(Exception("Try again in 5.5s")) == pytest.approx(
+            5.5
+        )
 
     def test_no_match_returns_default(self):
         assert _parse_retry_after_s(Exception("no timing information")) == 5.0
@@ -651,11 +789,11 @@ class TestParseTextToolCalls:
         assert calls[1]["name"] == "get_metric_series"
 
     def test_invalid_json_call_skipped(self):
-        text = '<function=bad_tool{invalid json here}</function>'
+        text = "<function=bad_tool{invalid json here}</function>"
         assert _parse_text_tool_calls(text) == []
 
     def test_call_without_brace_skipped(self):
-        text = '<function=no_args_here</function>'
+        text = "<function=no_args_here</function>"
         assert _parse_text_tool_calls(text) == []
 
     def test_each_call_has_unique_id(self):
@@ -670,7 +808,7 @@ class TestParseTextToolCalls:
     def test_valid_and_invalid_mixed_only_valid_returned(self):
         text = (
             '<function=good_tool{"key": "value"}</function>'
-            '<function=bad_tool{not valid json}</function>'
+            "<function=bad_tool{not valid json}</function>"
         )
         calls = _parse_text_tool_calls(text)
         assert len(calls) == 1

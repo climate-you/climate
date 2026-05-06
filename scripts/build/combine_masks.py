@@ -116,7 +116,9 @@ def main() -> None:
 
     and_valid = int(np.count_nonzero(all_and))
     or_valid = int(np.count_nonzero(all_or))
-    print(f"[stats] intersection (AND): {and_valid}/{total} ({_format_pct(and_valid, total)})")
+    print(
+        f"[stats] intersection (AND): {and_valid}/{total} ({_format_pct(and_valid, total)})"
+    )
     print(f"[stats] union (OR): {or_valid}/{total} ({_format_pct(or_valid, total)})")
 
     out_mask = all_and if args.mode == "and" else all_or

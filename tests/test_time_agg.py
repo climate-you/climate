@@ -39,7 +39,9 @@ def _daily_da(
     )
 
 
-def _single_cell_da(daily_values: list[float], start: str = "2000-01-01") -> xr.DataArray:
+def _single_cell_da(
+    daily_values: list[float], start: str = "2000-01-01"
+) -> xr.DataArray:
     arr = np.array(daily_values, dtype=np.float32).reshape(-1, 1, 1)
     return _daily_da(arr, start=start)
 
@@ -126,9 +128,9 @@ class TestMaxCddPerYear:
     def test_dry_run_resets_on_wet_day(self):
         # Pattern: 3 dry, 1 wet, 4 dry → max CDD = 4
         vals = np.full(365, 2.0, dtype=np.float32)
-        vals[0:3] = 0.0   # 3 dry
-        vals[3] = 5.0     # wet (resets)
-        vals[4:8] = 0.0   # 4 dry
+        vals[0:3] = 0.0  # 3 dry
+        vals[3] = 5.0  # wet (resets)
+        vals[4:8] = 0.0  # 4 dry
         da = _single_cell_da(vals.tolist())
         result = max_cdd_per_year(da)
         assert result.values[0, 0, 0] == 4
@@ -157,8 +159,8 @@ class TestMaxCddPerYear:
         days_2000 = 366  # 2000 is a leap year
         days_2001 = 365
         vals = np.full(days_2000 + days_2001, 5.0, dtype=np.float32)
-        vals[days_2000 - 5 : days_2000] = 0.0   # last 5 days of 2000 dry
-        vals[days_2000 : days_2000 + 3] = 0.0   # first 3 days of 2001 dry
+        vals[days_2000 - 5 : days_2000] = 0.0  # last 5 days of 2000 dry
+        vals[days_2000 : days_2000 + 3] = 0.0  # first 3 days of 2001 dry
         arr = vals.reshape(-1, 1, 1).astype(np.float32)
         da = _daily_da(arr, start="2000-01-01")
         result = max_cdd_per_year(da)
@@ -172,7 +174,7 @@ class TestMaxCddPerYear:
         days_2000 = 366
         days_2001 = 365
         vals = np.full(days_2000 + days_2001, 5.0, dtype=np.float32)
-        vals[50:57] = 0.0    # 7 consecutive dry in 2000
+        vals[50:57] = 0.0  # 7 consecutive dry in 2000
         vals[days_2000 + 10 : days_2000 + 12] = 0.0  # 2 consecutive dry in 2001
         arr = vals.reshape(-1, 1, 1).astype(np.float32)
         da = _daily_da(arr, start="2000-01-01")
@@ -184,7 +186,7 @@ class TestMaxCddPerYear:
     def test_custom_threshold(self):
         # threshold=5mm: values of 3mm count as dry
         vals = np.full(365, 3.0, dtype=np.float32)
-        vals[0:4] = 3.0   # all below threshold=5 → all dry → CDD=365
+        vals[0:4] = 3.0  # all below threshold=5 → all dry → CDD=365
         da = _single_cell_da(vals.tolist())
         result = max_cdd_per_year(da, dry_day_threshold_mm=5.0)
         assert result.values[0, 0, 0] == 365
@@ -201,8 +203,11 @@ class TestMaxCddPerYear:
         # Zero-day array → no years → empty output
         arr = np.empty((0, 1, 1), dtype=np.float32)
         times = pd.DatetimeIndex([])
-        da = xr.DataArray(arr, dims=("time", "latitude", "longitude"),
-                          coords={"time": times, "latitude": [0.0], "longitude": [0.0]})
+        da = xr.DataArray(
+            arr,
+            dims=("time", "latitude", "longitude"),
+            coords={"time": times, "latitude": [0.0], "longitude": [0.0]},
+        )
         result = max_cdd_per_year(da)
         assert result.sizes["year"] == 0
 
@@ -257,5 +262,7 @@ class TestClimatologyMeanFromMonthly:
 
     def test_raises_when_window_outside_data_range(self):
         da = self._monthly_da(start="1990-01", periods=12)  # only 1990
-        with pytest.raises(RuntimeError, match="No monthly data in requested climatology window"):
+        with pytest.raises(
+            RuntimeError, match="No monthly data in requested climatology window"
+        ):
             climatology_mean_from_monthly(da, start_year=2050, end_year=2060)

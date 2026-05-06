@@ -280,22 +280,54 @@ def test_build_scored_panels_tiles_registry_success_and_fallback(
     monkeypatch.setattr(
         panels_module,
         "_compute_t2m_hotdays_headline",
-        lambda tile_store, lat, lon: {"key": "t2m_hotdays_local", "label": "Air hot days per year", "value": None, "unit": "days", "baseline": "1979", "period": None, "method": None},
+        lambda tile_store, lat, lon: {
+            "key": "t2m_hotdays_local",
+            "label": "Air hot days per year",
+            "value": None,
+            "unit": "days",
+            "baseline": "1979",
+            "period": None,
+            "method": None,
+        },
     )
     monkeypatch.setattr(
         panels_module,
         "_compute_sst_hotdays_headline",
-        lambda tile_store, lat, lon: {"key": "sst_hotdays_local", "label": "Sea surface hot days per year", "value": None, "unit": "days", "baseline": "1982", "period": None, "method": None},
+        lambda tile_store, lat, lon: {
+            "key": "sst_hotdays_local",
+            "label": "Sea surface hot days per year",
+            "value": None,
+            "unit": "days",
+            "baseline": "1982",
+            "period": None,
+            "method": None,
+        },
     )
     monkeypatch.setattr(
         panels_module,
         "_compute_precip_headline",
-        lambda tile_store, lat, lon: {"key": "precip_local", "label": "Annual precipitation", "value": None, "unit": "mm", "baseline": "1979", "period": None, "method": None},
+        lambda tile_store, lat, lon: {
+            "key": "precip_local",
+            "label": "Annual precipitation",
+            "value": None,
+            "unit": "mm",
+            "baseline": "1979",
+            "period": None,
+            "method": None,
+        },
     )
     monkeypatch.setattr(
         panels_module,
         "_compute_cdd_headline",
-        lambda tile_store, lat, lon: {"key": "cdd_local", "label": "Consecutive dry days per year", "value": None, "unit": "days", "baseline": "1979", "period": None, "method": None},
+        lambda tile_store, lat, lon: {
+            "key": "cdd_local",
+            "label": "Consecutive dry days per year",
+            "value": None,
+            "unit": "days",
+            "baseline": "1979",
+            "period": None,
+            "method": None,
+        },
     )
     monkeypatch.setattr(
         panels_module,
@@ -305,17 +337,41 @@ def test_build_scored_panels_tiles_registry_success_and_fallback(
     monkeypatch.setattr(
         panels_module,
         "_compute_global_t2m_preindustrial_headline",
-        lambda tile_store, unit: {"key": "t2m_vs_preindustrial_global", "label": "Air temperature change vs pre-industrial (global)", "value": None, "unit": unit, "baseline": "1850-1900", "period": None, "method": None},
+        lambda tile_store, unit: {
+            "key": "t2m_vs_preindustrial_global",
+            "label": "Air temperature change vs pre-industrial (global)",
+            "value": None,
+            "unit": unit,
+            "baseline": "1850-1900",
+            "period": None,
+            "method": None,
+        },
     )
     monkeypatch.setattr(
         panels_module,
         "_global_aggregate_recent_delta_headline",
-        lambda **kwargs: {"key": kwargs["key"], "label": kwargs["label"], "value": None, "unit": kwargs["unit_out"], "baseline": str(kwargs["baseline_year"]), "period": None, "method": None},
+        lambda **kwargs: {
+            "key": kwargs["key"],
+            "label": kwargs["label"],
+            "value": None,
+            "unit": kwargs["unit_out"],
+            "baseline": str(kwargs["baseline_year"]),
+            "period": None,
+            "method": None,
+        },
     )
     monkeypatch.setattr(
         panels_module,
         "_global_aggregate_trend_headline",
-        lambda **kwargs: {"key": kwargs["key"], "label": kwargs["label"], "value": None, "unit": kwargs["unit"], "baseline": str(kwargs["baseline_year"]), "period": None, "method": None},
+        lambda **kwargs: {
+            "key": kwargs["key"],
+            "label": kwargs["label"],
+            "value": None,
+            "unit": kwargs["unit"],
+            "baseline": str(kwargs["baseline_year"]),
+            "period": None,
+            "method": None,
+        },
     )
 
     scored = panels_module.build_scored_panels_tiles_registry(
@@ -605,6 +661,7 @@ def test_build_panel_tiles_registry_loads_default_manifest(
 # Score=0 panels produce stub graphs (new behaviour)
 # ---------------------------------------------------------------------------
 
+
 def test_build_scored_panels_score_zero_produces_stub_panels(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -612,7 +669,15 @@ def test_build_scored_panels_score_zero_produces_stub_panels(
     series_keys and an error string, not be silently dropped."""
     monkeypatch.setattr(panels_module, "_read_score_value", lambda *_a, **_kw: 0)
 
-    _nh = {"key": "x", "label": "x", "value": None, "unit": "C", "baseline": None, "period": None, "method": None}
+    _nh = {
+        "key": "x",
+        "label": "x",
+        "value": None,
+        "unit": "C",
+        "baseline": None,
+        "period": None,
+        "method": None,
+    }
     _nhd = {**_nh, "unit": "days"}
 
     # Stub all headline functions so SimpleNamespace tile_store is sufficient.
@@ -627,11 +692,18 @@ def test_build_scored_panels_score_zero_produces_stub_panels(
         "_compute_global_t2m_preindustrial_headline",
     ):
         monkeypatch.setattr(panels_module, _name, lambda *_a, **_kw: _nh)
-    monkeypatch.setattr(panels_module, "_compute_coral_local_headlines", lambda *_a, **_kw: [])
-    monkeypatch.setattr(panels_module, "_global_aggregate_recent_delta_headline", lambda *_a, **_kw: _nh)
-    monkeypatch.setattr(panels_module, "_global_aggregate_trend_headline", lambda *_a, **_kw: _nhd)
+    monkeypatch.setattr(
+        panels_module, "_compute_coral_local_headlines", lambda *_a, **_kw: []
+    )
+    monkeypatch.setattr(
+        panels_module, "_global_aggregate_recent_delta_headline", lambda *_a, **_kw: _nh
+    )
+    monkeypatch.setattr(
+        panels_module, "_global_aggregate_trend_headline", lambda *_a, **_kw: _nhd
+    )
 
     from types import SimpleNamespace
+
     result = panels_module.build_scored_panels_tiles_registry(
         place_resolver=_place_resolver(),
         tile_store=SimpleNamespace(aggregates={}),
@@ -669,6 +741,7 @@ def test_build_scored_panels_score_zero_produces_stub_panels(
 # ---------------------------------------------------------------------------
 # global_only series are skipped in local panel build (new behaviour)
 # ---------------------------------------------------------------------------
+
 
 def test_build_panel_tiles_registry_skips_global_only_series() -> None:
     grid = GridSpec.global_0p25(tile_size=64)
@@ -711,6 +784,7 @@ def test_build_panel_tiles_registry_skips_global_only_series() -> None:
 # ---------------------------------------------------------------------------
 # Animation steps filtered to only include locally-available series (new behaviour)
 # ---------------------------------------------------------------------------
+
 
 def test_build_panel_tiles_registry_animation_filtering() -> None:
     grid = GridSpec.global_0p25(tile_size=64)
@@ -761,7 +835,9 @@ def test_build_panel_tiles_registry_animation_filtering() -> None:
         assert "missing_metric" not in step["series_keys"]
 
 
-def test_build_panel_tiles_registry_animation_dropped_when_only_one_step_survives() -> None:
+def test_build_panel_tiles_registry_animation_dropped_when_only_one_step_survives() -> (
+    None
+):
     grid = GridSpec.global_0p25(tile_size=64)
     store = _TileStore(grid)
 

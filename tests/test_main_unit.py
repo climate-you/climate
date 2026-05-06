@@ -533,8 +533,13 @@ def test_chat_endpoints_return_503_when_chat_disabled(
         "climate_api.main.PlaceResolver",
         lambda **kwargs: SimpleNamespace(
             resolve_place=lambda lat, lon: SimpleNamespace(
-                geonameid=1, label="A", lat=lat, lon=lon,
-                distance_km=0.0, country_code="US", population=1,
+                geonameid=1,
+                label="A",
+                lat=lat,
+                lon=lon,
+                distance_km=0.0,
+                country_code="US",
+                population=1,
             )
         ),
     )

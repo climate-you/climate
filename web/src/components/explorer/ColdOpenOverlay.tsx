@@ -355,7 +355,12 @@ export default function ColdOpenOverlay({
             }`}
           >
             Human activities have caused{" "}
-            <span className={styles.coldOpenMessageAccent} style={accentColor ? { color: accentColor } : undefined}>{warmingText}</span>{" "}
+            <span
+              className={styles.coldOpenMessageAccent}
+              style={accentColor ? { color: accentColor } : undefined}
+            >
+              {warmingText}
+            </span>{" "}
             of global warming {PREINDUSTRIAL_TITLE_SUFFIX}
           </span>
           <span
@@ -364,7 +369,13 @@ export default function ColdOpenOverlay({
             }`}
           >
             What does this mean{" "}
-            <span className={styles.coldOpenMessageAccent} style={accentColor ? { color: accentColor } : undefined}>for you</span> ?
+            <span
+              className={styles.coldOpenMessageAccent}
+              style={accentColor ? { color: accentColor } : undefined}
+            >
+              for you
+            </span>{" "}
+            ?
           </span>
         </h1>
         <h1
@@ -372,9 +383,19 @@ export default function ColdOpenOverlay({
             introPromptVisible ? styles.coldOpenMessageSecondaryVisible : ""
           }`}
         >
-          <span className={styles.coldOpenMessageAccent} style={accentColor ? { color: accentColor } : undefined}>Ple</span>
+          <span
+            className={styles.coldOpenMessageAccent}
+            style={accentColor ? { color: accentColor } : undefined}
+          >
+            Ple
+          </span>
           <span className={styles.coldOpenMessageDark}>ase select locat</span>
-          <span className={styles.coldOpenMessageAccent} style={accentColor ? { color: accentColor } : undefined}>ion</span>
+          <span
+            className={styles.coldOpenMessageAccent}
+            style={accentColor ? { color: accentColor } : undefined}
+          >
+            ion
+          </span>
         </h1>
       </div>
     </div>

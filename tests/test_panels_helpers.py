@@ -500,6 +500,7 @@ def test_grid_and_read_score_misc_branches() -> None:
 # _compute_t2m_recent_headline  (significantly refactored)
 # ---------------------------------------------------------------------------
 
+
 def test_compute_t2m_recent_headline_success() -> None:
     years = list(range(1979, 2024))
 
@@ -544,17 +545,23 @@ def test_compute_t2m_recent_headline_missing_cases() -> None:
         def try_get_metric_vector(self, metric: str, lat: float, lon: float):
             raise FileNotFoundError("missing")
 
-    assert panels_module._compute_t2m_recent_headline(
-        tile_store=_FileNotFound(), lat=0.0, lon=0.0, unit="C"
-    ).value is None
+    assert (
+        panels_module._compute_t2m_recent_headline(
+            tile_store=_FileNotFound(), lat=0.0, lon=0.0, unit="C"
+        ).value
+        is None
+    )
 
     class _NoneVec:
         def try_get_metric_vector(self, metric: str, lat: float, lon: float):
             return None
 
-    assert panels_module._compute_t2m_recent_headline(
-        tile_store=_NoneVec(), lat=0.0, lon=0.0, unit="C"
-    ).value is None
+    assert (
+        panels_module._compute_t2m_recent_headline(
+            tile_store=_NoneVec(), lat=0.0, lon=0.0, unit="C"
+        ).value
+        is None
+    )
 
     # All-NaN axis values -> finite_years empty
     class _BadAxis:
@@ -566,9 +573,12 @@ def test_compute_t2m_recent_headline_missing_cases() -> None:
         def try_get_metric_vector(self, metric: str, lat: float, lon: float):
             return np.array([10.0, 11.0], dtype=np.float32)
 
-    assert panels_module._compute_t2m_recent_headline(
-        tile_store=_BadAxis(), lat=0.0, lon=0.0, unit="C"
-    ).value is None
+    assert (
+        panels_module._compute_t2m_recent_headline(
+            tile_store=_BadAxis(), lat=0.0, lon=0.0, unit="C"
+        ).value
+        is None
+    )
 
     # Only 2 recent years (< _HEADLINE_RECENT_YEARS - 1 = 4)
     class _TooShortRecent:
@@ -578,9 +588,12 @@ def test_compute_t2m_recent_headline_missing_cases() -> None:
         def try_get_metric_vector(self, metric: str, lat: float, lon: float):
             return np.ones(21 + 2, dtype=np.float32)
 
-    assert panels_module._compute_t2m_recent_headline(
-        tile_store=_TooShortRecent(), lat=0.0, lon=0.0, unit="C"
-    ).value is None
+    assert (
+        panels_module._compute_t2m_recent_headline(
+            tile_store=_TooShortRecent(), lat=0.0, lon=0.0, unit="C"
+        ).value
+        is None
+    )
 
     # Ref period 1979-2000 has fewer than 10 years
     class _TooShortRef:
@@ -590,14 +603,18 @@ def test_compute_t2m_recent_headline_missing_cases() -> None:
         def try_get_metric_vector(self, metric: str, lat: float, lon: float):
             return np.ones(7, dtype=np.float32)
 
-    assert panels_module._compute_t2m_recent_headline(
-        tile_store=_TooShortRef(), lat=0.0, lon=0.0, unit="C"
-    ).value is None
+    assert (
+        panels_module._compute_t2m_recent_headline(
+            tile_store=_TooShortRef(), lat=0.0, lon=0.0, unit="C"
+        ).value
+        is None
+    )
 
 
 # ---------------------------------------------------------------------------
 # _compute_trend_at_last_headline  (new generic helper)
 # ---------------------------------------------------------------------------
+
 
 def _trend_store(years, values):
     class _Store:
@@ -640,8 +657,14 @@ def test_compute_trend_at_last_headline_missing() -> None:
             raise FileNotFoundError("missing")
 
     h = panels_module._compute_trend_at_last_headline(
-        tile_store=_FileNotFound(), lat=0.0, lon=0.0,
-        metric="m", key="k", label="L", unit="days", baseline_year=1979,
+        tile_store=_FileNotFound(),
+        lat=0.0,
+        lon=0.0,
+        metric="m",
+        key="k",
+        label="L",
+        unit="days",
+        baseline_year=1979,
     )
     assert h.value is None
 
@@ -650,8 +673,14 @@ def test_compute_trend_at_last_headline_missing() -> None:
             return None
 
     h2 = panels_module._compute_trend_at_last_headline(
-        tile_store=_NoneVec(), lat=0.0, lon=0.0,
-        metric="m", key="k", label="L", unit="days", baseline_year=1979,
+        tile_store=_NoneVec(),
+        lat=0.0,
+        lon=0.0,
+        metric="m",
+        key="k",
+        label="L",
+        unit="days",
+        baseline_year=1979,
     )
     assert h2.value is None
 
@@ -662,8 +691,14 @@ def test_compute_trend_at_last_headline_no_baseline_year() -> None:
     store = _trend_store(years, values)
 
     h = panels_module._compute_trend_at_last_headline(
-        tile_store=store, lat=0.0, lon=0.0,
-        metric="m", key="k", label="L", unit="days", baseline_year=1979,
+        tile_store=store,
+        lat=0.0,
+        lon=0.0,
+        metric="m",
+        key="k",
+        label="L",
+        unit="days",
+        baseline_year=1979,
     )
     assert h.value is not None
     assert h.baseline_value is None
@@ -672,6 +707,7 @@ def test_compute_trend_at_last_headline_no_baseline_year() -> None:
 # ---------------------------------------------------------------------------
 # _compute_coral_local_headlines  (new)
 # ---------------------------------------------------------------------------
+
 
 def test_compute_coral_local_headlines_file_not_found() -> None:
     class _Store:
@@ -803,10 +839,13 @@ def test_compute_coral_local_headlines_mismatched_moderate_size() -> None:
 # _local_graph_ui  (new)
 # ---------------------------------------------------------------------------
 
+
 def test_local_graph_ui() -> None:
     assert panels_module._local_graph_ui({}) is None
     assert panels_module._local_graph_ui({"ui": {"x": 1}}) == {"x": 1}
-    assert panels_module._local_graph_ui({"local_info_text": "hello"}) == {"info_text": "hello"}
+    assert panels_module._local_graph_ui({"local_info_text": "hello"}) == {
+        "info_text": "hello"
+    }
     assert panels_module._local_graph_ui({"ui": {"x": 1}, "local_info_text": "hi"}) == {
         "x": 1,
         "info_text": "hi",
@@ -816,6 +855,7 @@ def test_local_graph_ui() -> None:
 # ---------------------------------------------------------------------------
 # _global_aggregate_recent_delta_headline  (new)
 # ---------------------------------------------------------------------------
+
 
 def _make_agg_store(metric, aggregation, time_axis, values):
     class _Store:
@@ -910,6 +950,7 @@ def test_global_aggregate_recent_delta_headline_missing() -> None:
 # _global_aggregate_trend_headline  (new)
 # ---------------------------------------------------------------------------
 
+
 def test_global_aggregate_trend_headline_success() -> None:
     years = list(range(1979, 2024))
     values = [float(5 + i * 0.1) for i in range(len(years))]
@@ -947,6 +988,7 @@ def test_global_aggregate_trend_headline_missing() -> None:
 # _compute_global_t2m_preindustrial_headline  (new)
 # ---------------------------------------------------------------------------
 
+
 def test_compute_global_t2m_preindustrial_headline_success() -> None:
     class _Store:
         aggregates = {
@@ -972,9 +1014,12 @@ def test_compute_global_t2m_preindustrial_headline_missing() -> None:
     class _Empty:
         aggregates: dict = {}
 
-    assert panels_module._compute_global_t2m_preindustrial_headline(
-        tile_store=_Empty(), unit="C"
-    ).value is None
+    assert (
+        panels_module._compute_global_t2m_preindustrial_headline(
+            tile_store=_Empty(), unit="C"
+        ).value
+        is None
+    )
 
     class _NoGlobe:
         aggregates = {
@@ -984,9 +1029,12 @@ def test_compute_global_t2m_preindustrial_headline_missing() -> None:
             }
         }
 
-    assert panels_module._compute_global_t2m_preindustrial_headline(
-        tile_store=_NoGlobe(), unit="C"
-    ).value is None
+    assert (
+        panels_module._compute_global_t2m_preindustrial_headline(
+            tile_store=_NoGlobe(), unit="C"
+        ).value
+        is None
+    )
 
     class _EmptyValues:
         aggregates = {
@@ -996,14 +1044,18 @@ def test_compute_global_t2m_preindustrial_headline_missing() -> None:
             }
         }
 
-    assert panels_module._compute_global_t2m_preindustrial_headline(
-        tile_store=_EmptyValues(), unit="C"
-    ).value is None
+    assert (
+        panels_module._compute_global_t2m_preindustrial_headline(
+            tile_store=_EmptyValues(), unit="C"
+        ).value
+        is None
+    )
 
 
 # ---------------------------------------------------------------------------
 # _dhw_info_bubble_text  (new)
 # ---------------------------------------------------------------------------
+
 
 def test_dhw_info_bubble_text_success() -> None:
     class _Store:
@@ -1027,9 +1079,7 @@ def test_dhw_info_bubble_text_missing() -> None:
 
     class _WrongFormat:
         aggregates = {
-            ("dhw_severe_risk_days_per_year", "fraction_1pct"): {
-                "aggregation": "mean"
-            }
+            ("dhw_severe_risk_days_per_year", "fraction_1pct"): {"aggregation": "mean"}
         }
 
     assert panels_module._dhw_info_bubble_text(_WrongFormat()) is None
@@ -1039,12 +1089,15 @@ def test_dhw_info_bubble_text_missing() -> None:
 # _with_coral_info_bubble  (new)
 # ---------------------------------------------------------------------------
 
+
 def test_with_coral_info_bubble() -> None:
     class _NoAgg:
         aggregates: dict = {}
 
     assert panels_module._with_coral_info_bubble(None, _NoAgg()) is None
-    assert panels_module._with_coral_info_bubble({"type": "temperature"}, _NoAgg()) == {"type": "temperature"}
+    assert panels_module._with_coral_info_bubble({"type": "temperature"}, _NoAgg()) == {
+        "type": "temperature"
+    }
 
     # Coral type but no aggregate -> spec returned unchanged
     spec = {"type": "coral", "info_bubble_texts": {"foo": "bar"}}
@@ -1057,7 +1110,9 @@ def test_with_coral_info_bubble() -> None:
             }
         }
 
-    result = panels_module._with_coral_info_bubble({"type": "coral", "info_bubble_texts": {"existing": "x"}}, _WithAgg())
+    result = panels_module._with_coral_info_bubble(
+        {"type": "coral", "info_bubble_texts": {"existing": "x"}}, _WithAgg()
+    )
     assert result is not None
     assert "trend" in result["info_bubble_texts"]
     assert "coral_unavailable" in result["info_bubble_texts"]

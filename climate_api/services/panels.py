@@ -660,15 +660,20 @@ def _compute_t2m_recent_headline(
     key = "t2m_recent_local"
     label = "Air temperature recent change"
     baseline_label = "1979-2000"
-    method = (
-        f"Latest {_HEADLINE_RECENT_YEARS}-year local annual mean minus local mean 1979-2000"
-    )
+    method = f"Latest {_HEADLINE_RECENT_YEARS}-year local annual mean minus local mean 1979-2000"
     try:
         vec = tile_store.try_get_metric_vector("t2m_yearly_mean_c", lat, lon)
     except FileNotFoundError:
         vec = None
     if vec is None:
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit.upper(), baseline=baseline_label, method=method)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit.upper(),
+            baseline=baseline_label,
+            method=method,
+        )
 
     y = np.asarray(vec, dtype=np.float64).reshape(-1)
     axis_vals = _series_axis(tile_store, "t2m_yearly_mean_c", y.size)
@@ -678,7 +683,14 @@ def _compute_t2m_recent_headline(
 
     finite_years = years[finite]
     if finite_years.size == 0:
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit.upper(), baseline=baseline_label, method=method)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit.upper(),
+            baseline=baseline_label,
+            method=method,
+        )
 
     latest_year = int(np.max(finite_years))
     recent_start = latest_year - (_HEADLINE_RECENT_YEARS - 1)
@@ -686,9 +698,23 @@ def _compute_t2m_recent_headline(
     ref_mask = finite & (years >= 1979) & (years <= 2000)
 
     if int(np.count_nonzero(recent_mask)) < max(2, _HEADLINE_RECENT_YEARS - 1):
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit.upper(), baseline=baseline_label, method=method)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit.upper(),
+            baseline=baseline_label,
+            method=method,
+        )
     if int(np.count_nonzero(ref_mask)) < 10:
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit.upper(), baseline=baseline_label, method=method)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit.upper(),
+            baseline=baseline_label,
+            method=method,
+        )
 
     delta_c = float(np.mean(y[recent_mask])) - float(np.mean(y[ref_mask]))
     delta = _to_unit_delta(delta_c, unit)
@@ -740,21 +766,39 @@ def _compute_trend_at_last_headline(
     except FileNotFoundError:
         vec = None
     if vec is None:
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit,
+            baseline=baseline,
+            method=method,
+        )
     y = np.asarray(vec, dtype=np.float64).reshape(-1)
     axis_vals = _series_axis(tile_store, metric, y.size)
     x = np.asarray([_axis_to_numeric(v) for v in axis_vals], dtype=np.float64)
     trend = linear_trend_line(x, y)
     trend_at_last = float(trend[-1])
     if not np.isfinite(trend_at_last):
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit,
+            baseline=baseline,
+            method=method,
+        )
     baseline_mask = x.astype(int) == baseline_year
     trend_at_baseline = float(trend[baseline_mask][-1]) if baseline_mask.any() else None
     return HeadlinePayload(
         key=key,
         label=label,
         value=round(trend_at_last, 1),
-        baseline_value=round(trend_at_baseline, 1) if trend_at_baseline is not None and np.isfinite(trend_at_baseline) else None,
+        baseline_value=(
+            round(trend_at_baseline, 1)
+            if trend_at_baseline is not None and np.isfinite(trend_at_baseline)
+            else None
+        ),
         unit=unit,
         baseline=baseline,
         period=str(int(x[-1])),
@@ -843,13 +887,35 @@ def _compute_coral_local_headlines(
 
     def _dhw_local_headlines() -> list[HeadlinePayload]:
         no_data = [
-            HeadlinePayload(key="dhw_severe_local", label="Severe coral heat stress data available", value=None, unit="flag", baseline="1985"),
-            HeadlinePayload(key="dhw_worst_year_local", label="Worst coral heat stress year", value=None, unit="year", baseline="1985"),
-            HeadlinePayload(key="dhw_worst_year_days_local", label="Coral heat stress days in worst year", value=None, unit="days", baseline="1985"),
+            HeadlinePayload(
+                key="dhw_severe_local",
+                label="Severe coral heat stress data available",
+                value=None,
+                unit="flag",
+                baseline="1985",
+            ),
+            HeadlinePayload(
+                key="dhw_worst_year_local",
+                label="Worst coral heat stress year",
+                value=None,
+                unit="year",
+                baseline="1985",
+            ),
+            HeadlinePayload(
+                key="dhw_worst_year_days_local",
+                label="Coral heat stress days in worst year",
+                value=None,
+                unit="days",
+                baseline="1985",
+            ),
         ]
         try:
-            severe_vec = tile_store.try_get_metric_vector("dhw_severe_risk_days_per_year", lat, lon)
-            moderate_vec = tile_store.try_get_metric_vector("dhw_moderate_risk_days_per_year", lat, lon)
+            severe_vec = tile_store.try_get_metric_vector(
+                "dhw_severe_risk_days_per_year", lat, lon
+            )
+            moderate_vec = tile_store.try_get_metric_vector(
+                "dhw_moderate_risk_days_per_year", lat, lon
+            )
         except FileNotFoundError:
             return no_data
         if severe_vec is None:
@@ -857,20 +923,48 @@ def _compute_coral_local_headlines(
         severe = np.asarray(severe_vec, dtype=np.float64).reshape(-1)
         if not np.any(np.isfinite(severe)):
             return no_data
-        axis_vals = _series_axis(tile_store, "dhw_severe_risk_days_per_year", severe.size)
+        axis_vals = _series_axis(
+            tile_store, "dhw_severe_risk_days_per_year", severe.size
+        )
         x = np.asarray([_axis_to_numeric(v) for v in axis_vals], dtype=np.float64)
-        moderate = np.asarray(moderate_vec, dtype=np.float64).reshape(-1) if moderate_vec is not None else np.zeros_like(severe)
+        moderate = (
+            np.asarray(moderate_vec, dtype=np.float64).reshape(-1)
+            if moderate_vec is not None
+            else np.zeros_like(severe)
+        )
         if moderate.size != severe.size:
             moderate = np.zeros_like(severe)
-        total = np.where(np.isfinite(severe), severe, 0.0) + np.where(np.isfinite(moderate), moderate, 0.0)
+        total = np.where(np.isfinite(severe), severe, 0.0) + np.where(
+            np.isfinite(moderate), moderate, 0.0
+        )
         finite_mask = np.isfinite(severe) | np.isfinite(moderate)
         worst_idx = int(np.argmax(np.where(finite_mask, total, -np.inf)))
         worst_year = int(x[worst_idx])
         worst_days = round(float(total[worst_idx]))
         return [
-            HeadlinePayload(key="dhw_severe_local", label="Severe coral heat stress data available", value=1.0, unit="flag", baseline="1985"),
-            HeadlinePayload(key="dhw_worst_year_local", label="Worst coral heat stress year", value=float(worst_year), unit="year", baseline="1985", period=str(worst_year)),
-            HeadlinePayload(key="dhw_worst_year_days_local", label="Coral heat stress days in worst year", value=float(worst_days), unit="days", baseline="1985", period=str(worst_year)),
+            HeadlinePayload(
+                key="dhw_severe_local",
+                label="Severe coral heat stress data available",
+                value=1.0,
+                unit="flag",
+                baseline="1985",
+            ),
+            HeadlinePayload(
+                key="dhw_worst_year_local",
+                label="Worst coral heat stress year",
+                value=float(worst_year),
+                unit="year",
+                baseline="1985",
+                period=str(worst_year),
+            ),
+            HeadlinePayload(
+                key="dhw_worst_year_days_local",
+                label="Coral heat stress days in worst year",
+                value=float(worst_days),
+                unit="days",
+                baseline="1985",
+                period=str(worst_year),
+            ),
         ]
 
     return _dhw_local_headlines()
@@ -1108,7 +1202,12 @@ def build_panel_tiles_registry(
         animation_spec = graph.get("animation")
         if animation_spec:
             filtered = [
-                {**s, "series_keys": [k for k in s.get("series_keys", []) if k in graph_series_keys]}
+                {
+                    **s,
+                    "series_keys": [
+                        k for k in s.get("series_keys", []) if k in graph_series_keys
+                    ],
+                }
                 for s in animation_spec.get("steps", [])
                 if any(k in graph_series_keys for k in s.get("series_keys", []))
             ]
@@ -1359,7 +1458,9 @@ def build_scored_panels_tiles_registry(
             for key, payload in panel_resp.series.items():
                 if key not in merged_series:
                     merged_series[key] = payload
-            scored_panels.append(ScoredPanelPayload(score=score, panel=panel_resp.panel))
+            scored_panels.append(
+                ScoredPanelPayload(score=score, panel=panel_resp.panel)
+            )
         else:
             # Score=0 means no data at this location, but include stub graph definitions
             # so the frontend always receives headline config and can show the unavailable state.
@@ -1527,18 +1628,33 @@ def _global_aggregate_recent_delta_headline(
     baseline_year: int,
 ) -> HeadlinePayload:
     baseline = str(baseline_year)
-    method = (
-        f"Global area-weighted mean: latest {_HEADLINE_RECENT_YEARS}-year mean minus {baseline_year} value"
-    )
+    method = f"Global area-weighted mean: latest {_HEADLINE_RECENT_YEARS}-year mean minus {baseline_year} value"
     agg_data = tile_store.aggregates.get((metric, "mean"))
     if agg_data is None:
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit_out, baseline=baseline, method=method)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit_out,
+            baseline=baseline,
+            method=method,
+        )
     globe = agg_data["regions"].get("globe")
     if globe is None:
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit_out, baseline=baseline, method=method)
-    x = np.asarray([_axis_to_numeric(v) for v in agg_data["time_axis"]], dtype=np.float64)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit_out,
+            baseline=baseline,
+            method=method,
+        )
+    x = np.asarray(
+        [_axis_to_numeric(v) for v in agg_data["time_axis"]], dtype=np.float64
+    )
     y = np.asarray(
-        [float("nan") if v is None else float(v) for v in globe["values"]], dtype=np.float64
+        [float("nan") if v is None else float(v) for v in globe["values"]],
+        dtype=np.float64,
     )
     years = x.astype(int)
     finite = np.isfinite(y)
@@ -1547,7 +1663,14 @@ def _global_aggregate_recent_delta_headline(
     recent_mask = finite & (years >= recent_start) & (years <= latest_year)
     base_mask = finite & (years == baseline_year)
     if not recent_mask.any() or not base_mask.any():
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit_out, baseline=baseline, method=method)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit_out,
+            baseline=baseline,
+            method=method,
+        )
     delta = float(np.mean(y[recent_mask])) - float(y[base_mask][-1])
     if unit_in.upper() in ("C", "F"):
         delta = _to_unit_delta(delta, unit_out)
@@ -1575,25 +1698,53 @@ def _global_aggregate_trend_headline(
     method = "OLS trend value at last year of global area-weighted mean"
     agg_data = tile_store.aggregates.get((metric, "mean"))
     if agg_data is None:
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit,
+            baseline=baseline,
+            method=method,
+        )
     globe = agg_data["regions"].get("globe")
     if globe is None:
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
-    x = np.asarray([_axis_to_numeric(v) for v in agg_data["time_axis"]], dtype=np.float64)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit,
+            baseline=baseline,
+            method=method,
+        )
+    x = np.asarray(
+        [_axis_to_numeric(v) for v in agg_data["time_axis"]], dtype=np.float64
+    )
     y = np.asarray(
-        [float("nan") if v is None else float(v) for v in globe["values"]], dtype=np.float64
+        [float("nan") if v is None else float(v) for v in globe["values"]],
+        dtype=np.float64,
     )
     trend = linear_trend_line(x, y)
     trend_at_last = float(trend[-1])
     if not np.isfinite(trend_at_last):
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit,
+            baseline=baseline,
+            method=method,
+        )
     baseline_mask = x.astype(int) == baseline_year
     trend_at_baseline = float(trend[baseline_mask][-1]) if baseline_mask.any() else None
     return HeadlinePayload(
         key=key,
         label=label,
         value=round(trend_at_last, 1),
-        baseline_value=round(trend_at_baseline, 1) if trend_at_baseline is not None and np.isfinite(trend_at_baseline) else None,
+        baseline_value=(
+            round(trend_at_baseline, 1)
+            if trend_at_baseline is not None and np.isfinite(trend_at_baseline)
+            else None
+        ),
         unit=unit,
         baseline=baseline,
         period=str(int(x[-1])),
@@ -1610,18 +1761,48 @@ def _compute_global_t2m_preindustrial_headline(
     label = "Air temperature change vs pre-industrial (global)"
     baseline = "1850-1900"
     method = "Precomputed CMIP+ERA5 global mean warming vs 1850-1900"
-    agg_data = tile_store.aggregates.get(("t2m_total_warming_vs_preindustrial_c", "mean"))
+    agg_data = tile_store.aggregates.get(
+        ("t2m_total_warming_vs_preindustrial_c", "mean")
+    )
     if agg_data is None:
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit,
+            baseline=baseline,
+            method=method,
+        )
     globe = agg_data["regions"].get("globe")
     if globe is None:
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit,
+            baseline=baseline,
+            method=method,
+        )
     values = globe["values"]
     if not values:
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit,
+            baseline=baseline,
+            method=method,
+        )
     val_c = float(values[-1])
     if not np.isfinite(val_c):
-        return HeadlinePayload(key=key, label=label, value=None, unit=unit, baseline=baseline, method=method)
+        return HeadlinePayload(
+            key=key,
+            label=label,
+            value=None,
+            unit=unit,
+            baseline=baseline,
+            method=method,
+        )
     val = _to_unit_delta(val_c, unit)
     time_axis = agg_data["time_axis"]
     return HeadlinePayload(
@@ -1836,7 +2017,9 @@ def build_global_panels(
         panels=scored_panels,
         series=merged_series,
         headlines=[
-            _compute_global_t2m_preindustrial_headline(tile_store=tile_store, unit=unit),
+            _compute_global_t2m_preindustrial_headline(
+                tile_store=tile_store, unit=unit
+            ),
             _global_aggregate_recent_delta_headline(
                 tile_store=tile_store,
                 metric="t2m_yearly_mean_c",

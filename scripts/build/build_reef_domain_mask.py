@@ -38,12 +38,23 @@ def _load_mask(path: Path) -> tuple[np.ndarray, dict[str, float]]:
     return mask, meta
 
 
-def _check_compatible(base_path: Path, base: np.ndarray, base_meta: dict[str, float], path: Path, arr: np.ndarray, meta: dict[str, float]) -> None:
+def _check_compatible(
+    base_path: Path,
+    base: np.ndarray,
+    base_meta: dict[str, float],
+    path: Path,
+    arr: np.ndarray,
+    meta: dict[str, float],
+) -> None:
     if base.shape != arr.shape:
-        raise ValueError(f"Mask shape mismatch: {base_path}={base.shape}, {path}={arr.shape}")
+        raise ValueError(
+            f"Mask shape mismatch: {base_path}={base.shape}, {path}={arr.shape}"
+        )
     for k in ("deg", "lat_max", "lon_min"):
         if not np.isclose(base_meta[k], meta[k], atol=1e-9):
-            raise ValueError(f"Mask metadata mismatch for {k}: {base_path}={base_meta[k]} vs {path}={meta[k]}")
+            raise ValueError(
+                f"Mask metadata mismatch for {k}: {base_path}={base_meta[k]} vs {path}={meta[k]}"
+            )
 
 
 def _pct(n: int, total: int) -> str:
@@ -58,9 +69,18 @@ def main() -> None:
         default=[],
         help="Input reef mask NPZ (repeatable, OR-combined).",
     )
-    ap.add_argument("--water-mask", type=Path, required=True, help="Water mask NPZ (1=water).")
-    ap.add_argument("--dhw-mask", type=Path, required=True, help="DHW availability mask NPZ.")
-    ap.add_argument("--dilate-iterations", type=int, default=1, help="Sea-only dilation iterations (default: 1).")
+    ap.add_argument(
+        "--water-mask", type=Path, required=True, help="Water mask NPZ (1=water)."
+    )
+    ap.add_argument(
+        "--dhw-mask", type=Path, required=True, help="DHW availability mask NPZ."
+    )
+    ap.add_argument(
+        "--dilate-iterations",
+        type=int,
+        default=1,
+        help="Sea-only dilation iterations (default: 1).",
+    )
     ap.add_argument(
         "--output",
         type=Path,
@@ -80,15 +100,23 @@ def main() -> None:
         reef_seed = np.logical_or(reef_seed, m)
 
     water_mask, water_meta = _load_mask(args.water_mask)
-    _check_compatible(reef_paths[0], reef_seed, meta, args.water_mask, water_mask, water_meta)
+    _check_compatible(
+        reef_paths[0], reef_seed, meta, args.water_mask, water_mask, water_meta
+    )
 
     dhw_mask, dhw_meta = _load_mask(args.dhw_mask)
     _check_compatible(reef_paths[0], reef_seed, meta, args.dhw_mask, dhw_mask, dhw_meta)
 
     total = int(reef_seed.size)
-    print(f"[stats] reef_seed={int(np.count_nonzero(reef_seed))}/{total} ({_pct(int(np.count_nonzero(reef_seed)), total)})")
-    print(f"[stats] water_mask={int(np.count_nonzero(water_mask))}/{total} ({_pct(int(np.count_nonzero(water_mask)), total)})")
-    print(f"[stats] dhw_mask={int(np.count_nonzero(dhw_mask))}/{total} ({_pct(int(np.count_nonzero(dhw_mask)), total)})")
+    print(
+        f"[stats] reef_seed={int(np.count_nonzero(reef_seed))}/{total} ({_pct(int(np.count_nonzero(reef_seed)), total)})"
+    )
+    print(
+        f"[stats] water_mask={int(np.count_nonzero(water_mask))}/{total} ({_pct(int(np.count_nonzero(water_mask)), total)})"
+    )
+    print(
+        f"[stats] dhw_mask={int(np.count_nonzero(dhw_mask))}/{total} ({_pct(int(np.count_nonzero(dhw_mask)), total)})"
+    )
 
     if int(args.dilate_iterations) > 0:
         # 8-neighbor connectivity to close diagonal coastal gaps.
@@ -103,8 +131,12 @@ def main() -> None:
         reef_domain = reef_seed.copy()
 
     out = np.logical_and(reef_domain, dhw_mask)
-    print(f"[stats] reef_domain={int(np.count_nonzero(reef_domain))}/{total} ({_pct(int(np.count_nonzero(reef_domain)), total)})")
-    print(f"[stats] final_mask={int(np.count_nonzero(out))}/{total} ({_pct(int(np.count_nonzero(out)), total)})")
+    print(
+        f"[stats] reef_domain={int(np.count_nonzero(reef_domain))}/{total} ({_pct(int(np.count_nonzero(reef_domain)), total)})"
+    )
+    print(
+        f"[stats] final_mask={int(np.count_nonzero(out))}/{total} ({_pct(int(np.count_nonzero(out)), total)})"
+    )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
@@ -119,4 +151,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

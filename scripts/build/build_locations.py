@@ -536,9 +536,7 @@ def write_locations_csv(
         alias_count,
         feature_code,
         alt_names_raw,
-    ) in _iter_geonames_rows(
-        zip_path, excluded_feature_codes=excluded_feature_codes
-    ):
+    ) in _iter_geonames_rows(zip_path, excluded_feature_codes=excluded_feature_codes):
         # Prune true duplicates emitted by GeoNames for the same named place and coordinates.
         lat_f = float(lat)
         lon_f = float(lon)
@@ -1051,7 +1049,8 @@ def main() -> None:
         country_names_path = Path(args.country_names_path)
         country_names_path.parent.mkdir(parents=True, exist_ok=True)
         country_names_path.write_text(
-            json.dumps(country_names, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            json.dumps(country_names, ensure_ascii=False, indent=2, sort_keys=True)
+            + "\n",
             encoding="utf-8",
         )
         print(f"[ok] wrote {country_names_path}", file=sys.stderr)

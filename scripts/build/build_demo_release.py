@@ -101,7 +101,6 @@ def _parse_bbox(raw: str) -> tuple[float, float, float, float]:
     return (lat_min, lat_max, lon_min, lon_max)
 
 
-
 def _to_mask_bool(data: np.ndarray) -> np.ndarray:
     if data.dtype == np.bool_:
         return data.astype(bool, copy=False)
@@ -139,7 +138,9 @@ def _build_gbr_demo_mask(
 
     lat_centers = lat_max - (np.arange(nlat, dtype=np.float64) + 0.5) * deg
     lon_centers = lon_min + (np.arange(nlon, dtype=np.float64) + 0.5) * deg
-    lon_centers = np.asarray([normalize_lon_pm180(v) for v in lon_centers], dtype=np.float64)
+    lon_centers = np.asarray(
+        [normalize_lon_pm180(v) for v in lon_centers], dtype=np.float64
+    )
 
     row_idx = np.flatnonzero((lat_centers >= lat_min) & (lat_centers <= lat_max_bbox))
     if lon_min_bbox <= lon_max_bbox:
@@ -632,7 +633,9 @@ def _build_archive(
             shutil.rmtree(release_dst)
         shutil.copytree(release_root_resolved, release_dst)
 
-        _write_demo_readme(path=stage / "README.md", selected_datasets=selected_datasets)
+        _write_demo_readme(
+            path=stage / "README.md", selected_datasets=selected_datasets
+        )
 
         archive_path.parent.mkdir(parents=True, exist_ok=True)
         with tarfile.open(archive_path, mode="w:gz") as tar:

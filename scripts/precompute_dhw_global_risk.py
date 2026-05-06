@@ -68,6 +68,7 @@ def nc_pattern(year: int) -> str:
 # Computation
 # ---------------------------------------------------------------------------
 
+
 def compute_counts_year(
     year: int, cache_root: Path
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
@@ -85,18 +86,18 @@ def compute_counts_year(
             continue
         ds = xr.open_dataset(files[0], engine="netcdf4")
         dhw = ds["degree_heating_week"].values
-        flat = dhw.reshape(dhw.shape[0], -1)            # (time, cells)
+        flat = dhw.reshape(dhw.shape[0], -1)  # (time, cells)
 
-        tile_valid    = (~np.isnan(flat)).sum(axis=1)
-        tile_severe   = (flat >= SEVERE_THRESHOLD).sum(axis=1)
+        tile_valid = (~np.isnan(flat)).sum(axis=1)
+        tile_severe = (flat >= SEVERE_THRESHOLD).sum(axis=1)
         tile_moderate = (flat >= MODERATE_THRESHOLD).sum(axis=1)  # includes severe
 
         if n_valid is None:
             n_severe, n_moderate, n_valid = tile_severe, tile_moderate, tile_valid
         else:
-            n_severe   = n_severe   + tile_severe
+            n_severe = n_severe + tile_severe
             n_moderate = n_moderate + tile_moderate
-            n_valid    = n_valid    + tile_valid
+            n_valid = n_valid + tile_valid
         ds.close()
 
     return (n_severe, n_moderate, n_valid) if n_valid is not None else None
@@ -112,12 +113,12 @@ def classify(
     thresh = threshold_pct / 100.0
     has_data = n_valid > 0
     safe_valid = np.maximum(n_valid, 1)
-    frac_severe   = np.where(has_data, n_severe   / safe_valid, np.nan)
+    frac_severe = np.where(has_data, n_severe / safe_valid, np.nan)
     frac_moderate = np.where(has_data, n_moderate / safe_valid, np.nan)
 
-    severe_days   = has_data & (frac_severe >= thresh)
+    severe_days = has_data & (frac_severe >= thresh)
     moderate_days = has_data & ~severe_days & (frac_moderate >= thresh)
-    no_risk_days  = has_data & ~severe_days & ~moderate_days
+    no_risk_days = has_data & ~severe_days & ~moderate_days
 
     return int(no_risk_days.sum()), int(moderate_days.sum()), int(severe_days.sum())
 
@@ -125,6 +126,7 @@ def classify(
 # ---------------------------------------------------------------------------
 # I/O
 # ---------------------------------------------------------------------------
+
 
 def write_aggregate_json(
     path: Path,
@@ -155,24 +157,37 @@ def write_aggregate_json(
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument(
-        "--thresholds", nargs="+", type=float, required=True, metavar="PCT",
-        help="One or more fraction thresholds in %% (e.g. 1 5 10). "
-             "All thresholds are computed in a single pass.",
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    ap.add_argument("--release", default="dev",
-                    help="Release id (default: dev)")
-    ap.add_argument("--releases-root", default=None,
-                    help="Path to releases root (default: <repo>/data/releases)")
-    ap.add_argument("--cache-dir", type=Path, default=_DEFAULT_CACHE_DIR,
-                    help="Cache root directory (default: <repo>/data/cache)")
+    ap.add_argument(
+        "--thresholds",
+        nargs="+",
+        type=float,
+        required=True,
+        metavar="PCT",
+        help="One or more fraction thresholds in %% (e.g. 1 5 10). "
+        "All thresholds are computed in a single pass.",
+    )
+    ap.add_argument("--release", default="dev", help="Release id (default: dev)")
+    ap.add_argument(
+        "--releases-root",
+        default=None,
+        help="Path to releases root (default: <repo>/data/releases)",
+    )
+    ap.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=_DEFAULT_CACHE_DIR,
+        help="Cache root directory (default: <repo>/data/cache)",
+    )
     args = ap.parse_args()
 
     releases_root = (
-        Path(args.releases_root) if args.releases_root
+        Path(args.releases_root)
+        if args.releases_root
         else REPO_ROOT / "data" / "releases"
     )
     series_root = releases_root / args.release / "series"
@@ -199,7 +214,9 @@ def main() -> None:
         if counts is None:
             print("no data")
             for nr, mo, sv in results.values():
-                nr.append(None); mo.append(None); sv.append(None)
+                nr.append(None)
+                mo.append(None)
+                sv.append(None)
             continue
 
         parts = []
@@ -216,15 +233,27 @@ def main() -> None:
     for label, (no_risk_vals, moderate_vals, severe_vals) in results.items():
         write_aggregate_json(
             out_path / "dhw_no_risk_days_per_year" / "aggregates" / f"{label}.json",
-            "dhw_no_risk_days_per_year", label, YEARS, no_risk_vals,
+            "dhw_no_risk_days_per_year",
+            label,
+            YEARS,
+            no_risk_vals,
         )
         write_aggregate_json(
-            out_path / "dhw_moderate_risk_days_per_year" / "aggregates" / f"{label}.json",
-            "dhw_moderate_risk_days_per_year", label, YEARS, moderate_vals,
+            out_path
+            / "dhw_moderate_risk_days_per_year"
+            / "aggregates"
+            / f"{label}.json",
+            "dhw_moderate_risk_days_per_year",
+            label,
+            YEARS,
+            moderate_vals,
         )
         write_aggregate_json(
             out_path / "dhw_severe_risk_days_per_year" / "aggregates" / f"{label}.json",
-            "dhw_severe_risk_days_per_year", label, YEARS, severe_vals,
+            "dhw_severe_risk_days_per_year",
+            label,
+            YEARS,
+            severe_vals,
         )
     print("Done.")
 
