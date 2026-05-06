@@ -1071,6 +1071,7 @@ export default function ExplorerPage({
       countryCode: "",
       population: null,
     });
+    setResp(null);
     setPanelTab("graph");
     if (openPanel) setPanelOpen(true);
     setPanelLoadError(null);
@@ -1538,16 +1539,8 @@ export default function ExplorerPage({
           }}
           onHome={() => {
             setPanelOpen(false);
-            setPicked(null);
-            setChatLocations(null);
-            setChatFlyToBbox(null);
-            setSelectedLocation({
-              geonameid: 0,
-              label: "Global",
-              countryCode: "",
-              population: null,
-            });
             setGlobeBackground(pickGlobeBackground());
+            void loadGlobalPanel(unit, false, false);
           }}
           enablePick={!introActive}
           autoRotate={coldOpenAutoRotate}
