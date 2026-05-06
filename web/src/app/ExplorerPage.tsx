@@ -2113,6 +2113,7 @@ export default function ExplorerPage({
                   }}
                 >
                   <svg
+                    className={styles.panelScrollArrowStemOnly}
                     viewBox="0 0 14.51 35.1"
                     width="14"
                     height="35"
@@ -2120,6 +2121,17 @@ export default function ExplorerPage({
                     aria-hidden="true"
                   >
                     <polygon points="0,7.91 6.94,0.34 7.26,0 7.57,0.34 14.51,7.91 14.04,8.35 7.57,1.3 7.57,35.1 6.94,35.1 6.94,1.3 0.47,8.35" />
+                  </svg>
+                  <svg
+                    className={styles.panelScrollArrowHeadOnly}
+                    viewBox="0 0 14.51 9"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1"
+                    strokeLinejoin="miter"
+                    aria-hidden="true"
+                  >
+                    <polyline points="0.5,8.5 7.26,0.5 14.01,8.5" />
                   </svg>
                 </button>
                 <button
@@ -2136,6 +2148,7 @@ export default function ExplorerPage({
                   }}
                 >
                   <svg
+                    className={styles.panelScrollArrowStemOnly}
                     viewBox="0 0 14.51 35.1"
                     width="14"
                     height="35"
@@ -2143,6 +2156,17 @@ export default function ExplorerPage({
                     aria-hidden="true"
                   >
                     <polygon points="0,7.91 6.94,0.34 7.26,0 7.57,0.34 14.51,7.91 14.04,8.35 7.57,1.3 7.57,35.1 6.94,35.1 6.94,1.3 0.47,8.35" />
+                  </svg>
+                  <svg
+                    className={styles.panelScrollArrowHeadOnly}
+                    viewBox="0 0 14.51 9"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1"
+                    strokeLinejoin="miter"
+                    aria-hidden="true"
+                  >
+                    <polyline points="0.5,8.5 7.26,0.5 14.01,8.5" />
                   </svg>
                 </button>
               </div>
