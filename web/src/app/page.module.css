@@ -642,10 +642,7 @@
   appearance: none;
   -webkit-tap-highlight-color: transparent;
   outline: none;
-  transition:
-    background-color 140ms ease,
-    border-color 140ms ease,
-    color 140ms ease;
+  transition: none;
 }
 
 .panelStepIconActive {
