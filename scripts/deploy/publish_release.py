@@ -97,6 +97,12 @@ def _ssh_mkdir(
     remote: str | None, path: str, owner: str, *, dry_run: bool = False
 ) -> None:
     """Create a remote directory via sudo and chown it to owner so it is writable."""
+    if remote is None:
+        if not dry_run:
+            Path(path).mkdir(parents=True, exist_ok=True)
+        else:
+            print(f"  [mkdir] {path}")
+        return
     _ssh_run(remote, f"sudo mkdir -p {shlex.quote(path)}", dry_run=dry_run)
     _ssh_run(
         remote, f"sudo chown {shlex.quote(owner)} {shlex.quote(path)}", dry_run=dry_run
@@ -112,6 +118,8 @@ def _ssh_chown(
     dry_run: bool = False,
 ) -> None:
     """Chown a remote path via sudo, optionally recursively."""
+    if remote is None:
+        return
     flag = "-R " if recursive else ""
     _ssh_run(
         remote,
@@ -758,11 +766,18 @@ def main() -> int:
     # --- Update LATEST ---
     if args.update_latest:
         print(f"[LATEST] Updating LATEST -> {release}")
-        _ssh_run(
-            remote,
-            f"echo {shlex.quote(release)} | sudo tee {shlex.quote(remote_releases_root + '/LATEST')} > /dev/null",
-            dry_run=args.dry_run,
-        )
+        latest_path = remote_releases_root + "/LATEST"
+        if remote is None:
+            if not args.dry_run:
+                Path(latest_path).write_text(release + "\n", encoding="utf-8")
+            else:
+                print(f"  [write] {latest_path}")
+        else:
+            _ssh_run(
+                remote,
+                f"echo {shlex.quote(release)} | sudo tee {shlex.quote(latest_path)} > /dev/null",
+                dry_run=args.dry_run,
+            )
         print()
 
     print("Publish complete.")
