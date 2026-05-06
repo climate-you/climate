@@ -315,6 +315,7 @@
               "key": "tp_yearly_total",
               "metric": "tp_annual_total_mm",
               "label": "Annual total",
+              "shortLabel": "Total",
               "ui": { "role": "raw" },
               "unit": "mm",
               "style": { "type": "line", "color": "#000000" }
@@ -370,6 +371,7 @@
               "key": "tp_cdd",
               "metric": "tp_cdd_per_year",
               "label": "Max dry spell",
+              "shortLabel": "Dry spell",
               "ui": { "role": "raw" },
               "unit": "days",
               "style": {
@@ -443,17 +445,29 @@
               {
                 "id": "pct99",
                 "title": "≥1%",
-                "series_keys": ["dhw_no_risk_days", "dhw_moderate_risk_days", "dhw_severe_risk_days"]
+                "series_keys": [
+                  "dhw_no_risk_days",
+                  "dhw_moderate_risk_days",
+                  "dhw_severe_risk_days"
+                ]
               },
               {
                 "id": "pct95",
                 "title": "≥5%",
-                "series_keys": ["dhw_no_risk_5pct", "dhw_moderate_5pct", "dhw_severe_5pct"]
+                "series_keys": [
+                  "dhw_no_risk_5pct",
+                  "dhw_moderate_5pct",
+                  "dhw_severe_5pct"
+                ]
               },
               {
                 "id": "pct90",
                 "title": "≥10%",
-                "series_keys": ["dhw_no_risk_10pct", "dhw_moderate_10pct", "dhw_severe_10pct"]
+                "series_keys": [
+                  "dhw_no_risk_10pct",
+                  "dhw_moderate_10pct",
+                  "dhw_severe_10pct"
+                ]
               }
             ]
           },
