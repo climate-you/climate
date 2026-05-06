@@ -433,6 +433,7 @@ export default function ExplorerPage({
   const prevActiveLayerIdRef = useRef<string>("");
   const lastGraphViewFingerprintRef = useRef<string | null>(null);
   const lastTrackedLayerIdRef = useRef<string | null>(null);
+  const globalPrefetchDoneRef = useRef(false);
   const [graphsPerPage, setGraphsPerPage] = useState(2);
   const prevGraphsPerPageRef = useRef(2);
   const [graphPage, setGraphPage] = useState(0);
@@ -869,6 +870,13 @@ export default function ExplorerPage({
   }, [apiBase]);
 
   useEffect(() => {
+    if (globalPrefetchDoneRef.current) return;
+    globalPrefetchDoneRef.current = true;
+    void loadGlobalPanel(unit, false, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     setGraphPage((prev) => Math.min(prev, maxGraphPage));
   }, [maxGraphPage]);
 
@@ -1041,7 +1049,11 @@ export default function ExplorerPage({
     }
   }
 
-  async function loadGlobalPanel(nextUnit = unit, setDefaultGraph = false) {
+  async function loadGlobalPanel(
+    nextUnit = unit,
+    setDefaultGraph = false,
+    openPanel = true,
+  ) {
     panelAbortControllerRef.current?.abort("superseded");
     const controller = new AbortController();
     panelAbortControllerRef.current = controller;
@@ -1060,7 +1072,7 @@ export default function ExplorerPage({
       population: null,
     });
     setPanelTab("graph");
-    setPanelOpen(true);
+    if (openPanel) setPanelOpen(true);
     setPanelLoadError(null);
     try {
       const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/panel/global?unit=${nextUnit}`;
@@ -2010,9 +2022,7 @@ export default function ExplorerPage({
                     </>
                   ) : resp ? (
                     <span>{titleLocationLabel}</span>
-                  ) : (
-                    <span>Pick a location to load climate data.</span>
-                  )}
+                  ) : null}
                   {!panelLoadError &&
                   panelHeadline?.type !== "global_precip_unavailable" ? (
                     <InfoBubble
