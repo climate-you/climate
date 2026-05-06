@@ -402,7 +402,12 @@ export default function ExplorerPage({
     [number, number, number, number] | null
   >(null);
   const [selectedLocation, setSelectedLocation] =
-    useState<SelectedLocationMeta | null>(null);
+    useState<SelectedLocationMeta | null>({
+      geonameid: 0,
+      label: "Global",
+      countryCode: "",
+      population: null,
+    });
   const [selectedGeonameidForPanel, setSelectedGeonameidForPanel] = useState<
     number | null
   >(null);
@@ -1524,7 +1529,12 @@ export default function ExplorerPage({
             setPicked(null);
             setChatLocations(null);
             setChatFlyToBbox(null);
-            setSelectedLocation(null);
+            setSelectedLocation({
+              geonameid: 0,
+              label: "Global",
+              countryCode: "",
+              population: null,
+            });
             setGlobeBackground(pickGlobeBackground());
           }}
           enablePick={!introActive}
@@ -1537,8 +1547,12 @@ export default function ExplorerPage({
             if (panelOpen && panelTab === "graph") {
               setPanelOpen(false);
             } else {
-              applyLayerDefaultGraphPage(resp?.layer_overrides);
-              if (selectedLocation !== null) {
+              const hasDataForCurrentLocation =
+                resp !== null &&
+                selectedLocation !== null &&
+                resp.location.place.geonameid === selectedLocation.geonameid;
+              if (hasDataForCurrentLocation) {
+                applyLayerDefaultGraphPage(resp.layer_overrides);
                 setPanelTab("graph");
                 setPanelOpen(true);
               } else {
@@ -2253,12 +2267,20 @@ export default function ExplorerPage({
       </aside>
 
       <button
-        className={`${styles.panelOpenTab} ${!panelOpen && selectedLocation !== null ? styles.panelOpenTabVisible : ""}`}
+        className={`${styles.panelOpenTab} ${!panelOpen && selectedLocation !== null && !introActive ? styles.panelOpenTabVisible : ""}`}
         type="button"
         aria-label={`Open ${selectedLocation?.label ?? ""} location panel`}
         onClick={() => {
-          applyLayerDefaultGraphPage(resp?.layer_overrides);
-          setPanelOpen(true);
+          const hasDataForCurrentLocation =
+            resp !== null &&
+            selectedLocation !== null &&
+            resp.location.place.geonameid === selectedLocation.geonameid;
+          if (hasDataForCurrentLocation) {
+            applyLayerDefaultGraphPage(resp.layer_overrides);
+            setPanelOpen(true);
+          } else {
+            void loadGlobalPanel(unit, true);
+          }
         }}
       >
         <svg
