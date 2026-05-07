@@ -557,8 +557,11 @@ def create_app() -> FastAPI:
     def get_global_panel(
         release: str,
         unit: str = Query("C", pattern="^(C|F|c|f)$"),
+        response: Response = None,
     ):
         context = release_resolver.resolve_release_context(release)
+        if response is not None:
+            response.headers["Cache-Control"] = "public, max-age=3600"
         return build_global_panels(
             tile_store=context.tile_store,
             panels_manifest=context.panels_manifest,

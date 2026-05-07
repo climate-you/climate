@@ -384,6 +384,7 @@ export default function ExplorerPage({
   const [locationError, setLocationError] = useState<string | null>(null);
   const [panelLoadError, setPanelLoadError] = useState<string | null>(null);
   const [panelRetrying, setPanelRetrying] = useState<boolean>(false);
+  const [panelLoading, setPanelLoading] = useState<boolean>(false);
   const [panelOpen, setPanelOpen] = useState<boolean>(false);
   const [panelOpenKey, setPanelOpenKey] = useState(0);
   const [panelTab, setPanelTab] = useState<"graph" | "chat">("graph");
@@ -411,6 +412,8 @@ export default function ExplorerPage({
   const [selectedGeonameidForPanel, setSelectedGeonameidForPanel] = useState<
     number | null
   >(null);
+  const [panelStale, setPanelStale] = useState<boolean>(false);
+  const panelStaleTimerRef = useRef<number | null>(null);
   const panelAbortControllerRef = useRef<AbortController | null>(null);
   const wheelAccumRef = useRef(0);
   const wheelLastEventTsRef = useRef(0);
@@ -434,6 +437,8 @@ export default function ExplorerPage({
   const lastGraphViewFingerprintRef = useRef<string | null>(null);
   const lastTrackedLayerIdRef = useRef<string | null>(null);
   const globalPrefetchDoneRef = useRef(false);
+  const globalPanelCacheRef = useRef<Map<string, PanelResponse>>(new Map());
+  const preloadedBackgroundsRef = useRef<Set<string>>(new Set());
   const [graphsPerPage, setGraphsPerPage] = useState(2);
   const prevGraphsPerPageRef = useRef(2);
   const [graphPage, setGraphPage] = useState(0);
@@ -449,10 +454,6 @@ export default function ExplorerPage({
   useEffect(() => {
     setGlobeBackground(pickGlobeBackground());
   }, []);
-  useEffect(() => {
-    const img = new Image();
-    img.src = globeBackground.src;
-  }, [globeBackground]);
   const { aboutOpen, sourcesOpen, setOverlayOpenWithUrl } = useOverlayRouteSync(
     {
       initialOverlay,
@@ -565,6 +566,14 @@ export default function ExplorerPage({
     const spec = resp.layer_overrides[activeLayerId];
     return spec ?? null;
   }, [activeLayerId, resp?.layer_overrides]);
+
+  useEffect(() => {
+    if (darkBackdropLayerActive) return;
+    if (preloadedBackgroundsRef.current.has(globeBackground.src)) return;
+    preloadedBackgroundsRef.current.add(globeBackground.src);
+    const img = new Image();
+    img.src = globeBackground.src;
+  }, [darkBackdropLayerActive, globeBackground]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -906,6 +915,13 @@ export default function ExplorerPage({
     setGraphPage(Math.floor(graphIndex / Math.max(1, graphsPerPage)));
   }, [activeLayerId, activeLayerOverride, graphsPerPage]);
 
+  useEffect(() => {
+    if (panelOpen) return;
+    window.clearTimeout(panelStaleTimerRef.current ?? undefined);
+    panelStaleTimerRef.current = null;
+    setPanelStale(false);
+  }, [panelOpen]);
+
   const goGraphPage = useCallback(
     (direction: 1 | -1): boolean => {
       const nextPage =
@@ -980,6 +996,9 @@ export default function ExplorerPage({
     pinSessionRelease(data.release);
     setResp(data);
     setRespUnit(nextUnit);
+    window.clearTimeout(panelStaleTimerRef.current ?? undefined);
+    panelStaleTimerRef.current = null;
+    setPanelStale(false);
     const place = data.location.place;
     if (place?.geonameid) {
       setSelectedLocation({
@@ -1071,10 +1090,25 @@ export default function ExplorerPage({
       countryCode: "",
       population: null,
     });
-    setResp(null);
     setPanelTab("graph");
     if (openPanel) setPanelOpen(true);
     setPanelLoadError(null);
+
+    const cacheKey = `${releaseForSession}:${nextUnit}`;
+    const cached = globalPanelCacheRef.current.get(cacheKey);
+    if (cached) {
+      window.clearTimeout(timeoutId);
+      controller.abort("superseded");
+      if (setDefaultGraph) {
+        applyLayerDefaultGraphPage(cached.layer_overrides);
+      }
+      setResp(cached);
+      setRespUnit(nextUnit);
+      return;
+    }
+
+    setResp(null);
+    setPanelLoading(true);
     try {
       const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/panel/global?unit=${nextUnit}`;
       const r = await fetch(url, { signal: controller.signal });
@@ -1082,15 +1116,18 @@ export default function ExplorerPage({
       const data = (await r.json()) as PanelResponse;
       window.clearTimeout(timeoutId);
       pinSessionRelease(data.release);
+      globalPanelCacheRef.current.set(cacheKey, data);
       if (setDefaultGraph) {
         applyLayerDefaultGraphPage(data.layer_overrides);
       }
       setResp(data);
       setRespUnit(nextUnit);
       setPanelLoadError(null);
+      setPanelLoading(false);
     } catch {
       window.clearTimeout(timeoutId);
       if (controller.signal.reason === "superseded") return;
+      setPanelLoading(false);
       setPanelLoadError(CLIMATE_DATA_LOAD_ERROR);
     }
   }
@@ -1161,9 +1198,15 @@ export default function ExplorerPage({
         timerFired = true;
         setSelectedLocation(null);
         setPanelOpen(true);
+        setPanelStale(true);
       }, PANEL_OPEN_AWAIT_MS);
     } else if (openPanel) {
       setPanelOpen(true);
+      if (panelStaleTimerRef.current === null) {
+        panelStaleTimerRef.current = window.setTimeout(() => {
+          setPanelStale(true);
+        }, 1000);
+      }
     }
 
     try {
@@ -1201,6 +1244,9 @@ export default function ExplorerPage({
           };
         });
         setPanelLoadError(null);
+        window.clearTimeout(panelStaleTimerRef.current ?? undefined);
+        panelStaleTimerRef.current = null;
+        setPanelStale(false);
         if (delayOpen) {
           applyLayerDefaultGraphPage(resp?.layer_overrides);
           window.clearTimeout(timer!);
@@ -1222,6 +1268,9 @@ export default function ExplorerPage({
       setLocationError(
         err instanceof Error ? err.message : "Failed to load location data",
       );
+      window.clearTimeout(panelStaleTimerRef.current ?? undefined);
+      panelStaleTimerRef.current = null;
+      setPanelStale(false);
       if (delayOpen) {
         window.clearTimeout(timer!);
         if (!timerFired) setPanelOpen(true);
@@ -1539,7 +1588,8 @@ export default function ExplorerPage({
           }}
           onHome={() => {
             setPanelOpen(false);
-            setGlobeBackground(pickGlobeBackground());
+            if (!darkBackdropLayerActive)
+              setGlobeBackground(pickGlobeBackground());
             void loadGlobalPanel(unit, false, false);
           }}
           enablePick={!introActive}
@@ -1697,7 +1747,7 @@ export default function ExplorerPage({
 
       <aside
         ref={panelRef}
-        className={`${styles.locationPanel} ${panelOpen ? styles.locationPanelOpen : ""} ${panelDragActive ? styles.locationPanelDragging : ""}`}
+        className={`${styles.locationPanel} ${panelOpen ? styles.locationPanelOpen : ""} ${panelDragActive ? styles.locationPanelDragging : ""} ${panelStale ? styles.locationPanelStale : ""}`}
         aria-live="polite"
         tabIndex={0}
         style={
@@ -1710,7 +1760,10 @@ export default function ExplorerPage({
         onTouchEnd={handlePanelTouchEnd}
         onTouchCancel={handlePanelTouchCancel}
       >
-        {panelTab === "graph" && stepCount >= 2 && !panelLoadError ? (
+        {!panelLoading &&
+        panelTab === "graph" &&
+        stepCount >= 2 &&
+        !panelLoadError ? (
           <div
             className={styles.panelSteps}
             role="tablist"
@@ -1738,324 +1791,334 @@ export default function ExplorerPage({
           </div>
         ) : null}
 
-        <div className={styles.panelActions}>
-          <div className={styles.panelTopRow}>
-            <button
-              className={styles.panelClose}
-              type="button"
-              aria-label="Close panel"
-              title="Close"
-              onClick={() => setPanelOpen(false)}
-            >
-              <svg
-                className={styles.panelCloseIcon}
-                viewBox="0 0 24 24"
-                aria-hidden="true"
+        {!panelLoading ? (
+          <div className={styles.panelActions}>
+            <div className={styles.panelTopRow}>
+              <button
+                className={styles.panelClose}
+                type="button"
+                aria-label="Close panel"
+                title="Close"
+                onClick={() => setPanelOpen(false)}
               >
-                <path d="M6 6L18 18" />
-                <path d="M18 6L6 18" />
-              </svg>
-            </button>
-          </div>
-          <div className={styles.panelTitleWrap}>
-            <div>
-              <div className={styles.panelTitleLine}>
-                <h2 className={styles.panelTitle}>
-                  {panelLoadError ? (
-                    <span className={styles.panelTitleTempAccent}>
-                      {CLIMATE_DATA_LOAD_ERROR}
-                    </span>
-                  ) : panelHeadline?.type === "air_temp" ? (
-                    <>
-                      {resp?.location.place.geonameid === 0 ? (
-                        <>Globally, </>
-                      ) : (
-                        <>
-                          <span className={styles.panelTitleSmall}>In</span>{" "}
-                          {titleLocationLabel},{" "}
-                        </>
-                      )}
-                      {panelHeadline.warming ? (
-                        <>
+                <svg
+                  className={styles.panelCloseIcon}
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path d="M6 6L18 18" />
+                  <path d="M18 6L6 18" />
+                </svg>
+              </button>
+            </div>
+            <div className={styles.panelTitleWrap}>
+              <div>
+                <div className={styles.panelTitleLine}>
+                  <h2 className={styles.panelTitle}>
+                    {panelLoadError ? (
+                      <span className={styles.panelTitleTempAccent}>
+                        {CLIMATE_DATA_LOAD_ERROR}
+                      </span>
+                    ) : panelHeadline?.type === "air_temp" ? (
+                      <>
+                        {resp?.location.place.geonameid === 0 ? (
+                          <>Globally, </>
+                        ) : (
+                          <>
+                            <span className={styles.panelTitleSmall}>In</span>{" "}
+                            {titleLocationLabel},{" "}
+                          </>
+                        )}
+                        {panelHeadline.warming ? (
+                          <>
+                            <span className={styles.panelTitleSmall}>
+                              the air has warmed by{" "}
+                            </span>
+                            <span
+                              className={
+                                panelHeadline.preindustrial < 0
+                                  ? styles.panelTitleTempAccentNegative
+                                  : styles.panelTitleTempAccent
+                              }
+                            >
+                              {formatHeadlineDelta(
+                                panelHeadline.preindustrial,
+                                unit,
+                              )}
+                            </span>
+                            <span className={styles.panelTitleSmall}>
+                              {" "}
+                              since the pre-industrial era (1850–1900)
+                              {panelHeadline.recent !== null
+                                ? `, of which ${formatHeadlineDelta(panelHeadline.recent, unit)} since 1979`
+                                : ""}
+                              .
+                            </span>
+                          </>
+                        ) : panelHeadline.recent !== null ? (
+                          <>
+                            <span className={styles.panelTitleSmall}>
+                              the air has warmed by{" "}
+                            </span>
+                            <span
+                              className={
+                                panelHeadline.recent < 0
+                                  ? styles.panelTitleTempAccentNegative
+                                  : styles.panelTitleTempAccent
+                              }
+                            >
+                              {formatHeadlineDelta(panelHeadline.recent, unit)}
+                            </span>
+                            <span className={styles.panelTitleSmall}>
+                              {" "}
+                              since 1979.
+                            </span>
+                          </>
+                        ) : (
                           <span className={styles.panelTitleSmall}>
-                            the air has warmed by{" "}
+                            the air has not warmed since the pre-industrial era
+                            (1850–1900).
                           </span>
-                          <span
-                            className={
-                              panelHeadline.preindustrial < 0
-                                ? styles.panelTitleTempAccentNegative
-                                : styles.panelTitleTempAccent
-                            }
-                          >
-                            {formatHeadlineDelta(
-                              panelHeadline.preindustrial,
-                              unit,
-                            )}
-                          </span>
-                          <span className={styles.panelTitleSmall}>
-                            {" "}
-                            since the pre-industrial era (1850–1900)
-                            {panelHeadline.recent !== null
-                              ? `, of which ${formatHeadlineDelta(panelHeadline.recent, unit)} since 1979`
-                              : ""}
-                            .
-                          </span>
-                        </>
-                      ) : panelHeadline.recent !== null ? (
-                        <>
-                          <span className={styles.panelTitleSmall}>
-                            the air has warmed by{" "}
-                          </span>
-                          <span
-                            className={
-                              panelHeadline.recent < 0
-                                ? styles.panelTitleTempAccentNegative
-                                : styles.panelTitleTempAccent
-                            }
-                          >
-                            {formatHeadlineDelta(panelHeadline.recent, unit)}
-                          </span>
-                          <span className={styles.panelTitleSmall}>
-                            {" "}
-                            since 1979.
-                          </span>
-                        </>
-                      ) : (
+                        )}
+                      </>
+                    ) : panelHeadline?.type === "temp_delta" ? (
+                      <>
+                        {resp?.location.place.geonameid === 0 ? (
+                          <>Globally, </>
+                        ) : (
+                          <>
+                            <span className={styles.panelTitleSmall}>In</span>{" "}
+                            {titleLocationLabel},{" "}
+                          </>
+                        )}
                         <span className={styles.panelTitleSmall}>
-                          the air has not warmed since the pre-industrial era
-                          (1850–1900).
+                          {panelHeadline.action}{" "}
                         </span>
-                      )}
-                    </>
-                  ) : panelHeadline?.type === "temp_delta" ? (
-                    <>
-                      {resp?.location.place.geonameid === 0 ? (
-                        <>Globally, </>
-                      ) : (
-                        <>
-                          <span className={styles.panelTitleSmall}>In</span>{" "}
-                          {titleLocationLabel},{" "}
-                        </>
-                      )}
-                      <span className={styles.panelTitleSmall}>
-                        {panelHeadline.action}{" "}
-                      </span>
-                      <span
-                        className={
-                          panelHeadline.value < 0
-                            ? styles.panelTitleTempAccentNegative
-                            : styles.panelTitleTempAccent
-                        }
-                      >
-                        {formatHeadlineDelta(panelHeadline.value, unit)}
-                      </span>
-                      <span className={styles.panelTitleSmall}>
-                        {" "}
-                        {panelHeadline.suffix}.
-                      </span>
-                    </>
-                  ) : panelHeadline?.type === "no_warming" ? (
-                    <>
-                      {resp?.location.place.geonameid === 0 ? (
-                        <>Globally, </>
-                      ) : (
-                        <>
-                          <span className={styles.panelTitleSmall}>In</span>{" "}
-                          {titleLocationLabel},{" "}
-                        </>
-                      )}
-                      <span className={styles.panelTitleSmall}>
-                        {panelHeadline.text}
-                      </span>
-                    </>
-                  ) : panelHeadline?.type === "trend" ? (
-                    <>
-                      {resp?.location.place.geonameid === 0 ? (
-                        <>Globally, </>
-                      ) : (
-                        <>
-                          <span className={styles.panelTitleSmall}>In</span>{" "}
-                          {titleLocationLabel},{" "}
-                        </>
-                      )}
-                      {Math.round(panelHeadline.value) === 0 ? (
+                        <span
+                          className={
+                            panelHeadline.value < 0
+                              ? styles.panelTitleTempAccentNegative
+                              : styles.panelTitleTempAccent
+                          }
+                        >
+                          {formatHeadlineDelta(panelHeadline.value, unit)}
+                        </span>
                         <span className={styles.panelTitleSmall}>
-                          {panelHeadline.label_no_change} {panelHeadline.suffix}
-                          .
+                          {" "}
+                          {panelHeadline.suffix}.
                         </span>
-                      ) : (
-                        <>
+                      </>
+                    ) : panelHeadline?.type === "no_warming" ? (
+                      <>
+                        {resp?.location.place.geonameid === 0 ? (
+                          <>Globally, </>
+                        ) : (
+                          <>
+                            <span className={styles.panelTitleSmall}>In</span>{" "}
+                            {titleLocationLabel},{" "}
+                          </>
+                        )}
+                        <span className={styles.panelTitleSmall}>
+                          {panelHeadline.text}
+                        </span>
+                      </>
+                    ) : panelHeadline?.type === "trend" ? (
+                      <>
+                        {resp?.location.place.geonameid === 0 ? (
+                          <>Globally, </>
+                        ) : (
+                          <>
+                            <span className={styles.panelTitleSmall}>In</span>{" "}
+                            {titleLocationLabel},{" "}
+                          </>
+                        )}
+                        {Math.round(panelHeadline.value) === 0 ? (
                           <span className={styles.panelTitleSmall}>
-                            {panelHeadline.label}{" "}
-                          </span>
-                          <span
-                            className={
-                              panelHeadline.value < 0
-                                ? styles.panelTitleTempAccentNegative
-                                : styles.panelTitleTempAccent
-                            }
-                          >
-                            {panelHeadline.value >= 0 ? "+" : ""}
-                            {Math.round(panelHeadline.value)}{" "}
-                            {pluralizeUnit(
-                              panelHeadline.unit,
-                              Math.abs(Math.round(panelHeadline.value)),
-                            )}
-                          </span>
-                          <span className={styles.panelTitleSmall}>
-                            {" "}
+                            {panelHeadline.label_no_change}{" "}
                             {panelHeadline.suffix}.
                           </span>
-                        </>
-                      )}
-                    </>
-                  ) : panelHeadline?.type === "coral_global" ? (
-                    <>
-                      <>Globally, </>
-                      <span className={styles.panelTitleTempAccent}>10%</span>
-                      <span className={styles.panelTitleSmall}>
-                        {" "}
-                        of coral reefs experienced heat stress every single day
-                        of{" "}
-                      </span>
-                      <span className={styles.panelTitleTempAccent}>2024</span>
-                      <span className={styles.panelTitleSmall}>
-                        , the worst year on record.
-                      </span>
-                    </>
-                  ) : panelHeadline?.type === "coral_worst_year" ? (
-                    <>
-                      <span className={styles.panelTitleSmall}>In</span>{" "}
-                      {titleLocationLabel},{" "}
-                      <span className={styles.panelTitleSmall}>
-                        {Math.round(panelHeadline.days) === 1
-                          ? "there was "
-                          : "there were "}
-                      </span>
-                      <span className={styles.panelTitleTempAccent}>
-                        {Math.round(panelHeadline.days)}
-                      </span>{" "}
-                      <span className={styles.panelTitleTempAccent}>
-                        {Math.round(panelHeadline.days) === 1 ? "day" : "days"}
-                      </span>
-                      <span className={styles.panelTitleSmall}>
-                        {" "}
-                        of coral heat stress in{" "}
-                      </span>
-                      <span className={styles.panelTitleTempAccent}>
-                        {panelHeadline.year}
-                      </span>
-                      <span className={styles.panelTitleSmall}>
-                        , the worst year since 1985.
-                      </span>
-                    </>
-                  ) : panelHeadline?.type === "coral_no_days" ? (
-                    <>
-                      <span className={styles.panelTitleSmall}>In</span>{" "}
-                      {titleLocationLabel},{" "}
-                      <span className={styles.panelTitleSmall}>
-                        no days of coral heat stress have been recorded since
-                        1985.
-                      </span>
-                    </>
-                  ) : panelHeadline?.type === "sst_unavailable" ? (
-                    <>
-                      <span className={styles.panelTitleSmall}>
-                        Sea temperature data not available in
-                      </span>{" "}
-                      {titleLocationLabel}.{" "}
-                      {panelHeadline.globalDelta !== null ? (
-                        <>
-                          <span className={styles.panelTitleSmall}>
-                            Globally, the sea has warmed of{" "}
-                          </span>
-                          <span
-                            className={
-                              panelHeadline.globalDelta < 0
-                                ? styles.panelTitleTempAccentNegative
-                                : styles.panelTitleTempAccent
-                            }
-                          >
-                            {formatHeadlineDelta(
-                              panelHeadline.globalDelta,
-                              unit,
-                            )}
-                          </span>
-                          <span className={styles.panelTitleSmall}>
-                            {" "}
-                            since 1982.
-                          </span>
-                        </>
-                      ) : null}
-                    </>
-                  ) : panelHeadline?.type === "coral_unavailable" ? (
-                    <>
-                      <span className={styles.panelTitleSmall}>
-                        Coral stress data not available in
-                      </span>{" "}
-                      {titleLocationLabel}.{" "}
-                      <span className={styles.panelTitleSmall}>Globally, </span>
-                      <span className={styles.panelTitleTempAccent}>10%</span>
-                      <span className={styles.panelTitleSmall}>
-                        {" "}
-                        of coral reefs experienced heat stress every single day
-                        of{" "}
-                      </span>
-                      <span className={styles.panelTitleTempAccent}>2024</span>
-                      <span className={styles.panelTitleSmall}>.</span>
-                    </>
-                  ) : panelHeadline?.type === "global_precip_unavailable" ? (
-                    <>
-                      Globally,{" "}
-                      <span className={styles.panelTitleSmall}>
-                        average precipitation data is not a meaningful climate
-                        indicator, these metrics only make sense at a regional
-                        or local level.
-                      </span>
-                    </>
-                  ) : resp ? (
-                    <span>{titleLocationLabel}</span>
-                  ) : null}
-                  {!panelLoadError &&
-                  panelHeadline?.type !== "global_precip_unavailable" ? (
-                    <InfoBubble
-                      label="Panel title information"
-                      text={panelTitleInfoText}
-                    />
-                  ) : null}
-                </h2>
-              </div>
-              {populationText ? (
-                <p className={styles.panelPopulation}>
-                  Population: {populationText}
-                </p>
-              ) : null}
-              {panelLoadError ? (
-                <div className={styles.panelInlineError}>
-                  <button
-                    type="button"
-                    className={styles.panelRetryButton}
-                    onClick={async () => {
-                      if (panelRetrying) return;
-                      setPanelRetrying(true);
-                      await loadPanel(
-                        lat,
-                        lon,
-                        unit,
-                        selectedGeonameidForPanel,
-                      );
-                      setPanelRetrying(false);
-                    }}
-                  >
-                    {panelRetrying ? "Retrying..." : "Retry"}
-                  </button>
+                        ) : (
+                          <>
+                            <span className={styles.panelTitleSmall}>
+                              {panelHeadline.label}{" "}
+                            </span>
+                            <span
+                              className={
+                                panelHeadline.value < 0
+                                  ? styles.panelTitleTempAccentNegative
+                                  : styles.panelTitleTempAccent
+                              }
+                            >
+                              {panelHeadline.value >= 0 ? "+" : ""}
+                              {Math.round(panelHeadline.value)}{" "}
+                              {pluralizeUnit(
+                                panelHeadline.unit,
+                                Math.abs(Math.round(panelHeadline.value)),
+                              )}
+                            </span>
+                            <span className={styles.panelTitleSmall}>
+                              {" "}
+                              {panelHeadline.suffix}.
+                            </span>
+                          </>
+                        )}
+                      </>
+                    ) : panelHeadline?.type === "coral_global" ? (
+                      <>
+                        <>Globally, </>
+                        <span className={styles.panelTitleTempAccent}>10%</span>
+                        <span className={styles.panelTitleSmall}>
+                          {" "}
+                          of coral reefs experienced heat stress every single
+                          day of{" "}
+                        </span>
+                        <span className={styles.panelTitleTempAccent}>
+                          2024
+                        </span>
+                        <span className={styles.panelTitleSmall}>
+                          , the worst year on record.
+                        </span>
+                      </>
+                    ) : panelHeadline?.type === "coral_worst_year" ? (
+                      <>
+                        <span className={styles.panelTitleSmall}>In</span>{" "}
+                        {titleLocationLabel},{" "}
+                        <span className={styles.panelTitleSmall}>
+                          {Math.round(panelHeadline.days) === 1
+                            ? "there was "
+                            : "there were "}
+                        </span>
+                        <span className={styles.panelTitleTempAccent}>
+                          {Math.round(panelHeadline.days)}
+                        </span>{" "}
+                        <span className={styles.panelTitleTempAccent}>
+                          {Math.round(panelHeadline.days) === 1
+                            ? "day"
+                            : "days"}
+                        </span>
+                        <span className={styles.panelTitleSmall}>
+                          {" "}
+                          of coral heat stress in{" "}
+                        </span>
+                        <span className={styles.panelTitleTempAccent}>
+                          {panelHeadline.year}
+                        </span>
+                        <span className={styles.panelTitleSmall}>
+                          , the worst year since 1985.
+                        </span>
+                      </>
+                    ) : panelHeadline?.type === "coral_no_days" ? (
+                      <>
+                        <span className={styles.panelTitleSmall}>In</span>{" "}
+                        {titleLocationLabel},{" "}
+                        <span className={styles.panelTitleSmall}>
+                          no days of coral heat stress have been recorded since
+                          1985.
+                        </span>
+                      </>
+                    ) : panelHeadline?.type === "sst_unavailable" ? (
+                      <>
+                        <span className={styles.panelTitleSmall}>
+                          Sea temperature data not available in
+                        </span>{" "}
+                        {titleLocationLabel}.{" "}
+                        {panelHeadline.globalDelta !== null ? (
+                          <>
+                            <span className={styles.panelTitleSmall}>
+                              Globally, the sea has warmed of{" "}
+                            </span>
+                            <span
+                              className={
+                                panelHeadline.globalDelta < 0
+                                  ? styles.panelTitleTempAccentNegative
+                                  : styles.panelTitleTempAccent
+                              }
+                            >
+                              {formatHeadlineDelta(
+                                panelHeadline.globalDelta,
+                                unit,
+                              )}
+                            </span>
+                            <span className={styles.panelTitleSmall}>
+                              {" "}
+                              since 1982.
+                            </span>
+                          </>
+                        ) : null}
+                      </>
+                    ) : panelHeadline?.type === "coral_unavailable" ? (
+                      <>
+                        <span className={styles.panelTitleSmall}>
+                          Coral stress data not available in
+                        </span>{" "}
+                        {titleLocationLabel}.{" "}
+                        <span className={styles.panelTitleSmall}>
+                          Globally,{" "}
+                        </span>
+                        <span className={styles.panelTitleTempAccent}>10%</span>
+                        <span className={styles.panelTitleSmall}>
+                          {" "}
+                          of coral reefs experienced heat stress every single
+                          day of{" "}
+                        </span>
+                        <span className={styles.panelTitleTempAccent}>
+                          2024
+                        </span>
+                        <span className={styles.panelTitleSmall}>.</span>
+                      </>
+                    ) : panelHeadline?.type === "global_precip_unavailable" ? (
+                      <>
+                        Globally,{" "}
+                        <span className={styles.panelTitleSmall}>
+                          average precipitation data is not a meaningful climate
+                          indicator, these metrics only make sense at a regional
+                          or local level.
+                        </span>
+                      </>
+                    ) : resp ? (
+                      <span>{titleLocationLabel}</span>
+                    ) : null}
+                    {!panelLoadError &&
+                    panelHeadline?.type !== "global_precip_unavailable" ? (
+                      <InfoBubble
+                        label="Panel title information"
+                        text={panelTitleInfoText}
+                      />
+                    ) : null}
+                  </h2>
                 </div>
-              ) : null}
+                {populationText ? (
+                  <p className={styles.panelPopulation}>
+                    Population: {populationText}
+                  </p>
+                ) : null}
+                {panelLoadError ? (
+                  <div className={styles.panelInlineError}>
+                    <button
+                      type="button"
+                      className={styles.panelRetryButton}
+                      onClick={async () => {
+                        if (panelRetrying) return;
+                        setPanelRetrying(true);
+                        await loadPanel(
+                          lat,
+                          lon,
+                          unit,
+                          selectedGeonameidForPanel,
+                        );
+                        setPanelRetrying(false);
+                      }}
+                    >
+                      {panelRetrying ? "Retrying..." : "Retry"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
-        </div>
+        ) : null}
 
-        {panelTab === "graph" && !panelLoadError ? (
+        {!panelLoading && panelTab === "graph" && !panelLoadError ? (
           <>
             <div
               ref={panelViewportCallbackRef}
@@ -2222,50 +2285,52 @@ export default function ExplorerPage({
           />
         ) : null}
 
-        <div className={styles.panelBottomBar}>
-          {panelTab === "graph" ? (
-            <div className={styles.unitToggle} role="group" aria-label="Unit">
-              <button
-                type="button"
-                className={`${styles.unitOption} ${
-                  unit === "C" ? styles.unitOptionActive : ""
-                }`}
-                aria-pressed={unit === "C"}
-                title="Switch to °F"
-                onClick={() => {
-                  if (unit === "C") return;
-                  setUnit("C");
-                  if (selectedLocation?.geonameid === 0) {
-                    void loadGlobalPanel("C");
-                  } else {
-                    void loadPanel(lat, lon, "C");
-                  }
-                }}
-              >
-                °C
-              </button>
-              <button
-                type="button"
-                className={`${styles.unitOption} ${
-                  unit === "F" ? styles.unitOptionActive : ""
-                }`}
-                aria-pressed={unit === "F"}
-                title="Switch to °C"
-                onClick={() => {
-                  if (unit === "F") return;
-                  setUnit("F");
-                  if (selectedLocation?.geonameid === 0) {
-                    void loadGlobalPanel("F");
-                  } else {
-                    void loadPanel(lat, lon, "F");
-                  }
-                }}
-              >
-                °F
-              </button>
-            </div>
-          ) : null}
-        </div>
+        {!panelLoading ? (
+          <div className={styles.panelBottomBar}>
+            {panelTab === "graph" ? (
+              <div className={styles.unitToggle} role="group" aria-label="Unit">
+                <button
+                  type="button"
+                  className={`${styles.unitOption} ${
+                    unit === "C" ? styles.unitOptionActive : ""
+                  }`}
+                  aria-pressed={unit === "C"}
+                  title="Switch to °F"
+                  onClick={() => {
+                    if (unit === "C") return;
+                    setUnit("C");
+                    if (selectedLocation?.geonameid === 0) {
+                      void loadGlobalPanel("C");
+                    } else {
+                      void loadPanel(lat, lon, "C");
+                    }
+                  }}
+                >
+                  °C
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.unitOption} ${
+                    unit === "F" ? styles.unitOptionActive : ""
+                  }`}
+                  aria-pressed={unit === "F"}
+                  title="Switch to °C"
+                  onClick={() => {
+                    if (unit === "F") return;
+                    setUnit("F");
+                    if (selectedLocation?.geonameid === 0) {
+                      void loadGlobalPanel("F");
+                    } else {
+                      void loadPanel(lat, lon, "F");
+                    }
+                  }}
+                >
+                  °F
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </aside>
 
       <button

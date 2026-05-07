@@ -325,10 +325,12 @@
   padding: 24px;
   transform: translate(110%, -50%);
   opacity: 0;
+  filter: grayscale(0);
   visibility: hidden;
   transition:
     transform 300ms ease,
     opacity 300ms ease,
+    filter 300ms ease,
     visibility 0s linear 300ms;
   overflow: hidden;
   font-family:
@@ -343,11 +345,17 @@
   visibility: visible;
   transition:
     transform 300ms ease,
-    opacity 300ms ease;
+    opacity 300ms ease,
+    filter 300ms ease;
 }
 
 .locationPanelDragging {
   transition: none;
+}
+
+.locationPanel.locationPanelStale {
+  opacity: 0.8;
+  filter: grayscale(1);
 }
 
 .locationPanel:focus,
