@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Precompute global DHW risk-day counts for the coral reef panel.
 

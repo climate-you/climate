@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Exploration: global-max or widespread-fraction DHW approach for coral reef risk days.
 

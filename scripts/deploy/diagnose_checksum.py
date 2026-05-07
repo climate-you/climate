@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 Diagnose a checksum mismatch for a single metric between local dev and prod.
 
@@ -14,6 +14,7 @@ Usage:
     --remote-releases-root /opt/climate/data/releases \\
     --metric t2m_yearly_mean_c
 """
+
 from __future__ import annotations
 
 import argparse

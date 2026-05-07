@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 Publish local dev release data to the production server's artifact store.
 
@@ -32,6 +32,7 @@ Permissions:
   Pass --rsync-chmod "" to disable, or use --remote-chown climate:climate
   to chown after each sync (requires passwordless sudo chown on the remote).
 """
+
 from __future__ import annotations
 
 import argparse

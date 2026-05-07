@@ -5,6 +5,7 @@ Checks that for every metric with a 'rankings' field in metrics.json, the
 corresponding ranking JSON files exist under:
   <series_root>/<grid_id>/<metric_id>/rankings/<aggregation>.json
 """
+
 from __future__ import annotations
 
 import argparse
