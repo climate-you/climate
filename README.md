@@ -12,8 +12,38 @@ A registry-driven climate data platform with:
 
 ## Screenshots
 
-<img src="docs/images/globe_default.png" alt="Global view" height="250" />
-<img src="docs/images/warming_paris.png" alt="Panel view" height="250" />
+<table>
+  <tr>
+    <td align="center">
+      <img src="docs/images/landing_page.webp" alt="Landing Page" height="250" /><br/>
+      <em>Landing Page</em>
+    </td>
+    <td align="center">
+      <img src="docs/images/global_temp.webp" alt="Global Temperature" height="250" /><br/>
+      <em>Global Temperature</em>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="docs/images/local_temp.webp" alt="Local Temperature" height="250" /><br/>
+      <em>Local Temperature</em>
+    </td>
+    <td align="center">
+      <img src="docs/images/local_precipitations.webp" alt="Local Precipitations" height="250" /><br/>
+      <em>Local Precipitations</em>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="docs/images/local_coral.webp" alt="Local Coral" height="250" /><br/>
+      <em>Local Coral</em>
+    </td>
+    <td align="center">
+      <img src="docs/images/alternative_backgrounds.webp" alt="Alternative Backgrounds" height="250" /><br/>
+      <em>Alternative Backgrounds</em>
+    </td>
+  </tr>
+</table>
 
 ## Repository Organization
 
