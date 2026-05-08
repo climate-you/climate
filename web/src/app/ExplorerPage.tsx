@@ -879,11 +879,12 @@ export default function ExplorerPage({
   }, [apiBase]);
 
   useEffect(() => {
+    if (!sessionRelease) return;
     if (globalPrefetchDoneRef.current) return;
     globalPrefetchDoneRef.current = true;
     void loadGlobalPanel(unit, false, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [sessionRelease]);
 
   useEffect(() => {
     setGraphPage((prev) => Math.min(prev, maxGraphPage));
