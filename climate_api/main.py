@@ -561,7 +561,12 @@ def create_app() -> FastAPI:
     ):
         context = release_resolver.resolve_release_context(release)
         if response is not None:
-            response.headers["Cache-Control"] = "public, max-age=3600"
+            if release == context.release:
+                # Pinned release — safe to cache aggressively
+                response.headers["Cache-Control"] = "public, max-age=3600"
+            else:
+                # Alias (e.g. "latest") — don't let proxies cache; browser may revalidate
+                response.headers["Cache-Control"] = "private, max-age=300"
         return build_global_panels(
             tile_store=context.tile_store,
             panels_manifest=context.panels_manifest,
