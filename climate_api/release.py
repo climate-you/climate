@@ -530,7 +530,7 @@ class ReleaseResolver:
                 datasets_path=datasets_path,
             )
             # Attach per_metric_roots and load rankings from artifact dirs
-            _expected = [
+            _expected_rankings = [
                 (_m_id, _agg)
                 for _m_id, _spec in tile_store.metrics.items()
                 for _agg in _spec.get("rankings", [])
@@ -548,14 +548,46 @@ class ReleaseResolver:
                             rankings[(_m_id, _p.stem)] = _cities
                     except Exception:
                         pass
-            _missing = [key for key in _expected if key not in rankings]
+            _missing_rankings = [key for key in _expected_rankings if key not in rankings]
             self._logger.info(
                 "Loaded %d/%d metric ranking(s)%s",
                 len(rankings),
-                len(_expected),
+                len(_expected_rankings),
                 (
-                    f"; missing: {', '.join(f'{m}/{a}' for m, a in _missing)}"
-                    if _missing
+                    f"; missing: {', '.join(f'{m}/{a}' for m, a in _missing_rankings)}"
+                    if _missing_rankings
+                    else ""
+                ),
+            )
+            # Load aggregates from artifact dirs
+            _expected_aggregates = [
+                (_m_id, _agg)
+                for _m_id, _spec in tile_store.metrics.items()
+                for _agg in _spec.get("aggregates", [])
+            ]
+            aggregates: dict[tuple[str, str], dict] = {}
+            for _m_id, _artifact_root in per_metric_roots.items():
+                _agg_dir = _artifact_root / "aggregates"
+                if not _agg_dir.is_dir():
+                    continue
+                for _p in sorted(_agg_dir.glob("*.json")):
+                    try:
+                        _data = json.loads(_p.read_text(encoding="utf-8"))
+                        if _data.get("regions"):
+                            aggregates[(_m_id, _p.stem)] = {
+                                "time_axis": _data.get("time_axis", []),
+                                "regions": _data["regions"],
+                                "mode": _data.get("mode"),
+                            }
+                    except Exception:
+                        pass
+            _missing_aggregates = [key for key in _expected_aggregates if key not in aggregates]
+            self._logger.info(
+                "Loaded %d metric aggregate(s)%s",
+                len(aggregates),
+                (
+                    f"; missing: {', '.join(f'{m}/{a}' for m, a in _missing_aggregates)}"
+                    if _missing_aggregates
                     else ""
                 ),
             )
@@ -567,6 +599,7 @@ class ReleaseResolver:
                 grids=tile_store.grids,
                 per_metric_roots=per_metric_roots,
                 rankings=rankings,
+                aggregates=aggregates,
             )
         else:
             tile_store = TileDataStore.discover(
