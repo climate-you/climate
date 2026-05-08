@@ -259,11 +259,11 @@ type PagedGraphItem = {
 type GlobeBackground = { src: string; accentColor: string };
 
 const GLOBE_BACKGROUNDS: GlobeBackground[] = [
-  { src: "/bg1.webp", accentColor: "#ff0000" },
-  { src: "/bg2.webp", accentColor: "#0000ff" },
-  { src: "/bg3.webp", accentColor: "#0000ff" },
-  { src: "/bg4.webp", accentColor: "#0000ff" },
-  { src: "/bg5.webp", accentColor: "#ff0000" },
+  { src: "/bg/bg1.webp", accentColor: "#ff0000" },
+  { src: "/bg/bg2.webp", accentColor: "#0000ff" },
+  { src: "/bg/bg3.webp", accentColor: "#0000ff" },
+  { src: "/bg/bg4.webp", accentColor: "#0000ff" },
+  { src: "/bg/bg5.webp", accentColor: "#ff0000" },
 ];
 
 function pickGlobeBackground(): GlobeBackground {
@@ -330,7 +330,7 @@ function PanelStepIcon({
         className={`${styles.panelStepIcon} ${active ? styles.panelStepIconActive : ""}`}
       >
         <img
-          src="/coral_icon.png"
+          src="/icons/coral_icon.png"
           alt=""
           aria-hidden="true"
           className={`${styles.panelStepIconImg} ${active ? styles.panelStepIconImgActive : ""}`}
