@@ -7,20 +7,35 @@ import React, {
   useRef,
   useState,
 } from "react";
-import * as echarts from "echarts";
+import dynamic from "next/dynamic";
 import MapLibreGlobe from "@/components/MapLibreGlobe";
 import type {
   MapLayerOption,
   TextureDebugInfo,
 } from "@/components/MapLibreGlobe";
-import AboutOverlay from "@/components/AboutOverlay";
-import GraphCard from "@/components/explorer/GraphCard";
-import InfoBubble from "@/components/explorer/InfoBubble";
-import ColdOpenOverlay from "@/components/explorer/ColdOpenOverlay";
-import SearchOverlay from "@/components/explorer/SearchOverlay";
 import type { AutocompleteItem } from "@/components/explorer/SearchOverlay";
-import SourcesOverlay from "@/components/SourcesOverlay";
-import ChatDrawer from "@/components/chat/ChatDrawer";
+import InfoBubble from "@/components/explorer/InfoBubble";
+
+const AboutOverlay = dynamic(() => import("@/components/AboutOverlay"), {
+  ssr: false,
+});
+const GraphCard = dynamic(() => import("@/components/explorer/GraphCard"), {
+  ssr: false,
+});
+const ColdOpenOverlay = dynamic(
+  () => import("@/components/explorer/ColdOpenOverlay"),
+  { ssr: false },
+);
+const SearchOverlay = dynamic(
+  () => import("@/components/explorer/SearchOverlay"),
+  { ssr: false },
+);
+const SourcesOverlay = dynamic(() => import("@/components/SourcesOverlay"), {
+  ssr: false,
+});
+const ChatDrawer = dynamic(() => import("@/components/chat/ChatDrawer"), {
+  ssr: false,
+});
 import { useChatFeatureFlag } from "@/hooks/explorer/useChatFeatureFlag";
 import { useDebugTextureSync } from "@/hooks/explorer/useDebugTextureSync";
 import { useOverlayRouteSync } from "@/hooks/explorer/useOverlayRouteSync";
@@ -567,7 +582,23 @@ export default function ExplorerPage({
     return spec ?? null;
   }, [activeLayerId, resp?.layer_overrides]);
 
+  const mapIdledRef = useRef(false);
+  const globeBackgroundRef = useRef(globeBackground);
   useEffect(() => {
+    globeBackgroundRef.current = globeBackground;
+  }, [globeBackground]);
+
+  const handleMapIdle = useCallback(() => {
+    mapIdledRef.current = true;
+    const bg = globeBackgroundRef.current;
+    if (!bg || preloadedBackgroundsRef.current.has(bg.src)) return;
+    preloadedBackgroundsRef.current.add(bg.src);
+    const img = new Image();
+    img.src = bg.src;
+  }, []);
+
+  useEffect(() => {
+    if (!mapIdledRef.current) return;
     if (darkBackdropLayerActive) return;
     if (preloadedBackgroundsRef.current.has(globeBackground.src)) return;
     preloadedBackgroundsRef.current.add(globeBackground.src);
@@ -881,7 +912,8 @@ export default function ExplorerPage({
   useEffect(() => {
     if (globalPrefetchDoneRef.current) return;
     globalPrefetchDoneRef.current = true;
-    void loadGlobalPanel(unit, false, false);
+    const id = requestIdleCallback(() => void loadGlobalPanel(unit, false, false));
+    return () => cancelIdleCallback(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -931,13 +963,15 @@ export default function ExplorerPage({
       if (nextPage === graphPage) return false;
       const viewport = panelViewportRef.current;
       if (viewport) {
-        viewport
-          .querySelectorAll<HTMLElement>('[data-echart-canvas="true"]')
-          .forEach((node) => {
-            const chart = echarts.getInstanceByDom(node);
-            if (!chart) return;
-            chart.dispatchAction({ type: "hideTip" });
-          });
+        void import("echarts").then(({ getInstanceByDom }) => {
+          viewport
+            .querySelectorAll<HTMLElement>('[data-echart-canvas="true"]')
+            .forEach((node) => {
+              const chart = getInstanceByDom(node);
+              if (!chart) return;
+              chart.dispatchAction({ type: "hideTip" });
+            });
+        });
       }
       setGraphPage(nextPage);
       return true;
@@ -950,13 +984,15 @@ export default function ExplorerPage({
       if (clamped === graphPage) return false;
       const viewport = panelViewportRef.current;
       if (viewport) {
-        viewport
-          .querySelectorAll<HTMLElement>('[data-echart-canvas="true"]')
-          .forEach((node) => {
-            const chart = echarts.getInstanceByDom(node);
-            if (!chart) return;
-            chart.dispatchAction({ type: "hideTip" });
-          });
+        void import("echarts").then(({ getInstanceByDom }) => {
+          viewport
+            .querySelectorAll<HTMLElement>('[data-echart-canvas="true"]')
+            .forEach((node) => {
+              const chart = getInstanceByDom(node);
+              if (!chart) return;
+              chart.dispatchAction({ type: "hideTip" });
+            });
+        });
       }
       setGraphPage(clamped);
       return true;
@@ -1624,6 +1660,7 @@ export default function ExplorerPage({
               setPanelOpen(true);
             }
           }}
+          onMapIdle={handleMapIdle}
         />
         {activeLayerLegend ? (
           <aside

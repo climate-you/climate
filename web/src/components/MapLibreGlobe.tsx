@@ -98,6 +98,7 @@ type Props = {
   onGraphOpen?: () => void;
   onChatOpen?: () => void;
   chatEnabled?: boolean;
+  onMapIdle?: () => void;
 };
 
 const initialView = {
@@ -397,6 +398,7 @@ export default function MapLibreGlobe({
   onGraphOpen,
   onChatOpen,
   chatEnabled = false,
+  onMapIdle,
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -424,6 +426,7 @@ export default function MapLibreGlobe({
   const backgroundImageUrlRef = useRef(backgroundImageUrl);
   const onGraphOpenRef = useRef(onGraphOpen);
   const onChatOpenRef = useRef(onChatOpen);
+  const onMapIdleRef = useRef(onMapIdle);
   const applyGlobeBackgroundRef = useRef<(() => void) | null>(null);
   const maxTextureSizeRef = useRef<number | null>(null);
   const textureBackdropRef = useRef<string>(BACKDROP_WHITE);
@@ -516,6 +519,10 @@ export default function MapLibreGlobe({
   useEffect(() => {
     onChatOpenRef.current = onChatOpen;
   }, [onChatOpen]);
+
+  useEffect(() => {
+    onMapIdleRef.current = onMapIdle;
+  }, [onMapIdle]);
 
   useEffect(() => {
     textureBackdropRef.current = textureBackdrop;
@@ -1192,11 +1199,17 @@ export default function MapLibreGlobe({
       homeFlyingRef.current = false;
     };
     map.on("moveend", onMoveEnd);
+    const onIdle = () => {
+      onMapIdleRef.current?.();
+      map.off("idle", onIdle);
+    };
+    map.on("idle", onIdle);
 
     return () => {
       window.removeEventListener("resize", onResize);
       map.off("click", onMapClick);
       map.off("moveend", onMoveEnd);
+      map.off("idle", onIdle);
       markerRef.current?.remove();
       markerRef.current = null;
       layerControlRef.current = null;
