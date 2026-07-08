@@ -1655,12 +1655,10 @@ export default function ExplorerPage({
                 onClick={() => {
                   const nextUnit: "C" | "F" = unit === "C" ? "F" : "C";
                   setUnit(nextUnit);
-                  if (panelOpen) {
-                    if (selectedLocation?.geonameid === 0) {
-                      void loadGlobalPanel(nextUnit);
-                    } else if (selectedLocation !== null) {
-                      void loadPanel(lat, lon, nextUnit);
-                    }
+                  if (selectedLocation?.geonameid === 0) {
+                    void loadGlobalPanel(nextUnit, false, panelOpen);
+                  } else if (selectedLocation !== null) {
+                    void loadPanel(lat, lon, nextUnit);
                   }
                 }}
               >
