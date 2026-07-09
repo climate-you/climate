@@ -17,10 +17,10 @@ All variables go in `/etc/climate/backend.env` (production) or your local shell 
 | Variable | Default | Description |
 |---|---|---|
 | `CHAT_ENABLED` | `0` | Set to `1` to activate the `/api/chat` endpoint |
-| `CHAT_DEV_MODE` | `1` (safe) | `1` = dev/8b chain; `0` = prod/70b chain. **Always set to `0` in production.** |
+| `CHAT_DEV_MODE` | `1` (safe) | `1` = dev/8b chain; `0` = prod/primary chain. **Always set to `0` in production.** |
 | `GROQ_API_KEY_FREE` | — | Groq free-tier API key. Required in both dev and prod chains. Also accepted as `GROQ_API_KEY` for backward compatibility. |
 | `GROQ_API_KEY_PAID` | — | Groq paid API key. Optional; only used in prod chain as Tier 2. |
-| `GROQ_MODEL_PRIMARY` | `llama-3.3-70b-versatile` | 70b model used in prod chain Tiers 1 and 2. |
+| `GROQ_MODEL_PRIMARY` | `openai/gpt-oss-120b` | Primary model used in prod chain Tiers 1 and 2. |
 | `GROQ_MODEL_FALLBACK` | `llama-3.1-8b-instant` | 8b model used as Tier 3 in prod chain and Tier 1 in dev chain. |
 | `OLLAMA_BASE_URL` | `` (disabled) | Base URL of a local Ollama instance (e.g. `http://localhost:11434`). Dev chain only. |
 | `OLLAMA_MODEL` | `qwen2.5:14b` | Model to use via Ollama. Dev chain only. |
@@ -34,8 +34,8 @@ All variables go in `/etc/climate/backend.env` (production) or your local shell 
 
 | Tier | Model | Key used | Condition |
 |---|---|---|---|
-| 1 | `llama-3.3-70b-versatile` | Free | Default |
-| 2 | `llama-3.3-70b-versatile` | Paid | Tier 1 hits daily token quota (TPD) |
+| 1 | `openai/gpt-oss-120b` | Free | Default |
+| 2 | `openai/gpt-oss-120b` | Paid | Tier 1 hits daily token quota (TPD) |
 | 3 | `llama-3.1-8b-instant` | Free | Tier 2 also exhausted; shows degraded-model disclaimer to user |
 | — | Static message | — | All tiers exhausted |
 
@@ -50,7 +50,7 @@ When the 8b fallback (Tier 3) is used, the frontend displays an amber notice abo
 | 2 | `qwen2.5:14b` (Ollama) | — | 8b quota exhausted (only if `OLLAMA_BASE_URL` is set) |
 | — | Static message | — | All tiers exhausted |
 
-The paid key is never used in dev mode. The 70b free allowance is preserved for production.
+The paid key is never used in dev mode. The primary model's free allowance is preserved for production.
 
 ---
 
@@ -95,7 +95,7 @@ export OLLAMA_BASE_URL=http://localhost:11434
 
 Ollama starts automatically as a background service on macOS after installation; `ollama serve` is only needed if it isn't already running. Verify with `curl http://localhost:11434/api/tags`.
 
-To test the production chain locally (uses 70b, burns free quota):
+To test the production chain locally (uses the primary model, burns free quota):
 
 ```bash
 export CHAT_DEV_MODE=0
@@ -179,7 +179,7 @@ After wiping, restart the backend — it will recreate all tables with the curre
 - In dev: wait for the quota to reset (resets at midnight UTC)
 
 **Answers are slow or wrong (8b fallback in prod)**
-- The free 70b quota is exhausted and the paid key isn't set
+- The primary model's free quota is exhausted and the paid key isn't set
 - Add `GROQ_API_KEY_PAID` or wait for the daily reset
 - The amber notice in the UI will tell users accuracy may be lower
 

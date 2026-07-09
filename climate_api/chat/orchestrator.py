@@ -47,7 +47,7 @@ from climate_api.chat import tools as _tools
 class ProviderTier:
     """One entry in the fallback chain."""
 
-    name: str  # e.g. "groq_70b_free", "groq_8b", "local"
+    name: str  # e.g. "groq_primary_free", "groq_8b", "local"
     client: Any  # groq.Groq or openai.OpenAI instance
     model: str
     is_degraded: bool = False  # True → emit disclaimer notice before answer

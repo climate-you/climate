@@ -21,7 +21,7 @@ type MapContext = {
   label: string;
   countryCode?: string | null;
 } | null;
-type ModelOverride = "groq_8b" | "local" | "groq_70b" | "groq_scout" | null;
+type ModelOverride = "groq_8b" | "local" | "groq_primary" | "groq_scout" | null;
 type ConversationTurn = { role: "user" | "assistant"; text: string };
 
 const MAX_HISTORY_TURNS = 3;
@@ -281,7 +281,7 @@ export default function ChatDrawer({
     } else if (
       stored === "groq_8b" ||
       stored === "local" ||
-      stored === "groq_70b" ||
+      stored === "groq_primary" ||
       stored === "groq_scout"
     ) {
       setModelOverride(stored);
@@ -777,7 +777,7 @@ export default function ChatDrawer({
           <option value="groq_8b">groq · llama 8b</option>
           <option value="local">local</option>
           <option disabled>──────────</option>
-          <option value="groq_70b">groq · llama 70b</option>
+          <option value="groq_primary">groq · gpt-oss 120b</option>
           <option value="groq_scout">groq · llama 4 scout</option>
         </select>
       )}

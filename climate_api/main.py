@@ -125,9 +125,9 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
       Tier 3 — Budget exhausted message (implicit, no tier object)
 
     Prod mode (default):
-      Tier 1 — Groq 70b free   (GROQ_API_KEY_FREE)
-      Tier 2 — Groq 70b paid   (GROQ_API_KEY_PAID, if set)
-      Tier 3 — Groq 8b free    (GROQ_API_KEY_FREE, degraded-model notice shown)
+      Tier 1 — Groq primary free   (GROQ_API_KEY_FREE)
+      Tier 2 — Groq primary paid   (GROQ_API_KEY_PAID, if set)
+      Tier 3 — Groq 8b free        (GROQ_API_KEY_FREE, degraded-model notice shown)
       Tier 4 — Budget exhausted message (implicit, no tier object)
     """
     from groq import Groq
@@ -168,7 +168,7 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
         if settings.groq_api_key_free:
             tiers.append(
                 ProviderTier(
-                    name="groq_70b",
+                    name="groq_primary",
                     client=Groq(api_key=settings.groq_api_key_free),
                     model=settings.groq_model_primary,
                     is_degraded=False,
@@ -185,11 +185,11 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
                 )
             )
     else:
-        # Prod: 70b free → 70b paid → 8b free (degraded)
+        # Prod: primary free → primary paid → 8b free (degraded)
         if settings.groq_api_key_free:
             tiers.append(
                 ProviderTier(
-                    name="groq_70b_free",
+                    name="groq_primary_free",
                     client=Groq(api_key=settings.groq_api_key_free),
                     model=settings.groq_model_primary,
                     is_degraded=False,
@@ -199,7 +199,7 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
         if settings.groq_api_key_paid:
             tiers.append(
                 ProviderTier(
-                    name="groq_70b_paid",
+                    name="groq_primary_paid",
                     client=Groq(api_key=settings.groq_api_key_paid),
                     model=settings.groq_model_primary,
                     is_degraded=False,
