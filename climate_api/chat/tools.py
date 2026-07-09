@@ -855,8 +855,8 @@ def get_region_metric_series(
         filtered = [
             (y, v)
             for y, v in zip(time_axis, values)
-            if (start_year is None or int(y) >= start_year)
-            and (end_year is None or int(y) <= end_year)
+            if (start_year is None or int(str(y)[:4]) >= start_year)
+            and (end_year is None or int(str(y)[:4]) <= end_year)
         ]
         if filtered:
             time_axis, values = zip(*filtered)

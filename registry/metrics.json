@@ -188,7 +188,9 @@
     "missing": "nan",
     "domain": "global",
     "time_axis": "monthly",
-    "llm_hidden": true,
+    "llm_note": "Highest daily-maximum temperature recorded in each month. Use for heat extremes, records, and heatwave questions.",
+    "rankings": ["mean", "max"],
+    "aggregates": ["mean", "max"],
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_t2m_max",
@@ -215,7 +217,9 @@
     "missing": "nan",
     "domain": "global",
     "time_axis": "monthly",
-    "llm_hidden": true,
+    "llm_note": "Lowest daily-minimum temperature recorded in each month. Use for cold extremes, records, and frost questions.",
+    "rankings": ["mean", "min"],
+    "aggregates": ["mean", "min"],
     "source": {
       "type": "cds",
       "dataset_ref": "era5_daily_t2m_min",
