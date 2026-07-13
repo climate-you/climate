@@ -7,7 +7,6 @@ import {
   CHAT_FOLLOWUP_CHIP_CAP,
   CHAT_MODEL_OVERRIDE_KEY,
   CHAT_QUESTIONS_API_PATH,
-  CHAT_ROOT_CHIP_CAP,
 } from "@/lib/explorer/constants";
 import ChatChart, { type ChatChartPayload } from "./ChatChart";
 
@@ -22,7 +21,12 @@ type MapContext = {
   countryCode?: string | null;
 } | null;
 type ModelOverride = "groq_8b" | "local" | "groq_primary" | "groq_scout" | null;
-type ConversationTurn = { role: "user" | "assistant"; text: string };
+type ConversationTurn = {
+  role: "user" | "assistant";
+  text: string;
+  // "canned" covers canned and templated answers; "llm" is a real model answer.
+  source?: "llm" | "canned";
+};
 
 const MAX_HISTORY_TURNS = 3;
 
@@ -73,6 +77,8 @@ interface QuestionTree {
 type ChatDrawerProps = {
   apiBase: string;
   mapContext: MapContext;
+  /** Whether the selected location has sea-surface data (gates coastal questions) */
+  hasSeaData?: boolean;
   unit?: "C" | "F";
   devMode?: boolean;
   debugMode?: boolean;
@@ -228,6 +234,7 @@ function describeToolCall(name: string, args: Record<string, unknown>): string {
 export default function ChatDrawer({
   apiBase,
   mapContext,
+  hasSeaData = false,
   unit = "C",
   devMode = false,
   debugMode = false,
@@ -252,7 +259,10 @@ export default function ChatDrawer({
   const [questionTree, setQuestionTree] = useState<QuestionTree | null>(null);
   const [chatUnavailable, setChatUnavailable] = useState(false);
   const [currentFollowUpIds, setCurrentFollowUpIds] = useState<string[]>([]);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [askedQuestionIds, setAskedQuestionIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastAnsweredQuestionIdRef = useRef<string | null>(null);
@@ -288,8 +298,32 @@ export default function ChatDrawer({
     }
   }, [devMode]);
 
+  // Asked-question keys are kept in memory only: they survive the
+  // "New conversation" reset but restore when the page is reloaded.
+  // Location questions are keyed per location (id@lat,lon) so they reappear
+  // when a different location is selected.
+  function askedKeyFor(node: QuestionMeta): string {
+    return node.requires_location && mapContext
+      ? `${node.id}@${mapContext.lat},${mapContext.lon}`
+      : node.id;
+  }
+
+  function markQuestionAsked(id: string) {
+    const node = questionTree?.questions[id];
+    const key = node ? askedKeyFor(node) : id;
+    setAskedQuestionIds((prev) => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  }
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Scroll only the messages pane — scrollIntoView would also scroll the
+    // document itself, shifting the whole page in the mobile layout.
+    const el = messagesRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
   useEffect(() => {
@@ -351,6 +385,7 @@ export default function ChatDrawer({
       return;
     }
     const parentQuestionId = lastAnsweredQuestionIdRef.current;
+    if (questionId) markQuestionAsked(questionId);
     setInput("");
     setLoading(true);
     setCurrentFollowUpIds([]);
@@ -370,14 +405,26 @@ export default function ChatDrawer({
     let answered = false;
     let errorReceived = false;
     let finalAnswerText = "";
+    let answerTier: string | null = null;
 
     try {
       await streamChatRequest(
         apiBase,
         {
           question,
-          history:
-            conversationHistory.length > 0 ? conversationHistory : undefined,
+          // Canned/templated answers are only sent as context when they are
+          // the immediately preceding exchange; older ones are dropped to
+          // keep the LLM request small.
+          history: (() => {
+            const filtered = conversationHistory
+              .filter(
+                (t, i) =>
+                  t.source !== "canned" ||
+                  i >= conversationHistory.length - 2,
+              )
+              .map(({ role, text }) => ({ role, text }));
+            return filtered.length > 0 ? filtered : undefined;
+          })(),
           map_context: mapContext,
           session_id: conversationId,
           message_id: messageId,
@@ -524,6 +571,7 @@ export default function ChatDrawer({
               }
             }
             const tier = event.tier as string | null;
+            answerTier = tier;
             const isExhausted = tier === null && !event.error;
             if (isExhausted) {
               setConversationExhausted(true);
@@ -581,11 +629,15 @@ export default function ChatDrawer({
           ),
         );
       } else if (finalAnswerText) {
+        const source: "llm" | "canned" =
+          answerTier === "canned" || answerTier === "templated"
+            ? "canned"
+            : "llm";
         setConversationHistory((prev) => {
           const updated: ConversationTurn[] = [
             ...prev,
-            { role: "user", text: question },
-            { role: "assistant", text: finalAnswerText },
+            { role: "user", text: question, source },
+            { role: "assistant", text: finalAnswerText, source },
           ];
           return updated.slice(-(MAX_HISTORY_TURNS * 2));
         });
@@ -665,23 +717,34 @@ export default function ChatDrawer({
   function passesLocationFilter(node: QuestionMeta): boolean {
     if (node.requires_location && !mapContext) return false;
     if (node.location_filter === "tropical_coastal") {
-      if (!mapContext || Math.abs(mapContext.lat) > 35) return false;
+      if (!mapContext || !hasSeaData || Math.abs(mapContext.lat) > 35)
+        return false;
     }
-    if (node.location_filter === "coastal" && !mapContext) return false;
+    if (node.location_filter === "coastal" && (!mapContext || !hasSeaData))
+      return false;
     return true;
   }
 
-  // Root chips: filtered + capped, grouped by scope
+  // Root chips: filtered, grouped by scope
   const rootNodes = React.useMemo((): QuestionMeta[] => {
     if (!questionTree) return [];
     return questionTree.root_ids
       .map((id) => questionTree.questions[id])
       .filter(
-        (node): node is QuestionMeta => !!node && passesLocationFilter(node),
-      )
-      .slice(0, CHAT_ROOT_CHIP_CAP);
+        (node): node is QuestionMeta =>
+          !!node &&
+          passesLocationFilter(node) &&
+          !askedQuestionIds.has(askedKeyFor(node)),
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionTree, conversationId, mapContext?.label, mapContext?.lat]);
+  }, [
+    questionTree,
+    conversationId,
+    mapContext?.label,
+    mapContext?.lat,
+    hasSeaData,
+    askedQuestionIds,
+  ]);
 
   const groupedQuestions = React.useMemo(() => {
     const scopeOrder: QuestionScope[] = ["local", "global", "country", "city"];
@@ -695,17 +758,52 @@ export default function ChatDrawer({
       .map((scope) => ({ scope, questions: map[scope]! }));
   }, [rootNodes]);
 
-  // Follow-up chips: filtered + capped
+  // Follow-up chips: the slots are topped up in three tiers so questions are
+  // not orphaned when their parent has already been asked, while staying on
+  // the current topic for as long as possible:
+  //   1. unasked follow-ups of the question just answered,
+  //   2. unasked follow-ups of questions selected earlier this session
+  //      (most recently selected first),
+  //   3. unasked root questions.
   const visibleFollowUpNodes = React.useMemo((): QuestionMeta[] => {
     if (!questionTree || currentFollowUpIds.length === 0) return [];
-    return currentFollowUpIds
-      .map((id) => questionTree.questions[id])
-      .filter(
-        (node): node is QuestionMeta => !!node && passesLocationFilter(node),
-      )
-      .slice(0, CHAT_FOLLOWUP_CHIP_CAP);
+    const picked: QuestionMeta[] = [];
+    const seen = new Set<string>();
+    const addFrom = (ids: string[]) => {
+      for (const id of ids) {
+        if (picked.length >= CHAT_FOLLOWUP_CHIP_CAP) return;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const node = questionTree.questions[id];
+        if (
+          node &&
+          passesLocationFilter(node) &&
+          !askedQuestionIds.has(askedKeyFor(node))
+        ) {
+          picked.push(node);
+        }
+      }
+    };
+    addFrom(currentFollowUpIds);
+    // Set preserves insertion order; reverse for most-recently-selected first.
+    // Keys of location questions carry an @lat,lon suffix — strip it.
+    const previousFollowUps: string[] = [];
+    for (const askedKey of [...askedQuestionIds].reverse()) {
+      const node = questionTree.questions[askedKey.split("@")[0]];
+      if (node) previousFollowUps.push(...node.follow_up_ids);
+    }
+    addFrom(previousFollowUps);
+    addFrom(questionTree.root_ids);
+    return picked;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionTree, currentFollowUpIds, mapContext?.label, mapContext?.lat]);
+  }, [
+    questionTree,
+    currentFollowUpIds,
+    mapContext?.label,
+    mapContext?.lat,
+    hasSeaData,
+    askedQuestionIds,
+  ]);
 
   // ---------------------------------------------------------------------------
   // Dataset icon
@@ -804,16 +902,21 @@ export default function ChatDrawer({
   const isEmpty = messages.length === 0;
 
   const messagesArea = (
-    <div className={styles.messages}>
+    <div className={styles.messages} ref={messagesRef}>
       {isEmpty && (
         <div className={styles.emptyState}>
           {chatUnavailable ? (
             <p className={styles.emptyStateError}>
               Research terminal not running.
             </p>
-          ) : (
+          ) : groupedQuestions.length > 0 || !questionTree ? (
             <p className={styles.emptyStateHint}>
               Ask a question about climate data, or try one of these:
+            </p>
+          ) : (
+            <p className={styles.emptyStateHint}>
+              You&apos;ve explored all the suggested questions — ask anything
+              about climate data in your own words.
             </p>
           )}
           {!chatUnavailable &&
@@ -1012,9 +1115,13 @@ export default function ChatDrawer({
       ))}
 
       {/* Follow-up chips — shown after the last answer while not loading */}
-      {!isEmpty && !loading && visibleFollowUpNodes.length > 0 && (
+      {!isEmpty && !loading && currentFollowUpIds.length > 0 && (
         <div className={styles.followUpRow}>
-          <div className={styles.followUpLabel}>Continue exploring</div>
+          <div className={styles.followUpLabel}>
+            {visibleFollowUpNodes.length > 0
+              ? "Continue exploring"
+              : "You've explored all the suggested questions — ask anything in your own words."}
+          </div>
           <div className={styles.chips}>
             {visibleFollowUpNodes.map((node) => {
               const text = resolveChipText(node);
@@ -1034,7 +1141,6 @@ export default function ChatDrawer({
         </div>
       )}
 
-      <div ref={messagesEndRef} />
     </div>
   );
 

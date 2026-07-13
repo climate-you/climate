@@ -638,6 +638,15 @@ export default function ExplorerPage({
   const pageStart = graphPage * graphsPerPage;
   const visibleGraphs = pagedGraphs.slice(pageStart, pageStart + graphsPerPage);
 
+  // Whether the selected location has sea-surface data (finite local SST
+  // headline). Gates coastal questions in the chat.
+  const hasSeaData = useMemo(() => {
+    const h = (resp?.headlines ?? []).find(
+      (hd) => hd.key === "sst_recent_local",
+    );
+    return typeof h?.value === "number" && Number.isFinite(h.value);
+  }, [resp]);
+
   const panelHeadline = useMemo(() => {
     if (!resp) return null;
     const headlines = resp.headlines ?? [];
@@ -2260,7 +2269,7 @@ export default function ExplorerPage({
             embeddedVisible={panelTab === "chat"}
             apiBase={apiBase}
             mapContext={
-              selectedLocation
+              selectedLocation && selectedLocation.geonameid !== 0
                 ? {
                     lat,
                     lon,
@@ -2269,6 +2278,7 @@ export default function ExplorerPage({
                   }
                 : null
             }
+            hasSeaData={hasSeaData}
             unit={unit}
             devMode={debugMode}
             debugMode={debugMode}
