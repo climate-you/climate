@@ -804,7 +804,10 @@ def get_region_metric_series(
     spec = tile_store.metrics.get(metric_id)
     if spec is None:
         return {"error": f"Unknown metric_id: '{metric_id}'."}
-    if aggregation not in ("mean", "min", "max"):
+    if aggregation not in ("mean", "min", "max") and (
+        metric_id,
+        aggregation,
+    ) not in tile_store.aggregates:
         return {
             "error": f"Unknown aggregation: '{aggregation}'. Use: mean, min, or max."
         }
@@ -878,7 +881,7 @@ def get_region_metric_series(
             for v in values
         ]
 
-    region_name = region_info["name"]
+    region_name = region_info.get("name", resolved)
     return {
         "region_id": resolved,
         "region_name": region_name,
@@ -888,6 +891,6 @@ def get_region_metric_series(
         "metric_id": metric_id,
         "aggregation": aggregation,
         "unit": out_unit,
-        "cell_count": region_info["cell_count"],
+        "cell_count": region_info.get("cell_count"),
         "data": [{"year": y, "value": v} for y, v in zip(time_axis, values)],
     }

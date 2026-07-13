@@ -58,6 +58,28 @@ def build_canned_charts(
     from climate_api.chat import tools as _tools
     from climate_api.chat.orchestrator import _build_chart_payloads
 
+    # Multi-metric form: "series" is a list of region chart specs, one per metric
+    # (e.g. air vs sea surface temperature on the globe). Each entry produces its
+    # own chart via the regular grouping in _build_chart_payloads.
+    sub_specs = chart_spec.get("series")
+    if sub_specs:
+        series_results = []
+        for sub in sub_specs:
+            for region_id in sub.get("region_ids", []):
+                result = _tools.get_region_metric_series(
+                    region_id=region_id,
+                    metric_id=sub["metric_id"],
+                    aggregation=sub.get("aggregation", "mean"),
+                    tile_store=tile_store,
+                    start_year=sub.get("start_year"),
+                    end_year=sub.get("end_year"),
+                    temperature_unit=temperature_unit,
+                )
+                if "error" in result or "data" not in result:
+                    continue
+                series_results.append(result)
+        return _build_chart_payloads(series_results, tile_store)
+
     metric_id = chart_spec.get("metric_id")
     if not metric_id:
         return []
@@ -148,6 +170,7 @@ def stream_canned(
     follow_up_ids: list[str] | None = None,
     delay_s: float = 1.5,
     temperature_unit: str = "C",
+    tier: str = "canned",
 ):
     """
     Yield SSE event dicts that mimic a real orchestrator response.
@@ -170,7 +193,7 @@ def stream_canned(
         "session_id": None,
         "step_count": 0,
         "tools_called": [],
-        "tier": "canned",
+        "tier": tier,
         "model": None,
         "rejected_tiers": [],
         "model_override": None,

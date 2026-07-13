@@ -38,6 +38,7 @@ from .services.panels import (
     build_scored_panels_tiles_registry,
 )
 from .chat.orchestrator import ChatOrchestrator, ProviderTier
+from .chat.templated import generate as _templated_generate
 from .chat.canned import (
     lookup as _canned_lookup,
     stream_canned as _stream_canned,
@@ -775,6 +776,16 @@ def create_app() -> FastAPI:
             error_text: str | None = None
 
             canned = _canned_lookup(body.question) if not body.model_override else None
+            templated = None
+            if canned is None and not body.model_override and body.question_id and map_ctx:
+                templated = _templated_generate(
+                    question_id=body.question_id,
+                    lat=map_ctx["lat"],
+                    lon=map_ctx["lon"],
+                    label=map_ctx["label"],
+                    tile_store=chat_orchestrator.tile_store,
+                    temperature_unit=body.temperature_unit,
+                )
             if canned is not None:
                 canned_answer, canned_locs, canned_chart_spec, canned_follow_up_ids = (
                     canned
@@ -795,6 +806,15 @@ def create_app() -> FastAPI:
                     charts=canned_charts,
                     follow_up_ids=canned_follow_up_ids,
                     temperature_unit=body.temperature_unit,
+                )
+            elif templated is not None:
+                event_source = _stream_canned(
+                    templated["answer"],
+                    templated["locations"],
+                    charts=templated["charts"],
+                    follow_up_ids=templated["follow_up_ids"],
+                    temperature_unit=body.temperature_unit,
+                    tier="templated",
                 )
             else:
                 event_source = chat_orchestrator.run(

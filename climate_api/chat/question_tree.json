@@ -1,13 +1,24 @@
 {
-  "version": "2026-04-25",
+  "version": "2026-07-09",
   "root_ids": [
+    "local_temp_trend",
+    "local_summer_heat",
+    "local_night_cold",
+    "rainfall_local",
+    "local_winters",
+    "sea_temp_local",
     "global_temp_change",
     "fastest_warming_continent",
+    "hot_days_global",
     "sea_temp_global",
+    "sea_temp_all_oceans",
     "coral_risk_global",
     "hottest_capital",
+    "coldest_capital",
+    "hottest_recorded_capital",
+    "wettest_capital",
     "least_rain_capital",
-    "local_temp_trend"
+    "fastest_warming_city"
   ],
   "nodes": {
     "global_temp_change": {
@@ -18,7 +29,7 @@
       "follow_up_ids": ["fastest_warming_continent", "sea_temp_increase", "fastest_warming_city", "hot_days_global", "country_warming_most", "local_vs_global"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "Global mean temperature has been increasing steadily, rising from [[13.9°C|57.0°F]] in 1979 to [[15.0°C|59.0°F]] in 2025 — an increase of [[1.1°C|2.0°F]] over 46 years.",
+      "answer": "Global mean temperature has been increasing steadily, rising from [[13.9°C|57.0°F]] in 1979 to [[15.0°C|59.0°F]] in 2025 — an increase of [[1.1°C|2.0°F]] over 46 years. The warmest year in the record is **2024**, at [[15.1°C|59.2°F]]. Most of this warming has occurred since the 1990s, and each of the last ten years ranks among the warmest on record.",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_yearly_mean_c",
@@ -36,7 +47,7 @@
       "follow_up_ids": ["country_warming_most", "europe_vs_asia", "arctic_amplification", "slowest_warming_continent", "country_in_europe_warming", "local_vs_global"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "The continent that is warming the fastest is **Europe**, with a warming trend of **[[0.51°C|0.92°F]] per decade**.",
+      "answer": "The continent that is warming the fastest is **Europe**, with a warming trend of **[[0.51°C|0.92°F]] per decade** — well ahead of North America ([[0.39°C|0.70°F]]) and Asia ([[0.36°C|0.65°F]]). Europe's proximity to the rapidly warming Arctic and shrinking snow cover both contribute to its accelerated warming.",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_trend_1979_2025_c_per_decade",
@@ -52,7 +63,7 @@
       "follow_up_ids": ["sea_temp_indian", "sea_temp_all_oceans", "sea_vs_land_warming", "coral_risk_global", "sea_temp_local"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "TODO: Write canned answer — global SST has been rising since 1982, with the trend accelerating in recent decades.",
+      "answer": "Global sea surface temperature has risen from about [[17.9°C|64.2°F]] in 1982 to [[18.7°C|65.7°F]] in 2025 — a warming trend of **[[0.17°C|0.31°F]] per decade**, and the pace has accelerated in recent decades. Because the oceans absorb over 90% of the excess heat trapped by greenhouse gases, even this apparently modest rise represents an enormous amount of stored energy.",
       "locations": [],
       "chart_spec": {
         "metric_id": "sst_yearly_mean_c",
@@ -70,10 +81,13 @@
       "follow_up_ids": ["sea_temp_global", "sea_temp_all_oceans", "coral_risk_local"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "TODO: Write canned answer — severe coral bleaching risk days per year have increased significantly since the 1990s due to sustained ocean warming.",
+      "answer": "Ocean warming has dramatically increased the heat stress on coral reefs. In the late 1980s there was rarely a single day in the year when more than 5% of the world's reef areas faced severe bleaching risk; in 2024 that was the case on **344 days**. Sustained heat stress causes corals to expel the symbiotic algae they depend on — repeated or prolonged bleaching can kill entire reef systems.",
       "locations": [],
       "chart_spec": {
         "metric_id": "dhw_severe_risk_days_per_year",
+        "aggregation": "fraction_5pct",
+        "start_year": 1985,
+        "end_year": 2025,
         "region_ids": ["globe"]
       },
       "status": "active"
@@ -83,12 +97,77 @@
       "question": "What is the hottest capital city in the world?",
       "scope": "city",
       "datasets": ["temperature"],
-      "follow_up_ids": ["top5_warmest_cities", "coldest_major_city", "fastest_warming_city", "local_rank"],
+      "follow_up_ids": ["top5_warmest_cities", "coldest_capital", "hottest_recorded_capital", "local_rank"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "The hottest capital city in the world is **Khartoum, Sudan**, with a mean annual temperature of **[[29.6°C|85.3°F]]**.",
+      "answer": "The hottest capital city in the world is **Khartoum, Sudan**, with a mean annual temperature of **[[29.6°C|85.3°F]]**. Khartoum sits where the Blue and White Nile meet, on the edge of the Sahara — and it is getting hotter, warming at [[0.33°C|0.59°F]] per decade since 1979.",
       "locations": [{"label": "Khartoum", "lat": 15.55, "lon": 32.53}],
       "chart_spec": {"metric_id": "t2m_yearly_mean_c"},
+      "status": "active"
+    },
+    "coldest_capital": {
+      "id": "coldest_capital",
+      "question": "What is the coldest capital city in the world?",
+      "scope": "city",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["coldest_nights_capital", "coldest_recorded_city", "hottest_capital", "coldest_major_city"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "The coldest national capital is **Ulaanbaatar, Mongolia**, with a mean annual temperature of just **[[-1.6°C|29.1°F]]** — its high altitude and deep continental location make its winters brutally cold. Among territorial capitals, **Nuuk, Greenland** ([[-3.2°C|26.2°F]]) and **Longyearbyen, Svalbard** ([[-6.3°C|20.7°F]]) are colder still. Even here the climate is changing: Ulaanbaatar has warmed at [[0.38°C|0.68°F]] per decade since 1979.",
+      "locations": [{"label": "Ulaanbaatar", "lat": 47.91, "lon": 106.88}],
+      "chart_spec": {"metric_id": "t2m_yearly_mean_c"},
+      "status": "active"
+    },
+    "hottest_recorded_capital": {
+      "id": "hottest_recorded_capital",
+      "question": "Which capital city has recorded the highest temperature?",
+      "scope": "city",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["coldest_recorded_city", "hottest_capital", "hot_days_global", "local_summer_heat"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "**Baghdad, Iraq** holds the record among capital cities, reaching **[[52.2°C|126.0°F]]** in August 2003. **Riyadh, Saudi Arabia** ([[46.9°C|116.4°F]]) and **Cairo, Egypt** ([[46.3°C|115.3°F]]) follow. The chart shows how Baghdad's hottest days have trended over time.",
+      "locations": [{"label": "Baghdad", "lat": 33.34, "lon": 44.40}],
+      "chart_spec": {"metric_id": "t2m_monthly_max_c", "aggregate_by_year": true, "show_trend": true},
+      "status": "active"
+    },
+    "coldest_recorded_city": {
+      "id": "coldest_recorded_city",
+      "question": "Which major city has recorded the lowest temperature?",
+      "scope": "city",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["coldest_nights_capital", "coldest_capital", "arctic_amplification", "local_night_cold"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "**Yakutsk, Russia** — the coldest major city on Earth — recorded **[[-58.7°C|-73.7°F]]** in January 1982. Built on continuous permafrost in eastern Siberia, Yakutsk regularly sees winter temperatures below [[-40°C|-40°F]]. Siberia is also one of the fastest-warming regions in the world, and its extreme cold snaps are becoming less severe.",
+      "locations": [{"label": "Yakutsk", "lat": 62.03, "lon": 129.72}],
+      "chart_spec": {"metric_id": "t2m_monthly_min_c", "aggregate_by_year": true, "show_trend": true},
+      "status": "active"
+    },
+    "coldest_nights_capital": {
+      "id": "coldest_nights_capital",
+      "question": "Which capital city has the coldest nights?",
+      "scope": "city",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["coldest_recorded_city", "coldest_capital", "local_night_cold"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "Among national capitals, **Ulaanbaatar, Mongolia** has the coldest nights: averaged across the year, its monthly low is **[[-15.1°C|4.8°F]]**. The territorial capitals **Longyearbyen, Svalbard** ([[-15.7°C|3.7°F]]) and **Nuuk, Greenland** ([[-10.7°C|12.7°F]]) experience similarly frigid nights.",
+      "locations": [{"label": "Ulaanbaatar", "lat": 47.91, "lon": 106.88}],
+      "chart_spec": {"metric_id": "t2m_monthly_min_c", "aggregate_by_year": true, "show_trend": true},
+      "status": "active"
+    },
+    "wettest_capital": {
+      "id": "wettest_capital",
+      "question": "Which capital city gets the most rain?",
+      "scope": "city",
+      "datasets": ["precipitation"],
+      "follow_up_ids": ["least_rain_capital", "wettest_major_city", "rainfall_local"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "The capital city with the most rain is **Quito, Ecuador**, with about **4,400 mm** of precipitation per year in our data — its position high in the Andes, near the equator, keeps it wet year-round. **Malabo, Equatorial Guinea** (3,770 mm) and **Monrovia, Liberia** (3,480 mm) follow.",
+      "locations": [{"label": "Quito", "lat": -0.23, "lon": -78.52}],
+      "chart_spec": {"metric_id": "tp_annual_total_mm"},
       "status": "active"
     },
     "least_rain_capital": {
@@ -96,10 +175,10 @@
       "question": "What capital city sees the least rain?",
       "scope": "city",
       "datasets": ["precipitation"],
-      "follow_up_ids": ["wettest_major_city", "driest_country", "rainfall_local"],
+      "follow_up_ids": ["wettest_capital", "driest_country", "rainfall_local"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "The capital city that sees the least rain is **Cairo, Egypt** with an average annual rainfall of **26.6 mm**.",
+      "answer": "The capital city that sees the least rain is **Cairo, Egypt**, with an average annual rainfall of just **26.6 mm** — less than what many cities receive in a single day. Sitting in the hyper-arid belt of the eastern Sahara, Cairo depends almost entirely on the Nile for its water.",
       "locations": [{"label": "Cairo", "lat": 30.06, "lon": 31.24}],
       "chart_spec": {"metric_id": "tp_annual_total_mm"},
       "status": "active"
@@ -117,6 +196,32 @@
       "chart_spec": null,
       "status": "active"
     },
+    "local_summer_heat": {
+      "id": "local_summer_heat",
+      "question": "How hot do summer days get in {location}?",
+      "scope": "local",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["local_night_cold", "hottest_recorded_capital", "local_winters"],
+      "requires_location": true,
+      "location_filter": "any",
+      "answer": null,
+      "locations": [],
+      "chart_spec": null,
+      "status": "active"
+    },
+    "local_night_cold": {
+      "id": "local_night_cold",
+      "question": "How cold do nights get in {location}?",
+      "scope": "local",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["local_summer_heat", "coldest_nights_capital", "local_winters"],
+      "requires_location": true,
+      "location_filter": "any",
+      "answer": null,
+      "locations": [],
+      "chart_spec": null,
+      "status": "active"
+    },
     "sea_temp_increase": {
       "id": "sea_temp_increase",
       "question": "Has global sea surface temperature also increased?",
@@ -125,7 +230,7 @@
       "follow_up_ids": ["sea_temp_global", "sea_temp_all_oceans", "sea_vs_land_warming", "sea_temp_local"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "TODO: Write canned answer — yes, global SST has also risen since 1982, tracking closely with air temperature but at a somewhat slower rate.",
+      "answer": "Yes — global sea surface temperature has risen by about [[0.7°C|1.3°F]] since 1982, from [[17.9°C|64.2°F]] to [[18.7°C|65.7°F]] in 2025. The sea surface warms more slowly than the air because of water's enormous heat capacity, but that same property means the oceans have absorbed over 90% of the excess heat trapped by greenhouse gases.",
       "locations": [],
       "chart_spec": {
         "metric_id": "sst_yearly_mean_c",
@@ -156,10 +261,13 @@
       "follow_up_ids": ["fastest_warming_continent", "top5_warming_countries", "europe_vs_asia"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "TODO: Write canned answer — the country with the highest warming trend since 1979 (derive from t2m_trend_1979_2025_c_per_decade).",
+      "answer": "The country with the strongest warming trend since 1979 is **Ukraine**, at **[[0.65°C|1.17°F]] per decade**, closely followed by **Moldova** ([[0.64°C|1.15°F]]) and **Iran** ([[0.63°C|1.13°F]]). Eastern Europe and the Middle East are warming rapidly because large continental land masses heat up much faster than ocean-moderated regions.",
       "locations": [],
       "chart_spec": {
-        "metric_id": "t2m_trend_1979_2025_c_per_decade"
+        "metric_id": "t2m_yearly_mean_c",
+        "start_year": 1979,
+        "end_year": 2025,
+        "region_ids": ["country:UA"]
       },
       "status": "active"
     },
@@ -171,7 +279,7 @@
       "follow_up_ids": ["fastest_warming_continent", "global_temp_change", "fastest_warming_city"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "TODO: Write canned answer — yes, the Arctic Ocean has warmed at roughly 2–3× the global average rate since 1979 (Arctic amplification). Chart: t2m_yearly_mean_c for globe vs ocean:arctic_ocean.",
+      "answer": "Yes — air temperatures over the Arctic Ocean have risen by **[[0.65°C|1.17°F]] per decade** since 1979, roughly **three times** the global average of [[0.21°C|0.38°F]]. This is known as Arctic amplification: as sea ice and snow melt, dark ocean and land surfaces absorb far more sunlight than the ice they replace, accelerating the warming further.",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_yearly_mean_c",
@@ -186,10 +294,10 @@
       "question": "Are extreme heat events becoming more common?",
       "scope": "global",
       "datasets": ["temperature"],
-      "follow_up_ids": ["global_temp_change", "fastest_warming_continent", "local_vs_global"],
+      "follow_up_ids": ["global_temp_change", "hottest_recorded_capital", "fastest_warming_continent", "local_vs_global"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "TODO: Write canned answer — the number of extreme heat days per year globally has been increasing since 1979 (t2m_hotdays_per_year, globe).",
+      "answer": "Yes, dramatically. The average number of hot days per year — days warmer than the local 90th-percentile baseline — has almost **quadrupled** globally, from about 36 days per year in the early 1980s to about 132 days per year in the last five years. Heat that used to be exceptional is rapidly becoming the norm.",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_hotdays_per_year",
@@ -220,7 +328,7 @@
       "follow_up_ids": ["fastest_warming_continent", "country_warming_most", "country_in_europe_warming"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "TODO: Write canned answer — Europe is warming faster than Asia; compare their respective t2m_trend_1979_2025_c_per_decade.",
+      "answer": "**Europe is warming about 40% faster than Asia**: [[0.51°C|0.92°F]] per decade versus [[0.36°C|0.65°F]] since 1979. Europe's high latitudes, proximity to the fast-warming Arctic, and declining snow cover all push it ahead — it is the fastest-warming continent overall.",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_trend_1979_2025_c_per_decade",
@@ -236,10 +344,13 @@
       "follow_up_ids": ["fastest_warming_continent", "europe_vs_asia", "top5_warming_countries"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "TODO: Write canned answer — the European country with the highest warming trend since 1979 (derive from t2m_trend_1979_2025_c_per_decade filtered by continent).",
+      "answer": "**Ukraine** has warmed the most in Europe — and in the world — with a trend of **[[0.65°C|1.17°F]] per decade** since 1979. Its neighbour **Moldova** ([[0.64°C|1.15°F]]) and the Alpine countries **Liechtenstein** and **Austria** (both [[0.61°C|1.10°F]]) are close behind: continental interiors and mountain regions losing snow cover warm the fastest.",
       "locations": [],
       "chart_spec": {
-        "metric_id": "t2m_trend_1979_2025_c_per_decade"
+        "metric_id": "t2m_yearly_mean_c",
+        "start_year": 1979,
+        "end_year": 2025,
+        "region_ids": ["country:UA", "country:AT"]
       },
       "status": "active"
     },
@@ -251,10 +362,13 @@
       "follow_up_ids": ["country_warming_most", "europe_vs_asia", "fastest_warming_continent"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "TODO: Write canned answer — top 5 countries by warming trend since 1979 (derive from t2m_trend_1979_2025_c_per_decade).",
+      "answer": "The five countries with the strongest warming trends since 1979 are:\n\n1. **Ukraine** — [[0.65°C|1.17°F]] per decade\n2. **Moldova** — [[0.64°C|1.15°F]] per decade\n3. **Iran** — [[0.63°C|1.13°F]] per decade\n4. **Syria** — [[0.61°C|1.10°F]] per decade\n5. **Liechtenstein** — [[0.61°C|1.10°F]] per decade\n\nAll are continental or mountain regions far from the moderating influence of the open ocean.",
       "locations": [],
       "chart_spec": {
-        "metric_id": "t2m_trend_1979_2025_c_per_decade"
+        "metric_id": "t2m_yearly_mean_c",
+        "start_year": 1979,
+        "end_year": 2025,
+        "region_ids": ["country:UA", "country:MD", "country:IR", "country:SY", "country:LI"]
       },
       "status": "active"
     },
@@ -266,7 +380,7 @@
       "follow_up_ids": ["fastest_warming_continent", "global_temp_change", "sea_vs_land_warming"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "TODO: Write canned answer — the continent with the lowest warming trend since 1979 (same chart as fastest_warming_continent, different framing).",
+      "answer": "**Oceania** has warmed the least of all continents, at **[[0.14°C|0.25°F]] per decade** since 1979, followed by **Antarctica** ([[0.15°C|0.28°F]]). Oceania is dominated by the vast Pacific and Southern Oceans, whose enormous heat capacity moderates temperature change — the mirror image of fast-warming continental Europe ([[0.51°C|0.92°F]]).",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_trend_1979_2025_c_per_decade",
@@ -282,7 +396,7 @@
       "follow_up_ids": ["hottest_capital", "coldest_major_city", "fastest_warming_city", "local_rank"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "The top 5 warmest large cities in the world are:\n\n1. **Khartoum, Sudan** — [[29.6°C|85.3°F]]\n2. **Niamey, Niger** — [[29.4°C|84.9°F]]\n3. **Makkah, Saudi Arabia** — [[29.3°C|84.7°F]]\n4. **Omdurman, Sudan** — [[29.2°C|84.6°F]]\n5. **Sokoto, Nigeria** — [[29.2°C|84.6°F]]",
+      "answer": "The top 5 warmest large cities in the world are:\n\n1. **Khartoum, Sudan** — [[29.6°C|85.3°F]]\n2. **Niamey, Niger** — [[29.4°C|84.9°F]]\n3. **Makkah, Saudi Arabia** — [[29.3°C|84.7°F]]\n4. **Omdurman, Sudan** — [[29.2°C|84.6°F]]\n5. **Sokoto, Nigeria** — [[29.2°C|84.6°F]]\n\nAll five sit in the Sahel–Sahara belt or the Arabian Peninsula, where clear skies and dry air keep temperatures high all year round.",
       "locations": [
         {"label": "Khartoum", "lat": 15.55, "lon": 32.53},
         {"label": "Niamey", "lat": 13.51, "lon": 2.11},
@@ -298,10 +412,10 @@
       "question": "What is the coldest major city in the world?",
       "scope": "city",
       "datasets": ["temperature"],
-      "follow_up_ids": ["hottest_capital", "top5_warmest_cities", "fastest_warming_city", "arctic_amplification"],
+      "follow_up_ids": ["coldest_capital", "coldest_recorded_city", "top5_warmest_cities", "arctic_amplification"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "The coldest major city in the world is **Krasnoyarsk, Russia**, with a mean annual temperature of **[[1.0°C|33.8°F]]**.",
+      "answer": "Among cities of over a million people, the coldest is **Krasnoyarsk, Russia**, with a mean annual temperature of **[[1.0°C|33.8°F]]**. This Siberian city on the Yenisei River endures long, severe winters — yet like the rest of Siberia it is warming quickly, at [[0.34°C|0.61°F]] per decade since 1979.",
       "locations": [{"label": "Krasnoyarsk", "lat": 56.02, "lon": 92.87}],
       "chart_spec": {"metric_id": "t2m_yearly_mean_c"},
       "status": "active"
@@ -327,7 +441,7 @@
       "follow_up_ids": ["sea_temp_global", "sea_temp_all_oceans", "sea_vs_land_warming", "coral_risk_global"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "The sea surface temperature in the Indian Ocean has been increasing over the years, with a mean temperature of **[[17.3°C|63.1°F]]** in 1982 and **[[18.1°C|64.6°F]]** in 2025.",
+      "answer": "The sea surface temperature in the Indian Ocean has been increasing over the years, with a mean temperature of **[[17.3°C|63.1°F]]** in 1982 and **[[18.1°C|64.6°F]]** in 2025 — a warming trend of [[0.17°C|0.30°F]] per decade. The Indian Ocean's warming is a major driver of coral bleaching and changing monsoon patterns across the region.",
       "locations": [],
       "chart_spec": {
         "metric_id": "sst_yearly_mean_c",
@@ -345,13 +459,13 @@
       "follow_up_ids": ["sea_temp_global", "sea_vs_land_warming", "coral_risk_global"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "TODO: Write canned answer — compare SST warming trends across Atlantic, Pacific, Indian, Arctic, and Southern Oceans since 1982.",
+      "answer": "The **North Atlantic** has warmed the most since 1982, at **[[0.25°C|0.45°F]] per decade**, ahead of the North Pacific ([[0.21°C|0.38°F]]), the Indian Ocean ([[0.17°C|0.30°F]]), the South Atlantic ([[0.16°C|0.29°F]]) and the South Pacific ([[0.13°C|0.23°F]]). The northern basins warm faster because they are surrounded by rapidly warming land masses and receive heat carried north by ocean currents.",
       "locations": [],
       "chart_spec": {
         "metric_id": "sst_yearly_mean_c",
         "start_year": 1982,
         "end_year": 2025,
-        "region_ids": ["ocean:atlantic_ocean", "ocean:pacific_ocean", "ocean:indian_ocean", "ocean:arctic_ocean", "ocean:southern_ocean"]
+        "region_ids": ["ocean:north_atlantic_ocean", "ocean:south_atlantic_ocean", "ocean:north_pacific_ocean", "ocean:south_pacific_ocean", "ocean:indian_ocean"]
       },
       "status": "active"
     },
@@ -363,9 +477,14 @@
       "follow_up_ids": ["global_temp_change", "fastest_warming_continent", "sea_temp_all_oceans"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "TODO: Write canned answer — land has warmed roughly twice as fast as oceans since 1982; show both t2m and sst globe series aligned from 1982.",
+      "answer": "Air temperatures are rising faster than the sea surface: since 1982, global air temperature has climbed **[[0.23°C|0.41°F]] per decade** while sea surface temperature has risen [[0.17°C|0.31°F]] per decade. Water's huge heat capacity and evaporative cooling slow the ocean's surface warming — but the heat is not gone, it is being stored in the ocean's depths.",
       "locations": [],
-      "chart_spec": null,
+      "chart_spec": {
+        "series": [
+          {"metric_id": "t2m_yearly_mean_c", "region_ids": ["globe"], "start_year": 1982, "end_year": 2025},
+          {"metric_id": "sst_yearly_mean_c", "region_ids": ["globe"], "start_year": 1982, "end_year": 2025}
+        ]
+      },
       "status": "active"
     },
     "sea_temp_local": {
@@ -399,11 +518,15 @@
       "question": "What is the wettest major city in the world?",
       "scope": "city",
       "datasets": ["precipitation"],
-      "follow_up_ids": ["least_rain_capital", "driest_country", "rainfall_local"],
+      "follow_up_ids": ["wettest_capital", "least_rain_capital", "driest_country", "rainfall_local"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "TODO: Write canned answer — the wettest major city in the world by annual mean precipitation (tp_annual_total_mm).",
-      "locations": [],
+      "answer": "Among cities of over a million people, the wettest in our data is **Quito, Ecuador**, with about **4,400 mm** of precipitation per year, followed closely by **Cali, Colombia** (4,360 mm). Both sit on the slopes of the Andes near the equator, where moist air is forced upward and wrings out rain nearly every day. **Monrovia, Liberia** (3,480 mm) is the wettest major city outside South America.",
+      "locations": [
+        {"label": "Quito", "lat": -0.23, "lon": -78.52},
+        {"label": "Cali", "lat": 3.43, "lon": -76.52},
+        {"label": "Monrovia", "lat": 6.30, "lon": -10.80}
+      ],
       "chart_spec": {"metric_id": "tp_annual_total_mm"},
       "status": "active"
     },
@@ -415,9 +538,14 @@
       "follow_up_ids": ["least_rain_capital", "wettest_major_city", "rainfall_local"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "TODO: Write canned answer — the driest country by annual mean precipitation (tp_annual_total_mm by country region).",
+      "answer": "**Egypt** is the driest country in the world, averaging just **14 mm** of rainfall per year across its territory — nearly all of which is Sahara desert. **Libya** (25 mm) and **Western Sahara** (36 mm) are close behind. For comparison, the United Kingdom receives about 1,060 mm per year, roughly 75 times more.",
       "locations": [],
-      "chart_spec": {"metric_id": "tp_annual_total_mm"},
+      "chart_spec": {
+        "metric_id": "tp_annual_total_mm",
+        "start_year": 1979,
+        "end_year": 2025,
+        "region_ids": ["country:EG"]
+      },
       "status": "active"
     },
     "rainfall_uk": {
@@ -428,7 +556,7 @@
       "follow_up_ids": ["driest_country", "least_rain_capital", "rainfall_local"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "TODO: Write canned answer — annual rainfall in the UK since 1979 (tp_annual_total_mm, country:GB).",
+      "answer": "UK annual rainfall has stayed roughly stable on average — about 1,060 mm per year in both the first and the most recent decade of the record — but the year-to-year swings are large, ranging from under 960 mm to well over 1,200 mm. Climate change in the UK shows up less as a change in total rainfall and more as a shift in *when* and *how intensely* it falls.",
       "locations": [],
       "chart_spec": {
         "metric_id": "tp_annual_total_mm",
