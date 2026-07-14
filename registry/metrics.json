@@ -97,6 +97,39 @@
       }
     }
   },
+  "t2m_june_2026_anomaly_vs_1991_2020_c": {
+    "id": "t2m_june_2026_anomaly_vs_1991_2020_c",
+    "title": "June 2026 temperature anomaly vs 1991–2020 June average",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "monthly_climatology_anomaly",
+          "params": {
+            "target_year": 2026,
+            "target_month": 6,
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": {
+      "tiled": true,
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
+    }
+  },
   "t2m_yearly_5y_mean_c": {
     "id": "t2m_yearly_5y_mean_c",
     "title": "2m temperature 5y rolling mean",

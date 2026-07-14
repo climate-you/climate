@@ -44,5 +44,15 @@
     "map_id": "dhw_risk_score_trend_1985_2025_mercator_texture",
     "opacity": 0.9,
     "resampling": "nearest"
+  },
+  "june_2026_heatwave": {
+    "id": "june_2026_heatwave",
+    "enable": false,
+    "label": "June 2026 heat anomaly",
+    "unit": "temperature",
+    "description": "Air temperature in June 2026 relative to the 1991–2020 June average. Red = hotter than normal, blue = cooler.",
+    "map_id": "t2m_june_2026_anomaly_mercator_texture",
+    "opacity": 0.78,
+    "resampling": "nearest"
   }
 }

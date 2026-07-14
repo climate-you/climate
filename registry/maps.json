@@ -139,6 +139,40 @@
       "height": 2150
     }
   },
+  "t2m_june_2026_anomaly_mercator_texture": {
+    "id": "t2m_june_2026_anomaly_mercator_texture",
+    "title": "June 2026 air temperature anomaly vs 1991–2020 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 89.99,
+    "web_write": true,
+    "source_metric": "t2m_june_2026_anomaly_vs_1991_2020_c",
+    "reducer": {
+      "op": "year",
+      "year": 2026
+    },
+    "palette": {
+      "colors": [
+        "#313695",
+        "#74add1",
+        "#f7f7f7",
+        "#f46d43",
+        "#a50026"
+      ],
+      "nan_color": "#000000"
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": -8.0,
+      "vmax": 8.0
+    },
+    "output": {
+      "filename": "t2m_june_2026_anomaly_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
   "t2m_trend_score": {
     "id": "t2m_trend_score",
     "title": "Air temperature trend score",

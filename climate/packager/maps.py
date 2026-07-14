@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -254,6 +255,61 @@ def compute_trend_slope_per_decade(
         out.flat[i] = slope
 
     return out
+
+
+def compute_monthly_climatology_anomaly(
+    series: np.ndarray,
+    axis: list,
+    *,
+    target_year: int,
+    target_month: int,
+    clim_start_year: int,
+    clim_end_year: int,
+) -> np.ndarray:
+    """Per-cell anomaly of one month vs a fixed climatology of that same month.
+
+    anomaly = value(target_year, target_month)
+              - mean over clim_start_year..clim_end_year of that month
+
+    Args:
+        series: shape (nlat, nlon, ntime) from a monthly metric.
+        axis: length-ntime list of "YYYY-MM" month labels.
+        target_year/target_month: the month to evaluate (e.g. 2026, 6).
+        clim_start_year/clim_end_year: inclusive climatology window.
+
+    Returns:
+        scalar grid shape (nlat, nlon). Cells lacking the target month or any
+        climatology month are NaN.
+    """
+    labels = [str(a) for a in axis]
+
+    def _idx(year: int, month: int) -> int | None:
+        key = f"{year:04d}-{month:02d}"
+        return labels.index(key) if key in labels else None
+
+    target_idx = _idx(target_year, target_month)
+    if target_idx is None:
+        raise ValueError(
+            f"Target month {target_year}-{target_month:02d} not present in series "
+            f"(axis {labels[0]}..{labels[-1]})."
+        )
+    clim_idxs = [
+        i
+        for y in range(int(clim_start_year), int(clim_end_year) + 1)
+        if (i := _idx(y, target_month)) is not None
+    ]
+    if not clim_idxs:
+        raise ValueError(
+            f"No climatology months {clim_start_year}-{clim_end_year} "
+            f"for month {target_month:02d} present in series."
+        )
+
+    target = series[:, :, target_idx]
+    with warnings.catch_warnings():
+        # Cells with no valid climatology month yield NaN by design.
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        clim = np.nanmean(series[:, :, clim_idxs], axis=2)
+    return (target - clim).astype(np.float64)
 
 
 def _load_scalar_grid_from_metric(
@@ -1059,12 +1115,16 @@ def _load_metric_axis(
     grid: GridSpec,
     metric_id: str,
     axis_name: str,
-) -> list[int]:
+) -> list:
     p = series_root / grid.grid_id / metric_id / "time" / f"{axis_name}.json"
     if not p.exists():
         return []
     values = json.loads(p.read_text(encoding="utf-8"))
-    return [int(v) for v in values]
+    # Yearly axes are integer years; monthly/daily axes are "YYYY-MM"/"YYYY-MM-DD"
+    # strings and must not be coerced to int.
+    if axis_name == "yearly":
+        return [int(v) for v in values]
+    return list(values)
 
 
 def _year_index(axis: list[int], year: int) -> int:

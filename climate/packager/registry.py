@@ -2345,6 +2345,38 @@ def _package_derived_metrics(
             scalar = compute_trend_slope_per_decade(series, axis)
             scalar_grid = scalar[:, :, np.newaxis]  # (nlat, nlon, 1)
 
+        elif fn == "monthly_climatology_anomaly":
+            inputs = source.get("inputs", [])
+            if len(inputs) != 1:
+                raise ValueError(
+                    f"{metric_id}: monthly_climatology_anomaly requires exactly 1 input"
+                )
+            from climate.packager.maps import compute_monthly_climatology_anomaly
+
+            input_id = inputs[0]
+            input_spec = manifest[input_id]
+            try:
+                series, grid, axis = load_series_grid_from_metric(
+                    series_root=series_root, metric_id=input_id, metric_spec=input_spec
+                )
+                scalar = compute_monthly_climatology_anomaly(
+                    series,
+                    axis,
+                    target_year=int(params["target_year"]),
+                    target_month=int(params["target_month"]),
+                    clim_start_year=int(params["clim_start_year"]),
+                    clim_end_year=int(params["clim_end_year"]),
+                )
+            except (FileNotFoundError, ValueError) as exc:
+                # The target month may not be ingested yet — skip without
+                # aborting the rest of the derived-metric pass.
+                print(
+                    f"[derived] skip metric={metric_id} fn={fn} "
+                    f"reason=input not ready ({exc})"
+                )
+                continue
+            scalar_grid = scalar[:, :, np.newaxis]  # (nlat, nlon, 1)
+
         elif fn == "blended_preindustrial_anomaly":
             inputs = source.get("inputs", [])
             if len(inputs) != 2:
