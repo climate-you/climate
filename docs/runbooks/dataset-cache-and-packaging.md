@@ -89,6 +89,64 @@ data/releases/dev/series/<grid_id>/<metric_id>/
     max.json
 ```
 
+### Incomplete (partial) final years
+
+Monthly- and daily-axis metrics can end mid-year — e.g. ERA5T data through
+June of the current year — by declaring `end_month` alongside `end_year` in
+the `time_range` (dataset-level in `registry/datasets.json` for the download
+clamp, metric-level in `registry/metrics.json` for the analysis range):
+
+```json
+"time_range": { "start_year": 1979, "end_year": 2026, "end_month": 6 }
+```
+
+`--end-month N` on the packager CLI overrides both. Rules enforced by the
+packager:
+
+- The partial year is downloaded only through `end_month`; complete years are
+  never month-capped (the partial year always gets its own download block).
+- Metrics with a **yearly** time axis refuse a partial final year — a yearly
+  value computed from six months would be wrong. Keep their metric-level
+  `end_year` at the last complete year.
+- **Do not use `--resume` when extending a metric's time range.** Resume keeps
+  existing tiles, which would misalign with the longer time axis; the packager
+  detects this and aborts. Re-run the extended metrics without `--resume` so
+  every tile is rewritten (downloads for already-cached years are still reused
+  from `data/cache/`).
+
+Example — extend the monthly t2m metrics through June 2026 (ranges already
+declared in the registries), and in the same pass compute the June-2026
+anomaly metric and generate its globe texture:
+
+```bash
+python scripts/build/packager.py --release dev --all --all-maps \
+  --metrics t2m_monthly_mean_c,t2m_monthly_max_c,t2m_monthly_min_c,t2m_daily_mean_c,t2m_june_2026_anomaly_vs_1991_2020_c
+```
+
+Notes:
+- `t2m_june_2026_anomaly_vs_1991_2020_c` is a **derived** metric (no download);
+  including it in `--metrics` is what makes `--all-maps` regenerate its map
+  (`t2m_june_2026_anomaly_mercator_texture`), since map selection is gated on
+  the selected metrics. The derived pass reads the freshly written
+  `t2m_monthly_mean_c` tiles, so ordering is handled automatically.
+- The `june_2026_heatwave` layer is declared with `enable: false`, so it is
+  hidden from the normal layer list and only appears in debug mode; the story
+  page references it directly by id.
+
+Afterwards re-run the ranking and aggregate precompute scripts for the
+extended metrics, and check `panels.json` graphs with a hardcoded `extend_to`
+date.
+
+### Download vs compute batch size
+
+Downloads use the **dataset**'s `batch_tiles`; a metric's
+`batch_tiles_override` only shrinks the *compute* batches (for memory) and no
+longer multiplies the number of remote requests. A coarse dataset batch is
+downloaded once and sliced to each compute batch, so e.g. a global daily
+metric with `batch_tiles=24` and `batch_tiles_override=4` issues one request
+per month (visible as `Downloading ERA5 daily stats` log lines) rather than
+one per compute batch (the rest show `[cache] Wrote sliced cache`).
+
 ### Derived tiled metrics
 
 Metrics declared with `"source": {"type": "derived"}` and `"storage": {"tiled": true}` in `registry/metrics.json` are computed automatically by the packager at the end of each run — no extra flags needed. The packager reads already-materialized input tiles and writes output tiles using the declared derivation function (e.g. OLS warming trend, blended pre-industrial anomaly). Re-run with `--resume` to skip tiles already written.

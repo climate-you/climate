@@ -57,7 +57,8 @@
           "type": "object",
           "properties": {
             "start_year": { "type": "integer" },
-            "end_year": { "type": "integer" }
+            "end_year": { "type": "integer" },
+            "end_month": { "type": "integer", "minimum": 1, "maximum": 12, "description": "Last available month of end_year when the final year is incomplete (e.g. 6 for data through June)." }
           },
           "additionalProperties": false
         },
@@ -85,7 +86,8 @@
           "type": "object",
           "properties": {
             "start_year": { "type": "integer" },
-            "end_year": { "type": "integer" }
+            "end_year": { "type": "integer" },
+            "end_month": { "type": "integer", "minimum": 1, "maximum": 12, "description": "Last available month of end_year when the final year is incomplete (e.g. 6 for data through June)." }
           },
           "additionalProperties": false
         },

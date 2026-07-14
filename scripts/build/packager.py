@@ -87,6 +87,13 @@ def main() -> None:
 
     ap.add_argument("--start-year", type=int, default=None)
     ap.add_argument("--end-year", type=int, default=None)
+    ap.add_argument(
+        "--end-month",
+        type=int,
+        default=None,
+        help="Last available month (1-11) of the final year when it is incomplete "
+        "(e.g. 6 for data through June). Only valid for monthly/daily metrics.",
+    )
     ap.add_argument("--cache-dir", type=Path, default=Path("data/cache"))
 
     ap.add_argument("--batch-tiles", type=int, default=None)
@@ -133,6 +140,7 @@ def main() -> None:
         cache_dir=args.cache_dir,
         start_year=args.start_year,
         end_year=args.end_year,
+        end_month=args.end_month,
         metric_ids=metric_ids,
         tile_range=tile_range,
         batch_tiles=args.batch_tiles,

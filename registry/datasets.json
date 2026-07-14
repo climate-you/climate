@@ -10,7 +10,7 @@
       "dataset": "derived-era5-single-levels-daily-statistics",
       "variable": "2m_temperature",
       "postprocess": [{ "fn": "k_to_c" }],
-      "time_range": { "start_year": 1979, "end_year": 2025 },
+      "time_range": { "start_year": 1979, "end_year": 2026, "end_month": 6 },
       "block_years": 1,
       "block_months": 1,
       "batch_tiles": 24
@@ -26,7 +26,7 @@
       "dataset": "derived-era5-single-levels-daily-statistics",
       "variable": "2m_temperature",
       "postprocess": [{ "fn": "k_to_c" }],
-      "time_range": { "start_year": 1979, "end_year": 2025 },
+      "time_range": { "start_year": 1979, "end_year": 2026, "end_month": 6 },
       "block_years": 1,
       "block_months": 1,
       "batch_tiles": 24,
@@ -45,7 +45,7 @@
       "dataset": "derived-era5-single-levels-daily-statistics",
       "variable": "2m_temperature",
       "postprocess": [{ "fn": "k_to_c" }],
-      "time_range": { "start_year": 1979, "end_year": 2025 },
+      "time_range": { "start_year": 1979, "end_year": 2026, "end_month": 6 },
       "block_years": 1,
       "block_months": 1,
       "batch_tiles": 24,
@@ -118,7 +118,7 @@
         { "fn": "m_to_mm" },
         { "fn": "scale", "params": { "factor": 24 } }
       ],
-      "time_range": { "start_year": 1979, "end_year": 2025 },
+      "time_range": { "start_year": 1979, "end_year": 2026, "end_month": 6 },
       "block_years": 1,
       "block_months": 1,
       "batch_tiles": 24

@@ -11,13 +11,14 @@ def build_monthly_means_request(
     grid_deg: float,
     area: Tuple[float, float, float, float] | None,
     variable: str = "2m_temperature",
+    months: List[str] | None = None,
 ) -> dict:
     req = {
         "product_type": "monthly_averaged_reanalysis",
         "data_format": "netcdf",
         "variable": [variable],
         "year": years,
-        "month": [f"{m:02d}" for m in range(1, 13)],
+        "month": months if months is not None else [f"{m:02d}" for m in range(1, 13)],
         "time": ["00:00"],
         # Coarsen the native 0.25° grid to keep files reasonable for a web app.
         "grid": [grid_deg, grid_deg],

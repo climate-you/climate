@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
@@ -1149,20 +1150,34 @@ def _year_blocks(
     block_years: int,
     *,
     dataset_start: str | None,
+    partial_end: tuple[int, int] | None = None,
 ) -> list[tuple[str, str, list[int]]]:
+    """
+    partial_end: optional (year, last_month) marking an incomplete final year.
+    That year is isolated into its own block (so month capping never affects
+    complete years sharing a block) and its end date is capped to the last day
+    of last_month.
+    """
     blocks: list[tuple[str, str, list[int]]] = []
     y = int(start_year)
     block_years = max(1, int(block_years))
     dataset_start_year = int(dataset_start[:4]) if dataset_start else None
+    partial_year = partial_end[0] if partial_end is not None else None
 
     while y <= end_year:
         y0 = y
         y1 = min(end_year, y + block_years - 1)
+        if partial_year is not None and y0 < partial_year <= y1:
+            # Stop the block before the partial year so it gets its own block.
+            y1 = partial_year - 1
         if dataset_start_year is not None and y1 < dataset_start_year:
             y = y1 + 1
             continue
         start_date = f"{y0}-01-01"
         end_date = f"{y1}-12-31"
+        if partial_end is not None and y1 == partial_year:
+            last_day = calendar.monthrange(partial_year, partial_end[1])[1]
+            end_date = f"{partial_year}-{partial_end[1]:02d}-{last_day:02d}"
         if dataset_start:
             start_date = max(start_date, dataset_start)
         years = [yy for yy in range(y0, y1 + 1) if yy >= (dataset_start_year or yy)]
@@ -1178,6 +1193,7 @@ def _cds_year_blocks_for_metric(
     source: dict[str, Any],
     download_start_year: int,
     download_end_year: int,
+    partial_end: tuple[int, int] | None = None,
 ) -> list[tuple[str, str, list[int]]]:
     if agg == "cmip_multi_model_offset_from_monthly":
         params = source.get("params", {}) or {}
@@ -1212,7 +1228,33 @@ def _cds_year_blocks_for_metric(
         download_end_year,
         block_years,
         dataset_start=None,
+        partial_end=partial_end,
     )
+
+
+def _cap_months_for_block(
+    month_blocks: list[list[str]],
+    years_part: list[int],
+    partial_end: tuple[int, int] | None,
+) -> list[list[str]]:
+    """Drop months beyond the partial final year's last month.
+
+    Only applies when the block is the isolated partial year (guaranteed by
+    _year_blocks isolation), so complete years are never month-capped.
+    """
+    if partial_end is None or years_part[-1] != partial_end[0]:
+        return month_blocks
+    capped = [[m for m in blk if int(m) <= partial_end[1]] for blk in month_blocks]
+    return [blk for blk in capped if blk]
+
+
+def _partial_block_months(
+    years_part: list[int], partial_end: tuple[int, int] | None
+) -> list[str] | None:
+    """Month list for a monthly-means request covering the partial final year."""
+    if partial_end is None or years_part[-1] != partial_end[0]:
+        return None
+    return [f"{m:02d}" for m in range(1, partial_end[1] + 1)]
 
 
 def _month_blocks(block_months: int) -> list[list[str]]:
@@ -1232,6 +1274,44 @@ def _parse_year_range(raw: Any) -> tuple[int, int] | None:
     if "start_year" not in raw or "end_year" not in raw:
         return None
     return (int(raw["start_year"]), int(raw["end_year"]))
+
+
+def _resolve_partial_end(
+    source: dict[str, Any],
+    cli_end_month: int | None,
+    analysis_end_year: int,
+    download_end_year: int,
+) -> tuple[int, int] | None:
+    """
+    Return (year, last_month) when the final download year is incomplete, or
+    None for the normal full-year case.
+
+    An incomplete year is declared with "end_month" (1..11) in a time_range —
+    either metric-level or dataset-level — and only takes effect when that
+    time_range's end_year is the resolved final download year. --end-month on
+    the CLI overrides both and applies to the resolved analysis end year.
+    """
+    candidates: list[tuple[int, int]] = []
+    if cli_end_month is not None:
+        candidates.append((int(analysis_end_year), int(cli_end_month)))
+    analysis_range = source.get("_analysis_time_range")
+    if isinstance(analysis_range, dict) and "end_month" in analysis_range:
+        candidates.append(
+            (int(analysis_range["end_year"]), int(analysis_range["end_month"]))
+        )
+    download_range = source.get("time_range")
+    if isinstance(download_range, dict) and "end_month" in download_range:
+        candidates.append(
+            (int(download_range["end_year"]), int(download_range["end_month"]))
+        )
+    for year, month in candidates:
+        if not 1 <= month <= 12:
+            raise ValueError(f"end_month must be 1..12, got {month}")
+        if month == 12:
+            continue  # a December end is a complete year
+        if year == int(download_end_year):
+            return (year, month)
+    return None
 
 
 def _align_to_dataset_blocks(
@@ -1314,6 +1394,25 @@ def _tiles_from_time_da(
     dataset_mask: np.ndarray | None = None,
 ) -> int:
     axis_len = len(axis_values)
+    if resume:
+        # With --resume, existing tiles are kept as-is. If the time axis has
+        # changed since they were written (e.g. the range was extended to a
+        # new partial year), stale tiles would silently misalign with the new
+        # axis — refuse instead of corrupting the release.
+        axis_path = (
+            out_root / grid.grid_id / metric_id / "time" / f"{axis_name}.json"
+        )
+        if axis_path.exists():
+            existing_axis = json.loads(axis_path.read_text(encoding="utf-8"))
+            new_axis = json.loads(json.dumps(list(axis_values)))
+            if existing_axis != new_axis:
+                raise SystemExit(
+                    f"Metric {metric_id}: time axis changed "
+                    f"({len(existing_axis)} -> {axis_len} entries) but --resume "
+                    f"keeps existing tiles, which would misalign with the new "
+                    f"axis. Re-run this metric without --resume so all tiles "
+                    f"are rewritten."
+                )
     write_axis_json(out_root, grid, metric_id, axis_name, axis_values)
     fill_value = normalize_missing_value(missing, dtype)
 
@@ -1518,10 +1617,12 @@ def _download_batch_monthly_means(
     debug: bool,
     variable: str,
     params: dict[str, Any] | None,
+    months: list[str] | None = None,
 ) -> Path:
     p = params or {}
     years_int = list(range(int(start_year), int(end_year) + 1))
     years_str = [str(y) for y in years_int]
+    month_tag = f"_m{months[0]}-{months[-1]}" if months else ""
 
     area, total_h, total_w = _compute_batch_bbox(
         grid,
@@ -1546,7 +1647,7 @@ def _download_batch_monthly_means(
     )
     batch_dir.mkdir(parents=True, exist_ok=True)
     dl_path = batch_dir / (
-        f"{prefix}_{grid.grid_id}_r{tile_range.tile_r0:03d}-{tile_range.tile_r1:03d}_c{tile_range.tile_c0:03d}-{tile_range.tile_c1:03d}_{start_year}-{end_year}.nc"
+        f"{prefix}_{grid.grid_id}_r{tile_range.tile_r0:03d}-{tile_range.tile_r1:03d}_c{tile_range.tile_c0:03d}-{tile_range.tile_c1:03d}_{start_year}-{end_year}{month_tag}.nc"
     )
     legacy_prefix = f"era5_monthly_{variable}"
     legacy_batch_dir = (
@@ -1601,19 +1702,20 @@ def _download_batch_monthly_means(
             grid_deg=float(grid.deg),
             area=area,
             variable=variable,
+            months=months,
         )
     else:
         req = dict(p.get("request_template", {}) or {})
         variable_field = str(p.get("variable_field", "variable"))
         year_field = str(p.get("year_field", "year"))
         month_field = str(p.get("month_field", "month"))
-        months = p.get("months")
-        if not isinstance(months, list) or not months:
-            months = [f"{m:02d}" for m in range(1, 13)]
+        req_months = months if months else p.get("months")
+        if not isinstance(req_months, list) or not req_months:
+            req_months = [f"{m:02d}" for m in range(1, 13)]
 
         req[variable_field] = [variable]
         req[year_field] = years_str
-        req[month_field] = months
+        req[month_field] = req_months
 
         format_field = p.get("format_field")
         format_value = p.get("format_value")
@@ -2300,6 +2402,7 @@ def package_registry(
     cache_dir: Path = Path("data/cache"),
     start_year: int | None = None,
     end_year: int | None = None,
+    end_month: int | None = None,
     metric_ids: list[str] | None = None,
     tile_range: TileRange | None = None,
     batch_tiles: int | None = None,
@@ -2517,11 +2620,27 @@ def package_registry(
             cli_end_year=end_year,
         )
         years_int = list(range(analysis_start_year, analysis_end_year + 1))
+        partial_end = _resolve_partial_end(
+            source, end_month, analysis_end_year, download_end_year
+        )
+        if partial_end is not None and time_axis == "yearly":
+            raise SystemExit(
+                f"Metric {metric_id} has a yearly time_axis but its final year "
+                f"{partial_end[0]} is incomplete (data through month "
+                f"{partial_end[1]:02d}). A yearly value computed from a partial "
+                f"year would be wrong — set this metric's source.time_range."
+                f"end_year to the last complete year instead."
+            )
         print(
             f"[metric] start metric={metric_id} source={source_type} "
             f"time_axis={time_axis} agg={agg} "
             f"analysis={analysis_start_year}..{analysis_end_year} "
             f"download={download_start_year}..{download_end_year}"
+            + (
+                f" partial_final_year={partial_end[0]}..month{partial_end[1]:02d}"
+                if partial_end
+                else ""
+            )
         )
         if debug:
             print(
@@ -2618,6 +2737,7 @@ def package_registry(
                                 source=source,
                                 download_start_year=download_start_year,
                                 download_end_year=download_end_year,
+                                partial_end=partial_end,
                             )
                             return len(blocks)
                         block_years = int(source.get("block_years", 1))
@@ -2626,6 +2746,7 @@ def package_registry(
                             download_end_year,
                             block_years,
                             dataset_start=None,
+                            partial_end=partial_end,
                         )
                         month_blocks = _month_blocks(int(source.get("block_months", 1)))
                         return len(blocks) * len(month_blocks)
@@ -2644,6 +2765,7 @@ def package_registry(
                             download_end_year,
                             block_years,
                             dataset_start=dataset_start,
+                            partial_end=partial_end,
                         )
                         return len(blocks)
                     return 0
@@ -2746,6 +2868,7 @@ def package_registry(
                                     download_end_year,
                                     block_years,
                                     dataset_start=None,
+                                    partial_end=partial_end,
                                 )
                             else:
                                 blocks = _cds_year_blocks_for_metric(
@@ -2753,6 +2876,7 @@ def package_registry(
                                     source=source,
                                     download_start_year=download_start_year,
                                     download_end_year=download_end_year,
+                                    partial_end=partial_end,
                                 )
                             if not blocks:
                                 raise ValueError(
@@ -2782,6 +2906,9 @@ def package_registry(
                                         debug=debug,
                                         variable=variable,
                                         params=params,
+                                        months=_partial_block_months(
+                                            years_part, partial_end
+                                        ),
                                     )
                                     download_count += 1
                                     with counters_lock:
@@ -2792,7 +2919,11 @@ def package_registry(
                                         break
                                 else:
                                     block_months = int(source.get("block_months", 1))
-                                    month_blocks = _month_blocks(block_months)
+                                    month_blocks = _cap_months_for_block(
+                                        _month_blocks(block_months),
+                                        years_part,
+                                        partial_end,
+                                    )
                                     paths: list[Path] = []
                                     for months in month_blocks:
                                         if (
@@ -2917,6 +3048,7 @@ def package_registry(
                                 download_end_year,
                                 block_years,
                                 dataset_start=dataset_start,
+                                partial_end=partial_end,
                             )
                             if not blocks:
                                 raise ValueError(
@@ -3164,6 +3296,7 @@ def package_registry(
                             download_end_year,
                             block_years,
                             dataset_start=None,
+                            partial_end=partial_end,
                         )
                     else:
                         blocks = _cds_year_blocks_for_metric(
@@ -3171,6 +3304,7 @@ def package_registry(
                             source=source,
                             download_start_year=download_start_year,
                             download_end_year=download_end_year,
+                            partial_end=partial_end,
                         )
                     if not blocks:
                         raise ValueError(
@@ -3200,12 +3334,17 @@ def package_registry(
                                 debug=debug,
                                 variable=variable,
                                 params=params,
+                                months=_partial_block_months(years_part, partial_end),
                             )
                             download_count += 1
                             downloads.append((years_part, [dl_path]))
                         else:
                             block_months = int(source.get("block_months", 1))
-                            month_blocks = _month_blocks(block_months)
+                            month_blocks = _cap_months_for_block(
+                                _month_blocks(block_months),
+                                years_part,
+                                partial_end,
+                            )
                             paths: list[Path] = []
                             for months in month_blocks:
                                 if stop_after_current:
@@ -3300,6 +3439,7 @@ def package_registry(
                         download_end_year,
                         block_years,
                         dataset_start=dataset_start,
+                        partial_end=partial_end,
                     )
                     if not blocks:
                         raise ValueError(
