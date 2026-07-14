@@ -612,7 +612,7 @@ def _iter_batches(tile_range: TileRange, batch_tiles: int) -> Iterable[TileRange
 
 def _resolve_batch_tiles(batch_tiles: int | None, source: dict[str, Any]) -> int:
     """
-    Resolve effective batch size with precedence:
+    Resolve effective *compute* batch size with precedence:
       1) CLI --batch-tiles
       2) metric source.batch_tiles_override
       3) dataset source.batch_tiles
@@ -623,6 +623,47 @@ def _resolve_batch_tiles(batch_tiles: int | None, source: dict[str, Any]) -> int
     if source.get("batch_tiles_override") is not None:
         return int(source["batch_tiles_override"])
     return int(source.get("batch_tiles", 1))
+
+
+def _resolve_download_batch_tiles(
+    batch_tiles: int | None, source: dict[str, Any], compute_batch_tiles: int
+) -> int:
+    """
+    Resolve the *download* batch size. Downloads should use the dataset's
+    natural batch size (source.batch_tiles) so a metric's batch_tiles_override
+    — which only shrinks compute batches for memory — does not multiply the
+    number of remote requests. The download batch never goes below the compute
+    batch (it must cover it).
+
+    Precedence:
+      1) CLI --batch-tiles (explicit global override)
+      2) dataset source.batch_tiles
+      3) compute batch size
+    """
+    if batch_tiles is not None:
+        return int(batch_tiles)
+    dataset_bt = source.get("batch_tiles")
+    dl = int(dataset_bt) if dataset_bt is not None else compute_batch_tiles
+    return max(dl, compute_batch_tiles)
+
+
+def _covering_download_range(
+    batch: TileRange, metric_range: TileRange, download_batch_tiles: int
+) -> TileRange:
+    """Coarse download tile range (aligned to ``download_batch_tiles`` over the
+    metric range) that fully contains ``batch``. Stable across all compute
+    batches that fall in the same coarse block, so the coarse cache downloads
+    once and later batches slice it."""
+    bt = max(1, int(download_batch_tiles))
+
+    def _lo(x: int, origin: int) -> int:
+        return origin + ((x - origin) // bt) * bt
+
+    r0 = _lo(batch.tile_r0, metric_range.tile_r0)
+    c0 = _lo(batch.tile_c0, metric_range.tile_c0)
+    r1 = min(_lo(batch.tile_r1, metric_range.tile_r0) + bt - 1, metric_range.tile_r1)
+    c1 = min(_lo(batch.tile_c1, metric_range.tile_c0) + bt - 1, metric_range.tile_c1)
+    return TileRange(r0, r1, c0, c1)
 
 
 def _erddap_cache_dir(cache_root: Path, dataset_key: str) -> Path:
@@ -1605,6 +1646,7 @@ def _download_batch_daily_stats(
     variable: str,
     params: dict[str, Any] | None,
     months: list[str] | None,
+    download_tile_range: TileRange | None = None,
 ) -> Path:
     years_int = list(range(int(start_year), int(end_year) + 1))
     years_str = [str(y) for y in years_int]
@@ -1673,6 +1715,32 @@ def _download_batch_daily_stats(
             )
             print(f"[cache] Wrote sliced cache: {dl_path}")
             return dl_path
+
+    # Download at the coarse (dataset) batch granularity, then slice to this
+    # compute batch. The coarse cache is fetched once; sibling compute batches
+    # in the same coarse block hit the covering-cache path above.
+    if download_tile_range is not None and download_tile_range != tile_range:
+        coarse_path = _download_batch_daily_stats(
+            grid=grid,
+            cache_dir=cache_dir,
+            start_year=start_year,
+            end_year=end_year,
+            tile_range=download_tile_range,
+            overwrite_download=overwrite_download,
+            debug=debug,
+            variable=variable,
+            params=params,
+            months=months,
+            download_tile_range=None,
+        )
+        _slice_daily_cache_to_tile_batch(
+            src_path=coarse_path,
+            dst_path=dl_path,
+            grid=grid,
+            tile_range=tile_range,
+        )
+        print(f"[cache] Wrote sliced cache: {dl_path}")
+        return dl_path
 
     # Keep enough precision for cell-center-aligned requests (e.g. 0.125, 0.025).
     area_req = tuple(round(coord, 5) for coord in area)
@@ -2462,6 +2530,9 @@ def package_registry(
             )
 
         batch_tiles_eff = _resolve_batch_tiles(batch_tiles, source)
+        download_batch_tiles_eff = _resolve_download_batch_tiles(
+            batch_tiles, source, batch_tiles_eff
+        )
         n_batches_processed = 0
         download_count = 0
         total_written = 0
@@ -2744,6 +2815,11 @@ def package_registry(
                                             variable=variable,
                                             params=params,
                                             months=months,
+                                            download_tile_range=_covering_download_range(
+                                                batch,
+                                                metric_tile_range,
+                                                download_batch_tiles_eff,
+                                            ),
                                         )
                                         download_count += 1
                                         with counters_lock:
@@ -3152,6 +3228,11 @@ def package_registry(
                                     variable=variable,
                                     params=params,
                                     months=months,
+                                    download_tile_range=_covering_download_range(
+                                        batch,
+                                        metric_tile_range,
+                                        download_batch_tiles_eff,
+                                    ),
                                 )
                                 download_count += 1
                                 paths.append(dl_path)
