@@ -991,7 +991,7 @@ def _concat_and_write_time_tiles(
         raise RuntimeError(f"No data blocks for metric={metric_id}")
 
     if time_axis == "yearly":
-        da = xr.concat(da_parts, dim="year").sortby("year")
+        da = xr.concat(da_parts, dim="year", join="outer").sortby("year")
         da = _select_years_if_present(da, output_years)
         axis_values: list[object] = [int(v) for v in da["year"].values.tolist()]
         return _tiles_from_time_da(
@@ -1012,7 +1012,12 @@ def _concat_and_write_time_tiles(
         )
 
     time_dim = find_time_dim(da_parts[0])
-    da = xr.concat(da_parts, dim=time_dim).sortby(time_dim)
+    # Concatenate the per-block arrays along time only. join="outer" preserves
+    # the historical (verified-correct) behaviour and sets the value explicitly
+    # so xarray's future default change (join="exact") does not warn; any minor
+    # coordinate differences between blocks are corrected when each tile is
+    # reindexed to the canonical grid in _tiles_from_time_da.
+    da = xr.concat(da_parts, dim=time_dim, join="outer").sortby(time_dim)
     years_set = set(int(y) for y in output_years)
     da = da.where(da[time_dim].dt.year.isin(sorted(years_set)), drop=True)
     if da.sizes.get(time_dim, 0) == 0:
@@ -1150,13 +1155,13 @@ def _year_blocks(
     block_years: int,
     *,
     dataset_start: str | None,
-    partial_end: tuple[int, int] | None = None,
+    partial_end: tuple[int, int, int | None] | None = None,
 ) -> list[tuple[str, str, list[int]]]:
     """
-    partial_end: optional (year, last_month) marking an incomplete final year.
-    That year is isolated into its own block (so month capping never affects
-    complete years sharing a block) and its end date is capped to the last day
-    of last_month.
+    partial_end: optional (year, last_month, last_day_or_None) marking an
+    incomplete final year. That year is isolated into its own block (so month
+    capping never affects complete years sharing a block) and its end date is
+    capped to last_day of last_month (or the month's final day).
     """
     blocks: list[tuple[str, str, list[int]]] = []
     y = int(start_year)
@@ -1176,7 +1181,9 @@ def _year_blocks(
         start_date = f"{y0}-01-01"
         end_date = f"{y1}-12-31"
         if partial_end is not None and y1 == partial_year:
-            last_day = calendar.monthrange(partial_year, partial_end[1])[1]
+            last_day = partial_end[2] or calendar.monthrange(
+                partial_year, partial_end[1]
+            )[1]
             end_date = f"{partial_year}-{partial_end[1]:02d}-{last_day:02d}"
         if dataset_start:
             start_date = max(start_date, dataset_start)
@@ -1193,7 +1200,7 @@ def _cds_year_blocks_for_metric(
     source: dict[str, Any],
     download_start_year: int,
     download_end_year: int,
-    partial_end: tuple[int, int] | None = None,
+    partial_end: tuple[int, int, int | None] | None = None,
 ) -> list[tuple[str, str, list[int]]]:
     if agg == "cmip_multi_model_offset_from_monthly":
         params = source.get("params", {}) or {}
@@ -1235,21 +1242,50 @@ def _cds_year_blocks_for_metric(
 def _cap_months_for_block(
     month_blocks: list[list[str]],
     years_part: list[int],
-    partial_end: tuple[int, int] | None,
+    partial_end: tuple[int, int, int | None] | None,
 ) -> list[list[str]]:
     """Drop months beyond the partial final year's last month.
 
     Only applies when the block is the isolated partial year (guaranteed by
-    _year_blocks isolation), so complete years are never month-capped.
+    _year_blocks isolation), so complete years are never month-capped. When
+    the final month itself is incomplete (end_day set), it is additionally
+    isolated into its own block so day capping never affects complete months.
     """
     if partial_end is None or years_part[-1] != partial_end[0]:
         return month_blocks
-    capped = [[m for m in blk if int(m) <= partial_end[1]] for blk in month_blocks]
-    return [blk for blk in capped if blk]
+    last_month = partial_end[1]
+    capped = [[m for m in blk if int(m) <= last_month] for blk in month_blocks]
+    capped = [blk for blk in capped if blk]
+    if partial_end[2] is None:
+        return capped
+    final = f"{last_month:02d}"
+    out: list[list[str]] = []
+    for blk in capped:
+        if final in blk and len(blk) > 1:
+            rest = [m for m in blk if m != final]
+            out.append(rest)
+            out.append([final])
+        else:
+            out.append(blk)
+    return out
+
+
+def _partial_month_days(
+    months: list[str],
+    years_part: list[int],
+    partial_end: tuple[int, int, int | None] | None,
+) -> list[str] | None:
+    """Day list for a daily-stats request when the block is the incomplete
+    final month of the partial year; None for complete months."""
+    if partial_end is None or partial_end[2] is None:
+        return None
+    if years_part[-1] != partial_end[0] or months != [f"{partial_end[1]:02d}"]:
+        return None
+    return [f"{d:02d}" for d in range(1, partial_end[2] + 1)]
 
 
 def _partial_block_months(
-    years_part: list[int], partial_end: tuple[int, int] | None
+    years_part: list[int], partial_end: tuple[int, int, int | None] | None
 ) -> list[str] | None:
     """Month list for a monthly-means request covering the partial final year."""
     if partial_end is None or years_part[-1] != partial_end[0]:
@@ -1281,36 +1317,43 @@ def _resolve_partial_end(
     cli_end_month: int | None,
     analysis_end_year: int,
     download_end_year: int,
-) -> tuple[int, int] | None:
+    cli_end_day: int | None = None,
+) -> tuple[int, int, int | None] | None:
     """
-    Return (year, last_month) when the final download year is incomplete, or
-    None for the normal full-year case.
+    Return (year, last_month, last_day_or_None) when the final download year
+    is incomplete, or None for the normal full-year case.
 
-    An incomplete year is declared with "end_month" (1..11) in a time_range —
-    either metric-level or dataset-level — and only takes effect when that
-    time_range's end_year is the resolved final download year. --end-month on
-    the CLI overrides both and applies to the resolved analysis end year.
+    An incomplete year is declared with "end_month" (and optionally "end_day"
+    for an incomplete final month) in a time_range — either metric-level or
+    dataset-level — and only takes effect when that time_range's end_year is
+    the resolved final download year. --end-month/--end-day on the CLI
+    override both and apply to the resolved analysis end year.
     """
-    candidates: list[tuple[int, int]] = []
+    if cli_end_day is not None and cli_end_month is None:
+        raise ValueError("--end-day requires --end-month")
+    candidates: list[tuple[int, int, int | None]] = []
     if cli_end_month is not None:
-        candidates.append((int(analysis_end_year), int(cli_end_month)))
-    analysis_range = source.get("_analysis_time_range")
-    if isinstance(analysis_range, dict) and "end_month" in analysis_range:
-        candidates.append(
-            (int(analysis_range["end_year"]), int(analysis_range["end_month"]))
-        )
-    download_range = source.get("time_range")
-    if isinstance(download_range, dict) and "end_month" in download_range:
-        candidates.append(
-            (int(download_range["end_year"]), int(download_range["end_month"]))
-        )
-    for year, month in candidates:
+        candidates.append((int(analysis_end_year), int(cli_end_month), cli_end_day))
+    for raw in (source.get("_analysis_time_range"), source.get("time_range")):
+        if isinstance(raw, dict) and "end_month" in raw:
+            candidates.append(
+                (
+                    int(raw["end_year"]),
+                    int(raw["end_month"]),
+                    int(raw["end_day"]) if "end_day" in raw else None,
+                )
+            )
+        elif isinstance(raw, dict) and "end_day" in raw:
+            raise ValueError("end_day requires end_month in the same time_range")
+    for year, month, day in candidates:
         if not 1 <= month <= 12:
             raise ValueError(f"end_month must be 1..12, got {month}")
-        if month == 12:
+        if day is not None and not 1 <= day <= 31:
+            raise ValueError(f"end_day must be 1..31, got {day}")
+        if month == 12 and day is None:
             continue  # a December end is a complete year
         if year == int(download_end_year):
-            return (year, month)
+            return (year, month, day)
     return None
 
 
@@ -1748,6 +1791,7 @@ def _download_batch_daily_stats(
     variable: str,
     params: dict[str, Any] | None,
     months: list[str] | None,
+    days: list[str] | None = None,
     download_tile_range: TileRange | None = None,
 ) -> Path:
     years_int = list(range(int(start_year), int(end_year) + 1))
@@ -1776,6 +1820,10 @@ def _download_batch_daily_stats(
     month_tag = ""
     if months:
         month_tag = f"_m{months[0]}-{months[-1]}"
+    # An incomplete final month is cached under a distinct name so its partial
+    # file never aliases a future full-month download.
+    if days:
+        month_tag += f"_d{days[0]}-{days[-1]}"
 
     dl_path = batch_dir / (
         f"era5_daily_{variable}{_stat_tag}_{grid.grid_id}_r{tile_range.tile_r0:03d}-{tile_range.tile_r1:03d}_c{tile_range.tile_c0:03d}-{tile_range.tile_c1:03d}_{start_year}-{end_year}{month_tag}.nc"
@@ -1833,6 +1881,7 @@ def _download_batch_daily_stats(
             variable=variable,
             params=params,
             months=months,
+            days=days,
             download_tile_range=None,
         )
         _slice_daily_cache_to_tile_batch(
@@ -1869,6 +1918,7 @@ def _download_batch_daily_stats(
         time_zone=str(params.get("time_zone", "utc+00:00")),
         frequency=str(params.get("frequency", "1_hourly")),
         months=months,
+        days=days,
     )
     try:
         retrieve(ERA5_DAILY_STATS_DATASET, req, dl_path, overwrite=overwrite_download)
@@ -2435,6 +2485,7 @@ def package_registry(
     start_year: int | None = None,
     end_year: int | None = None,
     end_month: int | None = None,
+    end_day: int | None = None,
     metric_ids: list[str] | None = None,
     tile_range: TileRange | None = None,
     batch_tiles: int | None = None,
@@ -2653,7 +2704,7 @@ def package_registry(
         )
         years_int = list(range(analysis_start_year, analysis_end_year + 1))
         partial_end = _resolve_partial_end(
-            source, end_month, analysis_end_year, download_end_year
+            source, end_month, analysis_end_year, download_end_year, end_day
         )
         if partial_end is not None and time_axis == "yearly":
             raise SystemExit(
@@ -2663,16 +2714,29 @@ def package_registry(
                 f"year would be wrong — set this metric's source.time_range."
                 f"end_year to the last complete year instead."
             )
+        if (
+            partial_end is not None
+            and partial_end[2] is not None
+            and time_axis == "monthly"
+        ):
+            raise SystemExit(
+                f"Metric {metric_id} has a monthly time_axis but its final month "
+                f"{partial_end[0]}-{partial_end[1]:02d} is incomplete (data "
+                f"through day {partial_end[2]:02d}). A monthly value computed "
+                f"from a partial month would be wrong — omit end_day for this "
+                f"metric (drop the final month) or use a daily time_axis."
+            )
+        _partial_dbg = (
+            f" partial_final_year={partial_end[0]}..month{partial_end[1]:02d}"
+            + (f"day{partial_end[2]:02d}" if partial_end and partial_end[2] else "")
+            if partial_end
+            else ""
+        )
         print(
             f"[metric] start metric={metric_id} source={source_type} "
             f"time_axis={time_axis} agg={agg} "
             f"analysis={analysis_start_year}..{analysis_end_year} "
-            f"download={download_start_year}..{download_end_year}"
-            + (
-                f" partial_final_year={partial_end[0]}..month{partial_end[1]:02d}"
-                if partial_end
-                else ""
-            )
+            f"download={download_start_year}..{download_end_year}" + _partial_dbg
         )
         if debug:
             print(
@@ -2978,6 +3042,9 @@ def package_registry(
                                             variable=variable,
                                             params=params,
                                             months=months,
+                                            days=_partial_month_days(
+                                                months, years_part, partial_end
+                                            ),
                                             download_tile_range=_covering_download_range(
                                                 batch,
                                                 metric_tile_range,
@@ -3399,6 +3466,9 @@ def package_registry(
                                     variable=variable,
                                     params=params,
                                     months=months,
+                                    days=_partial_month_days(
+                                        months, years_part, partial_end
+                                    ),
                                     download_tile_range=_covering_download_range(
                                         batch,
                                         metric_tile_range,

@@ -94,6 +94,14 @@ def main() -> None:
         help="Last available month (1-11) of the final year when it is incomplete "
         "(e.g. 6 for data through June). Only valid for monthly/daily metrics.",
     )
+    ap.add_argument(
+        "--end-day",
+        type=int,
+        default=None,
+        help="Last available day of --end-month when the final month is also "
+        "incomplete (e.g. 9 for data through the 9th). Daily-axis metrics only; "
+        "requires --end-month.",
+    )
     ap.add_argument("--cache-dir", type=Path, default=Path("data/cache"))
 
     ap.add_argument("--batch-tiles", type=int, default=None)
@@ -141,6 +149,7 @@ def main() -> None:
         start_year=args.start_year,
         end_year=args.end_year,
         end_month=args.end_month,
+        end_day=args.end_day,
         metric_ids=metric_ids,
         tile_range=tile_range,
         batch_tiles=args.batch_tiles,
