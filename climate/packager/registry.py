@@ -2427,6 +2427,80 @@ def _package_derived_metrics(
                 continue
             scalar_grid = scalar[:, :, np.newaxis]  # (nlat, nlon, 1)
 
+        elif fn == "daily_window_anomaly":
+            inputs = source.get("inputs", [])
+            if len(inputs) != 2:
+                raise ValueError(
+                    f"{metric_id}: daily_window_anomaly requires 2 inputs "
+                    "(daily metric, monthly-climatology metric)"
+                )
+            from climate.packager.maps import (
+                _load_metric_axis,
+                climatology_month_indices,
+                reduce_metric_mean_over_indices,
+                window_day_indices,
+            )
+            from climate.tiles.layout import grid_from_id
+
+            daily_id, monthly_id = inputs
+            daily_spec = manifest[daily_id]
+            monthly_spec = manifest[monthly_id]
+            try:
+                daily_grid = grid_from_id(
+                    str(daily_spec["grid_id"]),
+                    tile_size=int(daily_spec.get("storage", {}).get("tile_size", 64)),
+                )
+                monthly_grid = grid_from_id(
+                    str(monthly_spec["grid_id"]),
+                    tile_size=int(
+                        monthly_spec.get("storage", {}).get("tile_size", 64)
+                    ),
+                )
+                daily_axis = _load_metric_axis(
+                    series_root, daily_grid, daily_id, "daily"
+                )
+                monthly_axis = _load_metric_axis(
+                    series_root, monthly_grid, monthly_id, "monthly"
+                )
+                win_idx = window_day_indices(
+                    daily_axis,
+                    str(params["window_start"]),
+                    str(params["window_end"]),
+                )
+                if not win_idx:
+                    raise ValueError(
+                        f"window {params['window_start']}..{params['window_end']} "
+                        "not present in daily axis"
+                    )
+                clim_idx = climatology_month_indices(
+                    monthly_axis,
+                    int(params["clim_month"]),
+                    int(params["clim_start_year"]),
+                    int(params["clim_end_year"]),
+                )
+                if not clim_idx:
+                    raise ValueError("climatology months not present in monthly axis")
+                win_mean, grid = reduce_metric_mean_over_indices(
+                    series_root=series_root,
+                    metric_id=daily_id,
+                    metric_spec=daily_spec,
+                    indices=win_idx,
+                )
+                clim, _ = reduce_metric_mean_over_indices(
+                    series_root=series_root,
+                    metric_id=monthly_id,
+                    metric_spec=monthly_spec,
+                    indices=clim_idx,
+                )
+                scalar = (win_mean - clim).astype(np.float64)
+            except (FileNotFoundError, ValueError) as exc:
+                print(
+                    f"[derived] skip metric={metric_id} fn={fn} "
+                    f"reason=input not ready ({exc})"
+                )
+                continue
+            scalar_grid = scalar[:, :, np.newaxis]  # (nlat, nlon, 1)
+
         elif fn == "blended_preindustrial_anomaly":
             inputs = source.get("inputs", [])
             if len(inputs) != 2:

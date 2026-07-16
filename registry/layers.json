@@ -54,5 +54,45 @@
     "map_id": "t2m_june_2026_anomaly_mercator_texture",
     "opacity": 0.78,
     "resampling": "nearest"
+  },
+  "heatwave_2026_w1": {
+    "id": "heatwave_2026_w1",
+    "enable": false,
+    "label": "Jun 20–22 · Iberia",
+    "unit": "temperature",
+    "description": "Air temperature over 20–22 June 2026 relative to the 1991–2020 June average, as the heat dome built over the Iberian Peninsula.",
+    "map_id": "t2m_heatwave_2026_w1_mercator_texture",
+    "opacity": 0.8,
+    "resampling": "nearest"
+  },
+  "heatwave_2026_w2": {
+    "id": "heatwave_2026_w2",
+    "enable": false,
+    "label": "Jun 23–25 · France",
+    "unit": "temperature",
+    "description": "Air temperature over 23–25 June 2026 relative to the 1991–2020 June average, as the heat peaked over France and the Low Countries.",
+    "map_id": "t2m_heatwave_2026_w2_mercator_texture",
+    "opacity": 0.8,
+    "resampling": "nearest"
+  },
+  "heatwave_2026_w3": {
+    "id": "heatwave_2026_w3",
+    "enable": false,
+    "label": "Jun 27–29 · Central Europe",
+    "unit": "temperature",
+    "description": "Air temperature over 27–29 June 2026 relative to the 1991–2020 June average, as the heat peaked over Central Europe and Italy.",
+    "map_id": "t2m_heatwave_2026_w3_mercator_texture",
+    "opacity": 0.8,
+    "resampling": "nearest"
+  },
+  "heatwave_2026_w4": {
+    "id": "heatwave_2026_w4",
+    "enable": false,
+    "label": "Jul 6–10 · Second episode",
+    "unit": "temperature",
+    "description": "Air temperature over 6–10 July 2026 relative to the 1991–2020 July average, as a second episode built over France and Iberia. Still rising at the July 10 data cutoff.",
+    "map_id": "t2m_heatwave_2026_w4_mercator_texture",
+    "opacity": 0.8,
+    "resampling": "nearest"
   }
 }

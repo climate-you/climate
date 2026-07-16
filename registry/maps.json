@@ -145,7 +145,7 @@
     "type": "texture",
     "file_format": "webp",
     "projection": "mercator",
-    "mercator_lat_max": 89.99,
+    "mercator_lat_max": 85.05112878,
     "web_write": true,
     "source_metric": "t2m_june_2026_anomaly_vs_1991_2020_c",
     "reducer": {
@@ -169,6 +169,90 @@
     },
     "output": {
       "filename": "t2m_june_2026_anomaly_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatwave_2026_w1_mercator_texture": {
+    "id": "t2m_heatwave_2026_w1_mercator_texture",
+    "title": "June 20–22 2026 heat anomaly vs 1991–2020 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatwave_2026_w1_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": ["#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#b10026"],
+      "nan_color": "#fff9d7"
+    },
+    "scale": { "mode": "linear", "vmin": 0.0, "vmax": 12.0 },
+    "output": {
+      "filename": "t2m_heatwave_2026_w1_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatwave_2026_w2_mercator_texture": {
+    "id": "t2m_heatwave_2026_w2_mercator_texture",
+    "title": "June 23–25 2026 heat anomaly vs 1991–2020 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatwave_2026_w2_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": ["#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#b10026"],
+      "nan_color": "#fff9d7"
+    },
+    "scale": { "mode": "linear", "vmin": 0.0, "vmax": 12.0 },
+    "output": {
+      "filename": "t2m_heatwave_2026_w2_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatwave_2026_w3_mercator_texture": {
+    "id": "t2m_heatwave_2026_w3_mercator_texture",
+    "title": "June 27–29 2026 heat anomaly vs 1991–2020 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatwave_2026_w3_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": ["#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#b10026"],
+      "nan_color": "#fff9d7"
+    },
+    "scale": { "mode": "linear", "vmin": 0.0, "vmax": 12.0 },
+    "output": {
+      "filename": "t2m_heatwave_2026_w3_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatwave_2026_w4_mercator_texture": {
+    "id": "t2m_heatwave_2026_w4_mercator_texture",
+    "title": "July 6–10 2026 heat anomaly vs 1991–2020 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatwave_2026_w4_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": ["#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#b10026"],
+      "nan_color": "#fff9d7"
+    },
+    "scale": { "mode": "linear", "vmin": 0.0, "vmax": 12.0 },
+    "output": {
+      "filename": "t2m_heatwave_2026_w4_mercator.webp",
       "width": 1440,
       "height": 2150
     }

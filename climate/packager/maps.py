@@ -312,6 +312,71 @@ def compute_monthly_climatology_anomaly(
     return (target - clim).astype(np.float64)
 
 
+def window_day_indices(daily_axis: list, start_date: str, end_date: str) -> list[int]:
+    """Indices of a daily axis ("YYYY-MM-DD") within [start_date, end_date]."""
+    return [i for i, a in enumerate(daily_axis) if start_date <= str(a) <= end_date]
+
+
+def climatology_month_indices(
+    monthly_axis: list, month: int, start_year: int, end_year: int
+) -> list[int]:
+    """Indices of a monthly axis ("YYYY-MM") for one calendar month over a
+    year window (e.g. every June from 1991..2020)."""
+    suffix = f"-{int(month):02d}"
+    out = []
+    for i, a in enumerate(monthly_axis):
+        s = str(a)
+        if s.endswith(suffix) and start_year <= int(s[:4]) <= end_year:
+            out.append(i)
+    return out
+
+
+def reduce_metric_mean_over_indices(
+    *,
+    series_root: Path,
+    metric_id: str,
+    metric_spec: dict[str, Any],
+    indices: list[int],
+) -> tuple[np.ndarray, GridSpec]:
+    """Tile-streamed mean over selected time indices → (nlat, nlon) scalar grid.
+
+    Reads one tile at a time so it stays memory-safe for large daily metrics
+    (the full daily series would be tens of GB if loaded whole).
+    """
+    storage = metric_spec.get("storage", {})
+    ext = _compression_ext(storage.get("compression"))
+    tile_size = int(storage.get("tile_size", 64))
+    grid = grid_from_id(str(metric_spec["grid_id"]), tile_size=tile_size)
+    idx = np.asarray(indices, dtype=int)
+    if idx.size == 0:
+        raise ValueError(f"No time indices selected for metric {metric_id}.")
+
+    out = np.full((grid.nlat, grid.nlon), np.nan, dtype=np.float64)
+    ntr, ntc = tile_counts(grid)
+    for tr in range(ntr):
+        i_lat0 = tr * grid.tile_size
+        valid_h = min(grid.tile_size, grid.nlat - i_lat0)
+        for tc in range(ntc):
+            i_lon0 = tc * grid.tile_size
+            valid_w = min(grid.tile_size, grid.nlon - i_lon0)
+            p = tile_path(
+                series_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
+            )
+            if not p.exists():
+                raise FileNotFoundError(f"Missing source tile: {p}")
+            _hdr, arr = read_tile_array(p)
+            arr = np.asarray(arr, dtype=np.float64)
+            if arr.ndim != 3:
+                raise ValueError(f"Expected 3-D tile for {p}: {arr.shape}")
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                tile_mean = np.nanmean(arr[:, :, idx], axis=2)
+            out[i_lat0 : i_lat0 + valid_h, i_lon0 : i_lon0 + valid_w] = tile_mean[
+                :valid_h, :valid_w
+            ]
+    return out, grid
+
+
 def _load_scalar_grid_from_metric(
     *,
     series_root: Path,

@@ -7,9 +7,44 @@ import pytest
 
 from climate.packager.maps import (
     _load_metric_axis,
+    climatology_month_indices,
     compute_monthly_climatology_anomaly,
+    window_day_indices,
 )
 from climate.tiles.layout import grid_from_id
+
+
+class TestWindowDayIndices:
+    def test_selects_inclusive_range(self):
+        axis = [f"2026-06-{d:02d}" for d in range(1, 31)]
+        idx = window_day_indices(axis, "2026-06-23", "2026-06-25")
+        assert [axis[i] for i in idx] == ["2026-06-23", "2026-06-24", "2026-06-25"]
+
+    def test_spans_month_boundary(self):
+        axis = [f"2026-06-{d:02d}" for d in range(28, 31)] + [
+            f"2026-07-{d:02d}" for d in range(1, 3)
+        ]
+        idx = window_day_indices(axis, "2026-06-29", "2026-07-01")
+        assert [axis[i] for i in idx] == ["2026-06-29", "2026-06-30", "2026-07-01"]
+
+    def test_empty_when_out_of_range(self):
+        axis = ["2026-06-01", "2026-06-02"]
+        assert window_day_indices(axis, "2026-07-01", "2026-07-05") == []
+
+
+class TestClimatologyMonthIndices:
+    def test_selects_one_month_over_year_window(self):
+        axis = [f"{y}-{m:02d}" for y in range(1989, 2023) for m in range(1, 13)]
+        idx = climatology_month_indices(axis, 6, 1991, 2020)
+        picked = [axis[i] for i in idx]
+        assert len(picked) == 30
+        assert picked[0] == "1991-06" and picked[-1] == "2020-06"
+        assert all(a.endswith("-06") for a in picked)
+
+    def test_excludes_years_outside_window(self):
+        axis = [f"{y}-06" for y in range(1985, 2026)]
+        idx = climatology_month_indices(axis, 6, 1991, 2020)
+        assert all(1991 <= int(axis[i][:4]) <= 2020 for i in idx)
 
 
 class TestLoadMetricAxis:

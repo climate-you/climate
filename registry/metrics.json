@@ -130,6 +130,142 @@
       }
     }
   },
+  "t2m_heatwave_2026_w1_anomaly_c": {
+    "id": "t2m_heatwave_2026_w1_anomaly_c",
+    "title": "June 20–22 2026 heat anomaly vs 1991–2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-06-20",
+            "window_end": "2026-06-22",
+            "clim_month": 6,
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": {
+      "tiled": true,
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
+    }
+  },
+  "t2m_heatwave_2026_w2_anomaly_c": {
+    "id": "t2m_heatwave_2026_w2_anomaly_c",
+    "title": "June 23–25 2026 heat anomaly vs 1991–2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-06-23",
+            "window_end": "2026-06-25",
+            "clim_month": 6,
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": {
+      "tiled": true,
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
+    }
+  },
+  "t2m_heatwave_2026_w3_anomaly_c": {
+    "id": "t2m_heatwave_2026_w3_anomaly_c",
+    "title": "June 27–29 2026 heat anomaly vs 1991–2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-06-27",
+            "window_end": "2026-06-29",
+            "clim_month": 6,
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": {
+      "tiled": true,
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
+    }
+  },
+  "t2m_heatwave_2026_w4_anomaly_c": {
+    "id": "t2m_heatwave_2026_w4_anomaly_c",
+    "title": "July 6–10 2026 heat anomaly vs 1991–2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-07-06",
+            "window_end": "2026-07-10",
+            "clim_month": 7,
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": {
+      "tiled": true,
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
+    }
+  },
   "t2m_yearly_5y_mean_c": {
     "id": "t2m_yearly_5y_mean_c",
     "title": "2m temperature 5y rolling mean",
