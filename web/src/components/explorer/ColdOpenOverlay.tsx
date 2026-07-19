@@ -13,8 +13,8 @@ import {
 } from "@/lib/explorer/constants";
 import { parseIntroOverrideQuery } from "@/lib/explorer/routing";
 import {
-  defaultTemperatureUnitForLocale,
   observedWarmingString,
+  useDefaultTemperatureUnit,
 } from "@/lib/temperatureUnit";
 import styles from "./ColdOpenOverlay.module.css";
 
@@ -48,7 +48,7 @@ export default function ColdOpenOverlay({
 
   const introPaused = introVisible && paused;
 
-  const warmingText = `+${observedWarmingString(defaultTemperatureUnitForLocale())}`;
+  const warmingText = `+${observedWarmingString(useDefaultTemperatureUnit())}`;
 
   // Sync parent state via callbacks
   useEffect(() => {

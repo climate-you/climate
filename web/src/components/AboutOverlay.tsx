@@ -2,8 +2,8 @@
 
 import { useEffect } from "react";
 import {
-  defaultTemperatureUnitForLocale,
   observedWarmingString,
+  useDefaultTemperatureUnit,
 } from "@/lib/temperatureUnit";
 import styles from "./AboutOverlay.module.css";
 
@@ -26,7 +26,7 @@ export default function AboutOverlay({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  const defaultUnit = defaultTemperatureUnitForLocale();
+  const defaultUnit = useDefaultTemperatureUnit();
   const observedWarmingText = `${observedWarmingString(defaultUnit)}`;
   const parisTargetText = defaultUnit === "F" ? "3.6°F" : "2°C";
   const appVersionText = appVersion ?? "unknown";
