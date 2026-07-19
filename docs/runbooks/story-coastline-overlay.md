@@ -79,3 +79,18 @@ displays, so the map can be reframed without a regeneration.
 - Simplification is applied with `preserve_topology=False`, which is fine for
   purely decorative reference lines but is not suitable if the output is ever
   used for analysis.
+
+## Related: social sharing image
+
+`scripts/make_story_og_image.py` builds a story's 1200x630 Open Graph card,
+reusing the same texture crop and coastline overlay:
+
+```bash
+python scripts/make_story_og_image.py \
+  --texture data/releases/dev/maps/global_0p25/t2m_heatwave_2026_w2_mercator_texture/t2m_heatwave_2026_w2_mercator.webp \
+  --title "The June–July 2026 heat over Europe" \
+  --out web/public/story/june-2026-heatwave-og.png
+```
+
+`--kicker`, `--source`, `--bbox`, `--logo` and `--lines` are all overridable.
+Reference the result from the story route's `openGraph.images`.
