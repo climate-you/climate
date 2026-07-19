@@ -21,6 +21,14 @@
  *   Adds v_mercator_x varying to the line shaders; the varying is set to the
  *   actual Mercator X only for vertices at tile boundaries (pos.x < 1 or
  *   > 8190) and to 0.5 elsewhere, then discards fragments outside [0.02, 0.98].
+ *
+ * Fix F – Projection transition on a removed map
+ *   When a map is removed while its style load is still in flight (e.g. a React
+ *   StrictMode double-mount, or any conditional unmount), _load still fires the
+ *   internal projection transition, whose handler reads this.style.projection
+ *   after this.style has been torn down — throwing "Cannot read properties of
+ *   undefined (reading 'projection')". Guards the read with optional chaining so
+ *   the transition on a dead map is a harmless no-op instead of a console error.
  */
 
 "use strict";
@@ -135,6 +143,14 @@ c = applyPatch(
   "fragColor=color*(alpha*opacity);\\n#ifdef GLOBE\\nif (v_depth > 1.0) {discard;}\\n#endif\\n",
   "fragColor=color*(alpha*opacity);\\n#ifdef GLOBE\\nif (v_depth > 1.0) {discard;}\\nif (v_mercator_y < 0.031 || v_mercator_y > 0.969) {discard;}\\nif (v_mercator_x < 0.02 || v_mercator_x > 0.98) {discard;}\\n#endif\\n",
   "DE4: line fragment – polar ring + seam discard",
+);
+
+// ── Fix F: guard projection transition fired on a removed map ──────────────
+c = applyPatch(
+  c,
+  'this.fire(new t.l("projectiontransition",{newProjection:this.style.projection.name}))',
+  'this.fire(new t.l("projectiontransition",{newProjection:this.style?.projection?.name}))',
+  "F: projection transition – guard style access on removed map",
 );
 
 fs.writeFileSync(DIST, c, "utf8");

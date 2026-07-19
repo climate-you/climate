@@ -93,6 +93,8 @@ type Props = {
     lon: number;
   }> | null;
   chatFlyToBbox?: [number, number, number, number] | null;
+  /** Starting camera applied at map construction (avoids a post-load flyTo). */
+  initialCamera?: { center: [number, number]; zoom: number } | null;
   onPickChatMarker?: (lat: number, lon: number) => void;
   backgroundImageUrl?: string;
   onGraphOpen?: () => void;
@@ -392,6 +394,7 @@ export default function MapLibreGlobe({
   autoRotate = false,
   chatLocations = null,
   chatFlyToBbox = null,
+  initialCamera = null,
   onPickChatMarker,
   backgroundImageUrl,
   onGraphOpen,
@@ -422,6 +425,7 @@ export default function MapLibreGlobe({
   const onTextureDebugInfoChangeRef = useRef(onTextureDebugInfoChange);
   const autoRotateRef = useRef(autoRotate);
   const backgroundImageUrlRef = useRef(backgroundImageUrl);
+  const initialCameraRef = useRef(initialCamera);
   const onGraphOpenRef = useRef(onGraphOpen);
   const onChatOpenRef = useRef(onChatOpen);
   const applyGlobeBackgroundRef = useRef<(() => void) | null>(null);
@@ -534,11 +538,12 @@ export default function MapLibreGlobe({
     maxTextureSizeRef.current = getMaxTextureSize();
 
     const baseZoom = responsiveBaseZoom();
+    const initialCam = initialCameraRef.current;
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
       style: "/custom_map.json",
-      center: initialView.center,
-      zoom: baseZoom,
+      center: initialCam ? initialCam.center : initialView.center,
+      zoom: initialCam ? initialCam.zoom : baseZoom,
       minZoom: baseZoom,
       maxZoom: 10,
       pitch: initialView.pitch,
@@ -1204,7 +1209,17 @@ export default function MapLibreGlobe({
       styleReadyRef.current = false;
       applyGlobeBackgroundRef.current = null;
       onTextureDebugInfoChangeRef.current?.(null);
-      map.remove();
+      // If the map is torn down before its style has loaded (a React StrictMode
+      // double-mount, or any conditional unmount), removing it now leaves
+      // maplibre's in-flight _load to run against a null style and throw. Defer
+      // removal until the style settles so _load completes cleanly first.
+      if (map.loaded()) {
+        map.remove();
+      } else {
+        const removeOnce = () => map.remove();
+        map.once("load", removeOnce);
+        map.once("error", removeOnce);
+      }
       mapRef.current = null;
     };
   }, []);
