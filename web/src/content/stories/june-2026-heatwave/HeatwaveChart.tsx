@@ -77,15 +77,23 @@ type Props = { title: string; sourceText: string };
 
 export default function HeatwaveChart({ title, sourceText }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const chartRef = useRef<HTMLDivElement | null>(null);
   const [hover, setHover] = useState<number | null>(null);
 
   const handleDownload = () => {
-    if (svgRef.current)
+    const svg = svgRef.current;
+    if (!svg) return;
+    // Styles are serialized synchronously, so the swap is never painted.
+    chartRef.current?.classList.add(styles.exportLight);
+    try {
       downloadSvgWithAttribution(
-        svgRef.current,
+        svg,
         { title, sourceText },
         "europe-heat-2026-daily-anomaly.png",
       );
+    } finally {
+      chartRef.current?.classList.remove(styles.exportLight);
+    }
   };
 
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
@@ -114,7 +122,7 @@ export default function HeatwaveChart({ title, sourceText }: Props) {
     : 0;
 
   return (
-    <div className={styles.chart}>
+    <div className={styles.chart} ref={chartRef}>
       <DownloadIcon
         label="Download chart"
         onClick={handleDownload}
@@ -133,7 +141,8 @@ export default function HeatwaveChart({ title, sourceText }: Props) {
       >
         {/* episode bands */}
         <rect x="302.8" y="26" width="229.4" height="242" className="cw-bandbg" />
-        <text x="417.5" y="38" textAnchor="middle" className="cw-band">
+        {/* Nudged left of the band centre so it clears the peak's leader line. */}
+        <text x="385" y="38" textAnchor="middle" className="cw-band">
           First episode
         </text>
         <rect
