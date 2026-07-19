@@ -4,24 +4,24 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from "react";
-import { composeAndDownload, type DownloadMeta } from "@/lib/story/download";
+import { type DownloadMeta } from "@/lib/story/download";
+import {
+  type AnomalyMapSource,
+  downloadAnomalyMap,
+  drawMap,
+  loadImage,
+  loadLines,
+} from "@/lib/story/anomalyMapRender";
 import {
   type Bbox,
-  cropRectForBbox,
   DEFAULT_MERCATOR_LAT_MAX,
   mercatorAspect,
-  projectToCanvas,
 } from "@/lib/story/mercator";
 import styles from "./story.module.css";
-
-type LineFeatures = {
-  bbox: [number, number, number, number];
-  coast: number[][][];
-  borders: number[][][];
-};
 
 export type AnomalyMapHandle = {
   /** Composite the map with a framed border + attribution and download a PNG. */
@@ -41,88 +41,6 @@ type Props = {
   alt: string;
   className?: string;
 };
-
-const COAST_STROKE = "rgba(28, 20, 16, 0.62)";
-const BORDER_STROKE = "rgba(28, 20, 16, 0.34)";
-const DOWNLOAD_HEIGHT = 1500; // hi-res backing store for crisp exports
-
-const lineCache = new Map<string, Promise<LineFeatures>>();
-function loadLines(url: string): Promise<LineFeatures> {
-  let cached = lineCache.get(url);
-  if (!cached) {
-    cached = fetch(url).then((r) => {
-      if (!r.ok) throw new Error(`lines ${r.status}`);
-      return r.json() as Promise<LineFeatures>;
-    });
-    lineCache.set(url, cached);
-  }
-  return cached;
-}
-
-const imageCache = new Map<string, Promise<HTMLImageElement>>();
-function loadImage(url: string): Promise<HTMLImageElement> {
-  let cached = imageCache.get(url);
-  if (!cached) {
-    cached = new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.decoding = "async";
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error(`image ${url}`));
-      img.src = url;
-    });
-    imageCache.set(url, cached);
-  }
-  return cached;
-}
-
-function drawLines(
-  ctx: CanvasRenderingContext2D,
-  lines: number[][][],
-  bbox: Bbox,
-  w: number,
-  h: number,
-  latMax: number,
-  stroke: string,
-  width: number,
-) {
-  ctx.strokeStyle = stroke;
-  ctx.lineWidth = width;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  for (const line of lines) {
-    for (let i = 0; i < line.length; i++) {
-      const [lon, lat] = line[i];
-      const [px, py] = projectToCanvas(lon, lat, bbox, w, h, latMax);
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    }
-  }
-  ctx.stroke();
-}
-
-/** Draw the cropped anomaly texture + coastline overlay into a w×h context. */
-function drawMap(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  lines: LineFeatures,
-  bbox: Bbox,
-  textureWidth: number,
-  textureHeight: number,
-  latMax: number,
-  w: number,
-  h: number,
-) {
-  const crop = cropRectForBbox(bbox, textureWidth, textureHeight, latMax);
-  ctx.clearRect(0, 0, w, h);
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, w, h);
-  const scale = h / 640;
-  drawLines(ctx, lines.coast, bbox, w, h, latMax, COAST_STROKE, 1.4 * scale);
-  drawLines(ctx, lines.borders, bbox, w, h, latMax, BORDER_STROKE, 1.0 * scale);
-}
 
 const AnomalyMap = forwardRef<AnomalyMapHandle, Props>(function AnomalyMap(
   {
@@ -144,6 +62,11 @@ const AnomalyMap = forwardRef<AnomalyMapHandle, Props>(function AnomalyMap(
   // Display/export at the TRUE conformal mercator aspect (the stored texture is
   // non-square in pixels, so the crop's pixel aspect would stretch it ~1.5×).
   const aspect = mercatorAspect(bbox);
+
+  const source: AnomalyMapSource = useMemo(
+    () => ({ textureUrl, textureWidth, textureHeight, bbox, linesUrl, latMax }),
+    [textureUrl, textureWidth, textureHeight, bbox, linesUrl, latMax],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -180,28 +103,11 @@ const AnomalyMap = forwardRef<AnomalyMapHandle, Props>(function AnomalyMap(
   useImperativeHandle(
     ref,
     () => ({
-      async download(meta: DownloadMeta, filename: string) {
-        try {
-          const [img, lines] = await Promise.all([
-            loadImage(textureUrl),
-            loadLines(linesUrl),
-          ]);
-          // Hi-res map render, then hand off to the shared framed compositor.
-          const mh = DOWNLOAD_HEIGHT;
-          const mw = Math.round(mh * aspect);
-          const mapCanvas = document.createElement("canvas");
-          mapCanvas.width = mw;
-          mapCanvas.height = mh;
-          const mapCtx = mapCanvas.getContext("2d");
-          if (!mapCtx) return;
-          drawMap(mapCtx, img, lines, bbox, textureWidth, textureHeight, latMax, mw, mh);
-          await composeAndDownload(mapCanvas, meta, filename);
-        } catch {
-          // Silently ignore; download simply won't start.
-        }
+      download(meta: DownloadMeta, filename: string) {
+        void downloadAnomalyMap(source, meta, filename);
       },
     }),
-    [textureUrl, linesUrl, bbox, textureWidth, textureHeight, latMax, aspect],
+    [source],
   );
 
   return (

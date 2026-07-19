@@ -85,11 +85,20 @@ export async function composeAndDownload(
   const gx = border + frame; // graphic left edge
   const rightX = gx + w;
 
-  // Title
+  // Title. Descriptive titles can be long, so shrink to fit the graphic width
+  // rather than letting fillText run off the edge of the canvas.
   ctx.fillStyle = "#111111";
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
-  ctx.font = `700 ${Math.round(titleH * 0.66)}px Georgia, "Times New Roman", serif`;
+  const titleFont = (px: number) =>
+    `700 ${px}px Georgia, "Times New Roman", serif`;
+  let titlePx = Math.round(titleH * 0.66);
+  const minTitlePx = Math.round(titleH * 0.3);
+  ctx.font = titleFont(titlePx);
+  while (titlePx > minTitlePx && ctx.measureText(meta.title).width > w) {
+    titlePx -= 2;
+    ctx.font = titleFont(titlePx);
+  }
   ctx.fillText(meta.title, gx, border + titleH / 2);
 
   // Framed graphic

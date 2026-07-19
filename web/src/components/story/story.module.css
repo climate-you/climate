@@ -75,13 +75,59 @@
   --bandbg-alt: rgba(127, 160, 255, 0.12);
 }
 
+.eyebrowRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 16px;
+}
+
 .eyebrow {
   font-size: 0.72rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--blue);
   font-weight: 700;
-  margin: 0 0 16px;
+  margin: 0;
+}
+
+.eyebrowActions {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex: none;
+}
+
+.shareBtn {
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.shareBtn:hover,
+.shareBtn:focus-visible {
+  color: var(--ink);
+}
+
+.backLink {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 1px solid transparent;
+}
+.backLink:hover,
+.backLink:focus-visible {
+  color: var(--ink);
+  border-bottom-color: var(--hairline-strong);
 }
 
 .hero h1 {
@@ -354,7 +400,45 @@
 .globeCanvasWrap {
   position: relative;
   width: 100%;
-  height: min(66vh, 560px);
+  height: min(70vh, 620px);
+}
+
+.globeDownload {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 4;
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+}
+
+/* Only shown once the reader has taken over, to hand the tour back. */
+.globePlay {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 4;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.globePlay:hover,
+.globePlay:focus-visible {
+  background: var(--surface);
+  border-color: var(--blue);
+  color: var(--blue);
 }
 .globeBadge {
   position: absolute;
@@ -514,6 +598,25 @@
 .chartSec {
   margin: 56px 0;
 }
+/* Exports are composited onto a white card, so bake the light palette no
+   matter which theme the reader is in — otherwise dark-theme greys (axis
+   labels, gridlines, band captions) come out invisible on white. Applied to
+   the chart only while its computed styles are being serialized. */
+.exportLight {
+  --paper: #fff;
+  --surface: #fff;
+  --surface-alt: #f4f4f4;
+  --ink: #111;
+  --muted: rgba(17, 17, 17, 0.66);
+  --hairline: rgba(17, 17, 17, 0.18);
+  --hairline-strong: rgba(17, 17, 17, 0.6);
+  --blue: #0f50ff;
+  --heat: #b10026;
+  --grid: rgba(17, 17, 17, 0.16);
+  --bandbg: rgba(17, 17, 17, 0.05);
+  --bandbg-alt: rgba(15, 80, 255, 0.07);
+}
+
 .chart {
   position: relative;
   background: var(--surface);
@@ -661,7 +764,7 @@
   text-decoration: underline;
 }
 
-.swipeHint {
+.statsHint {
   display: none;
 }
 
@@ -676,17 +779,33 @@
   .lead {
     display: flex;
     flex-direction: column;
-    gap: 26px;
+    gap: 20px;
     margin-top: 30px;
   }
-  .stats {
+  /* Four figures do not fit side by side on a phone, so the row scrolls
+     rather than squeezing each one to an unreadable column. */
+  .statsCol {
     order: -1;
+  }
+  .stats {
     flex-direction: row;
     border-top: 2px solid var(--ink);
     border-bottom: 1px solid var(--hairline);
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
   }
+  .stats::-webkit-scrollbar {
+    display: none;
+  }
+  /* Same width three used to occupy, so the row keeps its tight look and the
+     fourth simply scrolls into view. */
   .stat {
-    flex: 1;
+    flex: 0 0 auto;
+    width: 32%;
+    min-width: 108px;
+    scroll-snap-align: start;
     padding: 12px 8px;
     border-bottom: none;
   }
@@ -717,12 +836,13 @@
     flex: 0 0 78%;
     scroll-snap-align: center;
   }
-  .swipeHint {
+  .statsHint {
     display: block;
-    text-align: center;
-    font-size: 0.72rem;
+    text-align: right;
+    font-size: 0.7rem;
+    line-height: 1.2;
     color: var(--muted);
-    margin-top: 12px;
+    margin: 5px 2px 0;
     letter-spacing: 0.03em;
   }
   .dome2 {

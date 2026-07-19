@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import MapLibreGlobe from "@/components/MapLibreGlobe";
 import type { MapLayerOption } from "@/components/MapLibreGlobe";
+import DownloadIcon from "./DownloadIcon";
 import LocationPanel from "./LocationPanel";
 import styles from "./story.module.css";
 
@@ -19,6 +20,14 @@ type Props = {
   /** Passed through to the location panel. */
   panelFromDate?: string;
   panelPeriodLabel?: string;
+  /**
+   * Cycle through the steps every N ms until the reader interacts. Omit (or
+   * pass 0) to leave the globe on its initial step.
+   */
+  autoAdvanceMs?: number;
+  /** Renders a download control that exports the map for the active step. */
+  onDownloadStep?: (stepId: string) => void;
+  downloadLabel?: string;
 };
 
 function cameraForBbox(bbox: [number, number, number, number]) {
@@ -40,6 +49,9 @@ export default function StoryGlobe({
   release,
   panelFromDate,
   panelPeriodLabel,
+  autoAdvanceMs = 0,
+  onDownloadStep,
+  downloadLabel = "Download the map for this window",
 }: Props) {
   const [activeLayerId, setActiveLayerId] = useState(initialLayerId);
   const [initialCamera] = useState(() => cameraForBbox(flyToBbox));
@@ -51,19 +63,67 @@ export default function StoryGlobe({
   const [recenter, setRecenter] = useState<
     [number, number, number, number] | null
   >(null);
+  // The tour runs until the reader takes over; resuming it automatically would
+  // fight someone who is exploring, so it only restarts from the play control.
+  const [touring, setTouring] = useState(autoAdvanceMs > 0);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+
+  const stopTour = useCallback(() => setTouring(false), []);
+  const startTour = useCallback(() => setTouring(true), []);
 
   const noop = useCallback(() => {}, []);
-  const handlePick = useCallback((lat: number, lon: number) => {
-    setPicked({ lat, lon });
-  }, []);
+  const handlePick = useCallback(
+    (lat: number, lon: number) => {
+      stopTour();
+      setPicked({ lat, lon });
+    },
+    [stopTour],
+  );
   const closePanel = useCallback(() => {
     setPicked(null);
     setRecenter([...flyToBbox]);
   }, [flyToBbox]);
 
+  // Any drag, wheel or tap on the stage counts as taking over.
+  useEffect(() => {
+    if (!touring) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    const opts = { passive: true } as const;
+    stage.addEventListener("pointerdown", stopTour, opts);
+    stage.addEventListener("wheel", stopTour, opts);
+    return () => {
+      stage.removeEventListener("pointerdown", stopTour);
+      stage.removeEventListener("wheel", stopTour);
+    };
+  }, [touring, stopTour]);
+
+  useEffect(() => {
+    if (!touring || autoAdvanceMs <= 0 || steps.length < 2) return;
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    )
+      return;
+    const timer = window.setInterval(() => {
+      setActiveLayerId((current) => {
+        const i = steps.findIndex((s) => s.id === current);
+        return steps[(i + 1) % steps.length].id;
+      });
+    }, autoAdvanceMs);
+    return () => window.clearInterval(timer);
+  }, [touring, autoAdvanceMs, steps]);
+
   return (
-    <div className={styles.globeStage}>
+    <div className={styles.globeStage} ref={stageRef}>
       <span className={styles.globeBadge}>Interactive</span>
+      {onDownloadStep ? (
+        <DownloadIcon
+          label={downloadLabel}
+          className={styles.globeDownload}
+          onClick={() => onDownloadStep(activeLayerId)}
+        />
+      ) : null}
       <div className={styles.globeCanvasWrap}>
         <MapLibreGlobe
           panelOpen={false}
@@ -92,6 +152,19 @@ export default function StoryGlobe({
           onClose={closePanel}
         />
       )}
+      {autoAdvanceMs > 0 && !touring ? (
+        <button
+          type="button"
+          className={styles.globePlay}
+          onClick={startTour}
+          aria-label="Resume stepping through the windows"
+          title="Resume animation"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path d="M8 5.5v13l11-6.5z" fill="currentColor" />
+          </svg>
+        </button>
+      ) : null}
       <div className={styles.globeSteps} role="group" aria-label="Heat windows">
         {steps.map((step) => (
           <button
@@ -101,7 +174,10 @@ export default function StoryGlobe({
               step.id === activeLayerId ? styles.stepBtnActive : ""
             }`}
             aria-pressed={step.id === activeLayerId}
-            onClick={() => setActiveLayerId(step.id)}
+            onClick={() => {
+              stopTour();
+              setActiveLayerId(step.id);
+            }}
           >
             {step.label}
           </button>
