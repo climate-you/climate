@@ -761,6 +761,26 @@
   gap: 10px;
 }
 
+/* Wide screens show every link inline; the toggle is a narrow-screen
+   affordance. Scoped to the dock so it outranks .searchMetaLink below. */
+.navItems {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sourcesLinkDock .navToggle {
+  display: none;
+}
+
+/* Dropdown-only furniture: on wide screens the overlay does this job.
+   Scoped to the dock so it outranks the .searchMetaLink display below. */
+.navSectionLabel,
+.navDivider,
+.navItems .navStoryLink {
+  display: none;
+}
+
 .searchMetaLink {
   font-size: 18px;
   color: var(--text-primary);
@@ -1177,6 +1197,131 @@
     padding: 4px 10px;
     width: var(--meta-dock-width);
     text-align: center;
+  }
+
+  /* Collapse the links behind a hamburger so they do not crowd the map. */
+  .sourcesLinkDock {
+    /* Above the search field, so the open menu is never occluded. */
+    z-index: 20;
+    align-items: flex-end;
+  }
+
+  /* Sized to match the map control buttons it sits opposite. */
+  .sourcesLinkDock .navToggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--top-ui-size);
+    height: var(--top-ui-size);
+    padding: 0;
+    background: var(--surface);
+    border: 1px solid var(--surface-border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  .sourcesLinkDock .navToggle:hover,
+  .sourcesLinkDock .navToggle:focus-visible {
+    background: var(--surface-alt);
+    border-color: var(--surface-border-strong);
+  }
+
+  /* Three bars drawn from one element: the middle is the box itself. */
+  .navToggleBars,
+  .navToggleBars::before,
+  .navToggleBars::after {
+    display: block;
+    width: 19px;
+    height: 2px;
+    border-radius: 2px;
+    background: currentColor;
+  }
+
+  .navToggleBars {
+    position: relative;
+  }
+
+  .navToggleBars::before,
+  .navToggleBars::after {
+    content: "";
+    position: absolute;
+    left: 0;
+  }
+
+  .navToggleBars::before {
+    top: -6px;
+  }
+
+  .navToggleBars::after {
+    top: 6px;
+  }
+
+  /* The overlay entry is a wide-screen affordance; here the stories are
+     listed directly so a reader reaches one in a single tap. */
+  .navItems .navCaseStudies {
+    display: none;
+  }
+
+  .navItems .navStoryLink {
+    display: block;
+  }
+
+  /* Anchored dropdown: taken out of flow so opening it never resizes the
+     dock, which would otherwise shift the toggle sideways. */
+  .navItems {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    min-width: 190px;
+    padding: 6px;
+    background: var(--surface);
+    border: 1px solid var(--surface-border-strong);
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  }
+
+  .navItemsOpen {
+    display: flex;
+  }
+
+  /* Inside the dropdown the entries read as menu rows, not pills. */
+  .navItems .searchMetaLink {
+    width: auto;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    justify-content: flex-start;
+    text-align: left;
+    padding: 9px 10px;
+    font-size: 14px;
+    white-space: normal;
+  }
+
+  .navItems .searchMetaLink:hover,
+  .navItems .searchMetaLink:focus-visible {
+    background: var(--surface-alt);
+  }
+
+  .navSectionLabel {
+    display: block;
+    padding: 6px 10px 2px;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted-text);
+    font-weight: 700;
+  }
+
+  .navDivider {
+    display: block;
+    height: 1px;
+    margin: 5px 6px;
+    background: var(--surface-border);
   }
 }
 

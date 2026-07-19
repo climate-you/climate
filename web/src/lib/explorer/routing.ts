@@ -2,7 +2,7 @@ import type { TextureVariantOverride } from "@/components/MapLibreGlobe";
 
 import { DEFAULT_OVERLAY_BASE_PATH } from "@/lib/explorer/constants";
 
-export type OverlayRoute = "about" | "sources" | null;
+export type OverlayRoute = "about" | "sources" | "case-studies" | null;
 
 export function parseDebugQuery(search: string): boolean {
   const raw = (new URLSearchParams(search).get("debug") ?? "")
@@ -38,14 +38,20 @@ export function parseOverlayFromLocationParts(
 ): OverlayRoute {
   if (pathname === "/about") return "about";
   if (pathname === "/sources") return "sources";
+  if (pathname === "/case-studies") return "case-studies";
   const params = new URLSearchParams(search);
   if (params.has("about")) return "about";
   if (params.has("sources")) return "sources";
+  if (params.has("case-studies")) return "case-studies";
   return null;
 }
 
 export function stripOverlayPath(pathname: string): string {
-  if (pathname === "/about" || pathname === "/sources") {
+  if (
+    pathname === "/about" ||
+    pathname === "/sources" ||
+    pathname === "/case-studies"
+  ) {
     return DEFAULT_OVERLAY_BASE_PATH;
   }
   return pathname || DEFAULT_OVERLAY_BASE_PATH;
@@ -57,5 +63,6 @@ export function overlayPathForRoute(
 ): string {
   if (overlay === "about") return "/about";
   if (overlay === "sources") return "/sources";
+  if (overlay === "case-studies") return "/case-studies";
   return stripOverlayPath(fallbackPath);
 }

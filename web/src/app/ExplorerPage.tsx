@@ -17,6 +17,10 @@ import AboutOverlay from "@/components/AboutOverlay";
 import GraphCard from "@/components/explorer/GraphCard";
 import InfoBubble from "@/components/explorer/InfoBubble";
 import ColdOpenOverlay from "@/components/explorer/ColdOpenOverlay";
+import SiteNav from "@/components/explorer/SiteNav";
+import CaseStudiesOverlay from "@/components/CaseStudiesOverlay";
+import type { CaseStudy } from "@/components/CaseStudiesOverlay";
+import type { OverlayRoute } from "@/lib/explorer/routing";
 import SearchOverlay from "@/components/explorer/SearchOverlay";
 import type { AutocompleteItem } from "@/components/explorer/SearchOverlay";
 import SourcesOverlay from "@/components/SourcesOverlay";
@@ -363,9 +367,20 @@ function PanelStepIcon({
   );
 }
 
+// Published case studies, newest first. Drives both the navigation menu and
+// the browsing overlay.
+const CASE_STUDIES: CaseStudy[] = [
+  {
+    title: "The June 2026 heatwave over Europe",
+    href: "/stories/june-2026-heatwave",
+    thumbnail: "/story/june-2026-heatwave-thumb.png",
+    meta: "July 2026",
+  },
+];
+
 type ExplorerPageProps = {
   coldOpen?: boolean;
-  initialOverlay?: "about" | "sources" | null;
+  initialOverlay?: OverlayRoute;
   initialOverlayBasePath?: string;
 };
 
@@ -454,7 +469,12 @@ export default function ExplorerPage({
   useEffect(() => {
     setGlobeBackground(pickGlobeBackground());
   }, []);
-  const { aboutOpen, sourcesOpen, setOverlayOpenWithUrl } = useOverlayRouteSync(
+  const {
+    aboutOpen,
+    sourcesOpen,
+    caseStudiesOpen,
+    setOverlayOpenWithUrl,
+  } = useOverlayRouteSync(
     {
       initialOverlay,
       initialOverlayBasePath,
@@ -1710,7 +1730,7 @@ export default function ExplorerPage({
 
       <ColdOpenOverlay
         active={coldOpen}
-        paused={aboutOpen || sourcesOpen}
+        paused={aboutOpen || sourcesOpen || caseStudiesOpen}
         onVisibleChange={setIntroActive}
         onShowMapChange={setIntroShowMap}
         onAutoRotateChange={setColdOpenAutoRotate}
@@ -1725,22 +1745,17 @@ export default function ExplorerPage({
         externalError={locationError}
       />
       {!introActive ? (
-        <div className={styles.sourcesLinkDock}>
-          <button
-            type="button"
-            className={styles.searchMetaLink}
-            onClick={() => setOverlayOpenWithUrl("about")}
-          >
-            About
-          </button>
-          <button
-            type="button"
-            className={styles.searchMetaLink}
-            onClick={() => setOverlayOpenWithUrl("sources")}
-          >
-            Sources
-          </button>
-        </div>
+        <SiteNav
+          stories={CASE_STUDIES}
+          onOpenCaseStudies={() => setOverlayOpenWithUrl("case-studies")}
+          links={[
+            { label: "About", onSelect: () => setOverlayOpenWithUrl("about") },
+            {
+              label: "Sources",
+              onSelect: () => setOverlayOpenWithUrl("sources"),
+            },
+          ]}
+        />
       ) : null}
 
       {aboutOpen ? (
@@ -1748,6 +1763,13 @@ export default function ExplorerPage({
           onClose={() => setOverlayOpenWithUrl(null)}
           appVersion={appVersion}
           assetsRelease={assetsRelease ?? sessionRelease ?? requestedRelease}
+        />
+      ) : null}
+
+      {caseStudiesOpen ? (
+        <CaseStudiesOverlay
+          studies={CASE_STUDIES}
+          onClose={() => setOverlayOpenWithUrl(null)}
         />
       ) : null}
 

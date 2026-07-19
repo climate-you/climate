@@ -19,6 +19,9 @@ export function useOverlayRouteSync({
 }: UseOverlayRouteSyncArgs) {
   const [aboutOpen, setAboutOpen] = useState(initialOverlay === "about");
   const [sourcesOpen, setSourcesOpen] = useState(initialOverlay === "sources");
+  const [caseStudiesOpen, setCaseStudiesOpen] = useState(
+    initialOverlay === "case-studies",
+  );
   const overlayBasePathRef = useRef<string>(
     stripOverlayPath(initialOverlayBasePath),
   );
@@ -31,6 +34,7 @@ export function useOverlayRouteSync({
     }
     setAboutOpen(overlay === "about");
     setSourcesOpen(overlay === "sources");
+    setCaseStudiesOpen(overlay === "case-studies");
     const targetPath = overlayPathForRoute(
       overlay,
       overlayBasePathRef.current || DEFAULT_OVERLAY_BASE_PATH,
@@ -51,6 +55,7 @@ export function useOverlayRouteSync({
       }
       setAboutOpen(overlay === "about");
       setSourcesOpen(overlay === "sources");
+      setCaseStudiesOpen(overlay === "case-studies");
     };
     syncFromLocation();
     window.addEventListener("popstate", syncFromLocation);
@@ -60,6 +65,7 @@ export function useOverlayRouteSync({
   return {
     aboutOpen,
     sourcesOpen,
+    caseStudiesOpen,
     setOverlayOpenWithUrl,
   };
 }
