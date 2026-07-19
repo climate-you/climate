@@ -181,3 +181,13 @@ This repository also includes scripts and configuration to deploy the platform t
 For day-to-day development, keep this README as orientation and use runbooks for operational details.
 
 Note: dev-only web query options (`?debug=on`, `?texture=mobile|full|auto`) are documented in the backend+frontend runbook.
+
+## Licence
+
+The software is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+Running your own instance — including the interactive globe — is welcome.
+
+Editorial content (articles and case studies under `web/src/app/stories/**` and
+`web/src/content/stories/**`, and the climate.you name and logo) is **not**
+covered by the AGPL and remains © 2026 Benoit Leveau & Fanny Chaléon, all rights
+reserved. See [CONTENT-LICENSE.md](CONTENT-LICENSE.md).

@@ -1,5 +1,23 @@
 Copyright (C) 2026 Benoit Leveau & Fanny Chaléon (climate.you)
 
+The software in this repository is licensed under the GNU Affero General Public
+License v3.0, reproduced in full below.
+
+SCOPE — EDITORIAL CONTENT IS NOT COVERED BY THIS LICENCE
+
+Articles and case studies -- their text, headlines, captions, figures, and the
+editorial selection and annotation of the data they present -- together with the
+climate.you name and logo, are (C) 2026 Benoit Leveau & Fanny Chaleon, all
+rights reserved, and are NOT licensed under the AGPL. This applies in
+particular to:
+
+    web/src/app/stories/**
+    web/src/content/stories/**
+
+The story rendering machinery (web/src/components/story/**, web/src/lib/story/**)
+is AGPL-3.0 like the rest of the codebase. See CONTENT-LICENSE.md for the full
+statement.
+
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
 
