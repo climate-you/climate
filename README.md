@@ -152,6 +152,7 @@ Detailed runbooks:
 
 - [`docs/runbooks/locations-and-ocean-mask.md`](docs/runbooks/locations-and-ocean-mask.md)
 - [`docs/runbooks/reef-mask.md`](docs/runbooks/reef-mask.md)
+- [`docs/runbooks/story-coastline-overlay.md`](docs/runbooks/story-coastline-overlay.md)
 - [`docs/runbooks/dataset-cache-and-packaging.md`](docs/runbooks/dataset-cache-and-packaging.md)
 
 ## Cloud Deployment
@@ -171,6 +172,7 @@ This repository also includes scripts and configuration to deploy the platform t
 | Deploy on a public VM (provider-neutral)           | [`docs/runbooks/deployment.md`](docs/runbooks/deployment.md)                                   |
 | Prepare locations + ocean masks                    | [`docs/runbooks/locations-and-ocean-mask.md`](docs/runbooks/locations-and-ocean-mask.md)       |
 | Rebuild reef-domain masks                          | [`docs/runbooks/reef-mask.md`](docs/runbooks/reef-mask.md)                                     |
+| Rebuild story map coastline overlay                | [`docs/runbooks/story-coastline-overlay.md`](docs/runbooks/story-coastline-overlay.md)         |
 | Build dataset caches, package metrics/maps         | [`docs/runbooks/dataset-cache-and-packaging.md`](docs/runbooks/dataset-cache-and-packaging.md) |
 | Run backend + frontend (with optional Redis cache) | [`docs/runbooks/backend-frontend.md`](docs/runbooks/backend-frontend.md)                       |
 | Validate registry/data/tests/smoke checks          | [`docs/runbooks/validation.md`](docs/runbooks/validation.md)                                   |
