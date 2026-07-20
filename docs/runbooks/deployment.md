@@ -188,14 +188,21 @@ Run bootstrap from inside that checkout:
 ```bash
 sudo ./scripts/deploy/bootstrap_vm.sh \
   --domain <PUBLIC_IP> \
-  --repo-branch main
+  --repo-branch main \
+  --deploy-user <SSH_USER>
 ```
+
+Pass `--deploy-user` with the account you publish release data from (e.g.
+`deploy`). Bootstrap adds it to the `climate` group so it can write into the
+artifact store without sudo. Omit it only if you publish as `climate` itself.
 
 What bootstrap does:
 
 - installs OS dependencies (Python, Node, Caddy, fail2ban, ufw)
 - installs Python package with API extras (`.[api]`) so `uvicorn` and FastAPI runtime deps are present
 - creates service user and directories
+- creates `/opt/climate/data/{artifacts,releases}` owned `climate:climate`, mode
+  `2775` (setgid + group-writable) so publishing never needs `sudo mkdir`
 - installs backend dependencies and frontend production build
 - installs systemd units, env files, and Caddy config
 - enables firewall rules (22,80,443)
@@ -408,58 +415,47 @@ See `docs/runbooks/dataset-cache-and-packaging.md` for the full publish workflow
 
 #### File ownership and permissions
 
-`publish_release.py` runs rsync as your SSH user (e.g. `deploy`). The `climate`
-service user that runs the API also needs read access to artifact files.
-The script defaults to `--rsync-chmod a+rX`, which makes all transferred files
-world-readable (644) and directories world-executable (755). Because artifact
-data is public scientific data this is appropriate and requires no further
-chown step.
+The artifact store and release roots are `climate:climate`, mode `2775`
+(setgid + group-writable), and the publishing user is a member of the `climate`
+group. That combination is what keeps ownership correct:
 
-If you prefer explicit ownership (e.g. so only the `climate` user can read
-files), two alternatives:
+- the publish script creates remote directories **as the SSH user with
+  `umask 002`**, never via `sudo mkdir` (which would create them root-owned)
+- setgid makes every new directory inherit the `climate` group
+- after each artifact sync the script runs
+  `sudo chown -R climate:climate <artifact_dir>` (the default for
+  `--remote-chown`), so the final owner is the service user
 
-**Option A — shared group (recommended for tighter access control):**
-
-Run once on the VM after bootstrap:
-
-```bash
-# Add the SSH/deploy user to the climate group
-sudo usermod -aG climate <SSH_USER>
-# Make the artifact root group-writable so rsync can create subdirs
-sudo chmod g+rwx /opt/climate/data/artifacts
-```
-
-Then publish with group-only permissions:
+Bootstrap sets this up. On a VM provisioned before this was automated, or if
+ownership has drifted, repair it once:
 
 ```bash
-python scripts/deploy/publish_release.py \
-  --remote <SSH_USER>@<PUBLIC_IP> \
-  --remote-releases-root /opt/climate/data/releases \
-  --rsync-chmod Dg+rwx,Fg+r \
-  --update-latest
+sudo chown -R climate:climate /opt/climate/data/artifacts /opt/climate/data/releases
+sudo find /opt/climate/data/artifacts /opt/climate/data/releases -type d -exec chmod 2775 {} +
+sudo find /opt/climate/data/artifacts /opt/climate/data/releases -type f -exec chmod 664 {} +
+sudo usermod -aG climate <SSH_USER>   # log out and back in to take effect
 ```
 
-**Option B — explicit chown via SSH (mirrors the manual scp + sudo chown workflow):**
+Verify (should print nothing):
 
-Requires passwordless `sudo chown` for the SSH user on the VM. Add to `/etc/sudoers`:
+```bash
+find /opt/climate/data/artifacts /opt/climate/data/releases \
+     \( ! -user climate -o ! -group climate \) | head
+```
+
+The `--remote-chown` step needs passwordless `sudo chown` for the SSH user:
 
 ```
 <SSH_USER> ALL=(root) NOPASSWD: /bin/chown
 ```
 
-Then publish with explicit chown:
+Pass `--remote-chown ""` to skip it and rely on group access alone; files then
+stay owned by the SSH user but remain readable and writable by the `climate`
+group.
 
-```bash
-python scripts/deploy/publish_release.py \
-  --remote <SSH_USER>@<PUBLIC_IP> \
-  --remote-releases-root /opt/climate/data/releases \
-  --rsync-chmod "" \
-  --remote-chown climate:climate \
-  --update-latest
-```
-
-The script will SSH after each artifact sync and run
-`sudo chown -R climate:climate <artifact_dir>`.
+**Do not rely on `--rsync-chmod` to set remote modes.** macOS ships `openrsync`,
+which accepts `--chmod` and silently ignores it, so modes come from `umask`,
+setgid inheritance and the chown above.
 
 Important:
 

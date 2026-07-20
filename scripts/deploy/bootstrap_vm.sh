@@ -12,6 +12,7 @@ Options:
   --repo-branch <branch>  Git branch/tag to deploy (default: main).
   --sync-repo             Fetch/checkout/pull APP_ROOT before build (default: disabled).
   --app-root <path>       Install root (default: /opt/climate/source).
+  --deploy-user <name>    SSH/publish user to add to the service group (optional).
   --user <name>           Service user (default: climate).
   --help                  Show this help.
 
@@ -27,6 +28,7 @@ REPO_BRANCH="main"
 SYNC_REPO=0
 APP_ROOT="/opt/climate/source"
 SERVICE_USER="climate"
+DEPLOY_USER=""
 SMOKE_INITIAL_WAIT_S="${SMOKE_INITIAL_WAIT_S:-8}"
 SMOKE_RETRIES="${SMOKE_RETRIES:-3}"
 SMOKE_RETRY_DELAY_S="${SMOKE_RETRY_DELAY_S:-30}"
@@ -59,6 +61,8 @@ while [[ $# -gt 0 ]]; do
       APP_ROOT="$2"
       shift 2
       ;;
+    --deploy-user)
+      DEPLOY_USER="$2"; shift 2 ;;
     --user)
       SERVICE_USER="$2"
       shift 2
@@ -181,6 +185,17 @@ install -m 0644 "$APP_ROOT/deploy/proxy/conf.d/00-base.caddy" /etc/caddy/conf.d/
 # Keep repository ownership stable for operator git workflows.
 # Only grant service-user ownership where runtime writes are expected.
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0755 "$APP_ROOT/data" "$APP_ROOT/web/.next"
+
+# Artifact store and release roots. setgid + group-writable so the publishing
+# user (a member of the service group) can create directories directly, and
+# everything it creates keeps the service group. Without this, publishing has
+# to mkdir via sudo, which leaves directories owned by root.
+install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 2775 \
+  /opt/climate/data /opt/climate/data/artifacts /opt/climate/data/releases
+if [[ -n "$DEPLOY_USER" ]] && id -u "$DEPLOY_USER" >/dev/null 2>&1; then
+  usermod -aG "$SERVICE_USER" "$DEPLOY_USER"
+  echo "Added $DEPLOY_USER to the $SERVICE_USER group (re-login required to take effect)."
+fi
 chown -R "$SERVICE_USER:$SERVICE_USER" /opt/climate/venv "$APP_ROOT/data" "$APP_ROOT/web/.next"
 chmod 0640 /etc/climate/backend.env /etc/climate/web.env
 

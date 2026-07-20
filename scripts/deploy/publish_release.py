@@ -27,10 +27,18 @@ Usage:
     --update-latest
 
 Permissions:
-  Files are rsync'd with --chmod a+rX by default (world-readable), so the
-  climate service user can read artifacts synced by the deploy SSH user.
-  Pass --rsync-chmod "" to disable, or use --remote-chown climate:climate
-  to chown after each sync (requires passwordless sudo chown on the remote).
+  Remote directories are created as the SSH user with `umask 002` -- never via
+  sudo, which would create them root-owned. This requires the SSH user to be in
+  the service group, and the artifact/release roots to be setgid and group
+  writable (bootstrap_vm.sh sets this up).
+
+  Each synced artifact directory is then chowned to --remote-chown
+  (default climate:climate), which needs passwordless sudo chown on the remote.
+  Pass --remote-chown "" to skip it; group access alone is then relied upon.
+
+  Note --rsync-chmod is unreliable: macOS ships openrsync, which accepts
+  --chmod but silently ignores it. Remote modes therefore come from umask,
+  setgid inheritance and the chown above, not from rsync.
 """
 
 from __future__ import annotations
@@ -94,20 +102,23 @@ def _dst(remote: str | None, path: str) -> str:
     return f"{remote}:{path}" if remote else path
 
 
-def _ssh_mkdir(
-    remote: str | None, path: str, owner: str, *, dry_run: bool = False
-) -> None:
-    """Create a remote directory via sudo and chown it to owner so it is writable."""
+def _ssh_mkdir(remote: str | None, path: str, *, dry_run: bool = False) -> None:
+    """Create a remote directory as the SSH user.
+
+    Deliberately does NOT use sudo. `sudo mkdir -p` creates every missing
+    component as root, and a follow-up chown only fixes the leaf, which used to
+    leave the artifact directory itself owned by root:root. The deploy user is a
+    member of the service group and the artifact roots are setgid + group
+    writable, so it can create these directly; `umask 002` keeps the new
+    directories group writable and setgid propagates the service group.
+    """
     if remote is None:
         if not dry_run:
             Path(path).mkdir(parents=True, exist_ok=True)
         else:
             print(f"  [mkdir] {path}")
         return
-    _ssh_run(remote, f"sudo mkdir -p {shlex.quote(path)}", dry_run=dry_run)
-    _ssh_run(
-        remote, f"sudo chown {shlex.quote(owner)} {shlex.quote(path)}", dry_run=dry_run
-    )
+    _ssh_run(remote, f"umask 002 && mkdir -p {shlex.quote(path)}", dry_run=dry_run)
 
 
 def _ssh_chown(
@@ -395,11 +406,12 @@ def main() -> int:
     )
     ap.add_argument(
         "--remote-chown",
-        default="",
+        default="climate:climate",
         help=(
-            "If set (e.g. 'climate:climate'), SSH and run "
-            "'sudo chown -R <spec> <artifact_dir>' after each artifact sync. "
-            "Requires passwordless sudo chown on the remote."
+            "Owner spec applied with 'sudo chown -R <spec> <artifact_dir>' after "
+            "each artifact sync, and to the release directory (default: "
+            "climate:climate). Requires passwordless sudo chown on the remote. "
+            "Set to '' to rely on group access alone."
         ),
     )
     ap.add_argument(
@@ -433,7 +445,6 @@ def main() -> int:
         Path(remote_releases_root).parent / "artifacts"
     )
     release: str = args.release or datetime.date.today().strftime("%Y_%m_%d")
-    deploy_user: str = remote.split("@")[0] if remote and "@" in remote else "deploy"
     dev_root: Path = args.dev_root
     dev_series_root = dev_root / "series"
     dev_maps_root = dev_root / "maps"
@@ -600,7 +611,7 @@ def main() -> int:
             grid_ids = local_metrics[metric_id]
             print(f"  series/{metric_id}  (grid_ids: {', '.join(grid_ids)})")
             dst_dir = f"{remote_artifacts_root}/series/{metric_id}/{artifact_date}"
-            _ssh_mkdir(remote, dst_dir, deploy_user, dry_run=args.dry_run)
+            _ssh_mkdir(remote, dst_dir, dry_run=args.dry_run)
             for grid_id in grid_ids:
                 src = str(dev_series_root / grid_id / metric_id)
                 _rsync_dir(
@@ -627,7 +638,7 @@ def main() -> int:
             if args.remote_chown:
                 _ssh_chown(
                     remote,
-                    dst_dir,
+                    f"{remote_artifacts_root}/series/{metric_id}",
                     args.remote_chown,
                     recursive=True,
                     dry_run=args.dry_run,
@@ -640,7 +651,7 @@ def main() -> int:
             print(f"  maps/{map_id}")
             src = str(local_maps[map_id])
             dst_dir = f"{remote_artifacts_root}/maps/{map_id}/{artifact_date}"
-            _ssh_mkdir(remote, dst_dir, deploy_user, dry_run=args.dry_run)
+            _ssh_mkdir(remote, dst_dir, dry_run=args.dry_run)
             _rsync_dir(
                 src,
                 _dst(remote, f"{dst_dir}/"),
@@ -664,7 +675,7 @@ def main() -> int:
             if args.remote_chown:
                 _ssh_chown(
                     remote,
-                    dst_dir,
+                    f"{remote_artifacts_root}/maps/{map_id}",
                     args.remote_chown,
                     recursive=True,
                     dry_run=args.dry_run,
@@ -702,9 +713,9 @@ def main() -> int:
     # --- Write release dir on remote ---
     print(f"[release] Creating release '{release}' on remote...")
     remote_release_dir = f"{remote_releases_root}/{release}"
-    _ssh_mkdir(remote, remote_release_dir, deploy_user, dry_run=args.dry_run)
+    _ssh_mkdir(remote, remote_release_dir, dry_run=args.dry_run)
     _ssh_mkdir(
-        remote, f"{remote_release_dir}/registry", deploy_user, dry_run=args.dry_run
+        remote, f"{remote_release_dir}/registry", dry_run=args.dry_run
     )
     registry_src = args.registry
     if registry_src.is_dir():
@@ -720,7 +731,7 @@ def main() -> int:
     if local_aux_dir.is_dir():
         print(f"  Copying aux files from {local_aux_dir}...")
         _ssh_mkdir(
-            remote, f"{remote_release_dir}/aux", deploy_user, dry_run=args.dry_run
+            remote, f"{remote_release_dir}/aux", dry_run=args.dry_run
         )
         _rsync_dir(
             str(local_aux_dir),
@@ -735,7 +746,7 @@ def main() -> int:
     if has_question_tree:
         print(f"  Copying question_tree.json from {question_tree_src}...")
         _ssh_mkdir(
-            remote, f"{remote_release_dir}/llm", deploy_user, dry_run=args.dry_run
+            remote, f"{remote_release_dir}/llm", dry_run=args.dry_run
         )
         _rsync_file(
             str(question_tree_src),
