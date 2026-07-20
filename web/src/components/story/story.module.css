@@ -149,6 +149,15 @@
   text-wrap: pretty;
 }
 
+.published {
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 20px;
+}
+
 .meta {
   font-size: 0.8rem;
   color: var(--muted);

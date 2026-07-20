@@ -202,10 +202,10 @@ export default function HeatwaveStory() {
               registers an analytics pageview, and the globe re-initialises
               cleanly instead of resuming a torn-down WebGL context. */}
           <span className={styles.eyebrowActions}>
-            <ShareButton
-              title="The June 2026 heatwave over Europe"
-              text="How far above normal Europe ran during the June 2026 heat, mapped from the ERA5 record."
-            />
+            {/* No `text`: the shared link unfurls into the social card, whose
+                headline and description already carry the message. A separate
+                body line would just repeat it above the same card. */}
+            <ShareButton title="The June 2026 heatwave over Europe" />
             {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a className={styles.backLink} href="/">
               <span aria-hidden="true">←</span> Back to the globe
@@ -219,8 +219,11 @@ export default function HeatwaveStory() {
           build-up over the southwest. This page shows where the heat sat, how
           it moved, and how far above the seasonal average it was.
         </p>
+        <p className={styles.published}>
+          Published <time dateTime="2026-07-19">19 July 2026</time>
+        </p>
         <p className={styles.meta}>
-          Data: Copernicus ERA5 climate record · 2&#8202;m air temperature ·
+          Data: Copernicus ERA5/ERA5T climate record · 2&#8202;m air temperature ·
           anomalies vs the 1991–2020 average for the same time of year · through
           13 July 2026 · processed with the{" "}
           <a href="https://github.com/climate-you/climate">

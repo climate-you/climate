@@ -374,7 +374,7 @@ const CASE_STUDIES: CaseStudy[] = [
     title: "The June 2026 heatwave over Europe",
     href: "/stories/june-2026-heatwave",
     thumbnail: "/story/june-2026-heatwave-thumb.png",
-    meta: "July 2026",
+    meta: "19 July 2026",
   },
 ];
 
