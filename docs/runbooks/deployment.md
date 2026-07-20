@@ -413,6 +413,39 @@ The release id defaults to today's date (`YYYY_MM_DD`). Pass `--release <id>` to
 
 See `docs/runbooks/dataset-cache-and-packaging.md` for the full publish workflow and local-testing instructions.
 
+#### Pruning superseded release data
+
+Every publish writes artifacts under a new dated directory, and unchanged
+metrics keep pointing at their previous date. Nothing is ever overwritten, so
+old versions accumulate -- a multi-gigabyte metric republished a few times can
+hold several copies. Reclaim that space with:
+
+```bash
+python scripts/deploy/prune_artifacts.py \
+  --remote <SSH_USER>@<PUBLIC_IP> \
+  --remote-releases-root /opt/climate/data/releases \
+  --keep-releases 3 --dry-run
+```
+
+Drop `--dry-run` to delete (it prompts first; `--yes` skips the prompt).
+
+It keeps the release named by `LATEST` plus the newest `--keep-releases`
+releases, deletes every artifact version none of those still reference, then
+removes the pruned release directories. Pass `--keep-release-dirs` to retain the
+manifests and delete only the artifact data.
+
+Note that keeping a release is not the same as keeping its dated artifacts: an
+unchanged metric may still be referenced by newer releases, so its old directory
+is retained even when the release that introduced it is pruned.
+
+Safety:
+
+- `LATEST` is always kept, whatever `--keep-releases` says.
+- If any kept release references an artifact that is already missing, the script
+  refuses to delete anything and exits non-zero -- fix that first.
+- Deletion needs write access to the artifact directories, which the publishing
+  user has through the service group; no sudo required.
+
 #### File ownership and permissions
 
 The artifact store and release roots are `climate:climate`, mode `2775`
