@@ -5,9 +5,9 @@ import HeatwaveStory from "@/content/stories/june-2026-heatwave/HeatwaveStory";
 const PATH = "/stories/june-2026-heatwave";
 const TITLE = "The June 2026 heatwave over Europe";
 const DESCRIPTION =
-  "Two spells of extreme heat swept Europe between mid-June and mid-July 2026. Where the heat sat, how it moved, and how far above the seasonal average it was — from the Copernicus ERA5 record.";
+  "Two spells of extreme heat swept Europe between mid-June and mid-July 2026. Where the heat sat, how it moved, and how far above the seasonal average it was — from the Copernicus ERA5/ERA5T record.";
 const SHORT_DESCRIPTION =
-  "Two spells of extreme heat swept Europe between mid-June and mid-July 2026, mapped from the Copernicus ERA5 record.";
+  "Two spells of extreme heat swept Europe between mid-June and mid-July 2026, mapped from the Copernicus ERA5/ERA5T record.";
 const PUBLISHED = "2026-07-19";
 const AUTHORS = ["Benoit Leveau", "Fanny Chaléon"];
 const OG_IMAGE = "/story/june-2026-heatwave-og.png";

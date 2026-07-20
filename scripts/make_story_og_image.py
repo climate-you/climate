@@ -28,7 +28,9 @@ sys.path.insert(0, str(REPO_ROOT))
 W, H = 1200, 630
 MARGIN = 56
 INK = (17, 17, 17)
-MUTED = (17, 17, 17, 168)
+# The card is read at thumbnail size in a chat list, so the secondary type is
+# only lightly greyed — anything softer stops being legible on a phone.
+MUTED = (17, 17, 17, 210)
 BLUE = (15, 80, 255)
 FRAME = 3
 
@@ -160,7 +162,7 @@ def main() -> int:
     draw = ImageDraw.Draw(card, "RGBA")
 
     # ── Right: framed map ────────────────────────────────────────────────
-    map_w = 500
+    map_w = 560
     map_img = render_map(
         args.texture, args.lines, tuple(args.bbox), map_w, args.lat_max
     )
@@ -177,14 +179,14 @@ def main() -> int:
     text_w = map_x - MARGIN - 44
     y = MARGIN
 
-    logo_size = 40
+    logo_size = 52
     if args.logo.exists():
         logo = Image.open(args.logo).convert("RGBA").resize(
             (logo_size, logo_size), Image.LANCZOS
         )
         card.paste(logo, (MARGIN, y), logo)
 
-    kicker_font = font(_SANS_BOLD, 17)
+    kicker_font = font(_SANS_BOLD, 24)
     draw.text(
         (MARGIN + logo_size + 14, y + logo_size / 2),
         args.kicker.upper(), font=kicker_font, fill=BLUE, anchor="lm",
@@ -192,11 +194,11 @@ def main() -> int:
 
     # Centre the headline block in the space below the mark, so the card does
     # not sit top-heavy with a dead band along the bottom.
-    title_font = font(_SERIF_BOLD, 58)
-    source_font = font(_SANS, 19)
+    title_font = font(_SERIF_BOLD, 62)
+    source_font = font(_SANS_BOLD, 26)
     lines = wrap(args.title, title_font, text_w)
-    line_h, rule_gap, source_gap = 70, 18, 30
-    block_h = len(lines) * line_h + rule_gap + 3 + source_gap + 24
+    line_h, rule_gap, source_gap = 74, 22, 32
+    block_h = len(lines) * line_h + rule_gap + 3 + source_gap + 32
     top = y + logo_size + 24
     bottom = H - MARGIN
     y = top + max(0, (bottom - top - block_h) // 2)

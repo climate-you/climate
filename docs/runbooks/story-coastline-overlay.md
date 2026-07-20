@@ -88,7 +88,7 @@ reusing the same texture crop and coastline overlay:
 ```bash
 python scripts/make_story_og_image.py \
   --texture data/releases/dev/maps/global_0p25/t2m_heatwave_2026_w2_mercator_texture/t2m_heatwave_2026_w2_mercator.webp \
-  --title "The June–July 2026 heat over Europe" \
+  --title "The June 2026 heatwave over Europe" \
   --out web/public/story/june-2026-heatwave-og.png
 ```
 
