@@ -465,6 +465,10 @@
   gap: 6px;
   flex-wrap: wrap;
   justify-content: center;
+  /* Anchored at left:50%, so the default shrink-to-fit width is limited to
+     half the stage and the row wraps early. Size to content instead, capped
+     to the stage. */
+  width: max-content;
   max-width: calc(100% - 24px);
   padding: 6px;
   background: color-mix(in srgb, var(--surface) 82%, transparent);
@@ -773,6 +777,22 @@
   width: 100%;
   height: auto;
   background: var(--surface-alt);
+}
+
+/* Narrow screens: lay the windows out 2x2 instead of letting them stack into
+   four rows. The centred bar is shrink-to-fit and anchored with left:50%, so
+   its available width is only half the stage — pin both edges here to reclaim
+   the full width, then force two equal columns. */
+@media (max-width: 560px) {
+  .globeSteps {
+    left: 12px;
+    right: 12px;
+    transform: none;
+    width: auto;
+    max-width: none;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 760px) {
