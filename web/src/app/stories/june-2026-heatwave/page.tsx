@@ -56,10 +56,13 @@ const jsonLd = {
   isBasedOn: {
     "@type": "Dataset",
     name: "Copernicus ERA5 reanalysis, 2 m air temperature",
+    description:
+      "Hourly estimates of 2 m air temperature from the ECMWF ERA5/ERA5T global atmospheric reanalysis, distributed through the Copernicus Climate Data Store.",
     creator: {
       "@type": "Organization",
       name: "European Centre for Medium-Range Weather Forecasts",
     },
+    license: "https://apps.ecmwf.int/datasets/licences/copernicus/",
   },
 };
 
