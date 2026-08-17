@@ -456,7 +456,7 @@ def _collect_series_for_extreme(
     start_year = args.get("start_year")
     end_year = args.get("end_year")
     month_filter = args.get("month_filter")
-    aggregate_by_year = bool(args.get("aggregate_by_year", False))
+    aggregate_by_year = _as_bool(args.get("aggregate_by_year", False))
     aggregation = str(args.get("aggregation", ""))
 
     # Normalise to a flat list of {label, lat, lon} entries, capped at 5
@@ -624,6 +624,10 @@ def _filter_series_results(series_results: list[dict]) -> list[dict]:
     find_extreme_location) from appearing in charts when the question is really
     comparing specific named cities.
     """
+    # Results where a requested month_filter could not be applied describe a
+    # different period than the question asked about, so they are never charted.
+    series_results = [r for r in series_results if not r.get("month_filter_ignored")]
+
     metrics_with_explicit = {
         r["metric_id"]
         for r in series_results
@@ -1275,6 +1279,7 @@ TOOL_SCHEMAS = [
                         "type": "string",
                         "enum": ["mean", "min", "max"],
                         "description": (
+                            "Optional, defaults to 'mean'. "
                             "'mean' for the area-weighted mean over all cells in the region "
                             "(use for typical temperature/trend questions), "
                             "'min' for the minimum cell value, "
@@ -1288,8 +1293,28 @@ TOOL_SCHEMAS = [
                     "end_year": {
                         "description": "Last year to include (inclusive). Must be a number, e.g. 2024.",
                     },
+                    "month_filter": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": (
+                            "Months to keep from a monthly metric, 1-12, e.g. [6] for June only. "
+                            "Use this whenever the question is about a particular month — asking "
+                            "for a monthly metric across many years without it returns hundreds "
+                            "of points and will overrun the request budget."
+                        ),
+                    },
+                    "aggregate_by_year": {
+                        "type": "boolean",
+                        "description": (
+                            "Collapse the selected months into one value per year. Combine with "
+                            "month_filter to get e.g. one June value per year."
+                        ),
+                    },
                 },
-                "required": ["region_id", "metric_id", "aggregation"],
+                # aggregation is deliberately not required: smaller models omit
+                # it when the question implies a plain average, and Groq rejects
+                # the whole call server-side before we can default it.
+                "required": ["region_id", "metric_id"],
             },
         },
     },
@@ -1324,7 +1349,13 @@ historical series (e.g. to find the hottest year across all years).
 pass month_filter for the season and aggregate_by_year=true. This returns one annual mean \
 per year instead of one record per month, which is far more efficient. Only omit \
 aggregate_by_year when per-month detail is needed (e.g. "which month of winter 2020 was \
-coldest?").
+coldest?"). This applies to get_region_metric_series too: a monthly metric over the full \
+record is ~560 points and will overrun the request budget, so when the question is about a \
+particular month (e.g. "how did June 2026 compare to normal in Europe?") pass \
+month_filter=[6] rather than fetching every month.
+- To compare one period against "normal", fetch the whole comparable series in one call \
+(e.g. month_filter=[6] with no year bounds) and read both the recent value and the earlier \
+average off it. Do not exclude the year being asked about from the range.
 - Before calling any tool that takes a year, check whether the requested year is in the \
 future (beyond today's date). If it is a future year, do not retry — instead explain that \
 our dataset only covers historical data up to the date shown in the metric catalogue above.
@@ -1415,7 +1446,11 @@ Available metrics:
 def _format_metric_catalogue(metrics: list[dict]) -> str:
     lines = []
     for m in metrics:
-        line = f"- {m['metric_id']}: {m['description']} ({m['unit']}), available {m['available_range']}, source: {m['source']}"
+        line = (
+            f"- {m['metric_id']}: {m['description']} ({m['unit']}), "
+            f"{m.get('resolution', 'yearly')} resolution, "
+            f"available {m['available_range']}, source: {m['source']}"
+        )
         if m.get("note"):
             line += f" -- {m['note']}"
         lines.append(line)
@@ -1588,8 +1623,9 @@ class ChatOrchestrator:
                 start_year=_int_or_none(args.get("start_year")),
                 end_year=_int_or_none(args.get("end_year")),
                 month_filter=args.get("month_filter"),
-                aggregate_by_year=bool(args.get("aggregate_by_year", False)),
+                aggregate_by_year=_as_bool(args.get("aggregate_by_year", False)),
                 temperature_unit=temperature_unit,
+                country_name_to_code=self.country_name_to_code,
             )
         elif name == "find_extreme_location":
             result = _tools.find_extreme_location(
@@ -1604,7 +1640,7 @@ class ChatOrchestrator:
                 month_filter=args.get("month_filter"),
                 country=args.get("country"),
                 continent=args.get("continent"),
-                capital_only=bool(args.get("capital_only", False)),
+                capital_only=_as_bool(args.get("capital_only", False)),
                 min_population=int(args.get("min_population", 0)),
                 limit=int(args.get("limit", 1)),
                 temperature_unit=temperature_unit,
@@ -1617,6 +1653,7 @@ class ChatOrchestrator:
                 location_index=self.location_index,
                 limit=int(args.get("limit", 5)),
                 temperature_unit=temperature_unit,
+                country_name_to_code=self.country_name_to_code,
             )
         elif name == "find_extreme_region":
             result = _tools.find_extreme_region(
@@ -1635,11 +1672,13 @@ class ChatOrchestrator:
             result = _tools.get_region_metric_series(
                 region_id=str(args["region_id"]),
                 metric_id=str(args["metric_id"]),
-                aggregation=str(args["aggregation"]),
+                aggregation=str(args.get("aggregation") or "mean"),
                 tile_store=self.tile_store,
                 start_year=_int_or_none(args.get("start_year")),
                 end_year=_int_or_none(args.get("end_year")),
                 temperature_unit=temperature_unit,
+                month_filter=args.get("month_filter"),
+                aggregate_by_year=_as_bool(args.get("aggregate_by_year", False)),
             )
         else:
             result = {"error": f"Unknown tool: '{name}'"}

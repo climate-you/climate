@@ -72,6 +72,10 @@ def list_available_metrics(tile_store: TileDataStore) -> dict:
             "description": spec.get("title", metric_id),
             "unit": spec.get("unit", "unknown"),
             "available_range": date_range,
+            # Stated so the model can tell which metrics accept month_filter.
+            # Without it, seasonal questions get aimed at yearly metrics, where
+            # the filter cannot apply and a step is wasted re-querying.
+            "resolution": spec.get("time_axis", "yearly"),
             "source": spec.get("source", {}).get("_dataset_ref", "unknown"),
         }
         if spec.get("llm_note"):
@@ -80,18 +84,161 @@ def list_available_metrics(tile_store: TileDataStore) -> dict:
     return {"metrics": metrics}
 
 
-def resolve_location(name: str, location_index: LocationIndex) -> dict:
-    """Resolve a place name to coordinates. Internal helper — not exposed as a tool."""
+_COUNTRY_ALIASES = {
+    "uk": "GB",
+    "u k": "GB",
+    "great britain": "GB",
+    "britain": "GB",
+    "england": "GB",
+    "scotland": "GB",
+    "wales": "GB",
+    "usa": "US",
+    "u s a": "US",
+    "u s": "US",
+    "america": "US",
+    "united states of america": "US",
+    "uae": "AE",
+    "south korea": "KR",
+    "north korea": "KP",
+    "russia": "RU",
+    "holland": "NL",
+    "czechia": "CZ",
+    "czech republic": "CZ",
+}
+
+
+def _country_code_for(
+    qualifier: str, country_name_to_code: dict[str, str] | None
+) -> str | None:
+    """Map a trailing qualifier ("Germany", "UK", "DE") to an ISO country code."""
+    q = " ".join(qualifier.strip().casefold().split())
+    if not q:
+        return None
+    # Aliases first: "UK" is two letters but the ISO code is "GB", so a bare
+    # two-letter passthrough would produce a code that matches nothing.
+    if q in _COUNTRY_ALIASES:
+        return _COUNTRY_ALIASES[q]
+    if len(q) == 2 and q.isalpha():
+        return q.upper()
+    return (country_name_to_code or {}).get(q)
+
+
+def resolve_location(
+    name: str,
+    location_index: LocationIndex,
+    country_name_to_code: dict[str, str] | None = None,
+) -> dict:
+    """Resolve a place name to coordinates. Internal helper — not exposed as a tool.
+
+    Exact name matches (which include alternate/exonym names such as "Londres"
+    for London or "Cologne" for Köln) are tried before the prefix search, and a
+    trailing country qualifier is used to disambiguate homonyms rather than
+    being discarded. Without this, "Londres" reaches Londres in Argentina and
+    "Cologne, Germany" reaches Cologne in Italy, since the prefix search matches
+    only literal labels and ranks purely by population.
+    """
     name = name.strip().strip("*")
-    hits = location_index.autocomplete(name, limit=1)
-    if not hits and "," in name:
-        # Retry with just the city part — handles "London, UK", "New York City, USA", etc.
-        city_only = name.split(",", 1)[0].strip()
-        hits = location_index.autocomplete(city_only, limit=1)
-    if not hits:
+
+    city_part, qualifier = name, ""
+    if "," in name:
+        city_part, qualifier = (p.strip() for p in name.split(",", 1))
+
+    wanted_cc = (
+        _country_code_for(qualifier, country_name_to_code) if qualifier else None
+    )
+
+    # Candidates in decreasing order of trust: exact match on the whole string,
+    # exact match on the city part, then the prefix search as a last resort.
+    candidates = location_index.resolve_all_by_any_name(name)
+    if city_part != name:
+        seen = {h.geonameid for h in candidates}
+        candidates += [
+            h
+            for h in location_index.resolve_all_by_any_name(city_part)
+            if h.geonameid not in seen
+        ]
+    if not candidates:
+        candidates = location_index.autocomplete(name, limit=10)
+    if not candidates and city_part != name:
+        # Handles "London, UK" where the label carries a different country wording
+        candidates = location_index.autocomplete(city_part, limit=10)
+
+    if not candidates:
         return {"error": f"Location not found: '{name}'"}
-    h = hits[0]
-    return {"lat": h.lat, "lon": h.lon, "label": h.label, "country": h.country_code}
+
+    hit = candidates[0]
+    if wanted_cc:
+        # Prefer a candidate in the requested country; fall back to the most
+        # populous match when the qualifier names no country we recognise.
+        in_country = [h for h in candidates if h.country_code == wanted_cc]
+        if in_country:
+            hit = in_country[0]
+
+    return {
+        "lat": hit.lat,
+        "lon": hit.lon,
+        "label": hit.label,
+        "country": hit.country_code,
+    }
+
+
+# A yearly series over the full record is ~47 points; this leaves room for a
+# couple of calls plus the conversation inside an 8,000-token request budget.
+_MAX_SERIES_POINTS = 120
+
+
+def _summarise_long_series(result: dict, unit: str) -> dict:
+    """Replace an over-long series with per-year means plus the extremes.
+
+    Keeps what an answer actually needs — the shape of the record, the record
+    highs and lows, and the most recent value — at a fraction of the size.
+    """
+    data = result["data"]
+    by_year: dict[str, list[float]] = {}
+    for point in data:
+        value = point.get("value")
+        if value is not None:
+            by_year.setdefault(str(point["year"])[:4], []).append(value)
+
+    def _year_key(year: str):
+        # Emit numeric years, matching what a natively-yearly series returns.
+        # Callers fit trend lines over this field, so a string here turns a
+        # working chart into a numpy dtype error.
+        try:
+            return int(year)
+        except (TypeError, ValueError):
+            return year
+
+    yearly = [
+        {"year": _year_key(year), "value": round(sum(vals) / len(vals), 3)}
+        for year, vals in sorted(by_year.items())
+    ]
+
+    finite = [p for p in data if p.get("value") is not None]
+    hottest = max(finite, key=lambda p: p["value"], default=None)
+    coldest = min(finite, key=lambda p: p["value"], default=None)
+
+    return {
+        **result,
+        "data": yearly,
+        # Flag rather than prose, so the chart title can say so too — a chart of
+        # yearly means must not be captioned as if it were the native series.
+        "collapsed_to_yearly": True,
+        "resolution": "yearly means (the native series was too long to return in full)",
+        "note": (
+            (
+                f"The underlying series has {len(data)} points at its native "
+                f"resolution, which is too large to return in full. It has been "
+                f"collapsed to {len(yearly)} yearly means. Highest single value: "
+                f"{hottest['value']} {unit} at {hottest['year']}. Lowest: "
+                f"{coldest['value']} {unit} at {coldest['year']}. To see individual "
+                f"months or days, call again with a narrower start_year/end_year, "
+                f"or with month_filter to pick specific months."
+            )
+            if hottest and coldest
+            else "Series collapsed to yearly means; it was too long to return in full."
+        ),
+    }
 
 
 def _resolve_region_id(
@@ -214,16 +361,26 @@ def _get_metric_series(
                 "lon": lon,
                 "unit": unit,
                 "data": data,
+                # Carried so the chart can say which months it covers — a
+                # June-only series titled "monthly mean" reads as all months.
+                "month_filter": list(month_filter),
                 "note": f"Annual means for months {month_filter}.",
             }
 
-        return {
+        monthly_result = {
             "metric_id": metric_id,
             "lat": lat,
             "lon": lon,
             "unit": unit,
             "data": data,
+            **({"month_filter": list(month_filter)} if month_filter else {}),
         }
+        # Same backstop as the regional tool: an unfiltered monthly series is
+        # ~560 points, which is both unreadable as a chart and large enough to
+        # overrun the request budget on its own.
+        if len(data) > _MAX_SERIES_POINTS:
+            monthly_result = _summarise_long_series(monthly_result, unit)
+        return monthly_result
 
     else:
         # yearly axis — int years (also catches any unknown time_axis_type)
@@ -282,6 +439,12 @@ def _get_metric_series(
                 "all years returned. Use a monthly metric (e.g. t2m_monthly_mean_c) "
                 "to filter by month."
             )
+            # The data is annual, not the months that were asked for, so it
+            # answers a different question than the one posed. The model still
+            # gets it (with the note above) and can re-query, but it must not
+            # become a chart: an annual-mean curve shown beside a winter answer
+            # reads as the winter trend.
+            result["month_filter_ignored"] = True
         return result
 
 
@@ -295,9 +458,10 @@ def get_metric_series(
     month_filter: list[int] | None = None,
     aggregate_by_year: bool = False,
     temperature_unit: str = "C",
+    country_name_to_code: dict[str, str] | None = None,
 ) -> dict:
     """Tool-facing wrapper: resolves location name then fetches the metric series."""
-    loc = resolve_location(location, location_index)
+    loc = resolve_location(location, location_index, country_name_to_code)
     if "error" in loc:
         return loc
     result = _get_metric_series(
@@ -560,6 +724,7 @@ def find_similar_locations(
     location_index: LocationIndex,
     limit: int = 5,
     temperature_unit: str = "C",
+    country_name_to_code: dict[str, str] | None = None,
 ) -> dict:
     """
     Find cities whose long-term metric mean is closest to the reference city.
@@ -569,7 +734,7 @@ def find_similar_locations(
     if spec is None:
         return {"error": f"Unknown metric_id: '{metric_id}'."}
 
-    ref = resolve_location(reference_name, location_index)
+    ref = resolve_location(reference_name, location_index, country_name_to_code)
     if "error" in ref:
         return ref
 
@@ -792,6 +957,8 @@ def get_region_metric_series(
     start_year: int | None = None,
     end_year: int | None = None,
     temperature_unit: str = "C",
+    month_filter: list[int] | None = None,
+    aggregate_by_year: bool = False,
 ) -> dict:
     """
     Return the precomputed time series of a climate metric aggregated over a
@@ -800,14 +967,24 @@ def get_region_metric_series(
     region_id: "country:FR", "continent:europe", "ocean:indian_ocean", "globe",
                or a human-readable name like "France", "Europe", "Indian Ocean".
     aggregation: "mean" (area-weighted), "min", or "max" across the region's cells.
+    month_filter: months to keep from a monthly metric, e.g. [6] for June only.
+    aggregate_by_year: collapse the remaining months into one value per year.
+
+    The last two mirror get_metric_series. Without them a monthly metric can
+    only be fetched in full — 47 years of months is ~560 points, which alone
+    exceeds the request budget of the smaller models and fails the turn.
     """
     spec = tile_store.metrics.get(metric_id)
     if spec is None:
         return {"error": f"Unknown metric_id: '{metric_id}'."}
-    if aggregation not in ("mean", "min", "max") and (
-        metric_id,
-        aggregation,
-    ) not in tile_store.aggregates:
+    if (
+        aggregation not in ("mean", "min", "max")
+        and (
+            metric_id,
+            aggregation,
+        )
+        not in tile_store.aggregates
+    ):
         return {
             "error": f"Unknown aggregation: '{aggregation}'. Use: mean, min, or max."
         }
@@ -868,6 +1045,21 @@ def get_region_metric_series(
         else:
             time_axis, values = [], []
 
+    # Month filter / yearly rollup, for monthly axes only ("YYYY-MM").
+    monthly = bool(time_axis) and len(str(time_axis[0])) == 7
+    if monthly and month_filter:
+        wanted = {int(m) for m in month_filter}
+        kept = [(y, v) for y, v in zip(time_axis, values) if int(str(y)[5:7]) in wanted]
+        time_axis = [y for y, _ in kept]
+        values = [v for _, v in kept]
+    if monthly and aggregate_by_year:
+        by_year: dict[str, list[float]] = {}
+        for y, v in zip(time_axis, values):
+            if v is not None:
+                by_year.setdefault(str(y)[:4], []).append(v)
+        time_axis = sorted(by_year)
+        values = [sum(by_year[y]) / len(by_year[y]) for y in time_axis]
+
     # Unit conversion
     is_delta = _is_delta_metric(spec)
     out_unit = _output_unit(spec, temperature_unit)
@@ -882,7 +1074,7 @@ def get_region_metric_series(
         ]
 
     region_name = region_info.get("name", resolved)
-    return {
+    result = {
         "region_id": resolved,
         "region_name": region_name,
         # "location" mirrors get_metric_series so chart builders can use the same field
@@ -893,4 +1085,14 @@ def get_region_metric_series(
         "unit": out_unit,
         "cell_count": region_info.get("cell_count"),
         "data": [{"year": y, "value": v} for y, v in zip(time_axis, values)],
+        **({"month_filter": list(month_filter)} if monthly and month_filter else {}),
     }
+
+    # Backstop: even with the filters above a caller can still ask for a full
+    # daily or monthly series, which on its own overruns the smaller models'
+    # per-request budget and kills the turn. Summarise rather than fail, and
+    # say plainly what was left out so the model does not read the trimmed
+    # series as the whole record.
+    if len(result["data"]) > _MAX_SERIES_POINTS:
+        result = _summarise_long_series(result, out_unit)
+    return result

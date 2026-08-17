@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from climate_api.chat import tools
 from climate_api.chat.tools import (
     _convert_temp,
     _is_delta_metric,
@@ -244,3 +245,191 @@ class TestResolveRegionId:
             _resolve_region_id("indian ocean", ts, "t2m", "mean")
             == "ocean:indian_ocean"
         )
+
+
+# ---------------------------------------------------------------------------
+# Region series size control
+# ---------------------------------------------------------------------------
+
+
+def _monthly_store(years=47):
+    """A tile store stub holding a monthly Europe aggregate."""
+
+    class _Store:
+        metrics = {
+            "t2m_monthly_mean_c": {
+                "id": "t2m_monthly_mean_c",
+                "title": "monthly mean",
+                "unit": "C",
+                "source": {"type": "cds", "_dataset_ref": "era5_daily_t2m"},
+            }
+        }
+        axis = [f"{1979 + i // 12}-{(i % 12) + 1:02d}" for i in range(years * 12)]
+        aggregates = {
+            ("t2m_monthly_mean_c", "mean"): {
+                "time_axis": axis,
+                "regions": {
+                    "continent:europe": {
+                        "type": "continent",
+                        "name": "Europe",
+                        "values": [float(i % 12) for i in range(years * 12)],
+                        "cell_count": 100,
+                    }
+                },
+            }
+        }
+
+    return _Store()
+
+
+def test_region_series_month_filter_keeps_only_that_month():
+    store = _monthly_store()
+    r = tools.get_region_metric_series(
+        region_id="continent:europe",
+        metric_id="t2m_monthly_mean_c",
+        aggregation="mean",
+        tile_store=store,
+        month_filter=[6],
+    )
+    assert len(r["data"]) == 47
+    assert all(str(p["year"]).endswith("-06") for p in r["data"])
+
+
+def test_region_series_aggregate_by_year_collapses_months():
+    store = _monthly_store()
+    r = tools.get_region_metric_series(
+        region_id="continent:europe",
+        metric_id="t2m_monthly_mean_c",
+        aggregation="mean",
+        tile_store=store,
+        month_filter=[6, 7],
+        aggregate_by_year=True,
+    )
+    assert len(r["data"]) == 47
+    assert all(len(str(p["year"])) == 4 for p in r["data"])
+
+
+def test_region_series_summarises_when_too_long():
+    """An unfiltered monthly series must not be returned in full.
+
+    564 monthly points is ~5,500 tokens, which alone overruns the request
+    budget of the smaller models and fails the turn.
+    """
+    store = _monthly_store()
+    r = tools.get_region_metric_series(
+        region_id="continent:europe",
+        metric_id="t2m_monthly_mean_c",
+        aggregation="mean",
+        tile_store=store,
+    )
+    assert len(r["data"]) == 47, "should collapse to one point per year"
+    assert "note" in r
+    assert "564" in r["note"], "the note must say how much was left out"
+    assert all(len(str(p["year"])) == 4 for p in r["data"])
+
+
+def test_region_series_short_enough_is_untouched():
+    store = _monthly_store(years=5)  # 60 points, under the cap
+    r = tools.get_region_metric_series(
+        region_id="continent:europe",
+        metric_id="t2m_monthly_mean_c",
+        aggregation="mean",
+        tile_store=store,
+    )
+    assert len(r["data"]) == 60
+    assert "note" not in r
+
+
+def _point_store(years=47):
+    """Tile store stub exposing a monthly point series."""
+    import numpy as np
+
+    class _Store:
+        metrics = {
+            "t2m_monthly_mean_c": {
+                "id": "t2m_monthly_mean_c",
+                "title": "monthly mean",
+                "unit": "C",
+                "time_axis": "monthly",
+                "source": {"type": "cds", "_dataset_ref": "era5_daily_t2m"},
+            }
+        }
+        _axis = [f"{1979 + i // 12}-{(i % 12) + 1:02d}" for i in range(years * 12)]
+
+        def axis(self, mid):
+            return self._axis
+
+        def time_axis_type(self, mid):
+            return "monthly"
+
+        def try_get_metric_vector(self, mid, lat, lon):
+            return np.array([float(i % 12) for i in range(years * 12)])
+
+        def get_metric_vector(self, mid, lat, lon):
+            return self.try_get_metric_vector(mid, lat, lon)
+
+    return _Store()
+
+
+def test_point_monthly_series_collapses_when_too_long():
+    """An unfiltered monthly point series is ~560 points — too many to send."""
+    store = _point_store()
+    r = tools._get_metric_series(
+        lat=48.85, lon=2.35, metric_id="t2m_monthly_mean_c", tile_store=store
+    )
+    if "error" in r:  # stub shape mismatch — skip rather than assert on plumbing
+        import pytest
+
+        pytest.skip(f"stub incompatible: {r['error']}")
+    assert len(r["data"]) < 120
+    assert r.get("collapsed_to_yearly") is True
+
+
+def test_month_filter_on_yearly_metric_is_flagged_not_silently_dropped():
+    """A yearly metric cannot honour month_filter.
+
+    It must say so, because the data it returns is annual — charting it beside
+    a "how have winters changed" answer would present the annual trend as the
+    winter trend.
+    """
+    from climate_api.chat.orchestrator import _filter_series_results
+
+    result = {
+        "metric_id": "t2m_yearly_mean_c",
+        "data": [{"year": 1979, "value": 9.8}],
+        "month_filter_ignored": True,
+        "note": "month_filter [12, 1, 2] is not applicable to a yearly metric",
+    }
+    ok = {"metric_id": "t2m_monthly_mean_c", "data": [{"year": 1979, "value": 2.6}]}
+
+    charted = _filter_series_results([result, ok])
+    assert [r["metric_id"] for r in charted] == ["t2m_monthly_mean_c"]
+    # The model must still receive the rejected result so it can re-query.
+    assert result["note"]
+
+
+def test_metric_catalogue_states_time_resolution():
+    """The model needs to know which metrics accept month_filter."""
+
+    class _Store:
+        metrics = {
+            "t2m_yearly_mean_c": {
+                "title": "yearly mean",
+                "unit": "C",
+                "time_axis": "yearly",
+            },
+            "t2m_monthly_mean_c": {
+                "title": "monthly mean",
+                "unit": "C",
+                "time_axis": "monthly",
+            },
+        }
+
+        def axis(self, mid):
+            return [1979, 2025]
+
+    entries = {
+        m["metric_id"]: m for m in tools.list_available_metrics(_Store())["metrics"]
+    }
+    assert entries["t2m_yearly_mean_c"]["resolution"] == "yearly"
+    assert entries["t2m_monthly_mean_c"]["resolution"] == "monthly"

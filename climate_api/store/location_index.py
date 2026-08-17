@@ -55,6 +55,11 @@ class LocationIndex:
         self._by_id: Dict[int, int] = {}
         self._prefix_map: Dict[str, List[int]] = {}
         self._name_to_idx: Dict[str, int] = {}
+        # Only names shared by more than one place ("Cologne" → Köln and Cologne
+        # IT), so they can be disambiguated by country. Names with a single
+        # owner are served from _name_to_idx instead: holding a list for all
+        # ~800k names costs ~100 MB for the ~6% that actually need it.
+        self._name_collisions: Dict[str, List[int]] = {}
 
         self._load()
 
@@ -95,17 +100,25 @@ class LocationIndex:
                 self._add_prefixes(i, norm_city)
 
                 # Build name→index hash map (highest population wins per name)
-                for norm_name in (norm_label, norm_city):
-                    if norm_name and len(norm_name) >= self.min_query_len:
-                        existing = self._name_to_idx.get(norm_name)
-                        if existing is None or pop > self._populations[existing]:
-                            self._name_to_idx[norm_name] = i
-                for raw_alt in alt_names.split(","):
-                    norm_alt = _norm(raw_alt)
-                    if norm_alt and len(norm_alt) >= self.min_query_len:
-                        existing = self._name_to_idx.get(norm_alt)
-                        if existing is None or pop > self._populations[existing]:
-                            self._name_to_idx[norm_alt] = i
+                names = [norm_label, norm_city]
+                names += [_norm(raw_alt) for raw_alt in alt_names.split(",")]
+                for norm_name in names:
+                    if not norm_name or len(norm_name) < self.min_query_len:
+                        continue
+                    existing = self._name_to_idx.get(norm_name)
+                    if existing is None:
+                        self._name_to_idx[norm_name] = i
+                        continue
+                    if pop > self._populations[existing]:
+                        self._name_to_idx[norm_name] = i
+                    if existing == i:
+                        continue
+                    # Second owner of this name — start tracking the homonyms.
+                    bucket = self._name_collisions.get(norm_name)
+                    if bucket is None:
+                        bucket = self._name_collisions[norm_name] = [existing]
+                    if i not in bucket:
+                        bucket.append(i)
 
     def _add_prefixes(self, i: int, s: str) -> None:
         if not s:
@@ -178,6 +191,25 @@ class LocationIndex:
             return None
         i = self._name_to_idx.get(q)
         return self._hit(i) if i is not None else None
+
+    def resolve_all_by_any_name(self, name: str) -> List[LocationHit]:
+        """Every place matching `name` exactly (label, city name, or alt name).
+
+        Sorted by descending population. Unlike `resolve_by_any_name`, this
+        keeps the less-populous homonyms so callers can disambiguate them by
+        country — "Cologne" matches both Köln (DE) and Cologne (IT).
+        """
+        q = _norm(name)
+        if not q or len(q) < self.min_query_len:
+            return []
+        idxs = self._name_collisions.get(q)
+        if idxs is None:
+            single = self._name_to_idx.get(q)
+            return [self._hit(single)] if single is not None else []
+        return sorted(
+            (self._hit(i) for i in idxs),
+            key=lambda h: (-h.population, h.label),
+        )
 
     def iter_all(
         self, *, min_population: int = 0, capitals_only: bool = False

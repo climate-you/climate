@@ -74,6 +74,8 @@ def build_canned_charts(
                     start_year=sub.get("start_year"),
                     end_year=sub.get("end_year"),
                     temperature_unit=temperature_unit,
+                    month_filter=sub.get("month_filter"),
+                    aggregate_by_year=bool(sub.get("aggregate_by_year", False)),
                 )
                 if "error" in result or "data" not in result:
                     continue
@@ -105,6 +107,8 @@ def build_canned_charts(
                 start_year=start_year,
                 end_year=end_year,
                 temperature_unit=temperature_unit,
+                month_filter=month_filter,
+                aggregate_by_year=aggregate_by_year,
             )
             if "error" in result or "data" not in result:
                 continue
