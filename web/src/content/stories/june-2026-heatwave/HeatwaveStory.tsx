@@ -374,6 +374,19 @@ export default function HeatwaveStory() {
           month. The daily line is the mean across 15 major Western and Central
           European cities. Data runs through 13 July 2026.
         </p>
+        <p className={styles.copyright}>
+          © 2026 Benoit Leveau &amp; Fanny Chaléon. This article, its figures,
+          and images exported from it are all rights reserved and are not
+          covered by the pipeline&apos;s AGPL licence.{" "}
+          <a
+            href="https://github.com/climate-you/climate/blob/main/CONTENT-LICENSE.md"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Terms
+          </a>
+          .
+        </p>
       </footer>
     </article>
   );

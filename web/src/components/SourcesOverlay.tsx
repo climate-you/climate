@@ -249,7 +249,8 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
           >
             <section className={styles.sourcesSection}>
               <p className={styles.sourcesNotice}>
-                This platform is open source, released under the{" "}
+                The software behind this platform is open source, released under
+                the{" "}
                 <a
                   href="https://github.com/climate-you/climate/blob/main/LICENSE"
                   target="_blank"
@@ -264,6 +265,22 @@ export default function SourcesOverlay({ onClose }: SourcesOverlayProps) {
                   rel="noreferrer"
                 >
                   github.com/climate-you/climate
+                </a>
+                .
+              </p>
+              <p className={styles.sourcesNotice}>
+                Case studies are not covered by that licence. Their text,
+                figures, and the editorial selection of the data they present —
+                together with images exported from them — are © 2026 Benoit
+                Leveau &amp; Fanny Chaléon, all rights reserved. Quotation for
+                press, commentary and academic work is welcome, with attribution
+                and a link.{" "}
+                <a
+                  href="https://github.com/climate-you/climate/blob/main/CONTENT-LICENSE.md"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Full statement
                 </a>
                 .
               </p>

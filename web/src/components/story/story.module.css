@@ -778,6 +778,15 @@
   text-decoration: underline;
 }
 
+.methods .copyright {
+  margin-top: 14px;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 72ch;
+  opacity: 0.85;
+}
+
 .statsHint {
   display: none;
 }
