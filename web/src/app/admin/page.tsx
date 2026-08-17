@@ -107,6 +107,43 @@ type ChatStats = {
   p95_resp_ms: number | null;
 };
 
+type QuestionMeta = {
+  id: string;
+  question: string;
+  scope: string;
+  datasets: string[];
+  follow_up_ids: string[];
+  requires_location: boolean;
+  location_filter: string;
+};
+
+type QuestionStat = {
+  question_tree_version: string | null;
+  question_id: string;
+  parent_question_id: string | null;
+  clicks: number;
+  feedback_good: number;
+  feedback_bad: number;
+  last_ts: number | null;
+};
+
+type QuestionTreeAnalytics = {
+  current_version: string;
+  tree: {
+    version: string;
+    root_ids: string[];
+    questions: Record<string, QuestionMeta>;
+  };
+  stats: QuestionStat[];
+  typed: { question_tree_version: string | null; typed: number }[];
+  typed_entry_points: {
+    question_tree_version: string | null;
+    after_question_id: string | null;
+    typed: number;
+    examples: string[];
+  }[];
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -249,7 +286,9 @@ function buildCopyText(s: ChatMessage): string {
 // ---------------------------------------------------------------------------
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<"map" | "chat">("map");
+  const [activeTab, setActiveTab] = useState<"map" | "chat" | "questions">(
+    "map",
+  );
 
   // --- Map tab state ---
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -276,6 +315,12 @@ export default function AdminPage() {
     string | null
   >(null);
   const CHAT_PAGE_SIZE = 50;
+
+  // --- Questions tab state ---
+  const [questionTreeData, setQuestionTreeData] =
+    useState<QuestionTreeAnalytics | null>(null);
+  const [questionsVersion, setQuestionsVersion] = useState<string | null>(null);
+  const [questionsError, setQuestionsError] = useState<string | null>(null);
 
   const apiBase = useMemo(() => {
     if (process.env.NEXT_PUBLIC_CLIMATE_API_BASE) {
@@ -382,6 +427,84 @@ export default function AdminPage() {
       .catch(() => {})
       .finally(() => setChatLoading(false));
   }, [apiBase, activeTab, chatPage, chatRefreshKey]);
+
+  // Fetch question-tree analytics when the Questions tab is opened
+  useEffect(() => {
+    if (activeTab !== "questions") return;
+    setChatLoading(true);
+    setQuestionsError(null);
+    fetch(`${apiBase}/api/admin/chat/question-tree`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<QuestionTreeAnalytics>;
+      })
+      .then((res) => {
+        setQuestionTreeData(res);
+        // Default to the newest revision that actually has clicks, falling
+        // back to the live tree when analytics are still empty.
+        setQuestionsVersion((prev) => {
+          if (prev !== null) return prev;
+          const withClicks = [
+            ...new Set(
+              res.stats
+                .map((s) => s.question_tree_version)
+                .filter((v): v is string => v !== null),
+            ),
+          ].sort();
+          return withClicks[withClicks.length - 1] ?? res.current_version;
+        });
+      })
+      .catch((e) => setQuestionsError(String(e)))
+      .finally(() => setChatLoading(false));
+  }, [apiBase, activeTab, chatRefreshKey]);
+
+  // Every tree revision present in the data, newest first, plus the live one.
+  const questionVersions = useMemo(() => {
+    if (!questionTreeData) return [] as (string | null)[];
+    const seen = new Set<string | null>([questionTreeData.current_version]);
+    for (const s of questionTreeData.stats) seen.add(s.question_tree_version);
+    for (const t of questionTreeData.typed) seen.add(t.question_tree_version);
+    const named = [...seen]
+      .filter((v): v is string => v !== null)
+      .sort()
+      .reverse();
+    // Untracked rows (pre-versioning) sort last — they cannot be attributed.
+    return seen.has(null) ? [...named, null] : named;
+  }, [questionTreeData]);
+
+  // Click counts for the selected revision. Keyed two ways: per question (the
+  // total, for the flat list) and per parent→child edge, because the same
+  // question hangs off several parents and "clicked from here" is the number
+  // that says whether a given follow-up placement works.
+  const { questionCounts, edgeCounts } = useMemo(() => {
+    const byId = new Map<
+      string,
+      { clicks: number; good: number; bad: number }
+    >();
+    const byEdge = new Map<
+      string,
+      { clicks: number; good: number; bad: number }
+    >();
+    if (!questionTreeData) return { questionCounts: byId, edgeCounts: byEdge };
+    for (const s of questionTreeData.stats) {
+      if (s.question_tree_version !== questionsVersion) continue;
+      const prev = byId.get(s.question_id) ?? { clicks: 0, good: 0, bad: 0 };
+      byId.set(s.question_id, {
+        clicks: prev.clicks + s.clicks,
+        good: prev.good + s.feedback_good,
+        bad: prev.bad + s.feedback_bad,
+      });
+      // parent === null means the question was clicked as a root chip.
+      const edgeKey = `${s.parent_question_id ?? ""}>${s.question_id}`;
+      const prevEdge = byEdge.get(edgeKey) ?? { clicks: 0, good: 0, bad: 0 };
+      byEdge.set(edgeKey, {
+        clicks: prevEdge.clicks + s.clicks,
+        good: prevEdge.good + s.feedback_good,
+        bad: prevEdge.bad + s.feedback_bad,
+      });
+    }
+    return { questionCounts: byId, edgeCounts: byEdge };
+  }, [questionTreeData, questionsVersion]);
 
   // Group messages by session_id, newest session first
   const groupedSessions = useMemo(() => {
@@ -600,6 +723,12 @@ export default function AdminPage() {
                 {unreviewedCount}
               </span>
             )}
+          </TabButton>
+          <TabButton
+            active={activeTab === "questions"}
+            onClick={() => setActiveTab("questions")}
+          >
+            Questions
           </TabButton>
         </div>
         <button
@@ -958,6 +1087,38 @@ export default function AdminPage() {
           </section>
         </div>
       )}
+
+      {/* Questions tab */}
+      {activeTab === "questions" && (
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: "auto",
+            padding: "12px 16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+          }}
+        >
+          {questionsError && (
+            <div style={{ color: "#e53e3e", fontSize: 13 }}>
+              Failed to load question analytics: {questionsError}
+            </div>
+          )}
+
+          {questionTreeData && (
+            <QuestionTreePanel
+              data={questionTreeData}
+              versions={questionVersions}
+              selectedVersion={questionsVersion}
+              onSelectVersion={setQuestionsVersion}
+              counts={questionCounts}
+              edgeCounts={edgeCounts}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -965,6 +1126,344 @@ export default function AdminPage() {
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
+
+function QuestionTreePanel({
+  data,
+  versions,
+  selectedVersion,
+  onSelectVersion,
+  counts,
+  edgeCounts,
+}: {
+  data: QuestionTreeAnalytics;
+  versions: (string | null)[];
+  selectedVersion: string | null;
+  onSelectVersion: (v: string | null) => void;
+  counts: Map<string, { clicks: number; good: number; bad: number }>;
+  edgeCounts: Map<string, { clicks: number; good: number; bad: number }>;
+}) {
+  // Only the revision currently on disk can be drawn as a tree — earlier
+  // revisions may have had different wording, children, or questions that no
+  // longer exist, so those are listed flat with their raw ids.
+  const isLiveTree = selectedVersion === data.current_version;
+  const questions = data.tree.questions;
+
+  const totalClicks = [...counts.values()].reduce((a, c) => a + c.clicks, 0);
+  const typedCount =
+    data.typed.find((t) => t.question_tree_version === selectedVersion)
+      ?.typed ?? 0;
+
+  // Ids seen in analytics for this revision but absent from the live tree.
+  const orphanIds = [
+    ...new Set(
+      data.stats
+        .filter((s) => s.question_tree_version === selectedVersion)
+        .map((s) => s.question_id),
+    ),
+  ]
+    .filter((id) => !questions[id])
+    .sort();
+
+  const maxClicks = Math.max(1, ...[...counts.values()].map((c) => c.clicks));
+
+  const entryPoints = data.typed_entry_points.filter(
+    (e) => e.question_tree_version === selectedVersion,
+  );
+
+  // The question tree is a dense DAG, not a tree: most questions are offered
+  // as a follow-up by several parents. Expanding a subtree per distinct path
+  // is combinatorial — for the 37-node/132-edge tree that is millions of rows,
+  // enough to kill the renderer. Each question is therefore expanded once, on
+  // first encounter; later encounters render as a non-expanding reference.
+  const expanded = new Set<string>();
+
+  function renderNode(
+    id: string,
+    depth: number,
+    path: string,
+    parentId: string | null,
+  ): React.ReactNode {
+    const node = questions[id];
+    if (!node) return null;
+    // Count for this position in the tree, not the question's grand total: a
+    // question offered under four parents needs to show which of those
+    // placements people actually take.
+    const stat = edgeCounts.get(`${parentId ?? ""}>${id}`);
+    const clicks = stat?.clicks ?? 0;
+    const total = counts.get(id)?.clicks ?? 0;
+    const alreadyExpanded = expanded.has(id);
+    if (!alreadyExpanded) expanded.add(id);
+    const children = alreadyExpanded ? [] : node.follow_up_ids;
+
+    return (
+      <div key={`${path}>${id}`}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "3px 0",
+            paddingLeft: depth * 18,
+            borderBottom: "1px solid #1e1e1e",
+            opacity: alreadyExpanded ? 0.55 : 1,
+          }}
+        >
+          <div
+            style={{
+              width: 46,
+              flexShrink: 0,
+              textAlign: "right",
+              fontVariantNumeric: "tabular-nums",
+              fontSize: 12,
+              fontWeight: clicks > 0 ? 700 : 400,
+              color: clicks > 0 ? "#eee" : "#555",
+            }}
+          >
+            {clicks}
+          </div>
+          <div
+            style={{
+              width: 60,
+              flexShrink: 0,
+              height: 6,
+              background: "#222",
+              borderRadius: 3,
+              overflow: "hidden",
+            }}
+            title={`${clicks} clicks`}
+          >
+            <div
+              style={{
+                width: `${(clicks / maxClicks) * 100}%`,
+                height: "100%",
+                background: clicks > 0 ? "#3b82f6" : "transparent",
+              }}
+            />
+          </div>
+          <span
+            style={{
+              fontSize: 13,
+              color: clicks > 0 ? "#ddd" : "#666",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+            title={`${node.id} · ${node.scope}`}
+          >
+            {depth > 0 && <span style={{ color: "#444" }}>└ </span>}
+            {node.question}
+            {total > clicks && (
+              <span
+                style={{ color: "#666", marginLeft: 6, fontSize: 11 }}
+                title={`${total} clicks in total across every place this question is offered`}
+              >
+                ({total} total)
+              </span>
+            )}
+            {alreadyExpanded && node.follow_up_ids.length > 0 && (
+              <span style={{ color: "#555", marginLeft: 6, fontSize: 11 }}>
+                ↑ shown above
+              </span>
+            )}
+          </span>
+          {stat && (stat.good > 0 || stat.bad > 0) && (
+            <span style={{ fontSize: 11, color: "#666", flexShrink: 0 }}>
+              {stat.good > 0 && (
+                <span style={{ color: "#48bb78" }}>▲{stat.good}</span>
+              )}{" "}
+              {stat.bad > 0 && (
+                <span style={{ color: "#e53e3e" }}>▼{stat.bad}</span>
+              )}
+            </span>
+          )}
+        </div>
+        {children.map((childId) =>
+          renderNode(childId, depth + 1, `${path}>${id}`, id),
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div
+        style={{ display: "flex", gap: 10, flexWrap: "wrap", flexShrink: 0 }}
+      >
+        <Card title="Tree revision">
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {versions.map((v) => (
+              <button
+                key={v ?? "untracked"}
+                onClick={() => onSelectVersion(v)}
+                style={{
+                  background: v === selectedVersion ? "#2a2a2a" : "transparent",
+                  border:
+                    "1px solid " + (v === selectedVersion ? "#555" : "#2a2a2a"),
+                  borderRadius: 6,
+                  color: v === selectedVersion ? "#eee" : "#777",
+                  padding: "3px 9px",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                {v ?? "untracked"}
+                {v === data.current_version && (
+                  <span style={{ color: "#48bb78", marginLeft: 5 }}>live</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </Card>
+        <Card title="This revision">
+          <Row label="Chip clicks" value={fmt(totalClicks)} />
+          <Row label="Typed questions" value={fmt(typedCount)} />
+          <Row
+            label="Typed share"
+            value={
+              totalClicks + typedCount > 0
+                ? `${Math.round((typedCount / (totalClicks + typedCount)) * 100)}%`
+                : "—"
+            }
+          />
+          <Row
+            label="Questions used"
+            value={`${counts.size} / ${isLiveTree ? Object.keys(questions).length : "?"}`}
+          />
+        </Card>
+      </div>
+
+      <section>
+        <SectionTitle>Where people start typing</SectionTitle>
+        <div style={{ fontSize: 12, color: "#777", padding: "2px 0 8px" }}>
+          The last suggestion clicked before a free-typed question. A question
+          that keeps appearing here is one whose follow-ups do not cover what
+          people wanted to ask next.
+        </div>
+        {entryPoints.length === 0 ? (
+          <div style={{ fontSize: 13, color: "#666" }}>
+            No free-typed questions recorded for this revision.
+          </div>
+        ) : (
+          entryPoints.map((e) => (
+            <div
+              key={e.after_question_id ?? "cold-start"}
+              style={{
+                display: "flex",
+                gap: 8,
+                padding: "5px 0",
+                borderBottom: "1px solid #1e1e1e",
+              }}
+            >
+              <span
+                style={{
+                  width: 46,
+                  flexShrink: 0,
+                  textAlign: "right",
+                  fontVariantNumeric: "tabular-nums",
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                {e.typed}
+              </span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, color: "#ddd" }}>
+                  {e.after_question_id === null ? (
+                    <span style={{ color: "#a0793a" }}>
+                      Typed straight away — no suggestion used
+                    </span>
+                  ) : (
+                    (questions[e.after_question_id]?.question ??
+                    e.after_question_id)
+                  )}
+                </div>
+                {e.examples.length > 0 && (
+                  <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>
+                    {e.examples.map((q, i) => (
+                      <div key={i}>“{truncate(q, 90)}”</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </section>
+
+      <section>
+        <SectionTitle>
+          Question tree — {selectedVersion ?? "untracked"}
+        </SectionTitle>
+        {!isLiveTree && (
+          <div style={{ fontSize: 12, color: "#a0793a", padding: "6px 0" }}>
+            {selectedVersion === null
+              ? "These rows predate version tracking, so they cannot be attributed to a revision. Shown as a flat list."
+              : "This is not the revision currently on disk. Its wording and follow-up structure are no longer available, so questions are listed flat by id."}
+          </div>
+        )}
+
+        {isLiveTree ? (
+          <div style={{ marginTop: 6 }}>
+            {data.tree.root_ids.map((id) => renderNode(id, 0, "", null))}
+          </div>
+        ) : (
+          <div style={{ marginTop: 6 }}>
+            {[...counts.entries()]
+              .sort((a, b) => b[1].clicks - a[1].clicks)
+              .map(([id, stat]) => (
+                <div
+                  key={id}
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    padding: "3px 0",
+                    borderBottom: "1px solid #1e1e1e",
+                    fontSize: 13,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 46,
+                      textAlign: "right",
+                      fontVariantNumeric: "tabular-nums",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {stat.clicks}
+                  </span>
+                  <span style={{ color: "#bbb" }}>
+                    {questions[id]?.question ?? id}
+                  </span>
+                  {!questions[id] && (
+                    <span style={{ color: "#555", fontSize: 11 }}>
+                      (not in live tree)
+                    </span>
+                  )}
+                </div>
+              ))}
+          </div>
+        )}
+
+        {isLiveTree && orphanIds.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 12, color: "#a0793a", marginBottom: 4 }}>
+              Recorded under this revision but no longer in the tree — these ids
+              were removed or renamed without the version being bumped:
+            </div>
+            {orphanIds.map((id) => (
+              <div
+                key={id}
+                style={{ fontSize: 12, color: "#888", padding: "2px 0" }}
+              >
+                {counts.get(id)?.clicks ?? 0} · {id}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
 
 function TabButton({
   active,

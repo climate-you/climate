@@ -375,3 +375,251 @@ def test_ip_blocklist_len_counts_only_valid_entries(tmp_path: Path) -> None:
     f.write_text("# header\n1.1.1.1\n2.2.2.2\n\n")
     bl = IPBlocklist(f)
     assert len(bl) == 2
+
+
+# ---------------------------------------------------------------------------
+# Question-tree analytics
+# ---------------------------------------------------------------------------
+
+
+def test_question_tree_stats_never_pool_across_revisions(tmp_path: Path) -> None:
+    """The same id in two revisions must stay two rows.
+
+    Questions get reworded between revisions, so summing them would compare
+    clicks on questions that no longer say the same thing.
+    """
+    db = _db(tmp_path)
+    for i in range(3):
+        _record(
+            db,
+            message_id=f"old-{i}",
+            question_id="global_temp_change",
+            question_tree_version="2026-04-25",
+        )
+    for i in range(5):
+        _record(
+            db,
+            message_id=f"new-{i}",
+            question_id="global_temp_change",
+            question_tree_version="2026-07-09",
+        )
+
+    stats = db.get_question_tree_stats()
+    by_version = {s["question_tree_version"]: s["clicks"] for s in stats}
+    assert by_version == {"2026-04-25": 3, "2026-07-09": 5}
+
+
+def test_question_tree_stats_track_parent_edges(tmp_path: Path) -> None:
+    """Follow-up chips record which question they were reached from."""
+    db = _db(tmp_path)
+    _record(
+        db,
+        message_id="root",
+        question_id="global_temp_change",
+        question_tree_version="v1",
+    )
+    _record(
+        db,
+        message_id="child",
+        question_id="fastest_warming_continent",
+        parent_question_id="global_temp_change",
+        question_tree_version="v1",
+    )
+    stats = {s["question_id"]: s for s in db.get_question_tree_stats()}
+    assert stats["global_temp_change"]["parent_question_id"] is None
+    assert (
+        stats["fastest_warming_continent"]["parent_question_id"] == "global_temp_change"
+    )
+
+
+def test_question_tree_stats_exclude_typed_questions(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    _record(db, message_id="typed-1")  # no question_id
+    _record(
+        db,
+        message_id="chip-1",
+        question_id="hot_days_global",
+        question_tree_version="v1",
+    )
+    stats = db.get_question_tree_stats()
+    assert [s["question_id"] for s in stats] == ["hot_days_global"]
+
+
+def test_question_tree_stats_carry_feedback(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    _record(db, message_id="a", question_id="q1", question_tree_version="v1")
+    _record(db, message_id="b", question_id="q1", question_tree_version="v1")
+    db.record_chat_feedback("a", "good")
+    db.record_chat_feedback("b", "bad")
+    stat = db.get_question_tree_stats()[0]
+    assert stat["clicks"] == 2
+    assert stat["feedback_good"] == 1
+    assert stat["feedback_bad"] == 1
+
+
+def test_typed_question_counts_split_by_revision(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    _record(db, message_id="t1", question_tree_version="v1")
+    _record(db, message_id="t2", question_tree_version="v1")
+    _record(db, message_id="t3", question_tree_version="v2")
+    _record(db, message_id="c1", question_id="q1", question_tree_version="v1")
+    counts = {
+        c["question_tree_version"]: c["typed"] for c in db.get_typed_question_counts()
+    }
+    assert counts == {"v1": 2, "v2": 1}
+
+
+def test_question_tree_stats_empty_db(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    assert db.get_question_tree_stats() == []
+    assert db.get_typed_question_counts() == []
+
+
+def test_typed_entry_points_attribute_to_the_last_chip(tmp_path: Path) -> None:
+    """A typed question is attributed to the suggestion clicked before it."""
+    db = _db(tmp_path)
+    _record(
+        db,
+        message_id="a",
+        session_id="s1",
+        question_id="hot_days_global",
+        question_tree_version="v1",
+    )
+    _record(
+        db,
+        message_id="b",
+        session_id="s1",
+        question="What about hail?",
+        question_tree_version="v1",
+    )
+
+    points = db.get_typed_question_entry_points()
+    assert len(points) == 1
+    assert points[0]["after_question_id"] == "hot_days_global"
+    assert points[0]["typed"] == 1
+    assert points[0]["examples"] == ["What about hail?"]
+
+
+def test_typed_entry_points_flag_sessions_that_never_used_a_chip(
+    tmp_path: Path,
+) -> None:
+    """Typing with no prior chip means the suggestions were bypassed."""
+    db = _db(tmp_path)
+    _record(
+        db,
+        message_id="a",
+        session_id="s1",
+        question="Anything about wind?",
+        question_tree_version="v1",
+    )
+    points = db.get_typed_question_entry_points()
+    assert points[0]["after_question_id"] is None
+    assert points[0]["typed"] == 1
+
+
+def test_typed_entry_points_do_not_leak_across_sessions(tmp_path: Path) -> None:
+    """One user's chip must not be credited for another user's typing."""
+    db = _db(tmp_path)
+    _record(
+        db,
+        message_id="a",
+        session_id="s1",
+        question_id="hot_days_global",
+        question_tree_version="v1",
+    )
+    _record(
+        db,
+        message_id="b",
+        session_id="s2",
+        question="Unrelated question",
+        question_tree_version="v1",
+    )
+
+    points = {p["after_question_id"]: p for p in db.get_typed_question_entry_points()}
+    assert set(points) == {None}
+    assert points[None]["typed"] == 1
+
+
+def test_typed_entry_points_track_the_most_recent_chip(tmp_path: Path) -> None:
+    """Attribution follows the latest chip, not the first one in the session."""
+    db = _db(tmp_path)
+    _record(
+        db,
+        message_id="a",
+        session_id="s1",
+        question_id="first_q",
+        question_tree_version="v1",
+    )
+    _record(
+        db,
+        message_id="b",
+        session_id="s1",
+        question_id="second_q",
+        question_tree_version="v1",
+    )
+    _record(
+        db,
+        message_id="c",
+        session_id="s1",
+        question="Now a typed one",
+        question_tree_version="v1",
+    )
+
+    points = db.get_typed_question_entry_points()
+    assert points[0]["after_question_id"] == "second_q"
+
+
+def test_typed_entry_points_group_by_revision(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    _record(
+        db, message_id="a", session_id="s1", question_id="q", question_tree_version="v1"
+    )
+    _record(
+        db,
+        message_id="b",
+        session_id="s1",
+        question="typed",
+        question_tree_version="v1",
+    )
+    _record(
+        db, message_id="c", session_id="s2", question_id="q", question_tree_version="v2"
+    )
+    _record(
+        db,
+        message_id="d",
+        session_id="s2",
+        question="typed",
+        question_tree_version="v2",
+    )
+
+    versions = {
+        p["question_tree_version"] for p in db.get_typed_question_entry_points()
+    }
+    assert versions == {"v1", "v2"}
+
+
+def test_typed_entry_points_cap_examples(tmp_path: Path) -> None:
+    """Examples are illustrative, not an unbounded dump."""
+    db = _db(tmp_path)
+    _record(
+        db,
+        message_id="chip",
+        session_id="s1",
+        question_id="q",
+        question_tree_version="v1",
+    )
+    for i in range(6):
+        _record(
+            db,
+            message_id=f"t{i}",
+            session_id="s1",
+            question=f"typed {i}",
+            question_tree_version="v1",
+        )
+    point = db.get_typed_question_entry_points()[0]
+    assert point["typed"] == 6
+    assert len(point["examples"]) == 3
+
+
+def test_typed_entry_points_empty_db(tmp_path: Path) -> None:
+    assert _db(tmp_path).get_typed_question_entry_points() == []

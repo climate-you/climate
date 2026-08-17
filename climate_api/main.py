@@ -924,7 +924,12 @@ def create_app() -> FastAPI:
                     error=error_text,
                     question_id=body.question_id,
                     parent_question_id=body.parent_question_id,
-                    question_tree_version=body.question_tree_version,
+                    # Prefer the version the browser actually rendered its chips
+                    # from — a client on a cached bundle may legitimately be a
+                    # revision behind. Fall back to the server's tree so a row
+                    # is never left unattributed and cannot silently pool with
+                    # a later revision's numbers.
+                    question_tree_version=(body.question_tree_version or _TREE_VERSION),
                 )
 
         return StreamingResponse(
@@ -967,6 +972,25 @@ def create_app() -> FastAPI:
         return {
             "bad_answers": analytics_db.get_chat_bad_answers(limit=limit),
             "stats": analytics_db.get_chat_stats(),
+        }
+
+    @app.get("/api/admin/chat/question-tree")
+    def admin_chat_question_tree():
+        """Chip click counts per question, grouped by tree revision.
+
+        Only the revision currently on disk can be rendered as a tree — earlier
+        revisions are reported as a flat list, since their shape and wording are
+        no longer available. The `known_shape` flag tells the client which it is
+        looking at so it does not present stale ids as if they were the live
+        tree.
+        """
+        tree = _get_tree_metadata()
+        return {
+            "current_version": _TREE_VERSION,
+            "tree": tree,
+            "stats": analytics_db.get_question_tree_stats(),
+            "typed": analytics_db.get_typed_question_counts(),
+            "typed_entry_points": analytics_db.get_typed_question_entry_points(),
         }
 
     @app.get("/assets/v/{release}/{asset_path:path}")

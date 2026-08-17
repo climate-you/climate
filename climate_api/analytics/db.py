@@ -338,7 +338,8 @@ class AnalyticsDB:
                 cols = (
                     "message_id, session_id, ts, question, answer, step_count, tools_called, "
                     "tool_calls_detail, tier, feedback, feedback_status, total_ms, steps_timing, "
-                    "model, rejected_tiers, model_override, error"
+                    "model, rejected_tiers, model_override, error, "
+                    "question_id, parent_question_id, question_tree_version"
                 )
                 if feedback is not None:
                     rows = conn.execute(
@@ -371,6 +372,9 @@ class AnalyticsDB:
                     "rejected_tiers": _json.loads(r[14]) if r[14] else [],
                     "model_override": r[15],
                     "error": r[16],
+                    "question_id": r[17],
+                    "parent_question_id": r[18],
+                    "question_tree_version": r[19],
                 }
                 for r in rows
             ]
@@ -473,6 +477,122 @@ class AnalyticsDB:
         except Exception:
             logger.exception("Failed to query chat stats")
             return {}
+
+    def get_question_tree_stats(self) -> list[dict]:
+        """Per-question click counts, grouped by the tree revision in force.
+
+        Counts are never summed across revisions: the same question_id can be
+        reworded between revisions, so pooling them would compare answers to
+        different questions. Rows predating version tracking are reported under
+        a null version rather than folded into the current one.
+        """
+        try:
+            with self._lock:
+                conn = self._connect()
+                rows = conn.execute(
+                    """
+                    SELECT question_tree_version,
+                           question_id,
+                           parent_question_id,
+                           COUNT(*) AS clicks,
+                           SUM(CASE WHEN feedback='good' THEN 1 ELSE 0 END),
+                           SUM(CASE WHEN feedback='bad' THEN 1 ELSE 0 END),
+                           MAX(ts)
+                    FROM chat_messages
+                    WHERE question_id IS NOT NULL
+                    GROUP BY question_tree_version, question_id, parent_question_id
+                    ORDER BY clicks DESC
+                    """
+                ).fetchall()
+            return [
+                {
+                    "question_tree_version": r[0],
+                    "question_id": r[1],
+                    "parent_question_id": r[2],
+                    "clicks": r[3],
+                    "feedback_good": r[4] or 0,
+                    "feedback_bad": r[5] or 0,
+                    "last_ts": r[6],
+                }
+                for r in rows
+            ]
+        except Exception:
+            logger.exception("Failed to query question tree stats")
+            return []
+
+    def get_typed_question_counts(self) -> list[dict]:
+        """Totals for free-typed questions, split by tree revision.
+
+        Chip clicks only tell half the story — the ratio of typed to canned
+        questions is what says whether the suggested tree is covering what
+        people actually want to ask.
+        """
+        try:
+            with self._lock:
+                conn = self._connect()
+                rows = conn.execute(
+                    """
+                    SELECT question_tree_version, COUNT(*)
+                    FROM chat_messages
+                    WHERE question_id IS NULL
+                    GROUP BY question_tree_version
+                    """
+                ).fetchall()
+            return [{"question_tree_version": r[0], "typed": r[1]} for r in rows]
+        except Exception:
+            logger.exception("Failed to query typed question counts")
+            return []
+
+    def get_typed_question_entry_points(self, limit: int = 2000) -> list[dict]:
+        """Where in the suggested tree people give up and start typing.
+
+        For each free-typed question, reports the last chip the same session
+        clicked before it. A question that repeatedly precedes typing is one
+        whose follow-ups do not cover what people wanted next — which is the
+        signal for where to add canned questions.
+
+        `after_question_id` is None when the session typed without ever using a
+        chip, i.e. the suggestions were bypassed entirely.
+        """
+        try:
+            with self._lock:
+                conn = self._connect()
+                rows = conn.execute(
+                    """
+                    SELECT session_id, question_id, question_tree_version, question
+                    FROM chat_messages
+                    ORDER BY session_id, ts, rowid
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
+        except Exception:
+            logger.exception("Failed to query typed question entry points")
+            return []
+
+        # SQLite has no "last non-null value over a window", so the running
+        # last-chip-per-session is tracked here instead.
+        buckets: dict[tuple[str | None, str | None], dict] = {}
+        last_chip: dict[str, str | None] = {}
+        for session_id, question_id, version, question in rows:
+            if question_id is not None:
+                last_chip[session_id] = question_id
+                continue
+            key = (version, last_chip.get(session_id))
+            bucket = buckets.setdefault(
+                key,
+                {
+                    "question_tree_version": version,
+                    "after_question_id": last_chip.get(session_id),
+                    "typed": 0,
+                    "examples": [],
+                },
+            )
+            bucket["typed"] += 1
+            if question and len(bucket["examples"]) < 3:
+                bucket["examples"].append(question)
+
+        return sorted(buckets.values(), key=lambda b: -b["typed"])
 
 
 class IPBlocklist:
