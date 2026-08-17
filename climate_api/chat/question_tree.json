@@ -1,5 +1,5 @@
 {
-  "version": "2026-07-09",
+  "version": "2026-08-15",
   "root_ids": [
     "local_temp_trend",
     "local_summer_heat",
@@ -7,6 +7,7 @@
     "rainfall_local",
     "local_winters",
     "sea_temp_local",
+    "june_2026_heatwave",
     "global_temp_change",
     "fastest_warming_continent",
     "hot_days_global",
@@ -44,7 +45,7 @@
       "question": "Which continent is warming the fastest?",
       "scope": "global",
       "datasets": ["temperature"],
-      "follow_up_ids": ["country_warming_most", "europe_vs_asia", "arctic_amplification", "slowest_warming_continent", "country_in_europe_warming", "local_vs_global"],
+      "follow_up_ids": ["june_2026_heatwave", "country_warming_most", "europe_vs_asia", "arctic_amplification", "slowest_warming_continent", "country_in_europe_warming", "local_vs_global"],
       "requires_location": false,
       "location_filter": "any",
       "answer": "The continent that is warming the fastest is **Europe**, with a warming trend of **[[0.51°C|0.92°F]] per decade** — well ahead of North America ([[0.39°C|0.70°F]]) and Asia ([[0.36°C|0.65°F]]). Europe's proximity to the rapidly warming Arctic and shrinking snow cover both contribute to its accelerated warming.",
@@ -289,12 +290,32 @@
       },
       "status": "active"
     },
+    "june_2026_heatwave": {
+      "id": "june_2026_heatwave",
+      "question": "What happened during the June 2026 European heatwave?",
+      "scope": "global",
+      "datasets": ["temperature"],
+      "follow_up_ids": ["hot_days_global", "fastest_warming_continent", "europe_vs_asia", "global_temp_change", "local_temp_trend"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "June 2026 was the **warmest June on record for Europe** — a continent-wide average of [[15.7°C|60.3°F]], [[+1.8°C|+3.3°F]] above the 1991–2020 June norm and [[0.5°C|0.9°F]] clear of the previous record set in 2021, across 48 years of data.\n\nThe heat arrived as three distinct spells rather than one long wave, each measured against the 1991–2020 average for the same dates:\n\n- **20–22 June** — Iberia, with Madrid [[+7.8°C|+14.0°F]] above normal\n- **23–25 June** — France, where Paris reached [[+13.9°C|+25.0°F]], the most extreme anomaly of the whole event\n- **27–29 June** — Central Europe, with Berlin [[+10.9°C|+19.6°F]]\n- **6–10 July** — a second, weaker episode, Paris [[+6.8°C|+12.2°F]]\n\nParis and Madrid set monthly June records of their own ([[21.9°C|71.4°F]] and [[26.4°C|79.5°F]]). Berlin's spell was sharp but short, so its monthly average stayed below its record — a reminder that a record month and a record day are not the same thing.\n\nFor the maps of each window and the full daily breakdown, open the [June 2026 heatwave case study](/stories/june-2026-heatwave).",
+      "locations": [
+        { "label": "Paris", "lat": 48.8534, "lon": 2.3488 },
+        { "label": "Madrid", "lat": 40.4165, "lon": -3.7026 }
+      ],
+      "chart_spec": {
+        "metric_id": "t2m_monthly_mean_c",
+        "month_filter": [6],
+        "aggregate_by_year": true
+      },
+      "status": "active"
+    },
     "hot_days_global": {
       "id": "hot_days_global",
       "question": "Are extreme heat events becoming more common?",
       "scope": "global",
       "datasets": ["temperature"],
-      "follow_up_ids": ["global_temp_change", "hottest_recorded_capital", "fastest_warming_continent", "local_vs_global"],
+      "follow_up_ids": ["june_2026_heatwave", "global_temp_change", "hottest_recorded_capital", "fastest_warming_continent", "local_vs_global"],
       "requires_location": false,
       "location_filter": "any",
       "answer": "Yes, dramatically. The average number of hot days per year — days warmer than the local 90th-percentile baseline — has almost **quadrupled** globally, from about 36 days per year in the early 1980s to about 132 days per year in the last five years. Heat that used to be exceptional is rapidly becoming the norm.",
