@@ -348,7 +348,7 @@ CHAT_DEV_MODE=0
 GROQ_API_KEY_FREE=<your-groq-free-api-key>
 ```
 
-`CHAT_DEV_MODE` defaults to `1` (dev/safe mode — uses 8b model, preserves the 70b free allowance). **Always set `CHAT_DEV_MODE=0` explicitly in production** to activate the full 70b tier chain.
+`CHAT_DEV_MODE` defaults to `1` (dev/safe mode — uses the smaller gpt-oss-20b model, preserving the gpt-oss-120b free allowance). **Always set `CHAT_DEV_MODE=0` explicitly in production** to activate the full tier chain.
 
 For the full setup guide (API key tiers, fallback chain, monitoring, activating for users), see `docs/runbooks/chat.md`.
 

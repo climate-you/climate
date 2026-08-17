@@ -17,11 +17,11 @@ All variables go in `/etc/climate/backend.env` (production) or your local shell 
 | Variable | Default | Description |
 |---|---|---|
 | `CHAT_ENABLED` | `0` | Set to `1` to activate the `/api/chat` endpoint |
-| `CHAT_DEV_MODE` | `1` (safe) | `1` = dev/8b chain; `0` = prod/primary chain. **Always set to `0` in production.** |
+| `CHAT_DEV_MODE` | `1` (safe) | `1` = dev/small-model chain; `0` = prod/primary chain. **Always set to `0` in production.** |
 | `GROQ_API_KEY_FREE` | — | Groq free-tier API key. Required in both dev and prod chains. Also accepted as `GROQ_API_KEY` for backward compatibility. |
 | `GROQ_API_KEY_PAID` | — | Groq paid API key. Optional; only used in prod chain as Tier 2. |
 | `GROQ_MODEL_PRIMARY` | `openai/gpt-oss-120b` | Primary model used in prod chain Tiers 1 and 2. |
-| `GROQ_MODEL_FALLBACK` | `llama-3.1-8b-instant` | 8b model used as Tier 3 in prod chain and Tier 1 in dev chain. |
+| `GROQ_MODEL_FALLBACK` | `openai/gpt-oss-20b` | Smaller model used as Tier 3 in prod chain and Tier 1 in dev chain. |
 | `OLLAMA_BASE_URL` | `` (disabled) | Base URL of a local Ollama instance (e.g. `http://localhost:11434`). Dev chain only. |
 | `OLLAMA_MODEL` | `qwen2.5:14b` | Model to use via Ollama. Dev chain only. |
 | `CHAT_MAX_STEPS` | `5` | Maximum tool-calling iterations per question before giving up. |
@@ -36,18 +36,21 @@ All variables go in `/etc/climate/backend.env` (production) or your local shell 
 |---|---|---|---|
 | 1 | `openai/gpt-oss-120b` | Free | Default |
 | 2 | `openai/gpt-oss-120b` | Paid | Tier 1 hits daily token quota (TPD) |
-| 3 | `llama-3.1-8b-instant` | Free | Tier 2 also exhausted; shows degraded-model disclaimer to user |
+| 3 | `openai/gpt-oss-20b` | Free | Tier 2 also exhausted; shows degraded-model disclaimer to user |
 | — | Static message | — | All tiers exhausted |
 
-When the 8b fallback (Tier 3) is used, the frontend displays an amber notice above the answer:
+Each Groq model has its own free-tier quota bucket, so Tier 3 still has a full
+daily allowance of its own when Tier 1 runs out.
+
+When the small-model fallback (Tier 3) is used, the frontend displays an amber notice above the answer:
 > "Daily allowance exceeded, degraded model is used, accuracy might be lower."
 
 ### Dev chain (`CHAT_DEV_MODE=1`, the default)
 
 | Tier | Model | Key used | Condition |
 |---|---|---|---|
-| 1 | `llama-3.1-8b-instant` | Free | Default |
-| 2 | `qwen2.5:14b` (Ollama) | — | 8b quota exhausted (only if `OLLAMA_BASE_URL` is set) |
+| 1 | `openai/gpt-oss-20b` | Free | Default |
+| 2 | `qwen2.5:14b` (Ollama) | — | gpt-oss-20b quota exhausted (only if `OLLAMA_BASE_URL` is set) |
 | — | Static message | — | All tiers exhausted |
 
 The paid key is never used in dev mode. The primary model's free allowance is preserved for production.
@@ -67,7 +70,7 @@ For the paid key (Tier 2 prod fallback), add a payment method and generate a sec
 ## 4. Local Development Setup
 
 ```bash
-# Minimum to run chat locally (dev chain, 8b model)
+# Minimum to run chat locally (dev chain, gpt-oss-20b model)
 export CHAT_ENABLED=1
 # CHAT_DEV_MODE defaults to 1, no need to set it
 export GROQ_API_KEY_FREE=<your-free-key>
@@ -129,7 +132,7 @@ To deactivate for a specific user, they can clear their browser's localStorage f
 - [ ] `CHAT_ENABLED=1` in `/etc/climate/backend.env`
 - [ ] `CHAT_DEV_MODE=0` in `/etc/climate/backend.env`
 - [ ] `GROQ_API_KEY_FREE` set to a valid Groq free key
-- [ ] `GROQ_API_KEY_PAID` set (optional, but recommended to avoid the 8b fallback during busy periods)
+- [ ] `GROQ_API_KEY_PAID` set (optional, but recommended to avoid the degraded fallback during busy periods)
 - [ ] Backend restarted: `sudo systemctl restart climate-backend`
 - [ ] Verify endpoint responds: `curl -s http://127.0.0.1:8001/api/chat` (should return 405, not 404)
 
@@ -178,7 +181,7 @@ After wiping, restart the backend — it will recreate all tables with the curre
 - In prod: ensure `GROQ_API_KEY_PAID` is set so Tier 2 can take over
 - In dev: wait for the quota to reset (resets at midnight UTC)
 
-**Answers are slow or wrong (8b fallback in prod)**
+**Answers are slow or wrong (gpt-oss-20b fallback in prod)**
 - The primary model's free quota is exhausted and the paid key isn't set
 - Add `GROQ_API_KEY_PAID` or wait for the daily reset
 - The amber notice in the UI will tell users accuracy may be lower

@@ -20,7 +20,7 @@ _MSG_DEFAULTS = dict(
     answer="Paris averages 12°C.",
     step_count=2,
     tools_called=["get_metric_series"],
-    tier="groq_70b",
+    tier="groq_primary_free",
 )
 
 
@@ -50,7 +50,7 @@ def test_record_and_retrieve_chat_message(tmp_path: Path) -> None:
     assert m["answer"] == "Paris averages 12°C."
     assert m["step_count"] == 2
     assert m["tools_called"] == ["get_metric_series"]
-    assert m["tier"] == "groq_70b"
+    assert m["tier"] == "groq_primary_free"
     assert m["feedback"] is None
     assert m["error"] is None
 
@@ -74,15 +74,15 @@ def test_record_chat_message_all_optional_fields(tmp_path: Path) -> None:
         step_count=3,
         tools_called=["get_metric_series", "find_extreme_location"],
         tool_calls_detail=[{"name": "get_metric_series", "args": {}}],
-        tier="groq_8b",
+        tier="groq_small",
         opt_out=False,
         map_lat=48.8,
         map_lon=2.3,
         map_label="Paris, France",
         total_ms=1250,
         steps_timing=[{"step": 1, "model_ms": 400, "tools_ms": 50}],
-        model="llama-70b",
-        rejected_tiers=["groq_70b"],
+        model="openai/gpt-oss-20b",
+        rejected_tiers=["groq_primary_free"],
         model_override=None,
         error=None,
         question_id="q-tree-1",
@@ -93,9 +93,25 @@ def test_record_chat_message_all_optional_fields(tmp_path: Path) -> None:
     assert len(msgs) == 1
     m = msgs[0]
     assert m["total_ms"] == 1250
-    assert m["model"] == "llama-70b"
-    assert m["rejected_tiers"] == ["groq_70b"]
+    assert m["model"] == "openai/gpt-oss-20b"
+    assert m["rejected_tiers"] == ["groq_primary_free"]
     assert m["steps_timing"] == [{"step": 1, "model_ms": 400, "tools_ms": 50}]
+    # Question-tree attribution must survive the round trip: without these,
+    # chip-click analytics cannot be segmented by tree revision and counts
+    # from different question wordings silently pool together.
+    assert m["question_id"] == "q-tree-1"
+    assert m["parent_question_id"] is None
+    assert m["question_tree_version"] == "v2"
+
+
+def test_question_tree_fields_returned_for_typed_questions(tmp_path: Path) -> None:
+    """Free-typed questions carry no question_id but still record a version."""
+    db = _db(tmp_path)
+    _record(db, message_id="msg-typed")
+    m = db.get_chat_messages()[0]
+    assert m["question_id"] is None
+    assert m["parent_question_id"] is None
+    assert m["question_tree_version"] is None
 
 
 def test_record_chat_message_with_error_sets_feedback_status_new(

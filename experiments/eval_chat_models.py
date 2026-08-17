@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """Compare chat models by running sample questions through the real ChatOrchestrator.
 
-Unlike chat_poc.py (a pre-integration proof-of-concept with its own agentic
-loop), this drives climate_api.chat.orchestrator.ChatOrchestrator — the exact
+This drives climate_api.chat.orchestrator.ChatOrchestrator — the exact
 production system prompt, tool schemas, and dispatch — with one single-model
 tier per candidate, so differences in tool-call quality are attributable to
-the model alone.
+the model alone. It replaced an earlier standalone proof-of-concept harness
+that carried its own copy of the agentic loop and had drifted out of sync
+with production.
 
 Usage:
     export GROQ_API_KEY_FREE=$(cat ~/.groq_api_key_free)   # or rely on the file fallback
     python experiments/eval_chat_models.py
-    python experiments/eval_chat_models.py --models llama-3.3-70b-versatile openai/gpt-oss-120b
+    python experiments/eval_chat_models.py --models openai/gpt-oss-120b openai/gpt-oss-20b
     python experiments/eval_chat_models.py --questions "How hot is Rome?" --sleep 0
 
 Writes a JSON transcript and a side-by-side Markdown report.
@@ -32,9 +33,9 @@ from climate_api.store.location_index import LocationIndex
 from climate_api.store.tile_data_store import TileDataStore
 
 DEFAULT_MODELS = [
-    "llama-3.3-70b-versatile",  # deprecated 2026-06-17, decommissioned 2026-08-16
-    "openai/gpt-oss-120b",  # Groq's recommended replacement
-    "qwen/qwen3.6-27b",  # Groq's recommended replacement (smaller)
+    "openai/gpt-oss-120b",  # prod primary (Tiers 1-2)
+    "openai/gpt-oss-20b",  # prod degraded fallback (Tier 3) and dev default
+    "qwen/qwen3.6-27b",  # alternative small model, available as a dev override
 ]
 
 # Mix of question-tree questions (global/city/local scopes, all datasets) and

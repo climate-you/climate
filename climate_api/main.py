@@ -81,7 +81,7 @@ class _ChatRequest(BaseModel):
     )
     message_id: str | None = None  # per-Q&A UUID (used for feedback/review endpoints)
     # Optional tier override — used by the dev UI toggle.
-    # Valid values are tier names configured on the server (e.g. "groq_8b", "local").
+    # Valid values are tier names configured on the server (e.g. "groq_small", "local").
     model_override: str | None = None
     # Temperature unit preference set by the frontend ("C" or "F").
     temperature_unit: str = "C"
@@ -121,30 +121,42 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
     Build the ordered list of provider tiers based on settings.
 
     Dev mode  (CHAT_DEV_MODE=1):
-      Tier 1 — Groq 8b-instant free (fast, good enough for dev iteration)
+      Tier 1 — Groq gpt-oss-20b free (fast, good enough for dev iteration)
       Tier 2 — Local Ollama qwen2.5:14b (if OLLAMA_BASE_URL is set)
       Tier 3 — Budget exhausted message (implicit, no tier object)
 
     Prod mode (default):
-      Tier 1 — Groq primary free   (GROQ_API_KEY_FREE)
-      Tier 2 — Groq primary paid   (GROQ_API_KEY_PAID, if set)
-      Tier 3 — Groq 8b free        (GROQ_API_KEY_FREE, degraded-model notice shown)
+      Tier 1 — Groq primary free      (GROQ_API_KEY_FREE)
+      Tier 2 — Groq primary paid      (GROQ_API_KEY_PAID, if set)
+      Tier 3 — Groq gpt-oss-20b free  (GROQ_API_KEY_FREE, degraded-model notice shown)
       Tier 4 — Budget exhausted message (implicit, no tier object)
+
+    Each Groq model has its own free-tier quota bucket, so Tier 3 still adds
+    real headroom once the primary model's daily token quota is spent.
     """
     from groq import Groq
 
     tiers: list[ProviderTier] = []
 
+    # Pre-flight request caps. A request estimated above the key's
+    # tokens-per-minute ceiling can only come back as a 429, so it is cheaper to
+    # skip the tier and fall through than to send it and burn the round trip.
+    # Groq's free keys allow 8,000 TPM on every chat model we use; paid keys
+    # allow 250,000, so the paid cap is a conversation-length guard rather than
+    # a rate-limit one.
+    free_max_request_tokens = 8000
+    paid_max_request_tokens = 11000
+
     if settings.chat_dev_mode:
-        # Dev: 8b first (fast), local Ollama as fallback
+        # Dev: small model first (fast), local Ollama as fallback
         if settings.groq_api_key_free:
             tiers.append(
                 ProviderTier(
-                    name="groq_8b",
+                    name="groq_small",
                     client=Groq(api_key=settings.groq_api_key_free),
                     model=settings.groq_model_fallback,
                     is_degraded=False,
-                    max_request_tokens=8000,
+                    max_request_tokens=free_max_request_tokens,
                 )
             )
         if settings.ollama_base_url:
@@ -173,20 +185,20 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
                     client=Groq(api_key=settings.groq_api_key_free),
                     model=settings.groq_model_primary,
                     is_degraded=False,
-                    max_request_tokens=11000,
+                    max_request_tokens=free_max_request_tokens,
                 )
             )
             tiers.append(
                 ProviderTier(
-                    name="groq_scout",
+                    name="groq_qwen",
                     client=Groq(api_key=settings.groq_api_key_free),
-                    model="meta-llama/llama-4-scout-17b-16e-instruct",
+                    model="qwen/qwen3.6-27b",
                     is_degraded=False,
-                    max_request_tokens=27500,
+                    max_request_tokens=free_max_request_tokens,
                 )
             )
     else:
-        # Prod: primary free → primary paid → 8b free (degraded)
+        # Prod: primary free → primary paid → small free (degraded)
         if settings.groq_api_key_free:
             tiers.append(
                 ProviderTier(
@@ -194,7 +206,7 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
                     client=Groq(api_key=settings.groq_api_key_free),
                     model=settings.groq_model_primary,
                     is_degraded=False,
-                    max_request_tokens=11000,
+                    max_request_tokens=free_max_request_tokens,
                 )
             )
         if settings.groq_api_key_paid:
@@ -204,17 +216,17 @@ def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
                     client=Groq(api_key=settings.groq_api_key_paid),
                     model=settings.groq_model_primary,
                     is_degraded=False,
-                    max_request_tokens=11000,
+                    max_request_tokens=paid_max_request_tokens,
                 )
             )
         if settings.groq_api_key_free:
             tiers.append(
                 ProviderTier(
-                    name="groq_8b",
+                    name="groq_small",
                     client=Groq(api_key=settings.groq_api_key_free),
                     model=settings.groq_model_fallback,
                     is_degraded=True,
-                    max_request_tokens=8000,
+                    max_request_tokens=free_max_request_tokens,
                 )
             )
 

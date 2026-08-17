@@ -41,13 +41,15 @@ class Settings:
     chat_enabled: bool = False
     chat_dev_mode: bool = True  # safe default — set CHAT_DEV_MODE=0 in production
     chat_max_steps: int = 5
-    # Groq keys — free key is used for Tier 1 (primary free in prod, 8b in dev) and Tier 3 (8b fallback in prod).
+    # Groq keys — free key is used for Tier 1 (primary free in prod, small model in dev)
+    # and Tier 3 (small-model fallback in prod).
     # Paid key is used only in prod for Tier 2 (primary paid). Never used in dev mode.
     groq_api_key_free: Optional[str] = None
     groq_api_key_paid: Optional[str] = None
-    # llama-3.3-70b-versatile is decommissioned on Groq on 2026-08-16
+    # Groq decommissioned llama-3.3-70b-versatile and llama-3.1-8b-instant on
+    # 2026-08-16; both models were replaced by the GPT-OSS pair.
     groq_model_primary: str = "openai/gpt-oss-120b"
-    groq_model_fallback: str = "llama-3.1-8b-instant"
+    groq_model_fallback: str = "openai/gpt-oss-20b"
     # Local Ollama (dev chain Tier 2)
     ollama_base_url: str = ""
     ollama_model: str = "qwen2.5:14b"
@@ -177,7 +179,7 @@ def load_settings() -> Settings:
         or os.environ.get("GROQ_MODEL")
         or "openai/gpt-oss-120b"
     )
-    groq_model_fallback = os.environ.get("GROQ_MODEL_FALLBACK", "llama-3.1-8b-instant")
+    groq_model_fallback = os.environ.get("GROQ_MODEL_FALLBACK", "openai/gpt-oss-20b")
     ollama_base_url = os.environ.get("OLLAMA_BASE_URL", "")
     ollama_model = os.environ.get("OLLAMA_MODEL", "qwen2.5:14b")
 
