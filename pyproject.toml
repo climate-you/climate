@@ -15,7 +15,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# FastAPI server runtime (panel/resolve/nearest endpoints).
+# FastAPI server runtime (panel/resolve/nearest endpoints, chat assistant).
+# groq belongs here rather than in a chat-only extra: the deploy script installs
+# [api] alone, and the chat provider is imported lazily, so a missing groq only
+# surfaces as a crash-on-startup the first time CHAT_ENABLED=1 is set.
 api = [
   "fastapi>=0.110",
   "uvicorn>=0.29",
@@ -24,6 +27,12 @@ api = [
   "jsonschema>=4.0",
   "xarray>=2023.0",
   "zstandard>=0.21",
+  "groq>=1.1",
+]
+
+# Local Ollama fallback tier (dev chain only; guarded by ImportError at runtime).
+chat-local = [
+  "openai>=1.30",
 ]
 
 # scripts/build/build_ocean_mask.py
