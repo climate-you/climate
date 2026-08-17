@@ -23,7 +23,10 @@ from climate_api.schemas import (
 
 
 async def _asgi_get(
-    app: Any, path: str, query: dict[str, Any] | None = None
+    app: Any,
+    path: str,
+    query: dict[str, Any] | None = None,
+    request_headers: dict[str, str] | None = None,
 ) -> tuple[int, dict, dict]:
     import urllib.parse
 
@@ -31,6 +34,12 @@ async def _asgi_get(
     body_chunks: list[bytes] = []
     headers: dict[str, str] = {}
     query_string = urllib.parse.urlencode(query or {}).encode("utf-8")
+
+    raw_request_headers = [(b"host", b"testserver")]
+    for name, value in (request_headers or {}).items():
+        raw_request_headers.append(
+            (name.lower().encode("latin1"), value.encode("latin1"))
+        )
 
     scope = {
         "type": "http",
@@ -41,7 +50,7 @@ async def _asgi_get(
         "path": path,
         "raw_path": path.encode("utf-8"),
         "query_string": query_string,
-        "headers": [(b"host", b"testserver")],
+        "headers": raw_request_headers,
         "client": ("127.0.0.1", 12345),
         "server": ("testserver", 80),
     }
@@ -394,6 +403,43 @@ def test_asset_route_cache_variants_and_invalid_paths(
     status, data, _ = asyncio.run(_asgi_get(app, "/assets/v/dev/../../outside.txt"))
     assert status == 400
     assert "Invalid asset path" in data["detail"]
+
+    # A revalidating client gets a bare 304 rather than the body again.
+    status, _, headers = asyncio.run(_asgi_get(app, "/assets/v/dev/maps/sample.txt"))
+    etag = headers["etag"]
+    last_modified = headers["last-modified"]
+
+    status, _, headers = asyncio.run(
+        _asgi_get(
+            app,
+            "/assets/v/dev/maps/sample.txt",
+            request_headers={"if-none-match": etag},
+        )
+    )
+    assert status == 304
+    assert headers["etag"] == etag
+    assert headers["cache-control"] == "public, max-age=0, must-revalidate"
+    assert "content-length" not in headers
+
+    status, _, headers = asyncio.run(
+        _asgi_get(
+            app,
+            "/assets/v/dev/maps/sample.txt",
+            request_headers={"if-modified-since": last_modified},
+        )
+    )
+    assert status == 304
+
+    # A stale etag still gets the full body.
+    status, _, headers = asyncio.run(
+        _asgi_get(
+            app,
+            "/assets/v/dev/maps/sample.txt",
+            request_headers={"if-none-match": '"stale"'},
+        )
+    )
+    assert status == 200
+    assert headers["content-length"] == "2"
 
 
 def test_rate_limit_returns_429_when_window_is_exceeded(

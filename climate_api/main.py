@@ -7,6 +7,8 @@ import resource
 import shutil
 import time
 from collections import defaultdict, deque
+from email.utils import parsedate
+from pathlib import Path
 from threading import Lock
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
@@ -102,6 +104,58 @@ class _FeedbackBody(BaseModel):
 def _normalize_lon(lon: float) -> float:
     # Normalize wrapped-world longitudes (e.g. 359, 529) into [-180, 180).
     return ((float(lon) + 180.0) % 360.0) - 180.0
+
+
+# Headers a 304 is allowed to carry (RFC 9110 §15.4.5).
+_NOT_MODIFIED_HEADERS = (
+    "cache-control",
+    "content-location",
+    "date",
+    "etag",
+    "expires",
+    "vary",
+)
+
+
+def _is_not_modified(response_headers, request_headers) -> bool:
+    """Whether the client's cached copy still matches what we would send."""
+    if_none_match = request_headers.get("if-none-match")
+    if if_none_match:
+        etag = response_headers.get("etag")
+        return etag is not None and etag in [
+            tag.strip(" W/") for tag in if_none_match.split(",")
+        ]
+
+    if_modified_since = parsedate(request_headers.get("if-modified-since", ""))
+    last_modified = parsedate(response_headers.get("last-modified", ""))
+    return (
+        if_modified_since is not None
+        and last_modified is not None
+        and if_modified_since >= last_modified
+    )
+
+
+def _file_response(path: Path, request: Request, headers: dict[str, str]) -> Response:
+    """Serve `path`, answering a client revalidation with a bare 304.
+
+    FileResponse advertises an etag and last-modified but never looks at the
+    conditional request headers, so a client revalidating a `must-revalidate`
+    asset re-downloads the whole body every time. The animated story maps hit
+    that path on every frame, which is a full texture per frame.
+    """
+    # Stat up front so the etag and last-modified are set before we compare;
+    # FileResponse otherwise fills them in only once it is being sent.
+    response = FileResponse(path, headers=headers, stat_result=path.stat())
+    if _is_not_modified(response.headers, request.headers):
+        return Response(
+            status_code=304,
+            headers={
+                name: value
+                for name, value in response.headers.items()
+                if name in _NOT_MODIFIED_HEADERS
+            },
+        )
+    return response
 
 
 def _configure_uvicorn_like_access_logger() -> None:
@@ -999,7 +1053,7 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/assets/v/{release}/{asset_path:path}")
-    def get_release_asset(release: str, asset_path: str):
+    def get_release_asset(release: str, asset_path: str, request: Request):
         canonical_release = release_resolver.resolve_release_alias(release)
         release_root = release_resolver.release_root(canonical_release)
         relative_path = asset_path.lstrip("/")
@@ -1038,7 +1092,7 @@ def create_app() -> FastAPI:
                                 status_code=404,
                                 detail=f"Asset not found: {relative_path}",
                             )
-                        return FileResponse(candidate, headers=headers)
+                        return _file_response(candidate, request, headers)
 
         candidate = (release_root / relative_path).resolve()
         try:
@@ -1051,7 +1105,7 @@ def create_app() -> FastAPI:
                 status_code=404, detail=f"Asset not found: {relative_path}"
             )
 
-        return FileResponse(candidate, headers=headers)
+        return _file_response(candidate, request, headers)
 
     return app
 
