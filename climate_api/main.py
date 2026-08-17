@@ -810,7 +810,12 @@ def create_app() -> FastAPI:
 
             canned = _canned_lookup(body.question) if not body.model_override else None
             templated = None
-            if canned is None and not body.model_override and body.question_id and map_ctx:
+            if (
+                canned is None
+                and not body.model_override
+                and body.question_id
+                and map_ctx
+            ):
                 templated = _templated_generate(
                     question_id=body.question_id,
                     lat=map_ctx["lat"],

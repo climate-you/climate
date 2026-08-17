@@ -60,7 +60,10 @@ async function fetchDaily(
   return { label, daily };
 }
 
-function niceTicks(lo: number, hi: number): { min: number; max: number; ticks: number[] } {
+function niceTicks(
+  lo: number,
+  hi: number,
+): { min: number; max: number; ticks: number[] } {
   const span = hi - lo;
   const step = span > 28 ? 10 : span > 12 ? 5 : 2;
   const min = Math.floor(lo / step) * step;
@@ -78,7 +81,8 @@ function shortDate(iso: string) {
 function MiniChart({ daily }: { daily: { date: string; value: number }[] }) {
   const values = daily.map((d) => d.value);
   let peakI = 0;
-  for (let i = 1; i < values.length; i++) if (values[i] > values[peakI]) peakI = i;
+  for (let i = 1; i < values.length; i++)
+    if (values[i] > values[peakI]) peakI = i;
   const [hover, setHover] = useState<number>(peakI);
 
   if (daily.length < 2) return null;
@@ -92,7 +96,10 @@ function MiniChart({ daily }: { daily: { date: string; value: number }[] }) {
   const yOf = (v: number) => PAD_T + (1 - (v - min) / range) * plotH;
 
   const linePath = daily
-    .map((d, i) => `${i === 0 ? "M" : "L"}${xOf(i).toFixed(1)},${yOf(d.value).toFixed(1)}`)
+    .map(
+      (d, i) =>
+        `${i === 0 ? "M" : "L"}${xOf(i).toFixed(1)},${yOf(d.value).toFixed(1)}`,
+    )
     .join(" ");
 
   // month ticks (first day of each month present)
@@ -104,7 +111,9 @@ function MiniChart({ daily }: { daily: { date: string; value: number }[] }) {
       lastMonth = mo;
       monthTicks.push({
         i,
-        label: new Date(d.date + "T00:00:00").toLocaleString("en", { month: "short" }),
+        label: new Date(d.date + "T00:00:00").toLocaleString("en", {
+          month: "short",
+        }),
       });
     }
   });
@@ -142,7 +151,12 @@ function MiniChart({ daily }: { daily: { date: string; value: number }[] }) {
             y2={yOf(t)}
             className={styles.panelGrid}
           />
-          <text x={PAD_L - 5} y={yOf(t) + 3} textAnchor="end" className={styles.panelAx}>
+          <text
+            x={PAD_L - 5}
+            y={yOf(t) + 3}
+            textAnchor="end"
+            className={styles.panelAx}
+          >
             {t}°
           </text>
         </g>
@@ -150,7 +164,13 @@ function MiniChart({ daily }: { daily: { date: string; value: number }[] }) {
       <path d={linePath} className={styles.panelLine} />
 
       {/* hover guide + point */}
-      <line x1={hx} x2={hx} y1={PAD_T} y2={PAD_T + plotH} className={styles.panelGuide} />
+      <line
+        x1={hx}
+        x2={hx}
+        y1={PAD_T}
+        y2={PAD_T + plotH}
+        className={styles.panelGuide}
+      />
       <circle cx={hx} cy={hy} r={2.8} className={styles.panelPeak} />
       <g>
         <rect
@@ -161,7 +181,12 @@ function MiniChart({ daily }: { daily: { date: string; value: number }[] }) {
           rx={2}
           className={styles.panelTipBox}
         />
-        <text x={tipX + tipW / 2} y={tipY + 8.5} textAnchor="middle" className={styles.panelTipText}>
+        <text
+          x={tipX + tipW / 2}
+          y={tipY + 8.5}
+          textAnchor="middle"
+          className={styles.panelTipText}
+        >
           {tipText}
         </text>
       </g>

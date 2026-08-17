@@ -117,9 +117,7 @@ export default function HeatwaveChart({ title, sourceText }: Props) {
   const hovered = hover !== null ? BARS[hover] : null;
   // Tooltip position as % of the chart box (SVG scales to full width).
   const tipLeft = hovered ? (hovered.cx / VB_W) * 100 : 0;
-  const tipTop = hovered
-    ? (Math.min(yFor(hovered.value), Y0) / VB_H) * 100
-    : 0;
+  const tipTop = hovered ? (Math.min(yFor(hovered.value), Y0) / VB_H) * 100 : 0;
 
   return (
     <div className={styles.chart} ref={chartRef}>
@@ -129,109 +127,127 @@ export default function HeatwaveChart({ title, sourceText }: Props) {
         className={styles.chartDl}
       />
       <div className={styles.chartPlot}>
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${VB_W} ${VB_H}`}
-        role="img"
-        aria-label="Daily European temperature anomaly, June to July 2026"
-        preserveAspectRatio="xMidYMid meet"
-        className="curve"
-        onPointerMove={onMove}
-        onPointerLeave={() => setHover(null)}
-      >
-        {/* episode bands */}
-        <rect x="302.8" y="26" width="229.4" height="242" className="cw-bandbg" />
-        {/* Nudged left of the band centre so it clears the peak's leader line. */}
-        <text x="385" y="38" textAnchor="middle" className="cw-band">
-          First episode
-        </text>
-        <rect
-          x="565"
-          y="26"
-          width="181"
-          height="242"
-          className="cw-bandbg cw-bandbg-alt"
-        />
-        <text x="655.5" y="38" textAnchor="middle" className="cw-band">
-          Second episode
-        </text>
-
-        {/* gridlines + y axis */}
-        <line x1="40" y1="268" x2="746" y2="268" className="cw-grid" />
-        <text x="34" y="272" textAnchor="end" className="cw-ax">
-          -5
-        </text>
-        <line x1="40" y1="187.3" x2="746" y2="187.3" className="cw-grid cw-zero" />
-        <text x="34" y="191.3" textAnchor="end" className="cw-ax">
-          +0
-        </text>
-        <line x1="40" y1="106.6" x2="746" y2="106.6" className="cw-grid" />
-        <line x1="40" y1="26" x2="746" y2="26" className="cw-grid" />
-        <text x="34" y="30" textAnchor="end" className="cw-ax">
-          +10
-        </text>
-
-        {/* bars */}
-        {BARS.map((b, i) => {
-          const yv = yFor(b.value);
-          const top = Math.min(yv, Y0);
-          const height = Math.max(0.2, Math.abs(yv - Y0));
-          return (
-            <rect
-              key={b.date}
-              x={b.cx - BAR_W / 2}
-              y={top}
-              width={BAR_W}
-              height={height}
-              fill={b.fill}
-              opacity={hover === null || hover === i ? 1 : 0.5}
-            />
-          );
-        })}
-
-        {/* hover marker */}
-        {hovered && (
-          <rect
-            x={hovered.cx - BAR_W / 2 - 1.2}
-            y={Math.min(yFor(hovered.value), Y0) - 1.2}
-            width={BAR_W + 2.4}
-            height={Math.max(0.2, Math.abs(yFor(hovered.value) - Y0)) + 2.4}
-            fill="none"
-            stroke="var(--ink)"
-            strokeWidth={1.2}
-          />
-        )}
-
-        {/* peak annotation */}
-        <line x1="458.5" y1="42.1" x2="458.5" y2="23" className="cw-peakline" />
-        <text x="458.5" y="18" textAnchor="middle" className="cw-peak">
-          +9.0°C · 26 Jun
-        </text>
-
-        {/* x axis */}
-        <text x="48.8" y="290" textAnchor="middle" className="cw-ax">
-          1 Jun
-        </text>
-        <text x="278.2" y="290" textAnchor="middle" className="cw-ax">
-          15 Jun
-        </text>
-        <text x="540.4" y="290" textAnchor="middle" className="cw-ax">
-          1 Jul
-        </text>
-        <text x="737.1" y="290" textAnchor="middle" className="cw-ax">
-          13 Jul
-        </text>
-      </svg>
-
-      {hovered && (
-        <div
-          className={styles.chartTip}
-          style={{ left: `${tipLeft}%`, top: `${tipTop}%` }}
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${VB_W} ${VB_H}`}
+          role="img"
+          aria-label="Daily European temperature anomaly, June to July 2026"
+          preserveAspectRatio="xMidYMid meet"
+          className="curve"
+          onPointerMove={onMove}
+          onPointerLeave={() => setHover(null)}
         >
-          <span className={styles.chartTipVal}>{fmt(hovered.value)}</span>
-          <span className={styles.chartTipDate}>{hovered.date}</span>
-        </div>
-      )}
+          {/* episode bands */}
+          <rect
+            x="302.8"
+            y="26"
+            width="229.4"
+            height="242"
+            className="cw-bandbg"
+          />
+          {/* Nudged left of the band centre so it clears the peak's leader line. */}
+          <text x="385" y="38" textAnchor="middle" className="cw-band">
+            First episode
+          </text>
+          <rect
+            x="565"
+            y="26"
+            width="181"
+            height="242"
+            className="cw-bandbg cw-bandbg-alt"
+          />
+          <text x="655.5" y="38" textAnchor="middle" className="cw-band">
+            Second episode
+          </text>
+
+          {/* gridlines + y axis */}
+          <line x1="40" y1="268" x2="746" y2="268" className="cw-grid" />
+          <text x="34" y="272" textAnchor="end" className="cw-ax">
+            -5
+          </text>
+          <line
+            x1="40"
+            y1="187.3"
+            x2="746"
+            y2="187.3"
+            className="cw-grid cw-zero"
+          />
+          <text x="34" y="191.3" textAnchor="end" className="cw-ax">
+            +0
+          </text>
+          <line x1="40" y1="106.6" x2="746" y2="106.6" className="cw-grid" />
+          <line x1="40" y1="26" x2="746" y2="26" className="cw-grid" />
+          <text x="34" y="30" textAnchor="end" className="cw-ax">
+            +10
+          </text>
+
+          {/* bars */}
+          {BARS.map((b, i) => {
+            const yv = yFor(b.value);
+            const top = Math.min(yv, Y0);
+            const height = Math.max(0.2, Math.abs(yv - Y0));
+            return (
+              <rect
+                key={b.date}
+                x={b.cx - BAR_W / 2}
+                y={top}
+                width={BAR_W}
+                height={height}
+                fill={b.fill}
+                opacity={hover === null || hover === i ? 1 : 0.5}
+              />
+            );
+          })}
+
+          {/* hover marker */}
+          {hovered && (
+            <rect
+              x={hovered.cx - BAR_W / 2 - 1.2}
+              y={Math.min(yFor(hovered.value), Y0) - 1.2}
+              width={BAR_W + 2.4}
+              height={Math.max(0.2, Math.abs(yFor(hovered.value) - Y0)) + 2.4}
+              fill="none"
+              stroke="var(--ink)"
+              strokeWidth={1.2}
+            />
+          )}
+
+          {/* peak annotation */}
+          <line
+            x1="458.5"
+            y1="42.1"
+            x2="458.5"
+            y2="23"
+            className="cw-peakline"
+          />
+          <text x="458.5" y="18" textAnchor="middle" className="cw-peak">
+            +9.0°C · 26 Jun
+          </text>
+
+          {/* x axis */}
+          <text x="48.8" y="290" textAnchor="middle" className="cw-ax">
+            1 Jun
+          </text>
+          <text x="278.2" y="290" textAnchor="middle" className="cw-ax">
+            15 Jun
+          </text>
+          <text x="540.4" y="290" textAnchor="middle" className="cw-ax">
+            1 Jul
+          </text>
+          <text x="737.1" y="290" textAnchor="middle" className="cw-ax">
+            13 Jul
+          </text>
+        </svg>
+
+        {hovered && (
+          <div
+            className={styles.chartTip}
+            style={{ left: `${tipLeft}%`, top: `${tipTop}%` }}
+          >
+            <span className={styles.chartTipVal}>{fmt(hovered.value)}</span>
+            <span className={styles.chartTipDate}>{hovered.date}</span>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -223,9 +223,9 @@ export default function HeatwaveStory() {
           Published <time dateTime="2026-07-19">19 July 2026</time>
         </p>
         <p className={styles.meta}>
-          Data: Copernicus ERA5/ERA5T climate record · 2&#8202;m air temperature ·
-          anomalies vs the 1991–2020 average for the same time of year · through
-          13 July 2026 · processed with the{" "}
+          Data: Copernicus ERA5/ERA5T climate record · 2&#8202;m air temperature
+          · anomalies vs the 1991–2020 average for the same time of year ·
+          through 13 July 2026 · processed with the{" "}
           <a href="https://github.com/climate-you/climate">
             open-source pipeline
           </a>{" "}
@@ -360,9 +360,8 @@ export default function HeatwaveStory() {
 
       <footer className={styles.methods}>
         <p>
-          <strong>How this page was made.</strong>{" "}
-          2&#8202;m air temperature from the Copernicus ERA5 climate record at
-          0.25° resolution. ERA5 is
+          <strong>How this page was made.</strong> 2&#8202;m air temperature
+          from the Copernicus ERA5 climate record at 0.25° resolution. ERA5 is
           the ECMWF reanalysis, a physically consistent reconstruction of past
           weather; the most recent days use its preliminary near-real-time
           release, ERA5T. The data is ingested and tiled by the{" "}

@@ -89,7 +89,12 @@ class TestMonthCapping:
 
     def test_partial_block_months(self):
         assert _partial_block_months([2026], (2026, 6, None)) == [
-            "01", "02", "03", "04", "05", "06",
+            "01",
+            "02",
+            "03",
+            "04",
+            "05",
+            "06",
         ]
         assert _partial_block_months([2025], (2026, 6, None)) is None
         assert _partial_block_months([2026], None) is None
@@ -98,7 +103,15 @@ class TestMonthCapping:
 class TestPartialMonthDays:
     def test_returns_days_only_for_the_incomplete_month(self):
         assert _partial_month_days(["07"], [2026], (2026, 7, 9)) == [
-            "01", "02", "03", "04", "05", "06", "07", "08", "09",
+            "01",
+            "02",
+            "03",
+            "04",
+            "05",
+            "06",
+            "07",
+            "08",
+            "09",
         ]
 
     def test_none_for_earlier_months(self):
@@ -116,7 +129,13 @@ class TestPartialMonthDays:
 
 class TestResolvePartialEnd:
     def test_metric_level_end_month(self):
-        source = {"_analysis_time_range": {"start_year": 1979, "end_year": 2026, "end_month": 6}}
+        source = {
+            "_analysis_time_range": {
+                "start_year": 1979,
+                "end_year": 2026,
+                "end_month": 6,
+            }
+        }
         assert _resolve_partial_end(source, None, 2026, 2026) == (2026, 6, None)
 
     def test_dataset_level_end_month(self):
@@ -124,7 +143,14 @@ class TestResolvePartialEnd:
         assert _resolve_partial_end(source, None, 2026, 2026) == (2026, 6, None)
 
     def test_end_day_from_time_range(self):
-        source = {"time_range": {"start_year": 2021, "end_year": 2026, "end_month": 7, "end_day": 9}}
+        source = {
+            "time_range": {
+                "start_year": 2021,
+                "end_year": 2026,
+                "end_month": 7,
+                "end_day": 9,
+            }
+        }
         assert _resolve_partial_end(source, None, 2026, 2026) == (2026, 7, 9)
 
     def test_ignored_when_final_year_is_earlier(self):
@@ -140,7 +166,14 @@ class TestResolvePartialEnd:
 
     def test_december_with_end_day_is_partial(self):
         # A partial December (through the 9th) is still incomplete.
-        source = {"time_range": {"start_year": 2021, "end_year": 2026, "end_month": 12, "end_day": 9}}
+        source = {
+            "time_range": {
+                "start_year": 2021,
+                "end_year": 2026,
+                "end_month": 12,
+                "end_day": 9,
+            }
+        }
         assert _resolve_partial_end(source, None, 2026, 2026) == (2026, 12, 9)
 
     def test_cli_override(self):
@@ -171,15 +204,21 @@ class TestResolvePartialEnd:
 class TestDailyStatsRequest:
     def test_explicit_days_used(self):
         req = build_daily_stats_request(
-            years=["2026"], grid_deg=0.25, area=None,
-            months=["07"], days=["01", "02", "03"],
+            years=["2026"],
+            grid_deg=0.25,
+            area=None,
+            months=["07"],
+            days=["01", "02", "03"],
         )
         assert req["month"] == ["07"]
         assert req["day"] == ["01", "02", "03"]
 
     def test_full_month_when_days_none(self):
         req = build_daily_stats_request(
-            years=["2026"], grid_deg=0.25, area=None, months=["06"],
+            years=["2026"],
+            grid_deg=0.25,
+            area=None,
+            months=["06"],
         )
         assert req["day"] == [f"{d:02d}" for d in range(1, 32)]
 

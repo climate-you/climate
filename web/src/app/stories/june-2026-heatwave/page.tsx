@@ -28,9 +28,7 @@ export const metadata: Metadata = {
     url: `${SITE_URL}${PATH}`,
     publishedTime: PUBLISHED,
     authors: AUTHORS,
-    images: [
-      { url: OG_IMAGE, width: 1200, height: 630, alt: OG_IMAGE_ALT },
-    ],
+    images: [{ url: OG_IMAGE, width: 1200, height: 630, alt: OG_IMAGE_ALT }],
   },
   twitter: {
     card: "summary_large_image",

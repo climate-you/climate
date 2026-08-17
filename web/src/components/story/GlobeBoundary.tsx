@@ -32,8 +32,8 @@ export default class GlobeBoundary extends Component<Props, State> {
             }}
           >
             <p className={styles.secNote} style={{ margin: 0 }}>
-              The interactive globe needs a WebGL-capable browser. The maps above
-              show the same data for each window.
+              The interactive globe needs a WebGL-capable browser. The maps
+              above show the same data for each window.
             </p>
           </div>
         </div>

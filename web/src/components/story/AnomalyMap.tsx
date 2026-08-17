@@ -87,7 +87,17 @@ const AnomalyMap = forwardRef<AnomalyMapHandle, Props>(function AnomalyMap(
         if (cancelled) return;
         const ctx = canvas!.getContext("2d");
         if (!ctx) return;
-        drawMap(ctx, img, lines, bbox, textureWidth, textureHeight, latMax, w, h);
+        drawMap(
+          ctx,
+          img,
+          lines,
+          bbox,
+          textureWidth,
+          textureHeight,
+          latMax,
+          w,
+          h,
+        );
         if (!cancelled) setReady(true);
       } catch {
         // Leave the canvas blank on failure; the figure still renders.
@@ -98,7 +108,16 @@ const AnomalyMap = forwardRef<AnomalyMapHandle, Props>(function AnomalyMap(
     return () => {
       cancelled = true;
     };
-  }, [textureUrl, textureWidth, textureHeight, bbox, linesUrl, latMax, renderHeight, aspect]);
+  }, [
+    textureUrl,
+    textureWidth,
+    textureHeight,
+    bbox,
+    linesUrl,
+    latMax,
+    renderHeight,
+    aspect,
+  ]);
 
   useImperativeHandle(
     ref,

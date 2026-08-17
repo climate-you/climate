@@ -63,9 +63,7 @@ def main() -> int:
 
     client = cdsapi.Client(quiet=True, wait_until_complete=True)
     start = (
-        datetime.strptime(args.start, "%Y-%m-%d").date()
-        if args.start
-        else date.today()
+        datetime.strptime(args.start, "%Y-%m-%d").date() if args.start else date.today()
     )
     print(f"Probing {DATASET}\nfrom {start.isoformat()} backwards ({args.days} days):")
     for i in range(args.days):

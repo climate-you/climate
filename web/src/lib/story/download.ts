@@ -168,7 +168,13 @@ export async function composeAndDownload(
 
 // Presentation properties worth baking so the serialized SVG renders without
 // the page's stylesheet (CSS custom properties don't survive serialization).
-const BAKED_PROPS = ["fill", "stroke", "stroke-width", "opacity", "font"] as const;
+const BAKED_PROPS = [
+  "fill",
+  "stroke",
+  "stroke-width",
+  "opacity",
+  "font",
+] as const;
 
 /**
  * Rasterize a live <svg> to a canvas (baking computed styles so it renders

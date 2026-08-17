@@ -65,9 +65,7 @@ class TestLoadMetricAxis:
         assert all(isinstance(v, int) for v in axis)
 
     def test_monthly_axis_returns_strings(self, tmp_path):
-        grid = self._write_axis(
-            tmp_path, "m_month", "monthly", ["1979-01", "2026-06"]
-        )
+        grid = self._write_axis(tmp_path, "m_month", "monthly", ["1979-01", "2026-06"])
         axis = _load_metric_axis(tmp_path, grid, "m_month", "monthly")
         assert axis == ["1979-01", "2026-06"]
         assert all(isinstance(v, str) for v in axis)
@@ -93,8 +91,12 @@ def _synthetic_series():
 def test_known_anomaly():
     series, axis = _synthetic_series()
     anom = compute_monthly_climatology_anomaly(
-        series, axis, target_year=2026, target_month=6,
-        clim_start_year=1991, clim_end_year=2020,
+        series,
+        axis,
+        target_year=2026,
+        target_month=6,
+        clim_start_year=1991,
+        clim_end_year=2020,
     )
     assert anom.shape == (2, 2)
     assert anom[0, 0] == pytest.approx(4.0)
@@ -108,8 +110,12 @@ def test_climatology_window_is_respected():
         if mo == 6 and 2021 <= y <= 2025:
             series[0, 0, i] = 100.0
     anom = compute_monthly_climatology_anomaly(
-        series, axis, target_year=2026, target_month=6,
-        clim_start_year=1991, clim_end_year=2020,
+        series,
+        axis,
+        target_year=2026,
+        target_month=6,
+        clim_start_year=1991,
+        clim_end_year=2020,
     )
     assert anom[0, 0] == pytest.approx(4.0)
 
@@ -118,8 +124,12 @@ def test_all_nan_cell_is_nan():
     series, axis = _synthetic_series()
     series[1, 1, :] = np.nan
     anom = compute_monthly_climatology_anomaly(
-        series, axis, target_year=2026, target_month=6,
-        clim_start_year=1991, clim_end_year=2020,
+        series,
+        axis,
+        target_year=2026,
+        target_month=6,
+        clim_start_year=1991,
+        clim_end_year=2020,
     )
     assert np.isnan(anom[1, 1])
 
@@ -128,8 +138,12 @@ def test_missing_target_month_raises():
     series, axis = _synthetic_series()
     with pytest.raises(ValueError):
         compute_monthly_climatology_anomaly(
-            series, axis, target_year=2027, target_month=6,
-            clim_start_year=1991, clim_end_year=2020,
+            series,
+            axis,
+            target_year=2027,
+            target_month=6,
+            clim_start_year=1991,
+            clim_end_year=2020,
         )
 
 
@@ -137,6 +151,10 @@ def test_missing_climatology_raises():
     series, axis = _synthetic_series()
     with pytest.raises(ValueError):
         compute_monthly_climatology_anomaly(
-            series, axis, target_year=2026, target_month=6,
-            clim_start_year=1800, clim_end_year=1850,
+            series,
+            axis,
+            target_year=2026,
+            target_month=6,
+            clim_start_year=1800,
+            clim_end_year=1850,
         )

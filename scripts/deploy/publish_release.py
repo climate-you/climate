@@ -714,9 +714,7 @@ def main() -> int:
     print(f"[release] Creating release '{release}' on remote...")
     remote_release_dir = f"{remote_releases_root}/{release}"
     _ssh_mkdir(remote, remote_release_dir, dry_run=args.dry_run)
-    _ssh_mkdir(
-        remote, f"{remote_release_dir}/registry", dry_run=args.dry_run
-    )
+    _ssh_mkdir(remote, f"{remote_release_dir}/registry", dry_run=args.dry_run)
     registry_src = args.registry
     if registry_src.is_dir():
         _rsync_dir(
@@ -730,9 +728,7 @@ def main() -> int:
     local_aux_dir = dev_root / "aux"
     if local_aux_dir.is_dir():
         print(f"  Copying aux files from {local_aux_dir}...")
-        _ssh_mkdir(
-            remote, f"{remote_release_dir}/aux", dry_run=args.dry_run
-        )
+        _ssh_mkdir(remote, f"{remote_release_dir}/aux", dry_run=args.dry_run)
         _rsync_dir(
             str(local_aux_dir),
             _dst(remote, f"{remote_release_dir}/aux/"),
@@ -745,9 +741,7 @@ def main() -> int:
         )
     if has_question_tree:
         print(f"  Copying question_tree.json from {question_tree_src}...")
-        _ssh_mkdir(
-            remote, f"{remote_release_dir}/llm", dry_run=args.dry_run
-        )
+        _ssh_mkdir(remote, f"{remote_release_dir}/llm", dry_run=args.dry_run)
         _rsync_file(
             str(question_tree_src),
             _dst(remote, f"{remote_release_dir}/llm/question_tree.json"),

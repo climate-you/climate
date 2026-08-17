@@ -118,17 +118,20 @@ def wrap(text: str, fnt: ImageFont.FreeTypeFont, max_w: int) -> list[str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--texture", type=Path, required=True, help="Mercator texture to crop")
+    ap.add_argument(
+        "--texture", type=Path, required=True, help="Mercator texture to crop"
+    )
     ap.add_argument("--title", required=True, help="Headline shown on the card")
     ap.add_argument("--out", type=Path, required=True, help="Output PNG path")
     ap.add_argument("--kicker", default="climate.you · Case study")
-    ap.add_argument(
-        "--source", default="Source: ECMWF ERA5/ERA5T"
-    )
+    ap.add_argument("--source", default="Source: ECMWF ERA5/ERA5T")
     ap.add_argument("--lines", type=Path, default=_DEFAULT_LINES)
     ap.add_argument("--logo", type=Path, default=_DEFAULT_LOGO)
     ap.add_argument(
-        "--bbox", nargs=4, type=float, metavar=("W", "S", "E", "N"),
+        "--bbox",
+        nargs=4,
+        type=float,
+        metavar=("W", "S", "E", "N"),
         default=list(_DEFAULT_BBOX),
     )
     ap.add_argument("--lat-max", type=float, default=_MERCATOR_LAT_MAX)
@@ -170,9 +173,14 @@ def main() -> int:
     map_y = (H - map_img.height) // 2
     card.paste(map_img, (map_x, map_y))
     draw.rectangle(
-        [map_x - FRAME, map_y - FRAME, map_x + map_w + FRAME - 1,
-         map_y + map_img.height + FRAME - 1],
-        outline=INK, width=FRAME,
+        [
+            map_x - FRAME,
+            map_y - FRAME,
+            map_x + map_w + FRAME - 1,
+            map_y + map_img.height + FRAME - 1,
+        ],
+        outline=INK,
+        width=FRAME,
     )
 
     # ── Left: mark, headline, source ─────────────────────────────────────
@@ -181,15 +189,20 @@ def main() -> int:
 
     logo_size = 52
     if args.logo.exists():
-        logo = Image.open(args.logo).convert("RGBA").resize(
-            (logo_size, logo_size), Image.LANCZOS
+        logo = (
+            Image.open(args.logo)
+            .convert("RGBA")
+            .resize((logo_size, logo_size), Image.LANCZOS)
         )
         card.paste(logo, (MARGIN, y), logo)
 
     kicker_font = font(_SANS_BOLD, 24)
     draw.text(
         (MARGIN + logo_size + 14, y + logo_size / 2),
-        args.kicker.upper(), font=kicker_font, fill=BLUE, anchor="lm",
+        args.kicker.upper(),
+        font=kicker_font,
+        fill=BLUE,
+        anchor="lm",
     )
 
     # Centre the headline block in the space below the mark, so the card does

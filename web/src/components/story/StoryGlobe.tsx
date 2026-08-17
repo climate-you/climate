@@ -33,7 +33,10 @@ type Props = {
 function cameraForBbox(bbox: [number, number, number, number]) {
   const [west, south, east, north] = bbox;
   const span = Math.max(east - west, north - south);
-  const zoom = Math.max(1, Math.min(5, Math.floor(Math.log2(360 / Math.max(span, 1)))));
+  const zoom = Math.max(
+    1,
+    Math.min(5, Math.floor(Math.log2(360 / Math.max(span, 1)))),
+  );
   return {
     center: [(west + east) / 2, (south + north) / 2] as [number, number],
     zoom,

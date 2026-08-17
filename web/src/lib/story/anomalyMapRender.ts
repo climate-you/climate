@@ -135,8 +135,15 @@ export async function downloadAnomalyMap(
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     drawMap(
-      ctx, img, lines, source.bbox,
-      source.textureWidth, source.textureHeight, latMax, w, h,
+      ctx,
+      img,
+      lines,
+      source.bbox,
+      source.textureWidth,
+      source.textureHeight,
+      latMax,
+      w,
+      h,
     );
     await composeAndDownload(canvas, meta, filename);
   } catch {

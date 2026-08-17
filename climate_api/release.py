@@ -548,7 +548,9 @@ class ReleaseResolver:
                             rankings[(_m_id, _p.stem)] = _cities
                     except Exception:
                         pass
-            _missing_rankings = [key for key in _expected_rankings if key not in rankings]
+            _missing_rankings = [
+                key for key in _expected_rankings if key not in rankings
+            ]
             self._logger.info(
                 "Loaded %d/%d metric ranking(s)%s",
                 len(rankings),
@@ -581,7 +583,9 @@ class ReleaseResolver:
                             }
                     except Exception:
                         pass
-            _missing_aggregates = [key for key in _expected_aggregates if key not in aggregates]
+            _missing_aggregates = [
+                key for key in _expected_aggregates if key not in aggregates
+            ]
             self._logger.info(
                 "Loaded %d metric aggregate(s)%s",
                 len(aggregates),

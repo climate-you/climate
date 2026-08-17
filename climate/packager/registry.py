@@ -1181,9 +1181,9 @@ def _year_blocks(
         start_date = f"{y0}-01-01"
         end_date = f"{y1}-12-31"
         if partial_end is not None and y1 == partial_year:
-            last_day = partial_end[2] or calendar.monthrange(
-                partial_year, partial_end[1]
-            )[1]
+            last_day = (
+                partial_end[2] or calendar.monthrange(partial_year, partial_end[1])[1]
+            )
             end_date = f"{partial_year}-{partial_end[1]:02d}-{last_day:02d}"
         if dataset_start:
             start_date = max(start_date, dataset_start)
@@ -1442,9 +1442,7 @@ def _tiles_from_time_da(
         # changed since they were written (e.g. the range was extended to a
         # new partial year), stale tiles would silently misalign with the new
         # axis — refuse instead of corrupting the release.
-        axis_path = (
-            out_root / grid.grid_id / metric_id / "time" / f"{axis_name}.json"
-        )
+        axis_path = out_root / grid.grid_id / metric_id / "time" / f"{axis_name}.json"
         if axis_path.exists():
             existing_axis = json.loads(axis_path.read_text(encoding="utf-8"))
             new_axis = json.loads(json.dumps(list(axis_values)))
@@ -2452,9 +2450,7 @@ def _package_derived_metrics(
                 )
                 monthly_grid = grid_from_id(
                     str(monthly_spec["grid_id"]),
-                    tile_size=int(
-                        monthly_spec.get("storage", {}).get("tile_size", 64)
-                    ),
+                    tile_size=int(monthly_spec.get("storage", {}).get("tile_size", 64)),
                 )
                 daily_axis = _load_metric_axis(
                     series_root, daily_grid, daily_id, "daily"

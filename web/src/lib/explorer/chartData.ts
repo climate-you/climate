@@ -31,10 +31,7 @@ export type GraphPayload = {
   ui?: {
     info_text?: string | null;
     chart_mode?:
-      | "temperature_line"
-      | "hot_days_combo"
-      | "stacked_bar"
-      | "comparison_bar";
+      "temperature_line" | "hot_days_combo" | "stacked_bar" | "comparison_bar";
     axis_title_mode?: "year" | "date";
   } | null;
   series_keys: string[];

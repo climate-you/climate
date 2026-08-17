@@ -112,7 +112,11 @@ def _run_question(orchestrator: ChatOrchestrator, question: str) -> dict:
             etype = event.get("type")
             if etype == "tool_call":
                 tool_calls.append(
-                    {"step": event["step"], "name": event["name"], "args": event["args"]}
+                    {
+                        "step": event["step"],
+                        "name": event["name"],
+                        "args": event["args"],
+                    }
                 )
             elif etype == "answer":
                 answer_parts.append(event.get("text", ""))
@@ -139,7 +143,9 @@ def _fmt_tool_call(tc: dict) -> str:
     return f"step {tc['step']}: {tc['name']}({args})"
 
 
-def _write_markdown(path: Path, models: list[str], results: dict, questions: list[str]) -> None:
+def _write_markdown(
+    path: Path, models: list[str], results: dict, questions: list[str]
+) -> None:
     lines = [
         "# Chat model comparison",
         "",
@@ -172,7 +178,11 @@ def _write_markdown(path: Path, models: list[str], results: dict, questions: lis
             secs = f"{r['total_ms'] / 1000:.1f}s" if r["total_ms"] else "?"
             lines += [f"### {model} — {r['step_count'] or '?'} steps, {secs}", ""]
             if r["tool_calls"]:
-                lines += ["```"] + [_fmt_tool_call(tc) for tc in r["tool_calls"]] + ["```", ""]
+                lines += (
+                    ["```"]
+                    + [_fmt_tool_call(tc) for tc in r["tool_calls"]]
+                    + ["```", ""]
+                )
             else:
                 lines += ["_No tool calls._", ""]
             if r["errors"]:
@@ -188,7 +198,9 @@ def main() -> int:
     ap.add_argument("--models", nargs="+", default=DEFAULT_MODELS, metavar="MODEL_ID")
     ap.add_argument("--questions", nargs="+", default=DEFAULT_QUESTIONS)
     ap.add_argument("--release", default="dev")
-    ap.add_argument("--sleep", type=float, default=3.0, help="Pause between questions (s)")
+    ap.add_argument(
+        "--sleep", type=float, default=3.0, help="Pause between questions (s)"
+    )
     ap.add_argument(
         "--out-dir",
         type=Path,

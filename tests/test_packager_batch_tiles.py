@@ -47,9 +47,7 @@ class TestCoveringDownloadRange:
             for c0 in range(0, 23, 4):
                 fine = TileRange(r0, min(r0 + 3, 11), c0, min(c0 + 3, 22))
                 cov = _covering_download_range(fine, metric_range, 24)
-                ranges.add(
-                    (cov.tile_r0, cov.tile_r1, cov.tile_c0, cov.tile_c1)
-                )
+                ranges.add((cov.tile_r0, cov.tile_r1, cov.tile_c0, cov.tile_c1))
         assert ranges == {(0, 11, 0, 22)}
 
     def test_covering_range_contains_the_fine_batch(self):

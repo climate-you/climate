@@ -469,17 +469,11 @@ export default function ExplorerPage({
   useEffect(() => {
     setGlobeBackground(pickGlobeBackground());
   }, []);
-  const {
-    aboutOpen,
-    sourcesOpen,
-    caseStudiesOpen,
-    setOverlayOpenWithUrl,
-  } = useOverlayRouteSync(
-    {
+  const { aboutOpen, sourcesOpen, caseStudiesOpen, setOverlayOpenWithUrl } =
+    useOverlayRouteSync({
       initialOverlay,
       initialOverlayBasePath,
-    },
-  );
+    });
   const { debugMode, textureVariantOverride } =
     useDebugTextureSync(debugAllowed);
   const chatEnabled = useChatFeatureFlag();
@@ -1083,9 +1077,7 @@ export default function ExplorerPage({
 
   function applyLayerDefaultGraphPage(
     layerOverrides:
-      | Record<string, { default_graph_ids: string[] }>
-      | undefined
-      | null,
+      Record<string, { default_graph_ids: string[] }> | undefined | null,
   ) {
     const firstGraphId =
       layerOverrides?.[activeLayerId]?.default_graph_ids?.[0];

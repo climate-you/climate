@@ -75,8 +75,10 @@ def main() -> int:
     print("June 2026 t2m anomaly vs 1991-2020 June climatology")
     print(f"  Global area-weighted mean : {global_mean:+.2f} C")
     print(f"  Europe area-weighted mean : {europe_mean:+.2f} C")
-    print(f"  Europe peak cell          : {eu_max:+.2f} C at "
-          f"{hot_lat:.2f}N {hot_lon:.2f}E")
+    print(
+        f"  Europe peak cell          : {eu_max:+.2f} C at "
+        f"{hot_lat:.2f}N {hot_lon:.2f}E"
+    )
 
     _render_maps(anomaly, europe_mean, eu_max)
     return 0
@@ -99,21 +101,30 @@ def _render_maps(anomaly, europe_mean, eu_max):
 
     for name, extent in [
         ("global", None),
-        ("europe", [EUROPE["lon"][0], EUROPE["lon"][1],
-                    EUROPE["lat"][1], EUROPE["lat"][0]]),
+        (
+            "europe",
+            [EUROPE["lon"][0], EUROPE["lon"][1], EUROPE["lat"][1], EUROPE["lat"][0]],
+        ),
     ]:
         fig = plt.figure(figsize=(11, 6))
         ax = plt.axes(projection=ccrs.PlateCarree())
         if extent:
             ax.set_extent(extent, crs=ccrs.PlateCarree())
         mesh = ax.pcolormesh(
-            lon, lat, vals, transform=ccrs.PlateCarree(),
-            cmap=cmap, vmin=-vlim, vmax=vlim, shading="auto",
+            lon,
+            lat,
+            vals,
+            transform=ccrs.PlateCarree(),
+            cmap=cmap,
+            vmin=-vlim,
+            vmax=vlim,
+            shading="auto",
         )
         ax.add_feature(cfeature.COASTLINE, linewidth=0.4)
         ax.add_feature(cfeature.BORDERS, linewidth=0.25, edgecolor="0.4")
-        cb = plt.colorbar(mesh, ax=ax, orientation="horizontal",
-                          pad=0.05, shrink=0.8, extend="both")
+        cb = plt.colorbar(
+            mesh, ax=ax, orientation="horizontal", pad=0.05, shrink=0.8, extend="both"
+        )
         cb.set_label("June 2026 temperature anomaly vs 1991-2020 (degC)")
         ax.set_title(
             f"June 2026 air-temperature anomaly ({name})\n"

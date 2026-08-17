@@ -49,7 +49,11 @@ class TestTrendPerDecade:
 
 class TestMonthlyHelpers:
     def _axis(self, start_year, end_year):
-        return [f"{y}-{m:02d}" for y in range(start_year, end_year + 1) for m in range(1, 13)]
+        return [
+            f"{y}-{m:02d}"
+            for y in range(start_year, end_year + 1)
+            for m in range(1, 13)
+        ]
 
     def test_typical_extreme_max_picks_hottest_month(self):
         axis = self._axis(2016, 2025)
@@ -63,7 +67,9 @@ class TestMonthlyHelpers:
 
     def test_seasonal_means_southern_hemisphere_months(self):
         axis = self._axis(2020, 2021)
-        values = np.array([10.0 if int(a.split("-")[1]) in (6, 7, 8) else 0.0 for a in axis])
+        values = np.array(
+            [10.0 if int(a.split("-")[1]) in (6, 7, 8) else 0.0 for a in axis]
+        )
         years, means = _seasonal_yearly_means(axis, values, [6, 7, 8])
         assert list(years) == [2020.0, 2021.0]
         assert all(abs(m - 10.0) < 1e-9 for m in means)
@@ -71,12 +77,19 @@ class TestMonthlyHelpers:
 
 class TestGenerate:
     def test_unknown_question_id_returns_none(self):
-        assert generate("no_such_question", 48.85, 2.35, "Paris", tile_store=None) is None
+        assert (
+            generate("no_such_question", 48.85, 2.35, "Paris", tile_store=None) is None
+        )
 
     def test_non_local_question_returns_none(self):
         # A canned global question must not be templated
-        assert generate("global_temp_change", 48.85, 2.35, "Paris", tile_store=None) is None
+        assert (
+            generate("global_temp_change", 48.85, 2.35, "Paris", tile_store=None)
+            is None
+        )
 
     def test_generator_exception_falls_back_to_none(self):
         # tile_store=None raises inside the generator; generate() must swallow it
-        assert generate("local_temp_trend", 48.85, 2.35, "Paris", tile_store=None) is None
+        assert (
+            generate("local_temp_trend", 48.85, 2.35, "Paris", tile_store=None) is None
+        )

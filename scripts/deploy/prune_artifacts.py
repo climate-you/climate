@@ -100,7 +100,11 @@ def _ssh_du_bytes(remote: str | None, paths: list[str]) -> int:
         return total
     quoted = " ".join(shlex.quote(p) for p in paths)
     result = subprocess.run(
-        ["ssh", remote, f"du -sb {quoted} 2>/dev/null | awk '{{s+=$1}} END {{print s+0}}'"],
+        [
+            "ssh",
+            remote,
+            f"du -sb {quoted} 2>/dev/null | awk '{{s+=$1}} END {{print s+0}}'",
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -135,9 +139,7 @@ def _human(n: int) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _read_manifests(
-    remote: str | None, releases_root: str
-) -> dict[str, dict]:
+def _read_manifests(remote: str | None, releases_root: str) -> dict[str, dict]:
     """Return {release_id: manifest} for every release with a readable manifest."""
     manifests: dict[str, dict] = {}
     for name in _ssh_listdir(remote, releases_root):
@@ -147,7 +149,9 @@ def _read_manifests(
         try:
             manifests[name] = json.loads(raw)
         except json.JSONDecodeError:
-            print(f"  WARNING: {name}/manifest.json is not valid JSON, treating as keep")
+            print(
+                f"  WARNING: {name}/manifest.json is not valid JSON, treating as keep"
+            )
             manifests[name] = {}
     return manifests
 
@@ -178,7 +182,9 @@ def _on_disk(remote: str | None, artifacts_root: str) -> set[tuple[str, str, str
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Prune superseded release artifacts.")
-    ap.add_argument("--remote", help="SSH target, e.g. deploy@host. Omit to run locally.")
+    ap.add_argument(
+        "--remote", help="SSH target, e.g. deploy@host. Omit to run locally."
+    )
     ap.add_argument(
         "--remote-releases-root",
         "--releases-root",
@@ -204,7 +210,9 @@ def main() -> int:
         help="Keep the pruned releases' own directories (manifest/registry), "
         "deleting only the artifact data they alone referenced.",
     )
-    ap.add_argument("--dry-run", action="store_true", help="Show the plan, change nothing.")
+    ap.add_argument(
+        "--dry-run", action="store_true", help="Show the plan, change nothing."
+    )
     ap.add_argument("--yes", action="store_true", help="Skip the confirmation prompt.")
     args = ap.parse_args()
 
@@ -291,8 +299,10 @@ def main() -> int:
         [] if args.keep_release_dirs else [f"{releases_root}/{r}" for r in prune]
     )
 
-    print(f"[scan] {len(present)} artifact version(s) on disk, "
-          f"{len(needed)} still referenced.")
+    print(
+        f"[scan] {len(present)} artifact version(s) on disk, "
+        f"{len(needed)} still referenced."
+    )
     print(f"[plan] {len(obsolete)} unreferenced artifact version(s) to delete:")
     for kind, artifact_id, date in obsolete[:40]:
         print(f"  {kind}/{artifact_id}/{date}")

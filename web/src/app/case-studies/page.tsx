@@ -11,5 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default function CaseStudiesRoutePage() {
-  return <ExplorerPage initialOverlay="case-studies" initialOverlayBasePath="/" />;
+  return (
+    <ExplorerPage initialOverlay="case-studies" initialOverlayBasePath="/" />
+  );
 }
