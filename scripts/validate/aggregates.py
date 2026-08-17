@@ -2,17 +2,31 @@
 """Validate that precomputed aggregate files exist for all metrics that declare them.
 
 Checks that for every metric with an 'aggregates' field in metrics.json, the
-corresponding aggregate JSON files exist under:
-  <series_root>/<grid_id>/<metric_id>/aggregates/<aggregation>.json
-
-Also verifies that each file contains non-empty regions and that the number of
-values per region matches the length of the time_axis.
+corresponding aggregate JSON files exist, contain non-empty regions, and that
+the number of values per region matches the length of the time_axis.
 
 Finally — and this is the check that catches the common failure — it compares
 each aggregate's time_axis against the metric's own canonical axis. An
 aggregate is internally consistent forever once written, so extending a metric
 with new data leaves a perfectly valid file that silently stops short: region
 queries then return nothing for the new period while point queries work fine.
+
+Two layouts are supported:
+
+  dev series root (--series-root, the default):
+    <series_root>/<grid_id>/<metric_id>/aggregates/<aggregation>.json
+
+  deployed artifact store (--releases-root, format_version 2):
+    <releases_root>/LATEST names the release; its manifest.json maps each
+    metric to an artifact date, and files live flat (no grid_id) at
+    <artifacts_root>/series/<metric_id>/<date>/aggregates/<aggregation>.json
+
+Usage:
+    # local dev tree
+    python scripts/validate/aggregates.py --series-root data/releases/dev/series
+
+    # on the VM, against what is actually being served
+    python scripts/validate/aggregates.py --releases-root /opt/climate/data/releases
 """
 from __future__ import annotations
 
@@ -25,21 +39,19 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from climate.registry.metrics import (
-    DEFAULT_DATASETS_PATH,
     DEFAULT_METRICS_PATH,
-    DEFAULT_SCHEMA_PATH,
     load_metrics,
 )
 
 
-def _metric_time_axis(series_root: Path, grid_id: str, metric_id: str, spec: dict):
+def _metric_time_axis(metric_dir: Path, spec: dict):
     """The metric's canonical axis, as written next to its tiles.
 
     Returns None when the metric ships no axis file, in which case there is
     nothing to compare an aggregate against.
     """
     axis_name = spec.get("time_axis", "yearly")
-    path = series_root / grid_id / metric_id / "time" / f"{axis_name}.json"
+    path = metric_dir / "time" / f"{axis_name}.json"
     if not path.exists():
         return None
     try:
@@ -49,28 +61,87 @@ def _metric_time_axis(series_root: Path, grid_id: str, metric_id: str, spec: dic
     return [str(v) for v in axis] if isinstance(axis, list) else None
 
 
+def _dev_metric_dirs(
+    manifest: dict, series_root: Path
+) -> tuple[dict[str, Path], Path, list[str]]:
+    """metric_id -> dir for the dev layout. Never errors: a missing dir simply
+    yields missing-file errors downstream, same as before."""
+    dirs = {
+        metric_id: series_root / spec.get("grid_id", "") / metric_id
+        for metric_id, spec in manifest.items()
+        if metric_id != "version" and spec.get("aggregates")
+    }
+    return dirs, series_root.parent, []
+
+
+def _artifact_metric_dirs(
+    manifest: dict, releases_root: Path, artifacts_root: Path
+) -> tuple[dict[str, Path], Path, list[str]]:
+    """metric_id -> artifact dir for the deployed layout, resolved through the
+    release manifest exactly the way the backend resolves it at startup."""
+    errors: list[str] = []
+    latest_path = releases_root / "LATEST"
+    if not latest_path.exists():
+        raise SystemExit(
+            f"No LATEST pointer at {latest_path} — is this a v2 releases root?"
+        )
+    release = latest_path.read_text(encoding="utf-8").strip()
+    manifest_path = releases_root / release / "manifest.json"
+    if not manifest_path.exists():
+        raise SystemExit(f"Release manifest missing: {manifest_path}")
+    release_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    pointers: dict[str, str] = release_manifest.get("series", {})
+    print(f"[aggregates] checking release '{release}' via {manifest_path}")
+
+    dirs: dict[str, Path] = {}
+    for metric_id, spec in manifest.items():
+        if metric_id == "version" or not spec.get("aggregates"):
+            continue
+        date = pointers.get(metric_id)
+        if date is None:
+            errors.append(
+                f"Metric {metric_id} declares aggregates but release "
+                f"'{release}' has no series pointer for it"
+            )
+            continue
+        dirs[metric_id] = artifacts_root / "series" / metric_id / date
+    return dirs, artifacts_root.parent, errors
+
+
 def check_aggregates(
     *,
     metrics_path: Path,
-    series_root: Path,
+    series_root: Path | None = None,
+    releases_root: Path | None = None,
+    artifacts_root: Path | None = None,
 ) -> list[str]:
     """Return a list of error strings; empty means all good."""
     manifest = load_metrics(path=metrics_path, validate=True)
-    errors: list[str] = []
+
+    if releases_root is not None:
+        if artifacts_root is None:
+            artifacts_root = releases_root.parent / "artifacts"
+        metric_dirs, rel_base, errors = _artifact_metric_dirs(
+            manifest, releases_root, artifacts_root
+        )
+    else:
+        assert series_root is not None
+        metric_dirs, rel_base, errors = _dev_metric_dirs(manifest, series_root)
 
     for metric_id, spec in manifest.items():
         if metric_id == "version":
             continue
         aggregations: list[str] = spec.get("aggregates", [])
-        if not aggregations:
+        if not aggregations or metric_id not in metric_dirs:
             continue
-        grid_id = spec.get("grid_id", "")
-        metric_axis = _metric_time_axis(series_root, grid_id, metric_id, spec)
+        metric_dir = metric_dirs[metric_id]
+        metric_axis = _metric_time_axis(metric_dir, spec)
         for aggregation in aggregations:
-            path = (
-                series_root / grid_id / metric_id / "aggregates" / f"{aggregation}.json"
-            )
-            rel = path.relative_to(series_root.parent)
+            path = metric_dir / "aggregates" / f"{aggregation}.json"
+            try:
+                rel = path.relative_to(rel_base)
+            except ValueError:
+                rel = path
             if not path.exists():
                 errors.append(f"Missing aggregate file: {rel}")
                 continue
@@ -127,7 +198,23 @@ def main() -> int:
         "--series-root",
         type=Path,
         default=REPO_ROOT / "data" / "releases" / "dev" / "series",
-        help="Path to the series root (default: data/releases/dev/series)",
+        help="Dev-layout series root (default: data/releases/dev/series)",
+    )
+    ap.add_argument(
+        "--releases-root",
+        type=Path,
+        default=None,
+        help=(
+            "v2 releases root on a deployed server (e.g. /opt/climate/data/releases). "
+            "When given, the LATEST release manifest picks the artifact dirs and "
+            "--series-root is ignored."
+        ),
+    )
+    ap.add_argument(
+        "--artifacts-root",
+        type=Path,
+        default=None,
+        help="Artifact store root (default: sibling of --releases-root named 'artifacts')",
     )
     ap.add_argument(
         "--metrics",
@@ -140,6 +227,8 @@ def main() -> int:
     errors = check_aggregates(
         metrics_path=args.metrics,
         series_root=args.series_root,
+        releases_root=args.releases_root,
+        artifacts_root=args.artifacts_root,
     )
 
     if errors:
