@@ -7,6 +7,12 @@ corresponding aggregate JSON files exist under:
 
 Also verifies that each file contains non-empty regions and that the number of
 values per region matches the length of the time_axis.
+
+Finally — and this is the check that catches the common failure — it compares
+each aggregate's time_axis against the metric's own canonical axis. An
+aggregate is internally consistent forever once written, so extending a metric
+with new data leaves a perfectly valid file that silently stops short: region
+queries then return nothing for the new period while point queries work fine.
 """
 from __future__ import annotations
 
@@ -26,6 +32,23 @@ from climate.registry.metrics import (
 )
 
 
+def _metric_time_axis(series_root: Path, grid_id: str, metric_id: str, spec: dict):
+    """The metric's canonical axis, as written next to its tiles.
+
+    Returns None when the metric ships no axis file, in which case there is
+    nothing to compare an aggregate against.
+    """
+    axis_name = spec.get("time_axis", "yearly")
+    path = series_root / grid_id / metric_id / "time" / f"{axis_name}.json"
+    if not path.exists():
+        return None
+    try:
+        axis = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return [str(v) for v in axis] if isinstance(axis, list) else None
+
+
 def check_aggregates(
     *,
     metrics_path: Path,
@@ -42,6 +65,7 @@ def check_aggregates(
         if not aggregations:
             continue
         grid_id = spec.get("grid_id", "")
+        metric_axis = _metric_time_axis(series_root, grid_id, metric_id, spec)
         for aggregation in aggregations:
             path = (
                 series_root / grid_id / metric_id / "aggregates" / f"{aggregation}.json"
@@ -71,6 +95,28 @@ def check_aggregates(
                         f"{rel}: region {region_id!r} has {len(values)} values "
                         f"but time_axis has {n_steps} entries"
                     )
+
+            # Staleness: the file is valid on its own terms but no longer
+            # covers everything the metric holds.
+            if metric_axis:
+                agg_axis = [str(v) for v in time_axis]
+                if agg_axis != metric_axis:
+                    missing = [v for v in metric_axis if v not in set(agg_axis)]
+                    if missing:
+                        errors.append(
+                            f"STALE {rel}: aggregate ends at {agg_axis[-1]} "
+                            f"({len(agg_axis)} steps) but metric {metric_id} has data "
+                            f"to {metric_axis[-1]} ({len(metric_axis)} steps) — "
+                            f"{len(missing)} step(s) missing, so region queries return "
+                            f"nothing for them. Regenerate with: "
+                            f"scripts/precompute_regional_aggregates.py --metrics {metric_id}"
+                        )
+                    else:
+                        errors.append(
+                            f"{rel}: aggregate axis does not match metric {metric_id} "
+                            f"(aggregate {len(agg_axis)} steps, metric "
+                            f"{len(metric_axis)} steps)"
+                        )
 
     return errors
 
