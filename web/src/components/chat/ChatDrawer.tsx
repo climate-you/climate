@@ -38,7 +38,20 @@ type ChatLocation = {
   lon: number;
   alt_names?: string;
 };
-type ToolCallInfo = { name: string; args: Record<string, unknown> };
+type ToolProvenance = {
+  datasetTitle: string | null;
+  provider: string | null;
+  metricTitle: string | null;
+  location: string | null;
+  datasets: string;
+};
+type ToolCallInfo = {
+  name: string;
+  args: Record<string, unknown>;
+  step?: number;
+  /** Filled in once the call returns; absent while it is still running. */
+  provenance?: ToolProvenance;
+};
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -450,6 +463,7 @@ export default function ChatDrawer({
             const tc: ToolCallInfo = {
               name: event.name as string,
               args: (event.args ?? {}) as Record<string, unknown>,
+              step: event.step as number | undefined,
             };
             setMessages((prev) =>
               prev.map((m) =>
@@ -457,6 +471,42 @@ export default function ChatDrawer({
                   ? { ...m, toolCalls: [...(m.toolCalls ?? []), tc] }
                   : m,
               ),
+            );
+          } else if (type === "tool_call_provenance") {
+            // On a live answer this arrives once the call has run, carrying the
+            // place it actually resolved to, and is matched back to its pending
+            // call by step + name. Canned and templated answers never call a
+            // tool, so theirs arrive with nothing to attach to and become
+            // cards in their own right.
+            const prov: ToolProvenance = {
+              datasetTitle: (event.dataset_title as string) ?? null,
+              provider: (event.provider as string) ?? null,
+              metricTitle: (event.metric_title as string) ?? null,
+              location: (event.location as string) ?? null,
+              datasets: (event.datasets as string) ?? "temperature",
+            };
+            const step = event.step as number | undefined;
+            const name = event.name as string;
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.messageId !== messageId) return m;
+                let matched = false;
+                const toolCalls = (m.toolCalls ?? []).map((tc) => {
+                  if (matched || tc.provenance) return tc;
+                  if (tc.name !== name) return tc;
+                  if (step !== undefined && tc.step !== step) return tc;
+                  matched = true;
+                  return { ...tc, provenance: prov };
+                });
+                if (matched) return { ...m, toolCalls };
+                return {
+                  ...m,
+                  toolCalls: [
+                    ...toolCalls,
+                    { name, args: {}, step, provenance: prov },
+                  ],
+                };
+              }),
             );
           } else if (type === "reset") {
             finalAnswerText = "";
@@ -964,11 +1014,38 @@ export default function ChatDrawer({
           {msg.notice && <div className={styles.noticeBar}>{msg.notice}</div>}
           {msg.toolCalls && msg.toolCalls.length > 0 && (
             <div className={styles.toolCalls}>
-              {msg.toolCalls.map((tc, j) => (
-                <div key={j} className={styles.toolCallItem}>
-                  <em>{describeToolCall(tc.name, tc.args)}</em>
-                </div>
-              ))}
+              {msg.toolCalls.map((tc, j) =>
+                tc.provenance ? (
+                  <div key={j} className={styles.toolCallCard}>
+                    <DatasetIcon dataset={tc.provenance.datasets} />
+                    <div className={styles.toolCallText}>
+                      <div className={styles.toolCallHeadline}>
+                        {tc.provenance.metricTitle}
+                        {tc.provenance.location && (
+                          <>
+                            <span className={styles.toolCallDot}>·</span>
+                            {tc.provenance.location}
+                          </>
+                        )}
+                      </div>
+                      <div className={styles.toolCallSource}>
+                        {tc.provenance.provider && (
+                          <span className={styles.providerBadge}>
+                            {tc.provenance.provider}
+                          </span>
+                        )}
+                        {tc.provenance.datasetTitle}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  // Still running: no resolved place yet, so keep the plain
+                  // progress line rather than showing a half-empty card.
+                  <div key={j} className={styles.toolCallItem}>
+                    <em>{describeToolCall(tc.name, tc.args)}</em>
+                  </div>
+                ),
+              )}
             </div>
           )}
           <div

@@ -163,6 +163,72 @@ def build_canned_charts(
     return _build_chart_payloads(series_results, tile_store)
 
 
+def _summarise_places(labels: list[str]) -> str | None:
+    """Condense a chart's places into one line for the provenance card.
+
+    Canned answers can plot seven continents or five cities; naming them all
+    would swamp the card, so past two the rest become a count.
+    """
+    seen: list[str] = []
+    for label in labels:
+        if label and label not in seen:
+            seen.append(label)
+    if not seen:
+        return None
+    if len(seen) <= 2:
+        return " · ".join(seen)
+    return f"{seen[0]} · {seen[1]} +{len(seen) - 2} more"
+
+
+def build_chart_provenance(
+    chart_spec: dict | None,
+    locations: list[dict],
+    tile_store: Any,
+    dataset_titles: dict[str, str] | None = None,
+    country_names: dict[str, str] | None = None,
+) -> list[dict]:
+    """Describe the datasets behind a canned answer, one card per metric.
+
+    Canned and templated answers never enter the tool loop, so they emit no
+    tool calls to attach provenance to. The chart spec already names exactly
+    which metrics and places were read, so the same card is derived from it —
+    grouped by metric rather than by series, since a seven-continent chart
+    should still read as one source, not seven.
+    """
+    if not chart_spec:
+        return []
+
+    from .orchestrator import _humanise_region_id, describe_metric_source
+
+    subs = chart_spec.get("series") or [chart_spec]
+
+    # metric_id → place labels, preserving the order metrics appear in.
+    by_metric: dict[str, list[str]] = {}
+    for sub in subs:
+        metric_id = sub.get("metric_id")
+        if not metric_id:
+            continue
+        places = by_metric.setdefault(metric_id, [])
+        for region_id in sub.get("region_ids") or []:
+            places.append(_humanise_region_id(region_id, country_names))
+        if not sub.get("region_ids"):
+            places.extend(
+                loc["label"]
+                for loc in locations
+                if isinstance(loc, dict) and loc.get("label")
+            )
+
+    cards: list[dict] = []
+    for metric_id, places in by_metric.items():
+        described = describe_metric_source(
+            metric_id, tile_store.metrics, dataset_titles
+        )
+        if described is None:
+            continue
+        cards.append({**described, "location": _summarise_places(places)})
+    return cards
+
+
 def stream_canned(
     answer: str,
     locations: list[dict],
@@ -171,6 +237,7 @@ def stream_canned(
     delay_s: float = 1.5,
     temperature_unit: str = "C",
     tier: str = "canned",
+    provenance: list[dict] | None = None,
 ):
     """
     Yield SSE event dicts that mimic a real orchestrator response.
@@ -178,6 +245,11 @@ def stream_canned(
     full answer event at the end for consistency with the live path.
     """
     resolved = _apply_unit(answer, temperature_unit)
+
+    # Emitted before the text so the source cards are in place as the answer
+    # types in, matching where they appear on a live answer.
+    for index, card in enumerate(provenance or []):
+        yield {"type": "tool_call_provenance", "step": index, "name": "canned", **card}
 
     time.sleep(min(delay_s, 0.3))
 

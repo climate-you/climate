@@ -43,8 +43,12 @@ from .chat.canned import (
     lookup as _canned_lookup,
     stream_canned as _stream_canned,
     build_canned_charts as _build_canned_charts,
+    build_chart_provenance as _build_chart_provenance,
 )
-from .chat.question_tree import get_tree_metadata as _get_tree_metadata
+from .chat.question_tree import (
+    TREE_VERSION as _TREE_VERSION,
+    get_tree_metadata as _get_tree_metadata,
+)
 from .store.country_classifier import CountryClassifier
 from .store.location_index import LocationIndex
 from .store.ocean_classifier import OceanClassifier
@@ -286,6 +290,22 @@ def create_app() -> FastAPI:
         except Exception as exc:
             uvicorn_logger.warning("Country names JSON failed to load: %s", exc)
 
+    # Dataset titles name the source of each chat tool call in the transcript
+    # ("CDS · ERA5 daily 2m temperature"). Metric specs inherit the dataset's
+    # source fields but not its title, so the registry is read directly.
+    dataset_titles: dict[str, str] = {}
+    try:
+        from climate.registry.metrics import DEFAULT_DATASETS_PATH
+
+        _datasets_raw = json.loads(DEFAULT_DATASETS_PATH.read_text(encoding="utf-8"))
+        dataset_titles = {
+            k: v.get("title", k)
+            for k, v in _datasets_raw.items()
+            if isinstance(v, dict)
+        }
+    except Exception as exc:
+        uvicorn_logger.warning("Dataset titles unavailable: %s", exc)
+
     place_resolver = PlaceResolver(
         locations_csv=settings.locations_csv,
         kdtree_path=settings.kdtree_path,
@@ -380,6 +400,7 @@ def create_app() -> FastAPI:
                     location_index=location_index,
                     country_names=country_names,
                     max_steps=settings.chat_max_steps,
+                    dataset_titles=dataset_titles,
                 )
                 tier_summary = ", ".join(f"{t.name}({t.model})" for t in chat_tiers)
                 uvicorn_logger.info(
@@ -818,6 +839,13 @@ def create_app() -> FastAPI:
                     charts=canned_charts,
                     follow_up_ids=canned_follow_up_ids,
                     temperature_unit=body.temperature_unit,
+                    provenance=_build_chart_provenance(
+                        canned_chart_spec,
+                        canned_locs,
+                        chat_orchestrator.tile_store,
+                        dataset_titles,
+                        country_names,
+                    ),
                 )
             elif templated is not None:
                 event_source = _stream_canned(
@@ -827,6 +855,13 @@ def create_app() -> FastAPI:
                     follow_up_ids=templated["follow_up_ids"],
                     temperature_unit=body.temperature_unit,
                     tier="templated",
+                    provenance=_build_chart_provenance(
+                        templated.get("chart_spec"),
+                        templated["locations"],
+                        chat_orchestrator.tile_store,
+                        dataset_titles,
+                        country_names,
+                    ),
                 )
             else:
                 event_source = chat_orchestrator.run(

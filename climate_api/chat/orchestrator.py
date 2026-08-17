@@ -65,6 +65,170 @@ class ProviderTier:
 # Constants
 # ---------------------------------------------------------------------------
 
+
+def _humanise_region_id(value: str, country_names: dict[str, str] | None = None) -> str:
+    """Turn a canonical region id into something readable in the transcript.
+
+    "ocean:indian_ocean" → "Indian Ocean", "globe" → "Global",
+    "country:UA" → "Ukraine". Plain city labels ("Köln, Germany") are already
+    human and pass through untouched.
+    """
+    if value == "globe":
+        return "Global"
+    if ":" not in value:
+        return value
+    prefix, _, rest = value.partition(":")
+    if prefix == "country" and len(rest) <= 3:
+        return (country_names or {}).get(rest.upper()) or rest.upper()
+    return rest.replace("_", " ").title()
+
+
+def describe_metric_source(
+    metric_id: str,
+    metrics: dict[str, dict],
+    dataset_titles: dict[str, str] | None = None,
+) -> dict | None:
+    """Name the dataset a metric ultimately comes from.
+
+    Derived metrics (trends, anomalies, rolling means) carry no dataset of
+    their own — they list the metrics they were computed from. Reporting them
+    as "DERIVED" with no source would be worse than useless on a provenance
+    card, so their inputs are followed back to the observational metric that
+    does name a dataset. The derived metric's own title is kept, since that is
+    what was actually plotted.
+    """
+    spec = metrics.get(metric_id)
+    if spec is None:
+        return None
+
+    titles = dataset_titles or {}
+    seen: set[str] = set()
+    current_id, current = metric_id, spec
+    while True:
+        source = current.get("source", {}) or {}
+        dataset_ref = source.get("_dataset_ref")
+        if dataset_ref:
+            return {
+                "dataset_id": dataset_ref,
+                "dataset_title": titles.get(dataset_ref) or dataset_ref,
+                "provider": str(source.get("type") or "").upper() or None,
+                "metric_id": metric_id,
+                "metric_title": spec.get("title") or metric_id,
+                "datasets": _dataset_family(spec),
+            }
+        inputs = [i for i in (source.get("inputs") or []) if i not in seen]
+        if not inputs:
+            # Nothing upstream names a dataset; report the metric alone rather
+            # than inventing a provider.
+            return {
+                "dataset_id": None,
+                "dataset_title": None,
+                "provider": None,
+                "metric_id": metric_id,
+                "metric_title": spec.get("title") or metric_id,
+                "datasets": _dataset_family(spec),
+            }
+        seen.add(current_id)
+        current_id = inputs[0]
+        current = metrics.get(current_id, {})
+
+
+# Month names in two lengths. Long names go in chart titles, where the label is
+# read as prose ("December–February"); short names go in tool results sent to
+# the model, where they are keys in a climatology table and brevity matters.
+_MONTH_NAMES_LONG = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+]
+
+_MONTH_NAMES_SHORT = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+]
+
+
+def _describe_months(months: list[int] | None) -> str | None:
+    """Name the months a chart covers, for its title.
+
+    Returns None when every month is present — a full year needs no qualifier.
+    Contiguous runs collapse to a range, including ones that wrap the year end
+    so winter reads "December–February" rather than "January, February,
+    December".
+    """
+    if not months:
+        return None
+    uniq = sorted({int(m) for m in months if 1 <= int(m) <= 12})
+    if not uniq or len(uniq) == 12:
+        return None
+    if len(uniq) == 1:
+        return _MONTH_NAMES_LONG[uniq[0] - 1]
+
+    # Rotate to the start of the run so a wrapping season is contiguous.
+    for offset in range(len(uniq)):
+        rotated = uniq[offset:] + uniq[:offset]
+        contiguous = all(
+            (rotated[i] % 12) + 1 == rotated[i + 1] for i in range(len(rotated) - 1)
+        )
+        if contiguous:
+            return (
+                f"{_MONTH_NAMES_LONG[rotated[0] - 1]}–"
+                f"{_MONTH_NAMES_LONG[rotated[-1] - 1]}"
+            )
+    return ", ".join(_MONTH_NAMES_LONG[m - 1] for m in uniq)
+
+
+def _dataset_family(spec: dict) -> str:
+    """Map a metric to the dataset family the UI draws an icon for.
+
+    Mirrors the four families the question tree uses so the transcript and the
+    suggestion chips show the same icon for the same kind of data.
+    """
+    source = spec.get("source", {}) or {}
+    haystack = f"{spec.get('id', '')} {source.get('_dataset_ref', '')}".lower()
+    if "dhw" in haystack or "coral" in haystack:
+        return "coral"
+    if "sst" in haystack:
+        return "sea_temperature"
+    if haystack.count("tp") and ("_tp" in haystack or "precip" in haystack):
+        return "precipitation"
+    return "temperature"
+
+
+_FALSEY_STRINGS = {"false", "0", "no", "none", "null", ""}
+
+
+def _as_bool(value: Any) -> bool:
+    """Coerce a tool-call argument to a bool, tolerating stringified booleans.
+
+    Models do not reliably honour a JSON schema's boolean type — some emit
+    `"false"` as a string. Plain `bool()` would read that as True, silently
+    inverting flags like `capital_only`, so string forms are matched by value.
+    """
+    if isinstance(value, str):
+        return value.strip().casefold() not in _FALSEY_STRINGS
+    return bool(value)
+
+
 _DEGRADED_MODEL_NOTICE = (
     "Note: The primary AI model's daily allowance has been exceeded. "
     "A smaller backup model is being used — answers may be less accurate."
@@ -136,22 +300,8 @@ def _compress_series_for_context(result_json: str) -> str:
         if v > max_val:
             max_val, max_entry = v, entry
 
-    _MONTH_NAMES = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-    ]
     climatology = {
-        _MONTH_NAMES[m - 1]: round(sum(vs) / len(vs), 2)
+        _MONTH_NAMES_SHORT[m - 1]: round(sum(vs) / len(vs), 2)
         for m, vs in sorted(month_values.items())
     }
     years = sorted({e["year"] for e in data})
@@ -775,10 +925,27 @@ def _build_chart_payloads(
             location_label = "Multiple cities"
         else:
             location_label = " & ".join(title_locations)
+        # Qualify the title with what was actually plotted: which months, and
+        # whether the series had to be collapsed to yearly means. Without this a
+        # winter-only or reduced series is captioned as the full monthly record.
+        # Derived series (a fitted trend line) inherit neither field, so they are
+        # excluded — otherwise adding a trend line silently drops the qualifier.
+        measured = [r for r in results if r.get("role") != "trend"] or results
+        month_filters = {tuple(r.get("month_filter") or ()) for r in measured}
+        qualifiers = []
+        if len(month_filters) == 1:
+            months_label = _describe_months(list(month_filters.pop()))
+            if months_label:
+                qualifiers.append(months_label)
+        if all(r.get("collapsed_to_yearly") for r in measured):
+            qualifiers.append("yearly means")
+        qualified_title = (
+            f"{metric_title} ({', '.join(qualifiers)})" if qualifiers else metric_title
+        )
         title = (
-            f"{metric_title} \u2014 {location_label}"
+            f"{qualified_title} \u2014 {location_label}"
             if location_label
-            else metric_title
+            else qualified_title
         )
         unit = results[0].get("unit", "")
         charts.append({"title": title, "unit": unit, "series": series})
@@ -1345,20 +1512,72 @@ class ChatOrchestrator:
         location_index: LocationIndex,
         country_names: dict[str, str] | None = None,
         max_steps: int = 5,
+        dataset_titles: dict[str, str] | None = None,
     ) -> None:
         self.tiers = tiers
         self.tile_store = tile_store
         self.location_index = location_index
+        self.country_names: dict[str, str] = country_names or {}
         self.country_name_to_code: dict[str, str] = {}
         if country_names:
             self.country_name_to_code = {
                 v.casefold(): k for k, v in country_names.items()
             }
+        # dataset id → human title, used to name the source of each tool call
+        # in the UI. Optional: without it the provenance line falls back to the
+        # dataset id.
+        self.dataset_titles: dict[str, str] = dataset_titles or {}
         self.max_steps = max_steps
+
+    def _provenance(self, name: str, args: dict, result: str) -> dict | None:
+        """Describe what a completed tool call actually read, for display.
+
+        Returns the dataset, metric, and resolved place behind the call so the
+        transcript can show where a number came from. The resolved place is
+        taken from the tool result rather than the request, so a mis-resolution
+        ("Cologne" landing in Italy) is visible in the UI instead of hidden.
+        """
+        metric_id = args.get("metric_id")
+        if not metric_id:
+            return None
+        described = describe_metric_source(
+            str(metric_id), self.tile_store.metrics, self.dataset_titles
+        )
+        if described is None:
+            return None
+
+        location: str | None = None
+        try:
+            parsed = json.loads(result)
+        except (TypeError, ValueError):
+            parsed = {}
+        if isinstance(parsed, dict) and "error" not in parsed:
+            # get_metric_series reports the place it resolved to; the region
+            # tools report a canonical region id instead.
+            location = parsed.get("location") or parsed.get("region_id")
+        if not location:
+            raw = args.get("location") or args.get("region_id")
+            location = str(raw) if raw else None
+        if location:
+            location = _humanise_region_id(location, self.country_names)
+
+        return {**described, "location": location}
 
     def _dispatch(self, name: str, args: dict, temperature_unit: str = "C") -> str:
         def _int_or_none(v: Any) -> int | None:
-            return int(v) if v is not None else None
+            # Same tolerance as _as_bool: models sometimes send "1979" or even
+            # "1979.0" where the schema asks for an integer. An unparseable
+            # value is dropped rather than raised, so the tool still runs with
+            # the argument absent instead of the turn dying mid-stream.
+            if v is None or v == "":
+                return None
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                try:
+                    return int(float(v))
+                except (TypeError, ValueError):
+                    return None
 
         if name == "get_metric_series":
             result = _tools.get_metric_series(
@@ -1701,6 +1920,17 @@ class ChatOrchestrator:
                         tools_called.append(name)
                         result = self._dispatch(name, args, temperature_unit)
                         seen_calls[call_key] = result
+                        # Emitted separately from "tool_call" so the spinner can
+                        # appear the moment the call starts: the resolved place
+                        # is only known once the tool has run.
+                        provenance = self._provenance(name, args, result)
+                        if provenance:
+                            yield {
+                                "type": "tool_call_provenance",
+                                "step": step,
+                                "name": name,
+                                **provenance,
+                            }
                         if name == "get_metric_series":
                             parsed_result = json.loads(result)
                             if "error" not in parsed_result and "data" in parsed_result:

@@ -433,6 +433,88 @@
   }
 }
 
+/* Provenance card — what a completed tool call actually read */
+
+.toolCallCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 4px 7px;
+  border: 1px solid rgba(17, 17, 17, 0.1);
+  border-radius: 8px;
+  background: rgba(17, 17, 17, 0.03);
+}
+
+.toolCallCard .chipDatasetIcon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  opacity: 0.65;
+}
+
+.toolCallText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.toolCallHeadline {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary, #111827);
+  overflow-wrap: anywhere;
+}
+
+.toolCallDot {
+  margin: 0 5px;
+  color: rgba(17, 17, 17, 0.35);
+}
+
+.toolCallSource {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: rgba(17, 17, 17, 0.5);
+  overflow-wrap: anywhere;
+}
+
+.providerBadge {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border-radius: 3px;
+  border: 1px solid rgba(17, 17, 17, 0.16);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 14px;
+  color: rgba(17, 17, 17, 0.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  .toolCallCard {
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .toolCallHeadline {
+    color: rgba(255, 255, 255, 0.82);
+  }
+
+  .toolCallDot {
+    color: rgba(255, 255, 255, 0.3);
+  }
+
+  .toolCallSource {
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  .providerBadge {
+    border-color: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.55);
+  }
+}
+
 /* Charts */
 
 .charts {

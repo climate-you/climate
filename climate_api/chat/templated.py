@@ -99,9 +99,7 @@ def _global_trend_per_decade(tile_store: Any, metric: str) -> float | None:
     values = np.asarray(
         [v if v is not None else np.nan for v in globe["values"]], dtype=np.float64
     )
-    years = np.asarray(
-        [int(str(a)[:4]) for a in agg["time_axis"]], dtype=np.float64
-    )
+    years = np.asarray([int(str(a)[:4]) for a in agg["time_axis"]], dtype=np.float64)
     return _trend_per_decade(years, values)
 
 
@@ -471,4 +469,7 @@ def generate(
         "locations": locations,
         "charts": charts,
         "follow_up_ids": node.follow_up_ids,
+        # Kept so the caller can name the datasets behind the answer; these
+        # answers never call a tool, so this is the only record of the source.
+        "chart_spec": chart_spec,
     }
