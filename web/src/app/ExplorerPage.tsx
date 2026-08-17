@@ -1102,6 +1102,10 @@ export default function ExplorerPage({
     nextUnit = unit,
     setDefaultGraph = false,
     openPanel = true,
+    // Selecting the globe should land on its graphs, but a plain data refresh
+    // (e.g. the user flipping °C/°F) must leave the open tab alone — otherwise
+    // toggling the unit throws the reader out of the Research Terminal.
+    switchToGraphTab = true,
   ) {
     panelAbortControllerRef.current?.abort("superseded");
     const controller = new AbortController();
@@ -1120,7 +1124,7 @@ export default function ExplorerPage({
       countryCode: "",
       population: null,
     });
-    setPanelTab("graph");
+    if (switchToGraphTab) setPanelTab("graph");
     if (openPanel) setPanelOpen(true);
     setPanelLoadError(null);
 
@@ -1685,7 +1689,7 @@ export default function ExplorerPage({
                   const nextUnit: "C" | "F" = unit === "C" ? "F" : "C";
                   setUnit(nextUnit);
                   if (selectedLocation?.geonameid === 0) {
-                    void loadGlobalPanel(nextUnit, false, panelOpen);
+                    void loadGlobalPanel(nextUnit, false, panelOpen, false);
                   } else if (selectedLocation !== null) {
                     void loadPanel(lat, lon, nextUnit);
                   }
@@ -2369,7 +2373,15 @@ export default function ExplorerPage({
       <button
         className={`${styles.panelOpenTab} ${!panelOpen && selectedLocation !== null && !introActive ? styles.panelOpenTabVisible : ""}`}
         type="button"
-        aria-label={`Open ${selectedLocation?.label ?? ""} location panel`}
+        // Reopening restores the tab the panel was closed on, so the label has
+        // to name that tab rather than always naming the location — otherwise
+        // a panel closed on Research reopens on Research from a tab that
+        // promised the location's graphs.
+        aria-label={
+          panelTab === "chat"
+            ? "Open research terminal"
+            : `Open ${selectedLocation?.label ?? ""} location panel`
+        }
         onClick={() => {
           const hasDataForCurrentLocation =
             resp !== null &&
@@ -2396,7 +2408,7 @@ export default function ExplorerPage({
           <path d="M15 18L9 12L15 6" />
         </svg>
         <span className={styles.panelOpenTabLabel}>
-          {selectedLocation?.label ?? ""}
+          {panelTab === "chat" ? "Research" : (selectedLocation?.label ?? "")}
         </span>
       </button>
     </main>

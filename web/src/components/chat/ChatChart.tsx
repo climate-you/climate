@@ -35,12 +35,25 @@ export type ChatChartPayload = {
 };
 
 type ChatChartProps = {
+  // No unit prop by design: a chart is labelled in the unit its own values are
+  // in, which is fixed when the answer is produced. Passing the user's current
+  // preference here is what previously relabelled old charts °F while their
+  // curves stayed in °C.
   chart: ChatChartPayload;
-  temperatureUnit: "C" | "F";
 };
 
 const CHART_MAX_HEIGHT = 260;
 const CHART_MIN_ASPECT_RATIO = 1.5;
+
+// ECharts' `containLabel` reserves room for tick labels but not for the axis
+// *name*, which is drawn a further `nameGap` (50px) to the left of the axis
+// line. The name therefore lands at `grid.left + tickLabelWidth - nameGap`, so
+// the narrower the tick labels, the closer it creeps to the canvas edge: with
+// 36px here, a series sitting near 0°C renders single-character ticks and
+// leaves under 1px of clearance, clipping the rotated label. 60px keeps the
+// name on-canvas even with single-character ticks, and matches the value the
+// comparison-bar path below already uses.
+const Y_AXIS_NAME_GRID_LEFT = 60;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -127,7 +140,7 @@ function buildGraphPayload(chart: ChatChartPayload): GraphPayload {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
+export default function ChatChart({ chart }: ChatChartProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const chartHostRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
@@ -192,10 +205,10 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
       const option = buildComparisonBarOption({
         xLabels,
         yValues: s.y,
-        unit: temperatureUnit === "F" && chart.unit === "C" ? "F" : chart.unit,
+        unit: chart.unit,
       });
       (option as Record<string, unknown>).grid = {
-        left: 60,
+        left: Y_AXIS_NAME_GRID_LEFT,
         right: 12,
         top: 28,
         // Extra bottom room when x labels are rotated to avoid clipping.
@@ -213,10 +226,12 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
     const rawCount = chart.series.filter((s) => s.role !== "trend").length;
     const multiSeries = rawCount > 1;
     const isStackedBar = chart.chart_mode === "stacked_bar";
-    // For non-temperature units (e.g. "score", "days"), pass the raw unit string
-    // so the chart library doesn't format values as °C/°F.
+    // Always label a chart in the unit its own values are in. `chart.unit` is
+    // fixed when the answer is produced, whereas the user's preference can
+    // change later — following the live preference would relabel an old chart
+    // °F while its curve stayed in °C.
+    // Temperatures render as "12.3°C"; everything else as "12.3 mm".
     const isTemp = ["C", "F"].includes(chart.unit);
-    const effectiveUnit = isTemp ? temperatureUnit : chart.unit;
 
     const option = isStackedBar
       ? buildStackedBarOption({
@@ -225,7 +240,7 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
           data,
           visibleKeys,
           transitionMs: 0,
-          unit: temperatureUnit,
+          unit: chart.unit,
           showYAxisName: true,
         })
       : buildTimeSeriesOption({
@@ -234,14 +249,14 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
           data,
           visibleKeys,
           transitionMs: 0,
-          unit: effectiveUnit,
+          unit: chart.unit,
           showYAxisName: true,
         });
 
     // Tighter grid for the narrow chat drawer; extra top space when legend is
     // present (multi-series) to prevent it overlapping the plot area.
     (option as Record<string, unknown>).grid = {
-      left: 36,
+      left: Y_AXIS_NAME_GRID_LEFT,
       right: 12,
       top: isStackedBar || rawCount > 3 ? 72 : multiSeries ? 44 : 28,
       bottom: 12,
@@ -301,7 +316,7 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
                   position: "bottom" as const,
                   formatter: (p: { value: number }) =>
                     isTemp
-                      ? `${p.value.toFixed(1)}°${temperatureUnit}`
+                      ? `${p.value.toFixed(1)}°${chart.unit}`
                       : `${p.value.toFixed(1)} ${chart.unit}`,
                   fontSize: 10,
                   color: "#0000FF",
@@ -316,7 +331,7 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
                   position: "top" as const,
                   formatter: (p: { value: number }) =>
                     isTemp
-                      ? `${p.value.toFixed(1)}°${temperatureUnit}`
+                      ? `${p.value.toFixed(1)}°${chart.unit}`
                       : `${p.value.toFixed(1)} ${chart.unit}`,
                   fontSize: 10,
                   color: "#FF0000",
@@ -352,7 +367,7 @@ export default function ChatChart({ chart, temperatureUnit }: ChatChartProps) {
       notMerge: true,
       lazyUpdate: false,
     });
-  }, [chart, colorScheme, temperatureUnit]);
+  }, [chart, colorScheme]);
 
   return (
     <div className={styles.chartCard} ref={chartHostRef}>

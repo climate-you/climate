@@ -115,6 +115,27 @@
   min-width: 0;
 }
 
+.betaBadge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border: 1px solid rgba(17, 17, 17, 0.14);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(17, 17, 17, 0.55);
+  background: rgba(17, 17, 17, 0.05);
+}
+
+@media (prefers-color-scheme: dark) {
+  .betaBadge {
+    border-color: rgba(255, 255, 255, 0.18);
+    color: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
 .drawerTitleIcon {
   width: 18px;
   height: 18px;
@@ -376,6 +397,81 @@
 
 .locationLink:hover {
   text-decoration-style: solid;
+}
+
+/* Tables in model answers. Models reach for these unprompted when comparing
+   periods, so they need to look native rather than like pasted output. */
+
+.tableScroll {
+  overflow-x: auto;
+  margin: 8px 0;
+  border: 1px solid rgba(17, 17, 17, 0.1);
+  border-radius: 7px;
+}
+
+.answerTable {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12.5px;
+  /* Figures in a column must line up to be comparable at a glance. */
+  font-variant-numeric: tabular-nums;
+}
+
+.answerTable th,
+.answerTable td {
+  padding: 5px 10px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid rgba(17, 17, 17, 0.07);
+}
+
+.answerTable th {
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: rgba(17, 17, 17, 0.55);
+  background: rgba(17, 17, 17, 0.035);
+}
+
+/* Numeric columns read better right-aligned; models put the value last. */
+.answerTable td:not(:first-child),
+.answerTable th:not(:first-child) {
+  text-align: right;
+}
+
+.answerTable tr:last-child td {
+  border-bottom: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tableScroll {
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .answerTable th,
+  .answerTable td {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .answerTable th {
+    color: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+
+/* Outbound links inside an answer (e.g. a case study). Solid underline so they
+   read as "leaves the chat", against the dotted underline used for the
+   in-place location links above. */
+.answerLink {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.answerLink:hover {
+  opacity: 0.75;
 }
 
 .exhaustedLink {

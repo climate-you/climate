@@ -2,6 +2,9 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
+// Models routinely answer with GFM tables. Plain react-markdown has no table
+// support, so without this the pipes render as literal ASCII.
+import remarkGfm from "remark-gfm";
 import styles from "./ChatDrawer.module.css";
 import {
   CHAT_FOLLOWUP_CHIP_CAP,
@@ -433,8 +436,7 @@ export default function ChatDrawer({
             const filtered = conversationHistory
               .filter(
                 (t, i) =>
-                  t.source !== "canned" ||
-                  i >= conversationHistory.length - 2,
+                  t.source !== "canned" || i >= conversationHistory.length - 2,
               )
               .map(({ role, text }) => ({ role, text }));
             return filtered.length > 0 ? filtered : undefined;
@@ -910,6 +912,9 @@ export default function ChatDrawer({
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
         Research Terminal
+        <span className={styles.betaBadge} title="This feature is in beta">
+          Beta
+        </span>
       </div>
 
       {devMode && (
@@ -1077,47 +1082,66 @@ export default function ChatDrawer({
             ) : (
               <div className={styles.markdown}>
                 <Markdown
-                  components={
-                    msg.locations && msg.locations.length > 0
-                      ? {
-                          a({ href, children }) {
-                            if (href?.startsWith("#loc:")) {
-                              const [, lat, lon] = href.split(":");
-                              return (
-                                <a
-                                  href="#"
-                                  className={styles.locationLink}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    onPickLocation?.(
-                                      parseFloat(lat),
-                                      parseFloat(lon),
-                                    );
-                                  }}
-                                >
-                                  {children}
-                                </a>
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    // Tables get their own scroll container so a wide one never
+                    // widens the drawer.
+                    table({ children }) {
+                      return (
+                        <div className={styles.tableScroll}>
+                          <table className={styles.answerTable}>
+                            {children}
+                          </table>
+                        </div>
+                      );
+                    },
+                    a({ href, children }) {
+                      if (href?.startsWith("#loc:") && msg.locations?.length) {
+                        const [, lat, lon] = href.split(":");
+                        return (
+                          <a
+                            href="#"
+                            className={styles.locationLink}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              onPickLocation?.(
+                                parseFloat(lat),
+                                parseFloat(lon),
                               );
-                            }
-                            if (href === "#locs") {
-                              return (
-                                <a
-                                  href="#"
-                                  className={styles.locationLink}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    onLocations?.(msg.locations!);
-                                  }}
-                                >
-                                  {children}
-                                </a>
-                              );
-                            }
-                            return <a href={href}>{children}</a>;
-                          },
-                        }
-                      : undefined
-                  }
+                            }}
+                          >
+                            {children}
+                          </a>
+                        );
+                      }
+                      if (href === "#locs" && msg.locations?.length) {
+                        return (
+                          <a
+                            href="#"
+                            className={styles.locationLink}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              onLocations?.(msg.locations!);
+                            }}
+                          >
+                            {children}
+                          </a>
+                        );
+                      }
+                      // Real links (e.g. a case study). Opened in a new
+                      // tab so an in-progress conversation is not lost.
+                      return (
+                        <a
+                          href={href}
+                          className={styles.answerLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {children}
+                        </a>
+                      );
+                    },
+                  }}
                 >
                   {msg.locations && msg.locations.length > 0
                     ? addSummaryLineLink(linkifyCities(msg.text, msg.locations))
@@ -1130,7 +1154,7 @@ export default function ChatDrawer({
           {msg.charts && msg.charts.length > 0 && !msg.loading && (
             <div className={styles.charts}>
               {msg.charts.map((chart, ci) => (
-                <ChatChart key={ci} chart={chart} temperatureUnit={unit} />
+                <ChatChart key={ci} chart={chart} />
               ))}
             </div>
           )}
@@ -1218,7 +1242,6 @@ export default function ChatDrawer({
           </div>
         </div>
       )}
-
     </div>
   );
 
