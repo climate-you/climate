@@ -11,6 +11,7 @@ import {
   CHAT_MODEL_OVERRIDE_KEY,
   CHAT_QUESTIONS_API_PATH,
 } from "@/lib/explorer/constants";
+import { isAnalyticsDisabled } from "@/lib/analytics/optOut";
 import ChatChart, { type ChatChartPayload } from "./ChatChart";
 
 // ---------------------------------------------------------------------------
@@ -449,6 +450,9 @@ export default function ChatDrawer({
           question_id: questionId ?? null,
           parent_question_id: parentQuestionId,
           question_tree_version: questionTree?.version ?? undefined,
+          // Still recorded, but flagged so test traffic stays out of the
+          // usage reports.
+          opt_out: isAnalyticsDisabled(),
         },
         (event) => {
           const type = event.type as string;

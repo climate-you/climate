@@ -94,6 +94,7 @@ type ChatMessage = {
   total_ms: number | null;
   steps_timing: StepTiming[];
   error: string | null;
+  opt_out?: boolean;
 };
 type ChatStats = {
   total_messages: number;
@@ -105,6 +106,12 @@ type ChatStats = {
   avg_step_count: number | null;
   avg_resp_ms: number | null;
   p95_resp_ms: number | null;
+  // The same figures over model-generated answers only. Canned and templated
+  // ones take no steps and report a fixed think-time rather than a measured
+  // one, so they flatten whichever average they are counted in.
+  avg_step_count_llm?: number | null;
+  avg_resp_ms_llm?: number | null;
+  p95_resp_ms_llm?: number | null;
 };
 
 type QuestionMeta = {
@@ -205,6 +212,20 @@ function fmtMs(ms: number | null | undefined): string {
   if (ms >= 1_000) return `${(ms / 1000).toFixed(1)}s`;
   return `${ms}ms`;
 }
+
+function fmtSteps(n: number | null | undefined): string {
+  return n != null ? n.toFixed(1) : "–";
+}
+
+const RESP_TIME_HINT =
+  "First: every answer. Second: model-generated answers only — canned and " +
+  "templated ones report a fixed 1.5s think-time, so including them measures " +
+  "how often the fast paths hit rather than how long an answer takes.";
+
+const STEP_COUNT_HINT =
+  "First: every answer. Second: model-generated answers only — canned and " +
+  "templated ones take no steps at all, so including them measures how often " +
+  "the fast paths hit rather than how much work an answer takes.";
 
 function tierColor(tier: string | null): string {
   if (!tier) return "#888";
@@ -921,20 +942,25 @@ export default function AdminPage() {
                   }
                 />
                 <Row
-                  label="Avg steps"
-                  value={
-                    chatStats.avg_step_count != null
-                      ? chatStats.avg_step_count.toFixed(1)
-                      : "–"
-                  }
+                  label="Avg steps (all / LLM)"
+                  value={`${fmtSteps(chatStats.avg_step_count)} / ${fmtSteps(
+                    chatStats.avg_step_count_llm,
+                  )}`}
+                  title={STEP_COUNT_HINT}
                 />
                 <Row
-                  label="Avg resp time"
-                  value={fmtMs(chatStats.avg_resp_ms)}
+                  label="Avg resp (all / LLM)"
+                  value={`${fmtMs(chatStats.avg_resp_ms)} / ${fmtMs(
+                    chatStats.avg_resp_ms_llm,
+                  )}`}
+                  title={RESP_TIME_HINT}
                 />
                 <Row
-                  label="p95 resp time"
-                  value={fmtMs(chatStats.p95_resp_ms)}
+                  label="p95 resp (all / LLM)"
+                  value={`${fmtMs(chatStats.p95_resp_ms)} / ${fmtMs(
+                    chatStats.p95_resp_ms_llm,
+                  )}`}
+                  title={RESP_TIME_HINT}
                 />
               </Card>
               <Card title="Feedback">
@@ -1593,6 +1619,14 @@ function MessageRow({
               ⬤
             </span>
           )}
+          {s.opt_out && (
+            <span
+              style={{ color: "#6ab0f3", marginRight: 5, fontSize: 10 }}
+              title="Analytics disabled in this browser — excluded from stats and question counts"
+            >
+              test
+            </span>
+          )}
           {truncate(s.question, 80)}
         </span>
         <span
@@ -1933,14 +1967,17 @@ function Row({
   label,
   value,
   ok,
+  title,
 }: {
   label: string;
   value: string;
   ok?: boolean;
+  title?: string;
 }) {
   const valueColor = ok === true ? "#4caf50" : ok === false ? "#f66" : "#ddd";
   return (
     <div
+      title={title}
       style={{
         display: "flex",
         justifyContent: "space-between",

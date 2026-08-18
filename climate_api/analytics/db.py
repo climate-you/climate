@@ -11,6 +11,28 @@ logger = logging.getLogger(__name__)
 _SNAP_CLICK: float = 0.25
 _SNAP_ORIGIN: float = 1.0
 
+# Tiers that answer from stored text instead of calling a model. They report the
+# fixed think-time they were streamed with rather than a measured one, so a
+# latency average that includes them tracks how often the fast paths hit, not
+# how long an answer takes. Response-time stats are reported both ways.
+FIXED_LATENCY_TIERS = frozenset({"canned", "templated"})
+
+
+def _mean(values: list[int]) -> float | None:
+    """Mean rounded for display; None when there is nothing to average."""
+    if not values:
+        return None
+    return round(sum(values) / len(values), 2)
+
+
+def _latency_summary(values: list[int]) -> tuple[int | None, int | None]:
+    """(mean, p95) over an already-sorted list of durations; (None, None) if empty."""
+    if not values:
+        return None, None
+    mean = round(sum(values) / len(values))
+    p95_idx = max(0, int(len(values) * 0.95) - 1)
+    return mean, values[p95_idx]
+
 _CREATE_CLICK_EVENTS = """
 CREATE TABLE IF NOT EXISTS click_events (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,6 +66,10 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     feedback              TEXT,
     feedback_ts           INTEGER,
     feedback_status       TEXT,
+    -- Set when the browser has analytics disabled (?analytics=off): the row is
+    -- kept and stays readable in /admin, but every aggregate skips it. This is
+    -- a "do not count this" flag, not a "do not store this" one — a privacy
+    -- opt-out that promises the question is never written needs its own field.
     opt_out               INTEGER NOT NULL DEFAULT 0,
     map_lat               REAL,
     map_lon               REAL,
@@ -330,6 +356,12 @@ class AnalyticsDB:
         offset: int = 0,
         feedback: str | None = None,
     ) -> list[dict]:
+        """Recent messages, opted-out ones included and marked as such.
+
+        This is the transcript view rather than a report: an opted-out message
+        is still worth reading back when checking how the assistant answered.
+        Every aggregate below drops those rows instead.
+        """
         import json as _json
 
         try:
@@ -339,7 +371,7 @@ class AnalyticsDB:
                     "message_id, session_id, ts, question, answer, step_count, tools_called, "
                     "tool_calls_detail, tier, feedback, feedback_status, total_ms, steps_timing, "
                     "model, rejected_tiers, model_override, error, "
-                    "question_id, parent_question_id, question_tree_version"
+                    "question_id, parent_question_id, question_tree_version, opt_out"
                 )
                 if feedback is not None:
                     rows = conn.execute(
@@ -375,6 +407,7 @@ class AnalyticsDB:
                     "question_id": r[17],
                     "parent_question_id": r[18],
                     "question_tree_version": r[19],
+                    "opt_out": bool(r[20]),
                 }
                 for r in rows
             ]
@@ -383,7 +416,11 @@ class AnalyticsDB:
             return []
 
     def get_chat_bad_answers(self, limit: int = 50) -> list[dict]:
-        """Return messages needing review: bad feedback or errors, with feedback_status='new'."""
+        """Messages needing review: bad feedback or errors, with feedback_status='new'.
+
+        Opted-out rows are left out — a failure hit while testing is already
+        known about, and queueing it would bury the reports from real users.
+        """
         import json as _json
 
         try:
@@ -396,7 +433,7 @@ class AnalyticsDB:
                 )
                 rows = conn.execute(
                     f"SELECT {cols} FROM chat_messages"
-                    " WHERE feedback_status='new' ORDER BY ts DESC LIMIT ?",
+                    " WHERE feedback_status='new' AND opt_out=0 ORDER BY ts DESC LIMIT ?",
                     (limit,),
                 ).fetchall()
             return [
@@ -426,38 +463,44 @@ class AnalyticsDB:
             return []
 
     def get_chat_stats(self) -> dict:
+        """Usage totals over real traffic only — opted-out rows are excluded."""
         try:
             with self._lock:
                 conn = self._connect()
                 total_messages = conn.execute(
-                    "SELECT COUNT(*) FROM chat_messages"
+                    "SELECT COUNT(*) FROM chat_messages WHERE opt_out=0"
                 ).fetchone()[0]
                 total_sessions = conn.execute(
-                    "SELECT COUNT(DISTINCT session_id) FROM chat_messages"
+                    "SELECT COUNT(DISTINCT session_id) FROM chat_messages WHERE opt_out=0"
                 ).fetchone()[0]
                 good = conn.execute(
-                    "SELECT COUNT(*) FROM chat_messages WHERE feedback='good'"
+                    "SELECT COUNT(*) FROM chat_messages WHERE feedback='good' AND opt_out=0"
                 ).fetchone()[0]
                 bad = conn.execute(
-                    "SELECT COUNT(*) FROM chat_messages WHERE feedback='bad'"
+                    "SELECT COUNT(*) FROM chat_messages WHERE feedback='bad' AND opt_out=0"
                 ).fetchone()[0]
                 new_bad = conn.execute(
-                    "SELECT COUNT(*) FROM chat_messages WHERE feedback_status='new'"
+                    "SELECT COUNT(*) FROM chat_messages WHERE feedback_status='new' AND opt_out=0"
                 ).fetchone()[0]
-                avg_steps = conn.execute(
-                    "SELECT AVG(step_count) FROM chat_messages"
-                ).fetchone()[0]
+                step_rows = conn.execute(
+                    "SELECT step_count, tier FROM chat_messages"
+                    " WHERE step_count IS NOT NULL AND opt_out=0"
+                ).fetchall()
                 timing_rows = conn.execute(
-                    "SELECT total_ms FROM chat_messages WHERE total_ms IS NOT NULL ORDER BY total_ms"
+                    "SELECT total_ms, tier FROM chat_messages"
+                    " WHERE total_ms IS NOT NULL AND opt_out=0 ORDER BY total_ms"
                 ).fetchall()
 
-            avg_resp_ms: float | None = None
-            p95_resp_ms: int | None = None
-            if timing_rows:
-                values = [r[0] for r in timing_rows]
-                avg_resp_ms = round(sum(values) / len(values))
-                p95_idx = max(0, int(len(values) * 0.95) - 1)
-                p95_resp_ms = values[p95_idx]
+            # Sorted by the query, so both slices stay sorted for the percentile.
+            avg_resp_ms, p95_resp_ms = _latency_summary([r[0] for r in timing_rows])
+            avg_resp_ms_llm, p95_resp_ms_llm = _latency_summary(
+                [r[0] for r in timing_rows if r[1] not in FIXED_LATENCY_TIERS]
+            )
+
+            avg_steps = _mean([r[0] for r in step_rows])
+            avg_steps_llm = _mean(
+                [r[0] for r in step_rows if r[1] not in FIXED_LATENCY_TIERS]
+            )
 
             avg_msg_per_session = (
                 round(total_messages / total_sessions, 1) if total_sessions else None
@@ -470,9 +513,12 @@ class AnalyticsDB:
                 "feedback_good": good,
                 "feedback_bad": bad,
                 "bad_answers_unreviewed": new_bad,
-                "avg_step_count": round(avg_steps, 2) if avg_steps else None,
+                "avg_step_count": avg_steps,
+                "avg_step_count_llm": avg_steps_llm,
                 "avg_resp_ms": avg_resp_ms,
                 "p95_resp_ms": p95_resp_ms,
+                "avg_resp_ms_llm": avg_resp_ms_llm,
+                "p95_resp_ms_llm": p95_resp_ms_llm,
             }
         except Exception:
             logger.exception("Failed to query chat stats")
@@ -499,7 +545,7 @@ class AnalyticsDB:
                            SUM(CASE WHEN feedback='bad' THEN 1 ELSE 0 END),
                            MAX(ts)
                     FROM chat_messages
-                    WHERE question_id IS NOT NULL
+                    WHERE question_id IS NOT NULL AND opt_out=0
                     GROUP BY question_tree_version, question_id, parent_question_id
                     ORDER BY clicks DESC
                     """
@@ -534,7 +580,7 @@ class AnalyticsDB:
                     """
                     SELECT question_tree_version, COUNT(*)
                     FROM chat_messages
-                    WHERE question_id IS NULL
+                    WHERE question_id IS NULL AND opt_out=0
                     GROUP BY question_tree_version
                     """
                 ).fetchall()
@@ -561,6 +607,7 @@ class AnalyticsDB:
                     """
                     SELECT session_id, question_id, question_tree_version, question
                     FROM chat_messages
+                    WHERE opt_out=0
                     ORDER BY session_id, ts, rowid
                     LIMIT ?
                     """,

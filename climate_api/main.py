@@ -83,6 +83,8 @@ class _ChatRequest(BaseModel):
     question: str
     history: list[_ConversationTurn] | None = None  # prior turns (user+assistant pairs)
     map_context: _MapContext | None = None
+    # Set by browsers that opted out of analytics (?analytics=off). The message
+    # is recorded either way; the flag keeps it out of the usage reports.
     opt_out: bool = False
     session_id: str | None = (
         None  # browser-session UUID (groups all messages from one conversation)
@@ -1018,7 +1020,10 @@ def create_app() -> FastAPI:
                     total_ms = event.get("total_ms")
                     steps_timing = event.get("steps_timing")
 
-            if settings.chat_enabled and not body.opt_out:
+            # Opted-out messages are still recorded, flagged as opt_out: the
+            # answer stays reviewable in /admin while the usage reports and the
+            # question-tree counts leave it out.
+            if settings.chat_enabled:
                 analytics_db.record_chat_message(
                     message_id=message_id,
                     session_id=session_id,

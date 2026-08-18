@@ -58,10 +58,17 @@ def test_record_and_retrieve_chat_message(tmp_path: Path) -> None:
 def test_record_chat_message_opt_out_stored(tmp_path: Path) -> None:
     db = _db(tmp_path)
     _record(db, message_id="msg-2", opt_out=True)
-    # opt_out is not returned in the public get_chat_messages fields —
-    # verify by checking no crash and the record is stored
     msgs = db.get_chat_messages()
     assert len(msgs) == 1
+    assert msgs[0]["opt_out"] is True
+
+
+def test_get_chat_messages_marks_real_traffic_as_not_opted_out(
+    tmp_path: Path,
+) -> None:
+    db = _db(tmp_path)
+    _record(db)
+    assert db.get_chat_messages()[0]["opt_out"] is False
 
 
 def test_record_chat_message_all_optional_fields(tmp_path: Path) -> None:
@@ -284,6 +291,36 @@ def test_get_chat_stats_counts_and_feedback(tmp_path: Path) -> None:
     assert stats["avg_resp_ms"] == pytest.approx(200)
 
 
+def test_get_chat_stats_ignore_opted_out_messages(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    _record(db, message_id="m1", session_id="s1", step_count=2, total_ms=100)
+    _record(
+        db,
+        message_id="m2",
+        session_id="s-test",
+        step_count=8,
+        total_ms=9000,
+        opt_out=True,
+    )
+    db.record_chat_feedback("m2", "bad")
+
+    stats = db.get_chat_stats()
+    assert stats["total_messages"] == 1
+    assert stats["total_sessions"] == 1
+    assert stats["feedback_bad"] == 0
+    assert stats["bad_answers_unreviewed"] == 0
+    assert stats["avg_step_count"] == pytest.approx(2.0)
+    assert stats["avg_resp_ms"] == pytest.approx(100)
+
+
+def test_get_chat_bad_answers_skip_opted_out_messages(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    _record(db, message_id="m-test", opt_out=True, error="boom")
+    _record(db, message_id="m-real", error="boom")
+    ids = [m["message_id"] for m in db.get_chat_bad_answers()]
+    assert ids == ["m-real"]
+
+
 def test_get_chat_stats_timing_p95(tmp_path: Path) -> None:
     db = _db(tmp_path)
     # Insert 20 messages with total_ms 100, 200, ..., 2000
@@ -293,6 +330,54 @@ def test_get_chat_stats_timing_p95(tmp_path: Path) -> None:
     # p95 index = max(0, int(20 * 0.95) - 1) = max(0, 19 - 1) = 18
     # values sorted: 100, 200, ..., 2000 → index 18 → 1900
     assert stats["p95_resp_ms"] == 1900
+
+
+def test_get_chat_stats_report_effort_with_and_without_canned(
+    tmp_path: Path,
+) -> None:
+    """Canned and templated answers report a fixed think-time and take no steps.
+
+    Leaving them in the only latency and step figures makes the assistant look
+    faster and simpler the more often the fast paths hit, so both cuts are
+    reported.
+    """
+    db = _db(tmp_path)
+    _record(db, message_id="c1", tier="canned", total_ms=1500, step_count=0)
+    _record(db, message_id="c2", tier="templated", total_ms=1500, step_count=0)
+    _record(
+        db, message_id="l1", tier="groq_primary_free", total_ms=6000, step_count=3
+    )
+    _record(db, message_id="l2", tier="groq_small_free", total_ms=10000, step_count=5)
+
+    stats = db.get_chat_stats()
+    assert stats["avg_resp_ms"] == 4750
+    assert stats["avg_resp_ms_llm"] == 8000
+    assert stats["p95_resp_ms"] == 6000
+    assert stats["p95_resp_ms_llm"] == 6000
+    assert stats["avg_step_count"] == pytest.approx(2.0)
+    assert stats["avg_step_count_llm"] == pytest.approx(4.0)
+
+
+def test_get_chat_stats_llm_figures_none_when_only_canned(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    _record(db, message_id="c1", tier="canned", total_ms=1500, step_count=0)
+    stats = db.get_chat_stats()
+    assert stats["avg_resp_ms"] == 1500
+    assert stats["avg_resp_ms_llm"] is None
+    assert stats["p95_resp_ms_llm"] is None
+    # An all-canned corpus really does average zero steps — that is a figure,
+    # not missing data.
+    assert stats["avg_step_count"] == 0
+    assert stats["avg_step_count_llm"] is None
+
+
+def test_get_chat_stats_count_untiered_answers_as_llm(tmp_path: Path) -> None:
+    """A failed answer records no tier — it still cost real time, so it counts."""
+    db = _db(tmp_path)
+    _record(db, message_id="e1", tier=None, total_ms=4000, step_count=2)
+    stats = db.get_chat_stats()
+    assert stats["avg_resp_ms_llm"] == 4000
+    assert stats["avg_step_count_llm"] == pytest.approx(2.0)
 
 
 # ---------------------------------------------------------------------------
@@ -467,6 +552,30 @@ def test_typed_question_counts_split_by_revision(tmp_path: Path) -> None:
         c["question_tree_version"]: c["typed"] for c in db.get_typed_question_counts()
     }
     assert counts == {"v1": 2, "v2": 1}
+
+
+def test_question_tree_analytics_ignore_opted_out_messages(tmp_path: Path) -> None:
+    """Testing the chip tree from an opted-out browser must not move its counts."""
+    db = _db(tmp_path)
+    _record(db, message_id="real", question_id="q1", question_tree_version="v1")
+    _record(
+        db,
+        message_id="test-chip",
+        question_id="q1",
+        question_tree_version="v1",
+        opt_out=True,
+    )
+    _record(
+        db,
+        message_id="test-typed",
+        session_id="s-test",
+        question_tree_version="v1",
+        opt_out=True,
+    )
+
+    assert [s["clicks"] for s in db.get_question_tree_stats()] == [1]
+    assert db.get_typed_question_counts() == []
+    assert db.get_typed_question_entry_points() == []
 
 
 def test_question_tree_stats_empty_db(tmp_path: Path) -> None:

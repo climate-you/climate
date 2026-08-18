@@ -93,7 +93,6 @@ export const AUTO_ROTATE_DEG_PER_SEC = 3;
 
 // Chat feature flag
 export const CHAT_FEATURE_FLAG_KEY = "climate.chatBotEnabled";
-export const CHAT_OPT_OUT_KEY = "climate.chatOptOut";
 export const CHAT_MODEL_OVERRIDE_KEY = "climate.chatModelOverride";
 
 // Chat question tree

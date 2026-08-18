@@ -300,9 +300,37 @@ curl -u admin:<your-password> https://<your-domain>/admin; echo "Exit: $?"
 
 > **Note:** Testing via `http://127.0.0.1/admin` will bypass the auth gate because Caddy's site block is bound to the domain name. Requests to `127.0.0.1` do not match that block. Always test using the real domain (or set the `Host` header: `curl -H "Host: <your-domain>" http://127.0.0.1/admin`).
 
-## 8c) Exclude IPs from Analytics
+## 8c) Exclude Your Own Visits from Analytics
 
-To prevent visits from specific IPs (e.g. your own) from being recorded in analytics, add them to the IP blocklist file on the VM.
+There are two mechanisms. The browser opt-out is the one to reach for day to day; the IP blocklist stays available for excluding an address you cannot open a browser from.
+
+### Browser opt-out (recommended)
+
+Load any page of the site with `?analytics=off`:
+
+```
+https://<your-domain>/?analytics=off
+```
+
+The flag is stored in that browser's `localStorage` (`climate.analyticsDisabled`) and the parameter is stripped from the URL. It follows the browser rather than the address it connects from, so it keeps working across VPNs, networks, and reassigned IPs, and needs no deploy or restart to change.
+
+While set, that browser:
+
+- sends no session or click events, so it never appears in the click/session counts or the heat maps;
+- marks its chat messages as test traffic — they are still stored and readable in `/admin`, badged `test`, but are left out of the chat stats, the question-tree counts, and the bad-answer review queue;
+- sets GoatCounter's own `skipgc` key, so third-party pageviews and events stop too.
+
+To start counting again, load `?analytics=on` (or clear the site's local storage). Check the current state from the browser console:
+
+```js
+localStorage.getItem("climate.analyticsDisabled"); // "1" when opted out
+```
+
+Each browser and profile is separate, and a private window starts opted in.
+
+### IP blocklist
+
+To prevent visits from specific IPs (e.g. a device you cannot toggle the flag on) from being recorded in analytics, add them to the IP blocklist file on the VM. This covers session and click events only — it has no effect on chat analytics.
 
 First, find your current public IP:
 

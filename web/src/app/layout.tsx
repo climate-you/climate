@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { ANALYTICS_OPT_OUT_BOOTSTRAP } from "@/lib/analytics/optOut";
 import { GOATCOUNTER_ENDPOINT, SITE_HOST, SITE_URL } from "@/lib/siteConfig";
 import "./globals.css";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -18,6 +19,11 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
+        {/* Must stay ahead of the GoatCounter tags: it writes the `skipgc`
+            key those scripts read as they load. */}
+        <Script id="analytics-opt-out" strategy="beforeInteractive">
+          {ANALYTICS_OPT_OUT_BOOTSTRAP}
+        </Script>
         {GOATCOUNTER_ENDPOINT ? (
           <>
             <Script id="goatcounter-host-guard" strategy="beforeInteractive">

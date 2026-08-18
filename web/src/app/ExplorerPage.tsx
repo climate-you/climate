@@ -54,6 +54,7 @@ import {
   mergeSeries,
 } from "@/lib/explorer/chartData";
 import { isMobileViewport } from "@/lib/explorer/chartOptions";
+import { isAnalyticsDisabled } from "@/lib/analytics/optOut";
 import { defaultTemperatureUnitForLocale } from "@/lib/temperatureUnit";
 import styles from "./page.module.css";
 
@@ -840,6 +841,7 @@ export default function ExplorerPage({
 
   const trackGoatEvent = useCallback((path: string, title: string) => {
     if (typeof window === "undefined") return;
+    if (isAnalyticsDisabled()) return;
     const goatcounter = (
       window as Window & {
         goatcounter?: { count?: (payload: Record<string, unknown>) => void };
@@ -851,6 +853,18 @@ export default function ExplorerPage({
       event: true,
     });
   }, []);
+
+  const reportClickEvent = useCallback(
+    (clickLat: number, clickLon: number) => {
+      if (isAnalyticsDisabled()) return;
+      fetch(`${apiBase}/api/events/click`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat: clickLat, lon: clickLon }),
+      }).catch(() => {});
+    },
+    [apiBase],
+  );
 
   useEffect(() => {
     if (!panelOpen) return;
@@ -896,6 +910,7 @@ export default function ExplorerPage({
   }, [activeLayer?.label, activeLayerId, trackGoatEvent]);
 
   useEffect(() => {
+    if (isAnalyticsDisabled()) return;
     if (sessionStorage.getItem("session_reported")) return;
     sessionStorage.setItem("session_reported", "1");
     fetch(`${apiBase}/api/events/session`, { method: "POST" }).catch(() => {});
@@ -1171,11 +1186,7 @@ export default function ExplorerPage({
   }
 
   function applyLocation(item: AutocompleteItem) {
-    fetch(`${apiBase}/api/events/click`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lat: item.lat, lon: item.lon }),
-    }).catch(() => {});
+    reportClickEvent(item.lat, item.lon);
     setLat(item.lat);
     setLon(item.lon);
     setPicked({ lat: item.lat, lon: item.lon });
@@ -1198,11 +1209,7 @@ export default function ExplorerPage({
     keepChatLocations = false,
     openPanel = true,
   ) {
-    fetch(`${apiBase}/api/events/click`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lat: la, lon: lo }),
-    }).catch(() => {});
+    reportClickEvent(la, lo);
     setLat(la);
     setLon(lo);
     setPicked({ lat: la, lon: lo });
