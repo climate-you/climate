@@ -114,7 +114,7 @@
       "follow_up_ids": ["coldest_nights_capital", "coldest_recorded_city", "hottest_capital", "coldest_major_city"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "The coldest national capital is **Ulaanbaatar, Mongolia**, with a mean annual temperature of just **[[-1.6°C|29.1°F]]** — its high altitude and deep continental location make its winters brutally cold. Among territorial capitals, **Nuuk, Greenland** ([[-3.2°C|26.2°F]]) and **Longyearbyen, Svalbard** ([[-6.3°C|20.7°F]]) are colder still. Even here the climate is changing: Ulaanbaatar has warmed at [[0.38°C|0.68°F]] per decade since 1979.",
+      "answer": "The coldest capital of a sovereign country is **Ulaanbaatar, Mongolia**, with a mean annual temperature of just **[[-1.6°C|29.1°F]]** — its high altitude and deep continental location make its winters brutally cold. Two colder settlements govern dependencies rather than countries: **Nuuk** ([[-3.2°C|26.2°F]]), capital of Greenland, an autonomous part of the Kingdom of Denmark, and **Longyearbyen** ([[-6.3°C|20.7°F]]), the administrative center of Norway's Svalbard territory. Even here the climate is changing: Ulaanbaatar has warmed at [[0.38°C|0.68°F]] per decade since 1979.",
       "locations": [{"label": "Ulaanbaatar", "lat": 47.91, "lon": 106.88}],
       "chart_spec": {"metric_id": "t2m_yearly_mean_c"},
       "status": "active"
@@ -153,7 +153,7 @@
       "follow_up_ids": ["coldest_recorded_city", "coldest_capital", "local_night_cold"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "Among national capitals, **Ulaanbaatar, Mongolia** has the coldest nights: averaged across the year, its monthly low is **[[-15.1°C|4.8°F]]**. The territorial capitals **Longyearbyen, Svalbard** ([[-15.7°C|3.7°F]]) and **Nuuk, Greenland** ([[-10.7°C|12.7°F]]) experience similarly frigid nights.",
+      "answer": "**Ulaanbaatar, Mongolia** has the coldest nights of any capital of a sovereign country: averaged across the year, its monthly low is **[[-15.1°C|4.8°F]]**. Colder still is **Longyearbyen** ([[-15.7°C|3.7°F]]), the administrative center of Norway's Svalbard territory. **Nuuk**, capital of the autonomous Danish territory of Greenland, is milder at [[-10.7°C|12.7°F]] — its maritime setting keeps nights well above what its colder annual average would suggest.",
       "locations": [{"label": "Ulaanbaatar", "lat": 47.91, "lon": 106.88}],
       "chart_spec": {"metric_id": "t2m_monthly_min_c", "aggregate_by_year": true, "show_trend": true},
       "status": "active"
