@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import queue
 import resource
 import shutil
+import threading
 import time
 from collections import defaultdict, deque
 from email.utils import parsedate
@@ -172,6 +174,61 @@ def _configure_uvicorn_like_access_logger() -> None:
     fmt = '%(client_addr)s - "%(request_line)s" %(status_code)s (%(duration_ms).1f ms)'
     for h in access_logger.handlers:
         h.setFormatter(AccessFormatter(fmt=fmt, use_colors=True))
+
+
+_SSE_HEARTBEAT_S = 10.0
+# An SSE comment: ignored by any conformant client, including our own reader,
+# which skips every line that does not begin with "data: ".
+_SSE_HEARTBEAT = ": ping\n\n"
+
+
+def _with_heartbeat(events, interval_s: float = _SSE_HEARTBEAT_S):
+    """Relay an SSE generator, emitting a comment whenever it goes quiet.
+
+    A chat turn can spend a minute inside one provider call without producing
+    an event — deciding a tool call, or generating before the first token. Any
+    proxy in front of us is entitled to treat that silence as a dead connection
+    and close it, which surfaces to the reader as a stream that simply ends
+    with no answer in it.
+
+    The producer is run on a worker thread because it blocks inside the
+    provider SDK: a timeout can only fire while that call is in flight if
+    something else owns the timer.
+    """
+    q: queue.Queue = queue.Queue()
+    done = object()
+    stop = threading.Event()
+
+    def _produce() -> None:
+        try:
+            for item in events:
+                q.put((None, item))
+                # The consumer is gone (client disconnected); stop pulling from
+                # the model rather than finishing a turn nobody will read.
+                if stop.is_set():
+                    break
+        except BaseException as exc:  # relayed and re-raised on the caller's thread
+            q.put((exc, None))
+        finally:
+            q.put((None, done))
+
+    worker = threading.Thread(target=_produce, daemon=True)
+    worker.start()
+
+    try:
+        while True:
+            try:
+                exc, item = q.get(timeout=interval_s)
+            except queue.Empty:
+                yield _SSE_HEARTBEAT
+                continue
+            if exc is not None:
+                raise exc
+            if item is done:
+                return
+            yield item
+    finally:
+        stop.set()
 
 
 def _build_chat_tiers(settings, logger) -> list[ProviderTier]:
@@ -992,7 +1049,7 @@ def create_app() -> FastAPI:
                 )
 
         return StreamingResponse(
-            _event_stream(),
+            _with_heartbeat(_event_stream()),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )

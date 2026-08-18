@@ -21,6 +21,23 @@ example.com {
     Referrer-Policy "strict-origin-when-cross-origin"
   }
 
+  # Chat streams answers over SSE and can spend a minute inside a single model
+  # call without emitting an event, so the short timeouts used for ordinary
+  # JSON below would sever the connection mid-answer — the client sees a stream
+  # that ends with no answer in it. Must come before @backend: first match wins.
+  # flush_interval -1 disables response buffering, without which events are
+  # held back and progress never appears while the answer is being generated.
+  @chat path /api/chat /api/chat/*
+  handle @chat {
+    reverse_proxy 127.0.0.1:8001 {
+      flush_interval -1
+      transport http {
+        read_timeout 300s
+        write_timeout 300s
+      }
+    }
+  }
+
   # API and map assets routes with timeouts.
   # Request rate limiting is enforced in the backend middleware by default.
   @backend path /api/* /assets/* /healthz
