@@ -1611,9 +1611,13 @@ export default function ExplorerPage({
   const populationText = formatPopulation(selectedLocation?.population);
   const debugBbox = resp?.location?.panel_valid_bbox ?? null;
   const debugInBbox = inBbox(lat, lon, debugBbox);
-  const isMobile = isMobileViewport();
+  // Only emitted while a touch drag is actually moving the panel: a resting
+  // inline transform would survive a resize (nothing re-renders the panel on
+  // width changes alone) and override the desktop `translate(0, -50%)`,
+  // stranding the panel in the bottom-right corner. The offset can only be
+  // non-zero below the mobile breakpoint, so no viewport check is needed.
   const panelDragTransform =
-    isMobile && panelOpen
+    panelOpen && panelDragOffsetPx !== 0
       ? `translateY(${Math.round(panelDragOffsetPx)}px)`
       : undefined;
   return (
