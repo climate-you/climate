@@ -54,6 +54,11 @@ import {
   mergeSeries,
 } from "@/lib/explorer/chartData";
 import { isMobileViewport } from "@/lib/explorer/chartOptions";
+import {
+  findScrollOwner,
+  scrollOwnerAbsorbs,
+  type ScrollOwner,
+} from "@/lib/explorer/panelTouchScroll";
 import { isAnalyticsDisabled } from "@/lib/analytics/optOut";
 import { defaultTemperatureUnitForLocale } from "@/lib/temperatureUnit";
 import styles from "./page.module.css";
@@ -440,6 +445,7 @@ export default function ExplorerPage({
   const touchStartXRef = useRef<number | null>(null);
   const touchStartTimeRef = useRef<number | null>(null);
   const touchGestureAxisRef = useRef<"x" | "y" | null>(null);
+  const touchScrollOwnerRef = useRef<ScrollOwner | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const panelViewportRef = useRef<HTMLDivElement | null>(null);
   const [panelViewportEl, setPanelViewportEl] = useState<HTMLDivElement | null>(
@@ -1355,6 +1361,7 @@ export default function ExplorerPage({
     setPanelDragOffsetPx(0);
     setPanelDragActive(false);
     touchGestureAxisRef.current = null;
+    touchScrollOwnerRef.current = null;
   }, [panelOpen]);
 
   useEffect(() => {
@@ -1455,12 +1462,20 @@ export default function ExplorerPage({
         touchStartYRef.current = null;
         touchStartXRef.current = null;
         touchGestureAxisRef.current = null;
+        touchScrollOwnerRef.current = null;
         return;
       }
       touchStartYRef.current = e.touches[0].clientY;
       touchStartXRef.current = e.touches[0].clientX;
       touchStartTimeRef.current = Date.now();
       touchGestureAxisRef.current = null;
+      // Captured before the finger moves: a gesture that begins inside a
+      // scrolled region (the chat message pane) scrolls it instead of
+      // dragging the panel.
+      touchScrollOwnerRef.current = findScrollOwner(
+        e.target instanceof Element ? e.target : null,
+        panelRef.current,
+      );
       setPanelDragActive(false);
       setPanelDragOffsetPx(0);
     },
@@ -1490,6 +1505,9 @@ export default function ExplorerPage({
         touchGestureAxisRef.current = absDeltaY >= absDeltaX ? "y" : "x";
       }
       if (touchGestureAxisRef.current === "y") {
+        if (scrollOwnerAbsorbs(touchScrollOwnerRef.current, deltaY)) {
+          return;
+        }
         // Block native pull-to-refresh / page overscroll while panel drag
         // gestures are active on mobile, and follow the finger.
         e.preventDefault();
@@ -1518,6 +1536,7 @@ export default function ExplorerPage({
       if (!touch) {
         touchStartYRef.current = null;
         touchStartXRef.current = null;
+        touchScrollOwnerRef.current = null;
         return;
       }
       const deltaY = touch.clientY - touchStartYRef.current;
@@ -1525,7 +1544,9 @@ export default function ExplorerPage({
       touchStartYRef.current = null;
       touchStartXRef.current = null;
       const axis = touchGestureAxisRef.current;
+      const scrollOwner = touchScrollOwnerRef.current;
       touchGestureAxisRef.current = null;
+      touchScrollOwnerRef.current = null;
       setPanelDragActive(false);
       setPanelDragOffsetPx(0);
       if (
@@ -1535,7 +1556,10 @@ export default function ExplorerPage({
         return;
       }
       if (axis === "y" && deltaY > 0 && Math.abs(deltaY) > Math.abs(deltaX)) {
-        if (deltaY >= TOUCH_CLOSE_PANEL_THRESHOLD_PX) {
+        if (
+          deltaY >= TOUCH_CLOSE_PANEL_THRESHOLD_PX &&
+          !scrollOwnerAbsorbs(scrollOwner, deltaY)
+        ) {
           setPanelOpen(false);
         }
         return;
@@ -1566,6 +1590,7 @@ export default function ExplorerPage({
     touchStartYRef.current = null;
     touchStartXRef.current = null;
     touchGestureAxisRef.current = null;
+    touchScrollOwnerRef.current = null;
     setPanelDragActive(false);
     setPanelDragOffsetPx(0);
   }, []);
