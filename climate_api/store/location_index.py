@@ -7,6 +7,8 @@ import unicodedata
 import re
 from typing import List, Dict, Optional
 
+from climate_api.store.sovereignty import is_sovereign
+
 
 @dataclass(frozen=True)
 class LocationHit:
@@ -214,12 +216,21 @@ class LocationIndex:
     def iter_all(
         self, *, min_population: int = 0, capitals_only: bool = False
     ) -> List[LocationHit]:
-        """Return all locations matching the given filters, sorted by population descending."""
+        """
+        Return all locations matching the given filters, sorted by population descending.
+
+        `capitals_only` keeps capitals of sovereign states only. The stored
+        capital flag comes from the GeoNames PPLC feature code, which also
+        marks the capitals of dependencies such as Greenland or Svalbard;
+        see `climate_api.store.sovereignty` for why those are excluded.
+        """
         result = []
         for i in range(len(self._labels)):
             if min_population > 0 and self._populations[i] < min_population:
                 continue
-            if capitals_only and not self._capitals[i]:
+            if capitals_only and not (
+                self._capitals[i] and is_sovereign(self._country_codes[i])
+            ):
                 continue
             result.append(self._hit(i))
         result.sort(key=lambda h: -h.population)

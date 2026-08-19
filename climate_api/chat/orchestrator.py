@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
 from typing import Any, Iterator
 
+from climate.geo.country import LEGACY_COUNTRY_NAMES
 from climate_api.store.location_index import LocationIndex, _norm as _norm_location
 from climate_api.store.tile_data_store import TileDataStore
 from climate_api.chat import tools as _tools
@@ -1096,7 +1097,11 @@ TOOL_SCHEMAS = [
                     },
                     "capital_only": {
                         "type": "boolean",
-                        "description": "If true, only consider national capital cities.",
+                        "description": (
+                            "If true, only consider capital cities of sovereign countries. "
+                            "Capitals of dependencies and territories (Nuuk, Longyearbyen, "
+                            "San Juan, Hong Kong) are excluded."
+                        ),
                     },
                     "min_population": {
                         "type": "integer",
@@ -1558,6 +1563,10 @@ class ChatOrchestrator:
             self.country_name_to_code = {
                 v.casefold(): k for k, v in country_names.items()
             }
+            # Names we have since renamed still resolve, so a question phrased
+            # the old way ("cities in Palestinian Territory") is not rejected.
+            for legacy, code in LEGACY_COUNTRY_NAMES.items():
+                self.country_name_to_code.setdefault(legacy, code)
         # dataset id → human title, used to name the source of each tool call
         # in the UI. Optional: without it the provenance line falls back to the
         # dataset id.

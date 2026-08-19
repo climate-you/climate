@@ -22,6 +22,7 @@ from climate.geo.continents import CONTINENT_ALIASES as _CONTINENT_ALIASES
 from climate.geo.continents import resolve_continent as _resolve_continent
 
 from climate_api.store.location_index import LocationIndex
+from climate_api.store.sovereignty import is_sovereign
 from climate_api.store.tile_data_store import TileDataStore
 
 
@@ -564,7 +565,10 @@ def find_extreme_location(
                 c
                 for c in ranking
                 if c["population"] >= effective_min_pop
-                and (not capital_only or c.get("capital"))
+                and (
+                    not capital_only
+                    or (c.get("capital") and is_sovereign(c.get("country")))
+                )
                 and (not country_code or c.get("country") == country_code)
                 and (not continent_codes or c.get("country") in continent_codes)
             ]

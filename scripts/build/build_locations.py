@@ -29,6 +29,7 @@ from climate.datasets.sources.http import download_to
 from climate.geo.country import (
     COUNTRY_CODE_FIELD,
     NATURAL_EARTH_COUNTRIES_FALLBACK_URLS,
+    apply_country_name_overrides,
 )
 from climate.geo.marine import (
     MARINE_SOURCE_NATURAL_EARTH,
@@ -998,7 +999,7 @@ def main() -> None:
     a1path = download_cached(ADMIN1_CODES_TXT, cache_dir)
     a2path = download_cached(ADMIN2_CODES_TXT, cache_dir)
 
-    country_names = parse_country_info(cpath)
+    country_names = apply_country_name_overrides(parse_country_info(cpath))
     admin1_names = parse_admin1_codes(a1path)
     admin2_names = parse_admin2_codes(a2path)
     out_csv = Path(args.out)

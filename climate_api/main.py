@@ -19,6 +19,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from uvicorn.logging import AccessFormatter
 
+from climate.geo.country import apply_country_name_overrides
+
 from .analytics.db import AnalyticsDB, IPBlocklist
 from .analytics.geo import GeoIPCache
 from .cache import Cache, make_redis_client
@@ -397,8 +399,8 @@ def create_app() -> FastAPI:
     country_names: dict[str, str] | None = None
     if settings.country_names_json is not None and settings.country_names_json.exists():
         try:
-            country_names = json.loads(
-                settings.country_names_json.read_text(encoding="utf-8")
+            country_names = apply_country_name_overrides(
+                json.loads(settings.country_names_json.read_text(encoding="utf-8"))
             )
         except Exception as exc:
             uvicorn_logger.warning("Country names JSON failed to load: %s", exc)
