@@ -1264,7 +1264,7 @@ export default function ChatDrawer({
             ? "Research terminal not running."
             : conversationExhausted
               ? "Please try again later."
-              : "Ask about climate data…"
+              : "Ask anything about the climate…"
         }
         value={input}
         onChange={(e) => setInput(e.target.value)}
