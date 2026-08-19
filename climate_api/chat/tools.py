@@ -61,6 +61,20 @@ def _output_unit(spec: dict, target: str) -> str:
     return spec.get("unit", "unknown")
 
 
+def _alt_names_for(label: str, location_index: LocationIndex) -> str:
+    """Alternate names for a precomputed-ranking row, looked up by its label.
+
+    The ranking files store only what ranking needs, so they carry no alternate
+    names; the index-scan path returns them straight off the location record.
+    The chat UI uses them to recognise a city in the answer text under a name
+    other than ours ("Ulaanbaatar" for our "Ulan Bator"), and without them that
+    city gets neither a map pin nor a link. Resolution is a hash lookup, and
+    only the handful of rows actually returned are resolved.
+    """
+    hit = location_index.resolve_by_any_name(label)
+    return hit.alt_names if hit is not None else ""
+
+
 def list_available_metrics(tile_store: TileDataStore) -> dict:
     metrics = []
     for metric_id, spec in tile_store.metrics.items():
@@ -585,6 +599,7 @@ def find_extreme_location(
                 c = top[0]
                 return {
                     "nearest_city": c["name"],
+                    "alt_names": _alt_names_for(c["name"], location_index),
                     "lat": c["lat"],
                     "lon": c["lon"],
                     "value": _convert_temp(
@@ -600,6 +615,7 @@ def find_extreme_location(
                     {
                         "rank": i + 1,
                         "nearest_city": c["name"],
+                        "alt_names": _alt_names_for(c["name"], location_index),
                         "lat": c["lat"],
                         "lon": c["lon"],
                         "value": _convert_temp(

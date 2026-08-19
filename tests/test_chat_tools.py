@@ -6,11 +6,13 @@ import pytest
 
 from climate_api.chat import tools
 from climate_api.chat.tools import (
+    _alt_names_for,
     _convert_temp,
     _is_delta_metric,
     _output_unit,
     _resolve_region_id,
 )
+from climate_api.store.location_index import LocationIndex
 
 
 # ---------------------------------------------------------------------------
@@ -433,3 +435,39 @@ def test_metric_catalogue_states_time_resolution():
     }
     assert entries["t2m_yearly_mean_c"]["resolution"] == "yearly"
     assert entries["t2m_monthly_mean_c"]["resolution"] == "monthly"
+
+
+# ---------------------------------------------------------------------------
+# _alt_names_for
+# ---------------------------------------------------------------------------
+
+
+def _index_with_alt_names(tmp_path):
+    index_csv = tmp_path / "locations.index.csv"
+    index_csv.write_text(
+        "geonameid,label,lat,lon,country_code,population,norm_label,norm_city,city_name,capital,alt_names\n"
+        '1,"Ulan Bator, Mongolia",47.9,106.9,MN,844818,ulan bator mongolia,ulan bator,Ulan Bator,true,"Ulaanbaatar,Oulan-Bator"\n'
+        '2,"Oslo, Norway",59.9,10.8,NO,580000,oslo norway,oslo,Oslo,true,\n',
+        encoding="utf-8",
+    )
+    return LocationIndex(index_csv, min_query_len=2, prefix_len=2)
+
+
+class TestAltNamesFor:
+    """The precomputed ranking carries no alternate names, so the fast path
+    resolves them from the index to match what the index-scan path returns."""
+
+    def test_returns_alt_names_for_a_known_label(self, tmp_path) -> None:
+        index = _index_with_alt_names(tmp_path)
+        assert _alt_names_for("Ulan Bator, Mongolia", index) == (
+            "Ulaanbaatar,Oulan-Bator"
+        )
+
+    def test_returns_empty_string_for_a_city_without_alt_names(self, tmp_path) -> None:
+        index = _index_with_alt_names(tmp_path)
+        assert _alt_names_for("Oslo, Norway", index) == ""
+
+    def test_unresolvable_label_returns_empty_string(self, tmp_path) -> None:
+        """A ranking row the index no longer knows must not raise."""
+        index = _index_with_alt_names(tmp_path)
+        assert _alt_names_for("Atlantis, Nowhere", index) == ""
