@@ -27,7 +27,7 @@ GIT_TAG=""
 SKIP_PULL=0
 SKIP_BACKEND_INSTALL=0
 SKIP_WEB_BUILD=0
-SMOKE_INITIAL_WAIT_S="${SMOKE_INITIAL_WAIT_S:-8}"
+SMOKE_INITIAL_WAIT_S="${SMOKE_INITIAL_WAIT_S:-10}"
 SMOKE_RETRIES="${SMOKE_RETRIES:-3}"
 SMOKE_RETRY_DELAY_S="${SMOKE_RETRY_DELAY_S:-30}"
 
@@ -119,6 +119,7 @@ fi
 systemctl daemon-reload
 systemctl restart climate-backend climate-web
 
+echo "Waiting ${SMOKE_INITIAL_WAIT_S}s for services to come up before smoke checks..."
 sleep "$SMOKE_INITIAL_WAIT_S"
 for attempt in $(seq 1 "$SMOKE_RETRIES"); do
   if "$APP_ROOT/scripts/deploy/smoke_check.sh" --local; then
