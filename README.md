@@ -8,6 +8,7 @@ A registry-driven climate data platform with:
 - shared Python modules for registries, data transforms, and reusable domain utilities
 - a FastAPI backend serving packaged climate metrics and map-ready payloads
 - a Next.js web application for interactive climate data exploration
+- a retrieval-backed chat assistant answering climate questions from the packaged data, with a curated question tree and an agentic tool-calling mode
 - operational automation for validation, benchmarking, runtime management, and deployment tasks
 
 ## Screenshots
@@ -41,6 +42,16 @@ A registry-driven climate data platform with:
     <td align="center">
       <img src="docs/images/alternative_backgrounds.webp" alt="Alternative Backgrounds" height="250" /><br/>
       <em>Alternative Backgrounds</em>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="docs/images/chat_5_cities.webp" alt="Climate Assistant" height="250" /><br/>
+      <em>Climate Assistant</em>
+    </td>
+    <td align="center">
+      <img src="docs/images/chat_warmest_continent.webp" alt="Continental Warming Trends" height="250" /><br/>
+      <em>Continental Warming Trends</em>
     </td>
   </tr>
 </table>
@@ -133,6 +144,15 @@ npm run dev
 - API: `http://localhost:8001`
 - Web: `http://localhost:3000`
 
+## Climate Assistant
+
+The web app includes a chat assistant (beta) that answers climate questions from
+the packaged release data. It is **disabled by default**: set `CHAT_ENABLED=1` in
+the backend environment to activate the `/api/chat` endpoint, which also acts as
+the kill switch. Model-backed answers need a provider key — see
+[`docs/runbooks/chat.md`](docs/runbooks/chat.md) for the fallback chain, keys,
+local Ollama setup, and the production checklist.
+
 ## Data Preparation Overview
 
 If you want to create a release from scratch instead of relying on the pre-packaged `demo` release, follow the runbooks below.
@@ -175,6 +195,7 @@ This repository also includes scripts and configuration to deploy the platform t
 | Rebuild story map coastline overlay                | [`docs/runbooks/story-coastline-overlay.md`](docs/runbooks/story-coastline-overlay.md)         |
 | Build dataset caches, package metrics/maps         | [`docs/runbooks/dataset-cache-and-packaging.md`](docs/runbooks/dataset-cache-and-packaging.md) |
 | Run backend + frontend (with optional Redis cache) | [`docs/runbooks/backend-frontend.md`](docs/runbooks/backend-frontend.md)                       |
+| Set up and operate the climate assistant           | [`docs/runbooks/chat.md`](docs/runbooks/chat.md)                                               |
 | Validate registry/data/tests/smoke checks          | [`docs/runbooks/validation.md`](docs/runbooks/validation.md)                                   |
 | Understand concepts, grids, and acronyms           | [`docs/concepts-and-glossary.md`](docs/concepts-and-glossary.md)                               |
 
