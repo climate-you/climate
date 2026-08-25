@@ -25,7 +25,11 @@ type MapContext = {
   countryCode?: string | null;
 } | null;
 type ModelOverride =
-  "groq_small" | "local" | "groq_primary" | "groq_qwen" | null;
+  | "groq_small"
+  | "local"
+  | "groq_primary"
+  | "groq_qwen"
+  | null;
 type ConversationTurn = {
   role: "user" | "assistant";
   text: string;
@@ -915,7 +919,7 @@ export default function ChatDrawer({
         >
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
-        Research Terminal
+        Climate Assistant
         <span className={styles.betaBadge} title="This feature is in beta">
           Beta
         </span>
@@ -967,7 +971,7 @@ export default function ChatDrawer({
         <div className={styles.emptyState}>
           {chatUnavailable ? (
             <p className={styles.emptyStateError}>
-              Research terminal not running.
+              Climate assistant not running.
             </p>
           ) : groupedQuestions.length > 0 || !questionTree ? (
             <p className={styles.emptyStateHint}>
@@ -1261,7 +1265,7 @@ export default function ChatDrawer({
         rows={1}
         placeholder={
           chatUnavailable
-            ? "Research terminal not running."
+            ? "Climate assistant not running."
             : conversationExhausted
               ? "Please try again later."
               : "Ask anything about the climate…"

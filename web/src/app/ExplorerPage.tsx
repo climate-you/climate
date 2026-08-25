@@ -1096,7 +1096,9 @@ export default function ExplorerPage({
 
   function applyLayerDefaultGraphPage(
     layerOverrides:
-      Record<string, { default_graph_ids: string[] }> | undefined | null,
+      | Record<string, { default_graph_ids: string[] }>
+      | undefined
+      | null,
   ) {
     const firstGraphId =
       layerOverrides?.[activeLayerId]?.default_graph_ids?.[0];
@@ -1115,7 +1117,7 @@ export default function ExplorerPage({
     openPanel = true,
     // Selecting the globe should land on its graphs, but a plain data refresh
     // (e.g. the user flipping °C/°F) must leave the open tab alone — otherwise
-    // toggling the unit throws the reader out of the Research Terminal.
+    // toggling the unit throws the reader out of the Climate Assistant.
     switchToGraphTab = true,
   ) {
     panelAbortControllerRef.current?.abort("superseded");
@@ -2398,11 +2400,11 @@ export default function ExplorerPage({
         type="button"
         // Reopening restores the tab the panel was closed on, so the label has
         // to name that tab rather than always naming the location — otherwise
-        // a panel closed on Research reopens on Research from a tab that
-        // promised the location's graphs.
+        // a panel closed on the assistant reopens on the assistant from a tab
+        // that promised the location's graphs.
         aria-label={
           panelTab === "chat"
-            ? "Open research terminal"
+            ? "Open climate assistant"
             : `Open ${selectedLocation?.label ?? ""} location panel`
         }
         onClick={() => {
@@ -2431,7 +2433,7 @@ export default function ExplorerPage({
           <path d="M15 18L9 12L15 6" />
         </svg>
         <span className={styles.panelOpenTabLabel}>
-          {panelTab === "chat" ? "Research" : (selectedLocation?.label ?? "")}
+          {panelTab === "chat" ? "Assistant" : (selectedLocation?.label ?? "")}
         </span>
       </button>
     </main>
