@@ -78,7 +78,7 @@ export GROQ_API_KEY_FREE=<your-free-key>
 uvicorn climate_api.main:app --reload
 ```
 
-Then in the frontend, visit `http://localhost:3000?feature=chat_bot` to activate the feature flag in your browser. The chat button appears at the bottom-right of the map.
+Then in the frontend, visit `http://localhost:3000`. The chat button appears in the map's top-left control stack.
 
 To use the local Ollama fallback (dev Tier 2):
 
@@ -110,20 +110,13 @@ To see the dev model toggle in the chat UI, append `&debug=on` to the URL.
 
 ## 5. Activating the Feature for Users
 
-Two conditions must both be true for chat to work:
+The chat widget is visible to every visitor — there is no per-user opt-in. The only
+gate is the backend: `CHAT_ENABLED=1` must be set in the backend environment
+(default is `0`). With `CHAT_ENABLED=0` the widget still renders but the chat UI
+shows an error message rather than a response, so the env var is the kill-switch —
+unset it and restart the backend to take chat down for everyone.
 
-1. **Backend**: `CHAT_ENABLED=1` must be set in the backend environment (default is `0`).
-2. **Browser**: the user must opt in via a localStorage feature flag.
-
-The chat widget is hidden by default. Users activate it by visiting the site with `?feature=chat_bot` in the URL:
-
-```
-https://your-domain.com?feature=chat_bot
-```
-
-The flag is written to `localStorage` and the param is stripped from the URL. The widget stays active until `localStorage` is cleared. If the browser flag is set but the backend has `CHAT_ENABLED=0`, the chat UI will show an error message rather than a response.
-
-To deactivate for a specific user, they can clear their browser's localStorage for the site.
+To restrict a specific user's access, use the rate limiter.
 
 ---
 
@@ -170,8 +163,7 @@ After wiping, restart the backend — it will recreate all tables with the curre
 ## 8. Troubleshooting
 
 **Chat button doesn't appear**
-- Confirm the browser has the feature flag set: open DevTools → Application → Local Storage → check for `climate.chatBotEnabled = 1`
-- If missing, revisit the URL with `?feature=chat_bot`
+- The button lives in the map's top-left control stack; it is only rendered on maps that show controls (not on story-page background globes)
 
 **`/api/chat` returns 404**
 - `CHAT_ENABLED` is not set or not set to `1` — check backend env and restart

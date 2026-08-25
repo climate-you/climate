@@ -99,7 +99,6 @@ type Props = {
   backgroundImageUrl?: string;
   onGraphOpen?: () => void;
   onChatOpen?: () => void;
-  chatEnabled?: boolean;
 };
 
 const initialView = {
@@ -399,7 +398,6 @@ export default function MapLibreGlobe({
   backgroundImageUrl,
   onGraphOpen,
   onChatOpen,
-  chatEnabled = false,
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -416,7 +414,6 @@ export default function MapLibreGlobe({
   const layerOptionsRef = useRef(layerOptions);
   const activeLayerIdRef = useRef(activeLayerId);
   const showControlsRef = useRef(showControls);
-  const chatControlInstanceRef = useRef<maplibregl.IControl | null>(null);
   const enablePickRef = useRef(enablePick);
   const showDebugOverlayRef = useRef(showDebugOverlay);
   const debugBboxRef = useRef(debugBbox);
@@ -1144,6 +1141,7 @@ export default function MapLibreGlobe({
       layerControlRef.current = layerControl;
       map.addControl(layerControl, "top-left");
       map.addControl(createGraphControl(), "top-left");
+      map.addControl(makeChatControl(onChatOpenRef), "top-left");
     }
 
     const onResize = () => {
@@ -1205,7 +1203,6 @@ export default function MapLibreGlobe({
       markerRef.current?.remove();
       markerRef.current = null;
       layerControlRef.current = null;
-      chatControlInstanceRef.current = null;
       styleReadyRef.current = false;
       applyGlobeBackgroundRef.current = null;
       onTextureDebugInfoChangeRef.current?.(null);
@@ -1223,23 +1220,6 @@ export default function MapLibreGlobe({
       mapRef.current = null;
     };
   }, []);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    if (chatEnabled) {
-      if (!chatControlInstanceRef.current) {
-        const ctrl = makeChatControl(onChatOpenRef);
-        chatControlInstanceRef.current = ctrl;
-        map.addControl(ctrl, "top-left");
-      }
-    } else {
-      if (chatControlInstanceRef.current) {
-        map.removeControl(chatControlInstanceRef.current);
-        chatControlInstanceRef.current = null;
-      }
-    }
-  }, [chatEnabled]);
 
   useEffect(() => {
     const map = mapRef.current;

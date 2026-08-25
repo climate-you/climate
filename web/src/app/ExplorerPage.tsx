@@ -25,7 +25,6 @@ import SearchOverlay from "@/components/explorer/SearchOverlay";
 import type { AutocompleteItem } from "@/components/explorer/SearchOverlay";
 import SourcesOverlay from "@/components/SourcesOverlay";
 import ChatDrawer from "@/components/chat/ChatDrawer";
-import { useChatFeatureFlag } from "@/hooks/explorer/useChatFeatureFlag";
 import { useDebugTextureSync } from "@/hooks/explorer/useDebugTextureSync";
 import { useOverlayRouteSync } from "@/hooks/explorer/useOverlayRouteSync";
 import { useReleaseResolution } from "@/hooks/explorer/useReleaseResolution";
@@ -483,7 +482,6 @@ export default function ExplorerPage({
     });
   const { debugMode, textureVariantOverride } =
     useDebugTextureSync(debugAllowed);
-  const chatEnabled = useChatFeatureFlag();
   const [textureDebugInfo, setTextureDebugInfo] =
     useState<TextureDebugInfo | null>(null);
   const DEFAULT_API_PORT = 8001;
@@ -1677,7 +1675,6 @@ export default function ExplorerPage({
               }
             }
           }}
-          chatEnabled={chatEnabled}
           onChatOpen={() => {
             if (panelOpen && panelTab === "chat") {
               setPanelOpen(false);
@@ -2317,38 +2314,36 @@ export default function ExplorerPage({
           </>
         ) : null}
 
-        {chatEnabled ? (
-          <ChatDrawer
-            embedded
-            embeddedVisible={panelTab === "chat"}
-            apiBase={apiBase}
-            mapContext={
-              selectedLocation && selectedLocation.geonameid !== 0
-                ? {
-                    lat,
-                    lon,
-                    label: selectedLocation.label,
-                    countryCode: selectedLocation.countryCode,
-                  }
-                : null
-            }
-            hasSeaData={hasSeaData}
-            unit={unit}
-            devMode={debugMode}
-            debugMode={debugMode}
-            onLocations={(locs) => {
-              setChatLocations(locs && locs.length > 0 ? [...locs] : null);
-              setChatFlyToBbox(null);
-            }}
-            onPickLocation={(la, lo) => void handlePick(la, lo, true, false)}
-            onFlyToBbox={(bbox) => {
-              setChatFlyToBbox(bbox);
-              setChatLocations(null);
-            }}
-            onClose={() => setPanelOpen(false)}
-            onSwitchToGraph={() => setPanelTab("graph")}
-          />
-        ) : null}
+        <ChatDrawer
+          embedded
+          embeddedVisible={panelTab === "chat"}
+          apiBase={apiBase}
+          mapContext={
+            selectedLocation && selectedLocation.geonameid !== 0
+              ? {
+                  lat,
+                  lon,
+                  label: selectedLocation.label,
+                  countryCode: selectedLocation.countryCode,
+                }
+              : null
+          }
+          hasSeaData={hasSeaData}
+          unit={unit}
+          devMode={debugMode}
+          debugMode={debugMode}
+          onLocations={(locs) => {
+            setChatLocations(locs && locs.length > 0 ? [...locs] : null);
+            setChatFlyToBbox(null);
+          }}
+          onPickLocation={(la, lo) => void handlePick(la, lo, true, false)}
+          onFlyToBbox={(bbox) => {
+            setChatFlyToBbox(bbox);
+            setChatLocations(null);
+          }}
+          onClose={() => setPanelOpen(false)}
+          onSwitchToGraph={() => setPanelTab("graph")}
+        />
 
         {!panelLoading ? (
           <div className={styles.panelBottomBar}>
