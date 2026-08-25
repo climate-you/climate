@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-15",
+  "version": "2026-08-25",
   "root_ids": [
     "local_temp_trend",
     "local_summer_heat",
@@ -459,7 +459,7 @@
       "question": "How has the sea surface temperature in the Indian Ocean changed?",
       "scope": "global",
       "datasets": ["sea_temperature"],
-      "follow_up_ids": ["sea_temp_global", "sea_temp_all_oceans", "sea_vs_land_warming", "coral_risk_global"],
+      "follow_up_ids": ["sea_temp_mauritius", "sea_temp_global", "sea_temp_all_oceans", "sea_vs_land_warming", "coral_risk_global"],
       "requires_location": false,
       "location_filter": "any",
       "answer": "The sea surface temperature in the Indian Ocean has been increasing over the years, with a mean temperature of **[[17.3°C|63.1°F]]** in 1982 and **[[18.1°C|64.6°F]]** in 2025 — a warming trend of [[0.17°C|0.30°F]] per decade. The Indian Ocean's warming is a major driver of coral bleaching and changing monsoon patterns across the region.",
@@ -470,6 +470,19 @@
         "end_year": 2025,
         "region_ids": ["ocean:indian_ocean"]
       },
+      "status": "active"
+    },
+    "sea_temp_mauritius": {
+      "id": "sea_temp_mauritius",
+      "question": "How has the sea temperature near Mauritius changed?",
+      "scope": "country",
+      "datasets": ["sea_temperature", "coral"],
+      "follow_up_ids": ["coral_risk_local", "sea_temp_indian", "coral_risk_global", "sea_temp_local"],
+      "requires_location": false,
+      "location_filter": "any",
+      "answer": "Sea surface temperature off Mauritius has risen from **[[25.5°C|77.9°F]]** in 1982 to **[[26.5°C|79.7°F]]** in 2025 — a warming trend of **[[0.26°C|0.47°F]] per decade**, faster than the Indian Ocean as a whole. It shows up most clearly in how often the water is unusually warm: about **36 days a year** in the first decade of the record, against roughly **200 days a year** over the last ten. For the reefs that matters more than the average — severe bleaching-risk conditions first appear around the island in 2016, and 2025 was by far the worst year on record, with **53 days** of severe heat stress and a further **47** at moderate risk off the west coast.",
+      "locations": [{"label": "Mauritius", "lat": -20.25, "lon": 57.35}],
+      "chart_spec": {"metric_id": "sst_yearly_mean_c", "start_year": 1982, "end_year": 2025, "show_trend": true},
       "status": "active"
     },
     "sea_temp_all_oceans": {
