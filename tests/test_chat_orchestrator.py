@@ -6,6 +6,11 @@ from types import SimpleNamespace
 import pytest
 
 from climate_api.chat.orchestrator import (
+    _CHARS_PER_TOKEN,
+    _COMPLETION_RESERVE_TOKENS,
+    _CONVERSATION_TOO_LONG_MSG,
+    ChatOrchestrator,
+    ProviderTier,
     _build_chart_payloads,
     _compress_series_for_context,
     _compute_fly_to_bbox,
@@ -15,6 +20,7 @@ from climate_api.chat.orchestrator import (
     _is_quota_exhausted,
     _is_tpm_error,
     _parse_retry_after_s,
+    _estimate_request_tokens,
     _parse_text_tool_calls,
     _strip_internal_fields,
     _supplement_locations_from_answer,
@@ -813,3 +819,174 @@ class TestParseTextToolCalls:
         calls = _parse_text_tool_calls(text)
         assert len(calls) == 1
         assert calls[0]["name"] == "good_tool"
+
+
+# ---------------------------------------------------------------------------
+# _estimate_request_tokens
+# ---------------------------------------------------------------------------
+
+
+class TestEstimateRequestTokens:
+    def test_reserves_room_for_the_completion(self):
+        """An empty message list still costs the schemas plus the reserve."""
+        estimate = _estimate_request_tokens([])
+        assert estimate > _COMPLETION_RESERVE_TOKENS
+
+    def test_leaves_headroom_for_the_observed_overhead(self):
+        """A request billed at 8,115 must estimate over a free key's 8,000 cap.
+
+        Reconstructed from the recorded session: ~6,880 prompt tokens of
+        messages, which Groq reported as 8,115 against its 8,000 ceiling.
+        """
+        prompt_chars = int(6880 * _CHARS_PER_TOKEN)
+        messages = [{"role": "user", "content": "x" * prompt_chars}]
+        assert _estimate_request_tokens(messages) > 8000
+
+    def test_does_not_over_count_an_empty_conversation(self):
+        """The fixed base is ~4,450 tokens; a fresh question must still fit."""
+        assert _estimate_request_tokens([{"role": "user", "content": "Hot or cold"}]) < 8000
+
+    def test_grows_with_message_size(self):
+        small = _estimate_request_tokens([{"role": "user", "content": "hi"}])
+        large = _estimate_request_tokens([{"role": "user", "content": "hi" * 5000}])
+        assert large > small
+
+
+# ---------------------------------------------------------------------------
+# Tier fallback on an oversized request
+# ---------------------------------------------------------------------------
+
+
+def _chunk(content=None, tool_calls=None):
+    delta = SimpleNamespace(content=content, tool_calls=tool_calls)
+    return SimpleNamespace(usage=None, choices=[SimpleNamespace(delta=delta)])
+
+
+def _tool_call_chunk(name, arguments):
+    return _chunk(
+        tool_calls=[
+            SimpleNamespace(
+                index=0,
+                id="call_1",
+                function=SimpleNamespace(name=name, arguments=arguments),
+            )
+        ]
+    )
+
+
+class _ScriptedClient:
+    """Groq-shaped client that replays a scripted response per call."""
+
+    def __init__(self, script):
+        self._script = list(script)
+        self.calls = 0
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+    def _create(self, **kwargs):
+        step = self._script[min(self.calls, len(self._script) - 1)]
+        self.calls += 1
+        if isinstance(step, Exception):
+            raise step
+        return iter(step)
+
+
+def _orchestrator_with(tiers):
+    tile_store = SimpleNamespace(metrics={}, rankings={})
+    return ChatOrchestrator(
+        tiers=tiers,
+        tile_store=tile_store,
+        location_index=SimpleNamespace(),
+        max_steps=3,
+    )
+
+
+def _too_large_error():
+    return Exception(
+        "Request too large for model `openai/gpt-oss-120b` on tokens per "
+        "minute (TPM): Limit 8000, Requested 8115, please reduce your "
+        "message size and try again."
+    )
+
+
+class TestOversizedRequestFallsBackMidStream:
+    """A request over a free key's ceiling should reach the next tier.
+
+    This is the failure seen in production: the first step made a tool call,
+    the tool result pushed the second request over the free key's 8,000 TPM
+    ceiling, and the error surfaced to the user instead of falling through to
+    the paid tier that could serve it.
+    """
+
+    def _run(self, monkeypatch):
+        first = _ScriptedClient(
+            [
+                [_tool_call_chunk("find_extreme_location", '{"metric_id": "t2m"}')],
+                _too_large_error(),
+            ]
+        )
+        second = _ScriptedClient([[_chunk(content="Paris is the warmest.")]])
+        tiers = [
+            ProviderTier(
+                name="free", client=first, model="m", max_request_tokens=None
+            ),
+            ProviderTier(
+                name="paid", client=second, model="m", max_request_tokens=None
+            ),
+        ]
+        orch = _orchestrator_with(tiers)
+        monkeypatch.setattr(
+            orch, "_dispatch", lambda name, args, unit: json.dumps({"results": []})
+        )
+        return list(orch.run(question="Harder", session_id="s1")), first, second
+
+    def test_second_tier_answers(self, monkeypatch):
+        events, _, second = self._run(monkeypatch)
+        assert second.calls == 1
+        done = [e for e in events if e["type"] == "done"]
+        assert done and done[0]["tier"] == "paid"
+
+    def test_frontend_is_reset_before_the_retry(self, monkeypatch):
+        events, _, _ = self._run(monkeypatch)
+        types = [e["type"] for e in events]
+        assert "reset" in types
+        assert types.index("reset") < types.index("done")
+
+    def test_no_error_event_is_surfaced(self, monkeypatch):
+        events, _, _ = self._run(monkeypatch)
+        assert not [e for e in events if e["type"] == "error"]
+
+    def test_rejected_tier_is_recorded(self, monkeypatch):
+        events, _, _ = self._run(monkeypatch)
+        done = [e for e in events if e["type"] == "done"][0]
+        assert done["rejected_tiers"] == ["free"]
+
+
+class TestPreflightSkipsOversizedTier:
+    def test_tier_under_its_ceiling_is_skipped_without_a_round_trip(
+        self, monkeypatch
+    ):
+        """A request the estimate already rejects should not be sent at all."""
+        first = _ScriptedClient([[_chunk(content="never reached")]])
+        second = _ScriptedClient([[_chunk(content="Paris is the warmest.")]])
+        tiers = [
+            ProviderTier(name="free", client=first, model="m", max_request_tokens=10),
+            ProviderTier(
+                name="paid", client=second, model="m", max_request_tokens=None
+            ),
+        ]
+        orch = _orchestrator_with(tiers)
+        events = list(orch.run(question="Harder", session_id="s1"))
+        assert first.calls == 0
+        done = [e for e in events if e["type"] == "done"][0]
+        assert done["tier"] == "paid"
+        assert done["rejected_tiers"] == ["free"]
+
+    def test_all_tiers_too_small_reports_length_not_budget(self):
+        client = _ScriptedClient([[_chunk(content="never reached")]])
+        tiers = [
+            ProviderTier(name="free", client=client, model="m", max_request_tokens=10)
+        ]
+        orch = _orchestrator_with(tiers)
+        events = list(orch.run(question="Harder", session_id="s1"))
+        answers = [e for e in events if e["type"] == "answer"]
+        assert answers and answers[0]["text"] == _CONVERSATION_TOO_LONG_MSG

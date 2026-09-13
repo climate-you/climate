@@ -235,6 +235,11 @@ _DEGRADED_MODEL_NOTICE = (
     "A smaller backup model is being used — answers may be less accurate."
 )
 
+_CONVERSATION_TOO_LONG_MSG = (
+    "This conversation has grown too long for the AI assistant to answer in "
+    "one request. Please start a new chat — the question on its own will work."
+)
+
 _BUDGET_EXHAUSTED_MSG = (
     "The AI assistant's daily budget is exhausted. This project is provided for "
     "free and is self-funded. If you find it useful, please consider supporting "
@@ -247,15 +252,42 @@ _BUDGET_EXHAUSTED_MSG = (
 # ---------------------------------------------------------------------------
 
 
-class _QuotaExhaustedError(Exception):
-    """Raised when a tier's API call hits a daily-token-quota limit."""
+class _TierRejectedError(Exception):
+    """Raised when a tier cannot serve the request and the next one should try.
 
-    def __init__(self, mid_stream: bool = False) -> None:
+    `reason` is "quota" for a daily-token-quota limit and "too_large" when the
+    request exceeds the tier's per-request token ceiling. A request that is too
+    large for a free key's 8,000 TPM ceiling usually fits the paid tier, so both
+    reasons fall through the chain the same way; only the message shown when
+    every tier has refused differs.
+    """
+
+    def __init__(self, mid_stream: bool = False, reason: str = "quota") -> None:
         super().__init__()
         self.mid_stream = mid_stream
+        self.reason = reason
 
+
+# Pre-flight sizing, both figures measured against recorded sessions rather
+# than assumed. The system prompt and tool schemas run to 20,507 characters and
+# were billed as 4,452 prompt tokens, so this content tokenises at ~4.6
+# characters each — the usual chars/4 rule of thumb over-counts it by a fifth,
+# which would push conversations onto the paid tier long before they need it.
+# Groq then bills roughly 1,230 tokens beyond the prompt, covering the
+# completion it has to reserve room for; requests that measured ~6,880 prompt
+# tokens came back reported as 8,115.
+_CHARS_PER_TOKEN = 4.6
+_COMPLETION_RESERVE_TOKENS = 1300
 
 _INTERNAL_FIELDS = {"alt_names"}
+
+
+def _estimate_request_tokens(messages: list[dict]) -> int:
+    """Approximate the tokens a request will be billed, prompt and completion."""
+    messages_chars = sum(len(json.dumps(m)) for m in messages)
+    tools_chars = sum(len(json.dumps(t)) for t in TOOL_SCHEMAS)
+    prompt_tokens = int((messages_chars + tools_chars) / _CHARS_PER_TOKEN)
+    return prompt_tokens + _COMPLETION_RESERVE_TOKENS
 
 
 _MONTHLY_COMPRESS_THRESHOLD = 60  # data points; below this, send raw
@@ -1705,8 +1737,10 @@ class ChatOrchestrator:
         """
         Run the agentic loop for one tier. Yields SSE event dicts.
 
-        Raises _QuotaExhaustedError if the very first API call hits a daily token
-        quota limit (before any events have been yielded for this question).
+        Raises _TierRejectedError when this tier cannot serve the request — a
+        daily token quota limit, or a request over its per-request ceiling —
+        with mid_stream set if events have already been yielded, so the caller
+        can reset the frontend before handing over to the next tier.
         Any other error is yielded as an "error" event and the generator returns.
         """
         system_prompt = _build_system_prompt(
@@ -1742,39 +1776,27 @@ class ChatOrchestrator:
                 last_unique_step = step
                 step_model_ms = 0  # new step — reset accumulator
                 step_usage = {}
-            try:
-                # Pre-flight token estimate: chars / 4 is a standard approximation.
-                # Include tool schemas in the estimate since they count against the limit.
-                if tier.max_request_tokens is not None:
-                    messages_chars = sum(len(json.dumps(m)) for m in messages)
-                    tools_chars = sum(len(json.dumps(t)) for t in TOOL_SCHEMAS)
-                    estimated_tokens = (messages_chars + tools_chars) // 4
-                    if estimated_tokens > tier.max_request_tokens:
-                        if not events_yielded:
-                            raise _QuotaExhaustedError()
-                        # Mid-conversation: can't fall back, surface a clear error
-                        steps_timing.append(
-                            {"step": step, "model_ms": 0, "error": True, **step_usage}
-                        )
-                        total_ms = int((_time.monotonic() - t_start) * 1000)
-                        yield {
-                            "type": "error",
-                            "message": "The conversation has grown too long for this model. Please start a new chat.",
-                            "detail": f"Pre-flight estimate: ~{estimated_tokens:,} tokens exceeds tier limit of {tier.max_request_tokens:,}.",
-                        }
-                        yield {
-                            "type": "done",
-                            "session_id": session_id,
-                            "step_count": step,
-                            "tools_called": tools_called,
-                            "tier": tier.name,
-                            "model": tier.model,
-                            "total_ms": total_ms,
-                            "steps_timing": steps_timing,
-                            "locations": locations,
-                        }
-                        return
+            # Pre-flight size check. This runs at the top of every step, so it
+            # sees the tool results appended by the previous one — the usual
+            # way a request outgrows a free key's TPM ceiling. It sits outside
+            # the try block: the rejection is for the caller's tier loop, not
+            # for the API error handling below.
+            if tier.max_request_tokens is not None:
+                estimated_tokens = _estimate_request_tokens(messages)
+                if estimated_tokens > tier.max_request_tokens:
+                    logger.info(
+                        "Skipping tier %s at step %d: pre-flight estimate "
+                        "~%d tokens exceeds its %d limit.",
+                        tier.name,
+                        step,
+                        estimated_tokens,
+                        tier.max_request_tokens,
+                    )
+                    raise _TierRejectedError(
+                        mid_stream=events_yielded, reason="too_large"
+                    )
 
+            try:
                 model_t0 = _time.monotonic()
                 stream = tier.client.chat.completions.create(
                     model=tier.model,
@@ -1826,13 +1848,17 @@ class ChatOrchestrator:
                 # Always accumulate model latency, even for failed calls
                 step_model_ms += int((_time.monotonic() - model_t0) * 1000)
 
-                # Quota exhaustion → always fall through to the next tier.
-                # Context-too-large → only fall through if no events sent yet
-                # (the request is too big for this tier regardless of retries).
+                # Quota exhaustion and request-too-large both fall through to
+                # the next tier. Neither is fixed by retrying here, and a
+                # request over a free key's ceiling normally fits the paid one;
+                # when events have already been sent the frontend is reset
+                # first so the next tier answers from a clean slate.
                 if _is_quota_exhausted(exc):
-                    raise _QuotaExhaustedError(mid_stream=events_yielded) from exc
-                if not events_yielded and _is_context_too_large(exc):
-                    raise _QuotaExhaustedError() from exc
+                    raise _TierRejectedError(mid_stream=events_yielded) from exc
+                if _is_context_too_large(exc):
+                    raise _TierRejectedError(
+                        mid_stream=events_yielded, reason="too_large"
+                    ) from exc
 
                 error_body = getattr(exc, "body", {}) or {}
                 error_info = error_body.get("error") or {}
@@ -2162,6 +2188,7 @@ class ChatOrchestrator:
             tiers = tiers[idx:]
 
         rejected_tiers: list[str] = []
+        rejection_reasons: list[str] = []
 
         import os as _os
 
@@ -2181,16 +2208,24 @@ class ChatOrchestrator:
                         }
                     yield event
                 return
-            except _QuotaExhaustedError as exc:
+            except _TierRejectedError as exc:
                 if exc.mid_stream:
                     # Some events were already sent to the client — signal the
                     # frontend to reset its display before the next tier begins.
                     yield {"type": "reset"}
                 rejected_tiers.append(tier.name)
+                rejection_reasons.append(exc.reason)
                 continue
 
-        # All tiers quota-exhausted
-        yield {"type": "answer", "text": _BUDGET_EXHAUSTED_MSG}
+        # Every tier refused the request. Size and budget are different
+        # problems for the reader: one is fixed by starting a new chat, the
+        # other only by waiting.
+        exhausted_msg = (
+            _CONVERSATION_TOO_LONG_MSG
+            if rejection_reasons and all(r == "too_large" for r in rejection_reasons)
+            else _BUDGET_EXHAUSTED_MSG
+        )
+        yield {"type": "answer", "text": exhausted_msg}
         yield {
             "type": "done",
             "session_id": session_id,
