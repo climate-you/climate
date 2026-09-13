@@ -1045,6 +1045,27 @@ export default function AdminPage() {
                         {messages.length !== 1 ? "s" : ""}
                       </span>
                       <span>{relativeTime(latest_ts)}</span>
+                      {/* Exports the whole session from the server, not just
+                          the messages on this page — a long session spans
+                          several pages of the list above. */}
+                      <a
+                        href={`${apiBase}/api/admin/chat/session/${encodeURIComponent(
+                          session_id,
+                        )}?format=log`}
+                        download
+                        title="Download the full session as a text log"
+                        style={{
+                          marginLeft: "auto",
+                          padding: "2px 8px",
+                          border: "1px solid #444",
+                          borderRadius: 4,
+                          color: "#9bd",
+                          textDecoration: "none",
+                          fontSize: 11,
+                        }}
+                      >
+                        Export
+                      </a>
                     </div>
                     <div
                       style={{

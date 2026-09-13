@@ -16,12 +16,18 @@ from threading import Lock
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    JSONResponse,
+    PlainTextResponse,
+    StreamingResponse,
+)
 from uvicorn.logging import AccessFormatter
 
 from climate.geo.country import apply_country_name_overrides
 
 from .analytics.db import AnalyticsDB, IPBlocklist
+from .analytics.session_log import format_session_log, session_log_filename
 from .analytics.geo import GeoIPCache
 from .cache import Cache, make_redis_client
 from .config import load_settings
@@ -1089,6 +1095,30 @@ def create_app() -> FastAPI:
             ),
             "stats": analytics_db.get_chat_stats(),
         }
+
+    @app.get("/api/admin/chat/session/{session_id}")
+    def admin_chat_session(session_id: str, format: str = Query("json")):
+        """One session's messages, oldest first.
+
+        `format=log` returns the same content as a downloadable text file, so
+        the admin button and a curl from a terminal produce the same artefact.
+        `session_id` may be the eight-character prefix shown in the UI.
+        """
+        messages = analytics_db.get_chat_session(session_id)
+        if not messages:
+            raise HTTPException(
+                status_code=404, detail=f"No messages for session '{session_id}'."
+            )
+        if format == "log":
+            return PlainTextResponse(
+                format_session_log(messages, session_id=session_id),
+                headers={
+                    "Content-Disposition": (
+                        f'attachment; filename="{session_log_filename(session_id)}"'
+                    )
+                },
+            )
+        return {"session_id": session_id, "messages": messages}
 
     @app.get("/api/admin/chat/bad-answers")
     def admin_chat_bad_answers(limit: int = Query(50, ge=1, le=200)):

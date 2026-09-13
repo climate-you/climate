@@ -732,3 +732,82 @@ def test_typed_entry_points_cap_examples(tmp_path: Path) -> None:
 
 def test_typed_entry_points_empty_db(tmp_path: Path) -> None:
     assert _db(tmp_path).get_typed_question_entry_points() == []
+
+
+# ---------------------------------------------------------------------------
+# get_chat_session
+# ---------------------------------------------------------------------------
+
+
+def test_get_chat_session_returns_only_that_session(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    _record(db, message_id="m1", session_id="sess-a")
+    _record(db, message_id="m2", session_id="sess-b")
+    msgs = db.get_chat_session("sess-a")
+    assert [m["message_id"] for m in msgs] == ["m1"]
+
+
+def _set_ts(db: AnalyticsDB, message_id: str, ts: int) -> None:
+    conn = db._connect()
+    conn.execute("UPDATE chat_messages SET ts=? WHERE message_id=?", (ts, message_id))
+    conn.commit()
+
+
+def test_get_chat_session_is_chronological(tmp_path: Path) -> None:
+    """The export reads oldest first — the opposite of the admin list view."""
+    db = _db(tmp_path)
+    for mid, ts in (("m3", 300), ("m1", 100), ("m2", 200)):
+        _record(db, message_id=mid, session_id="s")
+        _set_ts(db, mid, ts)
+    assert [m["message_id"] for m in db.get_chat_session("s")] == ["m1", "m2", "m3"]
+    # The paginated view still returns newest first.
+    assert db.get_chat_messages()[0]["message_id"] == "m3"
+
+
+def test_get_chat_session_same_second_keeps_insertion_order(tmp_path: Path) -> None:
+    """Timestamps have second resolution, so a fast exchange ties on ts."""
+    db = _db(tmp_path)
+    for mid in ("m1", "m2", "m3"):
+        _record(db, message_id=mid, session_id="s")
+        _set_ts(db, mid, 100)
+    assert [m["message_id"] for m in db.get_chat_session("s")] == ["m1", "m2", "m3"]
+
+
+def test_get_chat_session_matches_a_prefix(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    _record(db, message_id="m1", session_id="7c8ce746-1111-2222")
+    assert [m["message_id"] for m in db.get_chat_session("7c8ce746")] == ["m1"]
+
+
+def test_get_chat_session_prefers_an_exact_match(tmp_path: Path) -> None:
+    """An id that is also the prefix of a longer one returns only itself."""
+    db = _db(tmp_path)
+    _record(db, message_id="short", session_id="abc")
+    _record(db, message_id="long", session_id="abcdef")
+    assert [m["message_id"] for m in db.get_chat_session("abc")] == ["short"]
+
+
+def test_get_chat_session_underscore_is_not_a_wildcard(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    _record(db, message_id="m1", session_id="aXc-session")
+    assert db.get_chat_session("a_c") == []
+
+
+def test_get_chat_session_unknown_id_returns_empty(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    _record(db, message_id="m1", session_id="sess-a")
+    assert db.get_chat_session("nope") == []
+
+
+def test_get_chat_session_empty_id_returns_empty(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    _record(db, message_id="m1", session_id="sess-a")
+    assert db.get_chat_session("") == []
+
+
+def test_get_chat_session_includes_opted_out_messages(tmp_path: Path) -> None:
+    """Export is a transcript view: an opted-out turn still shaped the context."""
+    db = _db(tmp_path)
+    _record(db, message_id="m1", session_id="s", opt_out=True)
+    msgs = db.get_chat_session("s")
+    assert len(msgs) == 1 and msgs[0]["opt_out"] is True

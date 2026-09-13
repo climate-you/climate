@@ -98,6 +98,44 @@ def snap(value: float, resolution: float) -> float:
     return round(value / resolution) * resolution
 
 
+# Full column list for a chat message row, and the mapping back to a dict.
+# Shared by every query that returns whole messages so they cannot drift apart.
+_CHAT_MESSAGE_COLS = (
+    "message_id, session_id, ts, question, answer, step_count, tools_called, "
+    "tool_calls_detail, tier, feedback, feedback_status, total_ms, steps_timing, "
+    "model, rejected_tiers, model_override, error, "
+    "question_id, parent_question_id, question_tree_version, opt_out"
+)
+
+
+def _row_to_chat_message(r: tuple) -> dict:
+    import json as _json
+
+    return {
+        "message_id": r[0],
+        "session_id": r[1],
+        "ts": r[2],
+        "question": r[3],
+        "answer": r[4] or "",
+        "step_count": r[5],
+        "tools_called": _json.loads(r[6]) if r[6] else [],
+        "tool_calls_detail": _json.loads(r[7]) if r[7] else [],
+        "tier": r[8],
+        "feedback": r[9],
+        "feedback_status": r[10],
+        "total_ms": r[11],
+        "steps_timing": _json.loads(r[12]) if r[12] else [],
+        "model": r[13],
+        "rejected_tiers": _json.loads(r[14]) if r[14] else [],
+        "model_override": r[15],
+        "error": r[16],
+        "question_id": r[17],
+        "parent_question_id": r[18],
+        "question_tree_version": r[19],
+        "opt_out": bool(r[20]),
+    }
+
+
 class AnalyticsDB:
     def __init__(self, db_path: Path) -> None:
         self._db_path = db_path
@@ -362,57 +400,61 @@ class AnalyticsDB:
         is still worth reading back when checking how the assistant answered.
         Every aggregate below drops those rows instead.
         """
-        import json as _json
-
         try:
             with self._lock:
                 conn = self._connect()
-                cols = (
-                    "message_id, session_id, ts, question, answer, step_count, tools_called, "
-                    "tool_calls_detail, tier, feedback, feedback_status, total_ms, steps_timing, "
-                    "model, rejected_tiers, model_override, error, "
-                    "question_id, parent_question_id, question_tree_version, opt_out"
-                )
                 if feedback is not None:
                     rows = conn.execute(
-                        f"SELECT {cols} FROM chat_messages"
+                        f"SELECT {_CHAT_MESSAGE_COLS} FROM chat_messages"
                         " WHERE feedback=? ORDER BY ts DESC LIMIT ? OFFSET ?",
                         (feedback, limit, offset),
                     ).fetchall()
                 else:
                     rows = conn.execute(
-                        f"SELECT {cols} FROM chat_messages"
+                        f"SELECT {_CHAT_MESSAGE_COLS} FROM chat_messages"
                         " ORDER BY ts DESC LIMIT ? OFFSET ?",
                         (limit, offset),
                     ).fetchall()
-            return [
-                {
-                    "message_id": r[0],
-                    "session_id": r[1],
-                    "ts": r[2],
-                    "question": r[3],
-                    "answer": r[4] or "",
-                    "step_count": r[5],
-                    "tools_called": _json.loads(r[6]) if r[6] else [],
-                    "tool_calls_detail": _json.loads(r[7]) if r[7] else [],
-                    "tier": r[8],
-                    "feedback": r[9],
-                    "feedback_status": r[10],
-                    "total_ms": r[11],
-                    "steps_timing": _json.loads(r[12]) if r[12] else [],
-                    "model": r[13],
-                    "rejected_tiers": _json.loads(r[14]) if r[14] else [],
-                    "model_override": r[15],
-                    "error": r[16],
-                    "question_id": r[17],
-                    "parent_question_id": r[18],
-                    "question_tree_version": r[19],
-                    "opt_out": bool(r[20]),
-                }
-                for r in rows
-            ]
+            return [_row_to_chat_message(r) for r in rows]
         except Exception:
             logger.exception("Failed to query chat messages")
+            return []
+
+    def get_chat_session(self, session_id: str) -> list[dict]:
+        """Every message of one session, oldest first — the export view.
+
+        `session_id` may be a prefix: the admin UI only shows the first eight
+        characters of an id, so a session read off the screen can be looked up
+        as typed. An exact match wins over a prefix match, and a prefix hitting
+        more than one session returns them all rather than picking one.
+        """
+        if not session_id:
+            return []
+        try:
+            with self._lock:
+                conn = self._connect()
+                rows = conn.execute(
+                    f"SELECT {_CHAT_MESSAGE_COLS} FROM chat_messages"
+                    " WHERE session_id=? ORDER BY ts, rowid",
+                    (session_id,),
+                ).fetchall()
+                if not rows:
+                    # LIKE needs the wildcards escaped, or an id containing _
+                    # would match any character in that position.
+                    escaped = (
+                        session_id.replace("\\", "\\\\")
+                        .replace("%", "\\%")
+                        .replace("_", "\\_")
+                    )
+                    rows = conn.execute(
+                        f"SELECT {_CHAT_MESSAGE_COLS} FROM chat_messages"
+                        " WHERE session_id LIKE ? ESCAPE '\\'"
+                        " ORDER BY session_id, ts, rowid",
+                        (escaped + "%",),
+                    ).fetchall()
+            return [_row_to_chat_message(r) for r in rows]
+        except Exception:
+            logger.exception("Failed to query chat session")
             return []
 
     def get_chat_bad_answers(self, limit: int = 50) -> list[dict]:
