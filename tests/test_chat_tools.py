@@ -6,6 +6,7 @@ import pytest
 
 from climate_api.chat import tools
 from climate_api.chat.tools import (
+    _MIN_RANKABLE_CELLS,
     _alt_names_for,
     _convert_temp,
     _drop_full_span_years,
@@ -537,3 +538,88 @@ class TestDropFullSpanYears:
 
     def test_unsorted_axis_still_finds_the_edges(self):
         assert _drop(_AxisStore([2000, 1979, 2025, 1990]), 1979, 2025) == (None, None)
+
+
+# ---------------------------------------------------------------------------
+# find_extreme_region — minimum region size
+# ---------------------------------------------------------------------------
+
+
+class _AggStore:
+    """Tile store exposing one metric's regional aggregates."""
+
+    def __init__(self, regions):
+        self.metrics = {"m": {"unit": "C", "time_axis": "yearly"}}
+        self.aggregates = {
+            ("m", "mean"): {"time_axis": [2000, 2001], "regions": regions}
+        }
+
+
+def _country(name, cells, value):
+    return {
+        "name": name,
+        "type": "country",
+        "cell_count": cells,
+        "values": [value, value],
+    }
+
+
+_REGIONS = {
+    # A single-cell microstate with the most extreme value in the set.
+    "country:LI": _country("Liechtenstein", 1, 9.9),
+    "country:UA": _country("Ukraine", 1244, 5.0),
+    "country:MD": _country("Moldova", 87, 4.0),
+    # Sitting exactly on the threshold, so it must be kept.
+    "country:AX": _country("Aland Islands", _MIN_RANKABLE_CELLS, 3.0),
+    # One cell below it, so it must be dropped.
+    "country:SM": _country("San Marino", _MIN_RANKABLE_CELLS - 1, 8.8),
+}
+
+
+def _rank(extremum="max", limit=5):
+    return tools.find_extreme_region(
+        metric_id="m",
+        aggregation="mean",
+        extremum=extremum,
+        region_type="country",
+        limit=limit,
+        tile_store=_AggStore(_REGIONS),
+    )
+
+
+class TestFindExtremeRegionMinimumSize:
+    """Regions of a cell or two have no meaningful area-weighted mean.
+
+    Left in the ranking they dominate both ends of it for reasons of grid
+    resolution rather than climate.
+    """
+
+    def test_single_cell_region_is_excluded_despite_extreme_value(self):
+        names = [r["region_name"] for r in _rank()["results"]]
+        assert "Liechtenstein" not in names
+
+    def test_largest_qualifying_region_ranks_first(self):
+        assert _rank()["results"][0]["region_name"] == "Ukraine"
+
+    def test_region_exactly_on_the_threshold_is_kept(self):
+        names = [r["region_name"] for r in _rank()["results"]]
+        assert "Aland Islands" in names
+
+    def test_region_just_below_the_threshold_is_excluded(self):
+        names = [r["region_name"] for r in _rank()["results"]]
+        assert "San Marino" not in names
+
+    def test_filter_applies_to_the_minimum_end_too(self):
+        """A microstate must not win the 'least' ranking either."""
+        names = [r["region_name"] for r in _rank(extremum="min")["results"]]
+        assert "San Marino" not in names and "Liechtenstein" not in names
+
+    def test_missing_cell_count_is_treated_as_too_small(self):
+        """An aggregate predating the field must not silently rank."""
+        regions = {"country:XX": {"name": "Nowhere", "type": "country",
+                                  "values": [7.0, 7.0]}}
+        res = tools.find_extreme_region(
+            metric_id="m", aggregation="mean", extremum="max",
+            region_type="country", limit=5, tile_store=_AggStore(regions),
+        )
+        assert "results" not in res or not res.get("results")

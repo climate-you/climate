@@ -852,6 +852,12 @@ def find_similar_locations(
     }
 
 
+# Smallest region admitted to a ranking, in 0.25-degree grid cells. Five cells
+# is roughly 4,000 km² at mid-latitudes. Of the 233 countries carrying
+# aggregates this excludes 43, none of which place anywhere near the extremes
+# on merit; the smallest that still ranks highly is Åland at seven cells.
+_MIN_RANKABLE_CELLS = 5
+
 _MAJOR_OCEAN_IDS = frozenset(
     {
         "ocean:arctic_ocean",
@@ -927,6 +933,14 @@ def find_extreme_region(
         if region_type and rtype != region_type:
             continue
         if rtype == "ocean" and region_id not in _MAJOR_OCEAN_IDS:
+            continue
+        if region_info.get("cell_count", 0) < _MIN_RANKABLE_CELLS:
+            # A region covering a couple of grid cells has no meaningful
+            # area-weighted mean — its "national average" is one reading. Left
+            # in, microstates dominate the extremes of any ranking for reasons
+            # of resolution rather than climate: Liechtenstein is a single
+            # cell. They stay reachable by name through
+            # get_region_metric_series; they are only barred from the ranking.
             continue
         if continent_codes and rtype == "country":
             # Extract ISO-2 code from "country:FR" → "FR"
