@@ -16,7 +16,10 @@ Workflow:
                    removed.
   5. [confirm]     Print the diff and prompt for confirmation.
   6. [sync]        Rsync changed/new artifacts to the server artifact store and
-                   write per-artifact manifest.json.
+                   write per-artifact manifest.json. Files identical to the
+                   artifact's previous version are hardlinked rather than
+                   copied, so regenerating a ranking no longer republishes a
+                   metric's whole tile set (--no-link-dest to opt out).
   7. [release]     Write the new release manifest + registry on the server.
   8. [LATEST]      Optionally update the LATEST pointer.
 
@@ -141,15 +144,53 @@ def _ssh_chown(
 
 
 def _rsync_dir(
-    src: str, dst: str, *, dry_run: bool = False, chmod: str = "a+rX"
+    src: str,
+    dst: str,
+    *,
+    dry_run: bool = False,
+    chmod: str = "a+rX",
+    link_dest: str | None = None,
 ) -> None:
+    """Rsync a directory, optionally hardlinking what an earlier copy already has.
+
+    `link_dest` names a previous artifact version on the target. Files identical
+    to their counterpart there become hardlinks instead of copies: they cost no
+    disk and cross no wire, while the directory still lists every file and its
+    tree_sha256 still describes the whole artifact. Regenerating a ranking
+    otherwise republishes a metric's entire tile set to change one JSON file.
+
+    Safe against the previous version because rsync writes a changed file to a
+    temporary name and renames it, so a shared inode is never written through.
+    Never combine this with --inplace, which would do exactly that.
+    """
     if not src.endswith("/"):
         src += "/"
     cmd = ["rsync", "-av", "--progress", "--exclude=._*", "--exclude=.DS_Store"]
     if chmod:
         cmd += ["--chmod", chmod]
+    if link_dest:
+        cmd += [f"--link-dest={link_dest}"]
     cmd += [src, dst]
     _run(cmd, dry_run=dry_run)
+
+
+def _link_dest_for(
+    kind_root: str,
+    artifact_id: str,
+    previous_date: str | None,
+    artifact_date: str,
+    *,
+    enabled: bool = True,
+) -> str | None:
+    """Path of the version to hardlink against, or None when there isn't one.
+
+    Nothing to link against for an artifact prod has never seen, and pointing a
+    directory at itself is meaningless when a release is republished under the
+    same date.
+    """
+    if not enabled or not previous_date or previous_date == artifact_date:
+        return None
+    return f"{kind_root}/{artifact_id}/{previous_date}"
 
 
 def _rsync_file(
@@ -405,6 +446,16 @@ def main() -> int:
         ),
     )
     ap.add_argument(
+        "--no-link-dest",
+        action="store_true",
+        help=(
+            "Write a full copy of every synced artifact instead of hardlinking "
+            "the files its previous version already holds. Slower and far "
+            "larger on disk; use only if the artifact store spans filesystems, "
+            "where hardlinks cannot reach the previous version."
+        ),
+    )
+    ap.add_argument(
         "--remote-chown",
         default="climate:climate",
         help=(
@@ -604,6 +655,14 @@ def main() -> int:
     sync_maps = new_maps + changed_maps
     artifact_date = release
     now_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    link_dest_enabled = not args.no_link_dest
+    if sync_metrics or sync_maps:
+        print(
+            "[sync] Hardlinking unchanged files against each artifact's "
+            "previous version."
+            if link_dest_enabled
+            else "[sync] Writing full copies (--no-link-dest)."
+        )
 
     if sync_metrics:
         print(f"[sync] Syncing {len(sync_metrics)} series artifact(s)...")
@@ -612,6 +671,13 @@ def main() -> int:
             print(f"  series/{metric_id}  (grid_ids: {', '.join(grid_ids)})")
             dst_dir = f"{remote_artifacts_root}/series/{metric_id}/{artifact_date}"
             _ssh_mkdir(remote, dst_dir, dry_run=args.dry_run)
+            link_dest = _link_dest_for(
+                f"{remote_artifacts_root}/series",
+                metric_id,
+                prod_series.get(metric_id),
+                artifact_date,
+                enabled=link_dest_enabled,
+            )
             for grid_id in grid_ids:
                 src = str(dev_series_root / grid_id / metric_id)
                 _rsync_dir(
@@ -619,6 +685,7 @@ def main() -> int:
                     _dst(remote, f"{dst_dir}/"),
                     dry_run=args.dry_run,
                     chmod=args.rsync_chmod,
+                    link_dest=link_dest,
                 )
             artifact_manifest = {
                 "artifact_type": "series",
@@ -657,6 +724,13 @@ def main() -> int:
                 _dst(remote, f"{dst_dir}/"),
                 dry_run=args.dry_run,
                 chmod=args.rsync_chmod,
+                link_dest=_link_dest_for(
+                    f"{remote_artifacts_root}/maps",
+                    map_id,
+                    prod_maps.get(map_id),
+                    artifact_date,
+                    enabled=link_dest_enabled,
+                ),
             )
             artifact_manifest = {
                 "artifact_type": "maps",
