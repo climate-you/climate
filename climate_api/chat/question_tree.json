@@ -30,7 +30,7 @@
       "follow_up_ids": ["fastest_warming_continent", "sea_temp_increase", "fastest_warming_city", "hot_days_global", "country_warming_most", "local_vs_global"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "Global mean temperature has been increasing steadily, rising from [[13.9°C|57.0°F]] in 1979 to [[15.0°C|59.0°F]] in 2025 — an increase of [[1.1°C|2.0°F]] over 46 years. The warmest year in the record is **2024**, at [[15.1°C|59.2°F]]. Most of this warming has occurred since the 1990s, and each of the last ten years ranks among the warmest on record.",
+      "answer": "Global mean temperature has been increasing steadily, rising from [[13.94°C|57.09°F]] in 1979 to [[14.96°C|58.93°F]] in 2025 — an increase of [[1.02°C|1.84°F]] over 46 years. The warmest year in the record is **2024**, at [[15.09°C|59.16°F]]. Most of this warming has occurred since the 1990s, and each of the last ten years ranks among the warmest on record.",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_yearly_mean_c",
@@ -48,7 +48,7 @@
       "follow_up_ids": ["june_2026_heatwave", "country_warming_most", "europe_vs_asia", "arctic_amplification", "slowest_warming_continent", "country_in_europe_warming", "local_vs_global"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "The continent that is warming the fastest is **Europe**, with a warming trend of **[[0.51°C|0.92°F]] per decade** — well ahead of North America ([[0.39°C|0.70°F]]) and Asia ([[0.36°C|0.65°F]]). Europe's proximity to the rapidly warming Arctic and shrinking snow cover both contribute to its accelerated warming.",
+      "answer": "The continent that is warming the fastest is **Europe**, with a warming trend of **[[0.50°C|0.90°F]] per decade** — well ahead of North America ([[0.39°C|0.70°F]]) and Asia ([[0.36°C|0.65°F]]). Europe's proximity to the rapidly warming Arctic and shrinking snow cover both contribute to its accelerated warming.",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_trend_1979_2025_c_per_decade",
@@ -101,7 +101,7 @@
       "follow_up_ids": ["top5_warmest_cities", "coldest_capital", "hottest_recorded_capital", "local_rank"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "The hottest capital city in the world is **Khartoum, Sudan**, with a mean annual temperature of **[[29.6°C|85.3°F]]**. Khartoum sits where the Blue and White Nile meet, on the edge of the Sahara — and it is getting hotter, warming at [[0.33°C|0.59°F]] per decade since 1979.",
+      "answer": "The hottest capital city in the world is **Khartoum, Sudan**, with a mean annual temperature of **[[29.7°C|85.5°F]]**. Khartoum sits where the Blue and White Nile meet, on the edge of the Sahara — and it is getting hotter, warming at [[0.33°C|0.59°F]] per decade since 1979.",
       "locations": [{"label": "Khartoum", "lat": 15.55, "lon": 32.53}],
       "chart_spec": {"metric_id": "t2m_yearly_mean_c"},
       "status": "active"
@@ -114,7 +114,7 @@
       "follow_up_ids": ["coldest_nights_capital", "coldest_recorded_city", "hottest_capital", "coldest_major_city"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "The coldest capital of a sovereign country is **Ulaanbaatar, Mongolia**, with a mean annual temperature of just **[[-1.6°C|29.1°F]]** — its high altitude and deep continental location make its winters brutally cold. Two colder settlements govern dependencies rather than countries: **Nuuk** ([[-3.2°C|26.2°F]]), capital of Greenland, an autonomous part of the Kingdom of Denmark, and **Longyearbyen** ([[-6.3°C|20.7°F]]), the administrative center of Norway's Svalbard territory. Even here the climate is changing: Ulaanbaatar has warmed at [[0.38°C|0.68°F]] per decade since 1979.",
+      "answer": "The coldest capital of a sovereign country is **Ulaanbaatar, Mongolia**, with a mean annual temperature of just **[[-1.4°C|29.5°F]]** — its high altitude and deep continental location make its winters brutally cold. Two colder settlements govern dependencies rather than countries: **Nuuk** ([[-2.6°C|27.3°F]]), capital of Greenland, an autonomous part of the Kingdom of Denmark, and **Longyearbyen** ([[-6.7°C|19.9°F]]), the administrative center of Norway's Svalbard territory. Even here the climate is changing: Ulaanbaatar has warmed at [[0.39°C|0.70°F]] per decade since 1979.",
       "locations": [{"label": "Ulaanbaatar", "lat": 47.91, "lon": 106.88}],
       "chart_spec": {"metric_id": "t2m_yearly_mean_c"},
       "status": "active"
@@ -249,7 +249,7 @@
       "follow_up_ids": ["hottest_capital", "coldest_major_city", "top5_warmest_cities", "arctic_amplification", "local_vs_global"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "The city that has warmed the fastest in the last 50 years is **Longyearbyen, Svalbard** (Norway), with a warming trend of **[[1.21°C|2.18°F]] per decade** — roughly [[6°C|10.8°F]] of warming over 50 years. This reflects the Arctic amplification effect, where polar regions warm at two to three times the global average rate.",
+      "answer": "The city that has warmed the fastest in the last 50 years is **Longyearbyen, Svalbard** (Norway), with a warming trend of **[[1.18°C|2.12°F]] per decade** — roughly [[6°C|10.8°F]] of warming over 50 years. This reflects the Arctic amplification effect, where polar regions warm at two to three times the global average rate.",
       "locations": [{"label": "Longyearbyen", "lat": 78.22, "lon": 15.65}],
       "chart_spec": {"metric_id": "t2m_yearly_mean_c", "show_trend": true},
       "status": "active"
@@ -280,7 +280,7 @@
       "follow_up_ids": ["fastest_warming_continent", "global_temp_change", "fastest_warming_city"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "Yes — air temperatures over the Arctic Ocean have risen by **[[0.65°C|1.17°F]] per decade** since 1979, roughly **three times** the global average of [[0.21°C|0.38°F]]. This is known as Arctic amplification: as sea ice and snow melt, dark ocean and land surfaces absorb far more sunlight than the ice they replace, accelerating the warming further.",
+      "answer": "Yes — air temperatures over the Arctic Ocean have risen by **[[0.66°C|1.19°F]] per decade** since 1979, roughly **three times** the global average of [[0.21°C|0.38°F]]. This is known as Arctic amplification: as sea ice and snow melt, dark ocean and land surfaces absorb far more sunlight than the ice they replace, accelerating the warming further.",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_yearly_mean_c",
@@ -349,7 +349,7 @@
       "follow_up_ids": ["fastest_warming_continent", "country_warming_most", "country_in_europe_warming"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "**Europe is warming about 40% faster than Asia**: [[0.51°C|0.92°F]] per decade versus [[0.36°C|0.65°F]] since 1979. Europe's high latitudes, proximity to the fast-warming Arctic, and declining snow cover all push it ahead — it is the fastest-warming continent overall.",
+      "answer": "**Europe is warming about 40% faster than Asia**: [[0.50°C|0.90°F]] per decade versus [[0.36°C|0.65°F]] since 1979. Europe's high latitudes, proximity to the fast-warming Arctic, and declining snow cover all push it ahead — it is the fastest-warming continent overall.",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_trend_1979_2025_c_per_decade",
@@ -365,7 +365,7 @@
       "follow_up_ids": ["fastest_warming_continent", "europe_vs_asia", "top5_warming_countries"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "**Ukraine** has warmed the most in Europe — and in the world — with a trend of **[[0.65°C|1.17°F]] per decade** since 1979. Its neighbour **Moldova** ([[0.64°C|1.15°F]]) and the Alpine countries **Liechtenstein** and **Austria** (both [[0.61°C|1.10°F]]) are close behind: continental interiors and mountain regions losing snow cover warm the fastest.",
+      "answer": "**Ukraine** has warmed the most in Europe — and in the world — with a trend of **[[0.65°C|1.17°F]] per decade** since 1979. Its neighbour **Moldova** ([[0.64°C|1.15°F]]) and Alpine **Austria** ([[0.61°C|1.10°F]]) are close behind: continental interiors and mountain regions losing snow cover warm the fastest.",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_yearly_mean_c",
@@ -383,7 +383,7 @@
       "follow_up_ids": ["country_warming_most", "europe_vs_asia", "fastest_warming_continent"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "The five countries with the strongest warming trends since 1979 are:\n\n1. **Ukraine** — [[0.65°C|1.17°F]] per decade\n2. **Moldova** — [[0.64°C|1.15°F]] per decade\n3. **Iran** — [[0.63°C|1.13°F]] per decade\n4. **Syria** — [[0.61°C|1.10°F]] per decade\n5. **Liechtenstein** — [[0.61°C|1.10°F]] per decade\n\nAll are continental or mountain regions far from the moderating influence of the open ocean.",
+      "answer": "The five countries with the strongest warming trends since 1979 are:\n\n1. **Ukraine** — [[0.65°C|1.17°F]] per decade\n2. **Moldova** — [[0.64°C|1.15°F]] per decade\n3. **Iran** — [[0.63°C|1.13°F]] per decade\n4. **Austria** — [[0.61°C|1.10°F]] per decade\n5. **Syria** — [[0.61°C|1.10°F]] per decade\n\nAll are continental or mountain regions far from the moderating influence of the open ocean.",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_yearly_mean_c",
@@ -401,7 +401,7 @@
       "follow_up_ids": ["fastest_warming_continent", "global_temp_change", "sea_vs_land_warming"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "**Oceania** has warmed the least of all continents, at **[[0.14°C|0.25°F]] per decade** since 1979, followed by **Antarctica** ([[0.15°C|0.28°F]]). Oceania is dominated by the vast Pacific and Southern Oceans, whose enormous heat capacity moderates temperature change — the mirror image of fast-warming continental Europe ([[0.51°C|0.92°F]]).",
+      "answer": "**Oceania** has warmed the least of all continents, at **[[0.14°C|0.25°F]] per decade** since 1979, followed by **Antarctica** ([[0.15°C|0.28°F]]). Oceania is dominated by the vast Pacific and Southern Oceans, whose enormous heat capacity moderates temperature change — the mirror image of fast-warming continental Europe ([[0.50°C|0.90°F]]).",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_trend_1979_2025_c_per_decade",
@@ -417,13 +417,13 @@
       "follow_up_ids": ["hottest_capital", "coldest_major_city", "fastest_warming_city", "local_rank"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "The top 5 warmest large cities in the world are:\n\n1. **Khartoum, Sudan** — [[29.6°C|85.3°F]]\n2. **Niamey, Niger** — [[29.4°C|84.9°F]]\n3. **Makkah, Saudi Arabia** — [[29.3°C|84.7°F]]\n4. **Omdurman, Sudan** — [[29.2°C|84.6°F]]\n5. **Sokoto, Nigeria** — [[29.2°C|84.6°F]]\n\nAll five sit in the Sahel–Sahara belt or the Arabian Peninsula, where clear skies and dry air keep temperatures high all year round.",
+      "answer": "The top 5 warmest large cities in the world are:\n\n1. **Khartoum, Sudan** — [[29.7°C|85.5°F]]\n2. **Niamey, Niger** — [[29.4°C|84.9°F]]\n3. **Makkah, Saudi Arabia** — [[29.3°C|84.7°F]]\n4. **Omdurman, Sudan** — [[29.3°C|84.7°F]]\n5. **Madurai, India** — [[29.1°C|84.4°F]]\n\nFour sit in the Sahel–Sahara belt or the Arabian Peninsula, where clear skies and dry air keep temperatures high all year round; Madurai lies in the tropical plains of southern India.",
       "locations": [
         {"label": "Khartoum", "lat": 15.55, "lon": 32.53},
         {"label": "Niamey", "lat": 13.51, "lon": 2.11},
         {"label": "Makkah", "lat": 21.39, "lon": 39.86},
         {"label": "Omdurman", "lat": 15.65, "lon": 32.48},
-        {"label": "Sokoto", "lat": 13.06, "lon": 5.24}
+        {"label": "Madurai", "lat": 9.92, "lon": 78.12}
       ],
       "chart_spec": {"metric_id": "t2m_yearly_mean_c"},
       "status": "active"
@@ -436,7 +436,7 @@
       "follow_up_ids": ["coldest_capital", "coldest_recorded_city", "top5_warmest_cities", "arctic_amplification"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "Among cities of over a million people, the coldest is **Krasnoyarsk, Russia**, with a mean annual temperature of **[[1.0°C|33.8°F]]**. This Siberian city on the Yenisei River endures long, severe winters — yet like the rest of Siberia it is warming quickly, at [[0.34°C|0.61°F]] per decade since 1979.",
+      "answer": "Among cities of over a million people, the coldest is **Krasnoyarsk, Russia**, with a mean annual temperature of **[[1.0°C|33.8°F]]**. This Siberian city on the Yenisei River endures long, severe winters — yet like the rest of Siberia it is warming quickly, at [[0.35°C|0.63°F]] per decade since 1979.",
       "locations": [{"label": "Krasnoyarsk", "lat": 56.02, "lon": 92.87}],
       "chart_spec": {"metric_id": "t2m_yearly_mean_c"},
       "status": "active"
