@@ -75,6 +75,33 @@ def _alt_names_for(label: str, location_index: LocationIndex) -> str:
     return hit.alt_names if hit is not None else ""
 
 
+def _drop_full_span_years(
+    metric_id: str,
+    tile_store: TileDataStore,
+    start_year: int | None,
+    end_year: int | None,
+) -> tuple[int | None, int | None]:
+    """Drop year bounds that select the metric's entire record.
+
+    A bound at or beyond the edge of the data excludes nothing, so returning
+    None for it lets callers treat the query as unbounded. Bounds that do
+    narrow the record are returned untouched.
+    """
+    if start_year is None and end_year is None:
+        return start_year, end_year
+    axis = tile_store.axis(metric_id)
+    if not axis:
+        return start_year, end_year
+    # Yearly axes hold ints, monthly ones "YYYY-MM" strings.
+    years = [int(str(v)[:4]) for v in axis]
+    first, last = min(years), max(years)
+    if start_year is not None and start_year <= first:
+        start_year = None
+    if end_year is not None and end_year >= last:
+        end_year = None
+    return start_year, end_year
+
+
 def list_available_metrics(tile_store: TileDataStore) -> dict:
     metrics = []
     for metric_id, spec in tile_store.metrics.items():
@@ -569,6 +596,15 @@ def find_extreme_location(
                     "North America, Oceania, South America."
                 )
             }
+
+    # A year range covering the metric's whole record selects every point, so
+    # it is the same query as passing no range at all. Models routinely spell
+    # the full span out ("1979 to 2025") rather than omitting it, and without
+    # this that redundant filter would skip the precomputed ranking below and
+    # fall through to a global per-city scan taking tens of seconds.
+    start_year, end_year = _drop_full_span_years(
+        metric_id, tile_store, start_year, end_year
+    )
 
     # Fast-path: use precomputed ranking if available and no time-range/month filters.
     if start_year is None and end_year is None and month_filter is None:

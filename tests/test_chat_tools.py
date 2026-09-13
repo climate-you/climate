@@ -8,6 +8,7 @@ from climate_api.chat import tools
 from climate_api.chat.tools import (
     _alt_names_for,
     _convert_temp,
+    _drop_full_span_years,
     _is_delta_metric,
     _output_unit,
     _resolve_region_id,
@@ -471,3 +472,68 @@ class TestAltNamesFor:
         """A ranking row the index no longer knows must not raise."""
         index = _index_with_alt_names(tmp_path)
         assert _alt_names_for("Atlantis, Nowhere", index) == ""
+
+
+# ---------------------------------------------------------------------------
+# _drop_full_span_years
+# ---------------------------------------------------------------------------
+
+
+class _AxisStore:
+    """Minimal tile store exposing just the time axis of one metric."""
+
+    def __init__(self, axis):
+        self._axis = axis
+
+    def axis(self, metric_id):
+        return self._axis
+
+
+_YEARLY = _AxisStore(list(range(1979, 2026)))
+_MONTHLY = _AxisStore([f"{y}-{m:02d}" for y in range(1979, 2027) for m in range(1, 13)])
+
+
+def _drop(store, start, end):
+    return _drop_full_span_years("m", store, start, end)
+
+
+class TestDropFullSpanYears:
+    """A range covering the whole record is the same query as no range.
+
+    Leaving it in place would skip the precomputed ranking and fall through to
+    a global per-city scan — the 36-second call this guards against.
+    """
+
+    def test_exact_full_span_is_dropped(self):
+        assert _drop(_YEARLY, 1979, 2025) == (None, None)
+
+    def test_range_wider_than_the_record_is_dropped(self):
+        assert _drop(_YEARLY, 1900, 2100) == (None, None)
+
+    def test_narrower_range_is_kept(self):
+        assert _drop(_YEARLY, 2000, 2020) == (2000, 2020)
+
+    def test_only_the_redundant_half_is_dropped(self):
+        assert _drop(_YEARLY, 1979, 2010) == (None, 2010)
+        assert _drop(_YEARLY, 2000, 2025) == (2000, None)
+
+    def test_single_year_inside_the_record_is_kept(self):
+        assert _drop(_YEARLY, 2000, 2000) == (2000, 2000)
+
+    def test_last_year_alone_is_not_treated_as_the_full_span(self):
+        """end_year=2025 is redundant, but start_year=2025 still narrows."""
+        assert _drop(_YEARLY, 2025, 2025) == (2025, None)
+
+    def test_no_bounds_passed_through(self):
+        assert _drop(_YEARLY, None, None) == (None, None)
+
+    def test_monthly_axis_years_parsed_from_the_string(self):
+        assert _drop(_MONTHLY, 1979, 2026) == (None, None)
+        assert _drop(_MONTHLY, 2000, 2020) == (2000, 2020)
+
+    def test_empty_axis_leaves_the_bounds_alone(self):
+        """Without an axis there is nothing to compare against — don't guess."""
+        assert _drop(_AxisStore([]), 1979, 2025) == (1979, 2025)
+
+    def test_unsorted_axis_still_finds_the_edges(self):
+        assert _drop(_AxisStore([2000, 1979, 2025, 1990]), 1979, 2025) == (None, None)
