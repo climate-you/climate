@@ -42,6 +42,12 @@ Permissions:
   Note --rsync-chmod is unreliable: macOS ships openrsync, which accepts
   --chmod but silently ignores it. Remote modes therefore come from umask,
   setgid inheritance and the chown above, not from rsync.
+
+  Artifact directories go further and preserve no permissions at all. rsync
+  will only hardlink a file it would give the same attributes as the link
+  target, and a developer machine's 0644 never matches the store's 0664, so
+  preserving the local mode silently turns hardlinking off and republishes
+  every tile. See _rsync_dir.
 """
 
 from __future__ import annotations
@@ -148,7 +154,7 @@ def _rsync_dir(
     dst: str,
     *,
     dry_run: bool = False,
-    chmod: str = "a+rX",
+    chmod: str = "",
     link_dest: str | None = None,
 ) -> None:
     """Rsync a directory, optionally hardlinking what an earlier copy already has.
@@ -159,6 +165,19 @@ def _rsync_dir(
     tree_sha256 still describes the whole artifact. Regenerating a ranking
     otherwise republishes a metric's entire tile set to change one JSON file.
 
+    Permissions and ownership are deliberately not preserved. rsync can only
+    hardlink a file it would give the same attributes as the candidate, and the
+    two sides disagree: a developer machine writes 0644 under umask 022 while
+    the artifact store holds 0664 from the server's umask 002 and setgid
+    directories. Preserving the local mode makes every file look different and
+    silently defeats link_dest. Dropping it lets the modes come from the
+    server's umask and the chown that follows each sync, which is what the
+    store wants anyway.
+
+    `chmod` therefore defaults to empty and should stay that way: --chmod
+    implies --perms, so setting it re-enables the comparison and turns
+    hardlinking off again.
+
     Safe against the previous version because rsync writes a changed file to a
     temporary name and renames it, so a shared inode is never written through.
     Never combine this with --inplace, which would do exactly that.
@@ -168,6 +187,8 @@ def _rsync_dir(
     cmd = ["rsync", "-av", "--progress", "--exclude=._*", "--exclude=.DS_Store"]
     if chmod:
         cmd += ["--chmod", chmod]
+    else:
+        cmd += ["--no-perms", "--no-owner", "--no-group"]
     if link_dest:
         cmd += [f"--link-dest={link_dest}"]
     cmd += [src, dst]
@@ -441,8 +462,11 @@ def main() -> int:
         "--rsync-chmod",
         default="a+rX",
         help=(
-            "chmod spec for rsync transfers (default: 'a+rX', world-readable). "
-            "Set to '' to disable."
+            "chmod spec for the release directory's own files -- registry, aux "
+            "and manifests (default: 'a+rX', world-readable). Set to '' to "
+            "disable. Artifact directories ignore this: they take their modes "
+            "from the server's umask so that unchanged files can be "
+            "hardlinked, which preserving a local mode would prevent."
         ),
     )
     ap.add_argument(
@@ -684,7 +708,6 @@ def main() -> int:
                     src,
                     _dst(remote, f"{dst_dir}/"),
                     dry_run=args.dry_run,
-                    chmod=args.rsync_chmod,
                     link_dest=link_dest,
                 )
             artifact_manifest = {
@@ -723,7 +746,6 @@ def main() -> int:
                 src,
                 _dst(remote, f"{dst_dir}/"),
                 dry_run=args.dry_run,
-                chmod=args.rsync_chmod,
                 link_dest=_link_dest_for(
                     f"{remote_artifacts_root}/maps",
                     map_id,
