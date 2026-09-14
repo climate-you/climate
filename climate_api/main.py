@@ -788,6 +788,8 @@ def create_app() -> FastAPI:
                 lon=h.lon,
                 country_code=h.country_code,
                 population=h.population,
+                kind=h.kind,
+                bbox=h.bbox,
             )
             for h in hits
         ]
@@ -820,6 +822,8 @@ def create_app() -> FastAPI:
                 lon=hit.lon,
                 country_code=hit.country_code,
                 population=hit.population,
+                kind=hit.kind,
+                bbox=hit.bbox,
             )
 
         return LocationResolveResponse(

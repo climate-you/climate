@@ -428,6 +428,11 @@ export default function ExplorerPage({
   const [chatFlyToBbox, setChatFlyToBbox] = useState<
     [number, number, number, number] | null
   >(null);
+  // Bounds of the currently selected area (country, sea or lake); null while a
+  // city or a map click is selected, which the map frames as a point instead.
+  const [focusBbox, setFocusBbox] = useState<
+    [number, number, number, number] | null
+  >(null);
   const [selectedLocation, setSelectedLocation] =
     useState<SelectedLocationMeta | null>({
       geonameid: 0,
@@ -1135,6 +1140,7 @@ export default function ExplorerPage({
     );
     setChatLocations(null);
     setChatFlyToBbox(null);
+    setFocusBbox(null);
     setPicked(null);
     setSelectedGeonameidForPanel(null);
     setSelectedLocation({
@@ -1204,6 +1210,9 @@ export default function ExplorerPage({
     setPicked({ lat: item.lat, lon: item.lon });
     setChatLocations(null);
     setChatFlyToBbox(null);
+    // Countries, seas and lakes carry a bounding box: frame the whole area
+    // rather than zooming in on its representative point.
+    setFocusBbox(item.bbox ?? null);
     setSelectedGeonameidForPanel(item.geonameid);
     setSelectedLocation({
       geonameid: item.geonameid,
@@ -1229,6 +1238,7 @@ export default function ExplorerPage({
       setChatLocations(null);
       setChatFlyToBbox(null);
     }
+    setFocusBbox(null);
     setSelectedGeonameidForPanel(null);
 
     // When the panel is closed, wait up to PANEL_OPEN_AWAIT_MS for the API so
@@ -1637,6 +1647,7 @@ export default function ExplorerPage({
         <MapLibreGlobe
           panelOpen={panelOpen}
           focusLocation={picked}
+          focusBbox={focusBbox}
           showDebugOverlay={debugMode}
           debugBbox={
             debugMode ? (resp?.location.panel_valid_bbox ?? null) : null

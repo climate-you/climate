@@ -5,9 +5,19 @@ from pathlib import Path
 import csv
 import unicodedata
 import re
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 
 from climate_api.store.sovereignty import is_sovereign
+
+# Kinds of index entry, mirroring the `kind` column written by
+# scripts/build/build_locations.py. Everything that is not a city is an area
+# and carries a bounding box.
+KIND_CITY = "city"
+
+# Autocomplete match ranks, best first. See `LocationIndex._match_rank`.
+_RANK_AREA_NAMED = 0
+_RANK_AREA_PARTIAL = 1
+_RANK_DEFAULT = 2
 
 
 @dataclass(frozen=True)
@@ -20,6 +30,24 @@ class LocationHit:
     population: int
     capital: bool = False
     alt_names: str = ""
+    kind: str = KIND_CITY
+    # (west, south, east, north) for area entries; None for cities. `east` may
+    # exceed 180 for a box that straddles the antimeridian.
+    bbox: Optional[Tuple[float, float, float, float]] = None
+
+
+def _parse_bbox(raw: Optional[str]) -> Optional[Tuple[float, float, float, float]]:
+    """Parse a "west,south,east,north" index cell; empty for city entries."""
+    if not raw:
+        return None
+    parts = raw.split(",")
+    if len(parts) != 4:
+        return None
+    try:
+        west, south, east, north = (float(p) for p in parts)
+    except ValueError:
+        return None
+    return (west, south, east, north)
 
 
 def _norm(s: str) -> str:
@@ -54,6 +82,8 @@ class LocationIndex:
         self._populations: List[int] = []
         self._capitals: List[bool] = []
         self._alt_names: List[str] = []
+        self._kinds: List[str] = []
+        self._bboxes: List[Optional[Tuple[float, float, float, float]]] = []
         self._by_id: Dict[int, int] = {}
         self._prefix_map: Dict[str, List[int]] = {}
         self._name_to_idx: Dict[str, int] = {}
@@ -82,6 +112,8 @@ class LocationIndex:
                 norm_label = row.get("norm_label") or _norm(label)
                 norm_city = row.get("norm_city") or _norm(row.get("city_name") or "")
                 alt_names = (row.get("alt_names") or "").strip()
+                kind = (row.get("kind") or "").strip().lower() or KIND_CITY
+                bbox = _parse_bbox(row.get("bbox"))
 
                 i = len(self._labels)
                 self._labels.append(label)
@@ -94,6 +126,8 @@ class LocationIndex:
                 self._populations.append(pop)
                 self._capitals.append(capital)
                 self._alt_names.append(alt_names)
+                self._kinds.append(kind)
+                self._bboxes.append(bbox)
 
                 if geonameid:
                     self._by_id[geonameid] = i
@@ -111,7 +145,9 @@ class LocationIndex:
                     if existing is None:
                         self._name_to_idx[norm_name] = i
                         continue
-                    if pop > self._populations[existing]:
+                    if self._name_owner_rank(kind, pop) < self._name_owner_rank(
+                        self._kinds[existing], self._populations[existing]
+                    ):
                         self._name_to_idx[norm_name] = i
                     if existing == i:
                         continue
@@ -121,6 +157,17 @@ class LocationIndex:
                         bucket = self._name_collisions[norm_name] = [existing]
                     if i not in bucket:
                         bucket.append(i)
+
+    @staticmethod
+    def _name_owner_rank(kind: str, population: int) -> tuple[int, int]:
+        """
+        Ordering for which entry owns a name outright — lower wins.
+
+        A city always beats an area of the same name, so that resolving
+        "Mexico" keeps landing on Mexico City rather than jumping to the
+        country's label point.
+        """
+        return (0 if kind == KIND_CITY else 1, -population)
 
     def _add_prefixes(self, i: int, s: str) -> None:
         if not s:
@@ -142,7 +189,35 @@ class LocationIndex:
             population=self._populations[i],
             capital=self._capitals[i],
             alt_names=self._alt_names[i] if i < len(self._alt_names) else "",
+            kind=self._kinds[i] if i < len(self._kinds) else KIND_CITY,
+            bbox=self._bboxes[i] if i < len(self._bboxes) else None,
         )
+
+    def _match_rank(self, i: int, q: str) -> int:
+        """
+        How well entry `i` answers query `q` — lower is better.
+
+        Population alone would bury every country, sea and lake, since they
+        carry no population of their own that is comparable to a city's: the
+        North Sea would rank below the Long Island village of the same name.
+        Naming an area outright, or typing enough words to be clearly after one,
+        promotes it. Only areas are promoted — cities are left to sort on
+        population as they always have, so "par" still means Paris and not the
+        Cornish village of Par that the query happens to name exactly.
+        """
+        if self._kinds[i] == KIND_CITY:
+            return _RANK_DEFAULT
+        norm_label = self._norm_labels[i]
+        norm_city = self._norm_cities[i]
+        if q == norm_label or q == norm_city:
+            return _RANK_AREA_NAMED
+        if " " in q and (norm_label.startswith(q) or norm_city.startswith(q)):
+            return _RANK_AREA_PARTIAL
+        return _RANK_DEFAULT
+
+    def _sort_population(self, i: int) -> int:
+        """Population for ranking: an area's own population is not comparable."""
+        return self._populations[i] if self._kinds[i] == KIND_CITY else 0
 
     def autocomplete(self, query: str, *, limit: int = 10) -> List[LocationHit]:
         q = _norm(query)
@@ -163,7 +238,13 @@ class LocationIndex:
                 seen.add(i)
                 hits.append(i)
 
-        hits.sort(key=lambda i: (-self._populations[i], self._labels[i]))
+        hits.sort(
+            key=lambda i: (
+                self._match_rank(i, q),
+                -self._sort_population(i),
+                self._labels[i],
+            )
+        )
         return [self._hit(i) for i in hits[:limit]]
 
     def resolve_by_id(self, geonameid: int) -> Optional[LocationHit]:
@@ -197,9 +278,10 @@ class LocationIndex:
     def resolve_all_by_any_name(self, name: str) -> List[LocationHit]:
         """Every place matching `name` exactly (label, city name, or alt name).
 
-        Sorted by descending population. Unlike `resolve_by_any_name`, this
-        keeps the less-populous homonyms so callers can disambiguate them by
-        country — "Cologne" matches both Köln (DE) and Cologne (IT).
+        Cities first, then by descending population. Unlike
+        `resolve_by_any_name`, this keeps the less-populous homonyms so callers
+        can disambiguate them by country — "Cologne" matches both Köln (DE) and
+        Cologne (IT).
         """
         q = _norm(name)
         if not q or len(q) < self.min_query_len:
@@ -210,14 +292,18 @@ class LocationIndex:
             return [self._hit(single)] if single is not None else []
         return sorted(
             (self._hit(i) for i in idxs),
-            key=lambda h: (-h.population, h.label),
+            key=lambda h: self._name_owner_rank(h.kind, h.population) + (h.label,),
         )
 
     def iter_all(
         self, *, min_population: int = 0, capitals_only: bool = False
     ) -> List[LocationHit]:
         """
-        Return all locations matching the given filters, sorted by population descending.
+        Return all cities matching the given filters, sorted by population descending.
+
+        Cities only: callers rank populated places against each other, and the
+        index also holds countries, seas and lakes, whose populations are either
+        absent or count a whole nation.
 
         `capitals_only` keeps capitals of sovereign states only. The stored
         capital flag comes from the GeoNames PPLC feature code, which also
@@ -226,6 +312,8 @@ class LocationIndex:
         """
         result = []
         for i in range(len(self._labels)):
+            if self._kinds[i] != KIND_CITY:
+                continue
             if min_population > 0 and self._populations[i] < min_population:
                 continue
             if capitals_only and not (

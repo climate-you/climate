@@ -38,8 +38,20 @@
 }
 
 .suggestionItem {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   padding: 8px 10px;
   cursor: pointer;
+}
+
+.suggestionKind {
+  flex: none;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.5;
 }
 
 .suggestionItemActive {

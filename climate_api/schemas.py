@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pydantic import BaseModel
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class SeriesPayload(BaseModel):
@@ -196,6 +196,11 @@ class LocationAutocompleteItem(BaseModel):
     lon: float
     country_code: str
     population: int
+    # "city", or an area kind ("country", "marine", "lake"). Area entries carry
+    # a (west, south, east, north) box the map fits on select; east may exceed
+    # 180 where the box straddles the antimeridian.
+    kind: str = "city"
+    bbox: Optional[Tuple[float, float, float, float]] = None
 
 
 class LocationAutocompleteResponse(BaseModel):

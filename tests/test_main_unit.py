@@ -138,6 +138,8 @@ def test_create_app_routes_with_mocked_dependencies(
                     lon=20.0,
                     country_code="US",
                     population=1000,
+                    kind="city",
+                    bbox=None,
                 )
             ]
 
@@ -150,6 +152,8 @@ def test_create_app_routes_with_mocked_dependencies(
                     lon=20.0,
                     country_code="US",
                     population=1000,
+                    kind="city",
+                    bbox=None,
                 )
             return None
 

@@ -66,6 +66,11 @@ export type TextureVariantOverride = "auto" | "mobile" | "full";
 type Props = {
   panelOpen: boolean;
   focusLocation: LngLat | null;
+  /**
+   * Bounds to frame instead of zooming in on `focusLocation`, used when the
+   * selection is an area — a country, sea or lake — rather than a point.
+   */
+  focusBbox?: [number, number, number, number] | null;
   layerOptions: MapLayerOption[];
   activeLayerId: string | null;
   onLayerChange: (layerId: string) => void;
@@ -373,9 +378,31 @@ function makeChatControl(
   };
 }
 
+/**
+ * Camera that frames a [west, south, east, north] box.
+ *
+ * `east` may exceed 180 for a box straddling the antimeridian, which keeps the
+ * centre and span arithmetic below correct; MapLibre wraps the longitude.
+ */
+function bboxCameraTarget(bbox: [number, number, number, number]): {
+  center: [number, number];
+  zoom: number;
+} {
+  const [west, south, east, north] = bbox;
+  const span = Math.max(east - west, north - south);
+  return {
+    center: [(west + east) / 2, (south + north) / 2],
+    zoom: Math.max(
+      1,
+      Math.min(5, Math.floor(Math.log2(360 / Math.max(span, 1)))),
+    ),
+  };
+}
+
 export default function MapLibreGlobe({
   panelOpen,
   focusLocation,
+  focusBbox = null,
   layerOptions,
   activeLayerId,
   onLayerChange,
@@ -1444,9 +1471,14 @@ export default function MapLibreGlobe({
       markerRef.current.setLngLat([lon, lat]);
     }
 
+    // An area selection (a country, sea or lake) frames its whole extent; the
+    // marker still sits on the representative point the panel reads from.
+    // `focusBbox` is set in the same render as `focusLocation`, so reading it
+    // here without listing it as a dependency is safe.
+    const areaTarget = focusBbox ? bboxCameraTarget(focusBbox) : null;
     map.flyTo({
-      center: [lon, lat],
-      zoom: focusZoomTarget(map),
+      center: areaTarget?.center ?? [lon, lat],
+      zoom: areaTarget?.zoom ?? focusZoomTarget(map),
       pitch: 0,
       bearing: 0,
       padding: panelPaddingForViewport(map, true),
@@ -1667,17 +1699,10 @@ export default function MapLibreGlobe({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !chatFlyToBbox) return;
-    const [west, south, east, north] = chatFlyToBbox;
     const panelPad = panelPaddingForViewport(map, panelOpenRef.current);
-    const centerLon = (west + east) / 2;
-    const centerLat = (south + north) / 2;
-    const span = Math.max(east - west, north - south);
-    const zoom = Math.max(
-      1,
-      Math.min(5, Math.floor(Math.log2(360 / Math.max(span, 1)))),
-    );
+    const { center, zoom } = bboxCameraTarget(chatFlyToBbox);
     map.flyTo({
-      center: [centerLon, centerLat],
+      center,
       zoom,
       pitch: 0,
       bearing: 0,

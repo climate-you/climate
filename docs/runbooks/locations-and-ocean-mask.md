@@ -46,18 +46,31 @@ python scripts/build/build_locations.py --source cities500 --write-index --write
 `build_locations.py` builds four different location artifacts from different inputs:
 
 - `locations.csv` + `locations.kdtree.pkl`: city-only (GeoNames populated places), used by nearest-location logic.
-- `locations.index.csv`: city + marine names (Natural Earth marine polygons by default), used by autocomplete/resolve.
+- `locations.index.csv`: cities plus area entries — seas, lakes and countries — used by autocomplete/resolve.
 - `country_mask.npz` + `country_codes.json`: country raster mask (Natural Earth 50m country polygons), used by country-constrained nearest-location lookup.
 - `country_names.json`: country code → name map (from GeoNames `countryInfo.txt`), used by nearest-location lookup as a label fallback for countries with no populated places.
 
-By default, when `--write-index` is enabled, marine polygons are read from Natural Earth and merged into the index with synthetic stable IDs. You can override the marine source with:
+### Area entries in the index
 
-- `--marine-input` (local GeoJSON/Shapefile/zip)
-- `--marine-source`
-- `--marine-cache-dir`
-- `--marine-name-field`
+When `--write-index` is enabled, three polygon sources are merged into the index alongside the cities, each with synthetic stable IDs drawn from its own id block:
 
-By default, when `--write-country-mask` is enabled, country polygons are downloaded from Natural Earth (50m). You can override with:
+| Kind | Source | Pseudo country code |
+| --- | --- | --- |
+| `marine` | Natural Earth 10m marine polygons | `OC` |
+| `lake` | Natural Earth 50m lakes | `LK` |
+| `country` | Natural Earth 50m admin_0 polygons, named from GeoNames `countryInfo.txt` | the real ISO code |
+
+Every area entry carries a `bbox` column (`west,south,east,north`) that the map fits when the entry is selected; `east` runs past 180 for a box straddling the antimeridian. Cities have an empty `bbox` and `kind=city`.
+
+A country's point is Natural Earth's hand-placed `LABEL_X`/`LABEL_Y`, and its box covers only its largest landmass, so France frames the mainland rather than stretching to French Guiana.
+
+You can override the polygon sources with:
+
+- `--marine-input` (local GeoJSON/Shapefile/zip), `--marine-source`, `--marine-cache-dir`, `--marine-name-field`
+- `--lake-input` (local GeoJSON/Shapefile/zip), `--lake-source`, `--lake-cache-dir`, `--lake-name-field`
+- `--country-input` (local GeoJSON/Shapefile/zip), `--country-cache-dir`, `--country-code-field`
+
+By default, when `--write-country-mask` is enabled, country polygons are downloaded from Natural Earth (50m) — the same file the country index entries use. You can override with:
 
 - `--country-input` (local GeoJSON/Shapefile/zip)
 - `--country-mask-deg` (grid resolution in degrees, default `0.05`)
@@ -67,7 +80,7 @@ By default, when `--write-country-mask` is enabled, country polygons are downloa
 Primary outputs:
 
 - `data/locations/locations.csv` (canonical city dataset consumed by nearest-location backend services)
-- `data/locations/locations.index.csv` (normalized search index used for autocomplete/resolve; includes city + marine names)
+- `data/locations/locations.index.csv` (normalized search index used for autocomplete/resolve; includes cities plus sea, lake and country entries)
 - `data/locations/locations.kdtree.pkl` (spatial nearest-neighbor index used by nearest-location lookups)
 - `data/locations/country_mask.npz` (raster mask mapping grid cells to country ids, used by country-constrained nearest-location lookup)
 - `data/locations/country_codes.json` (mapping of country ids to ISO 3166-1 alpha-2 codes)
