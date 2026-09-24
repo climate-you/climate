@@ -18,8 +18,9 @@ const LINES_URL = "/story/europe-lines.json";
 const EUROPE_BBOX: Bbox = { west: -10, south: 37, east: 30, north: 54 };
 // Tighter frame for the globe (span ~21° → zoom 4), centred on Europe.
 const GLOBE_BBOX: [number, number, number, number] = [-4, 37, 17, 55];
+// The Copernicus licence prescribes this wording for modified products.
 const ATTRIB_BASE =
-  "Source: ECMWF ERA5/ERA5T · 2m air temperature vs 1991–2020";
+  "Contains modified Copernicus Climate Change Service information 2026";
 // YlOrRd palette used by the anomaly maps (0 → +12 °C).
 const SCALE_COLORS = [
   "#ffffcc",
@@ -223,9 +224,10 @@ export default function HeatwaveStory() {
           Published <time dateTime="2026-07-19">19 July 2026</time>
         </p>
         <p className={styles.meta}>
-          Data: Copernicus ERA5/ERA5T climate record · 2&#8202;m air temperature
-          · anomalies vs the 1991–2020 average for the same time of year ·
-          through 13 July 2026 · processed with the{" "}
+          Contains modified Copernicus Climate Change Service information 2026
+          · ERA5/ERA5T 2&#8202;m air temperature · anomalies vs the 1991–2020
+          average for the same time of year · record through 13 July 2026 ·
+          processed with the{" "}
           <a href="https://github.com/climate-you/climate">
             open-source pipeline
           </a>{" "}
@@ -339,7 +341,7 @@ export default function HeatwaveStory() {
         </p>
         <HeatwaveChart
           title="Daily temperature anomaly · June–July 2026"
-          sourceText="Source: ECMWF ERA5/ERA5T · 15-city mean vs 1991–2020"
+          sourceText="Contains modified Copernicus Climate Change Service information 2026"
         />
         <p className={styles.cities}>
           <b>Cities included:</b> Paris, London, Madrid, Barcelona, Lisbon,
@@ -373,6 +375,12 @@ export default function HeatwaveStory() {
           time window minus that grid cell&apos;s 1991–2020 average for the same
           month. The daily line is the mean across 15 major Western and Central
           European cities. Data runs through 13 July 2026.
+        </p>
+        <p className={styles.copyright}>
+          Generated using Copernicus Climate Change Service information 2026.
+          Neither the European Commission nor ECMWF is responsible for any use
+          that may be made of the Copernicus information or data this page
+          contains.
         </p>
         <p className={styles.copyright}>
           © 2026 Benoit Leveau &amp; Fanny Chaléon. This article, its figures,

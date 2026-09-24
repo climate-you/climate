@@ -1,6 +1,7 @@
-// Typed view of data.json, which experiments/build_story_draft.py writes from
-// the release (`--json`). Nothing in the story is typed in by hand: every
+// Typed view of data.json, which scripts/make_summer_2026_story_data.py
+// writes from the release. Nothing in the story is typed in by hand: every
 // number in the prose and every chart reads from here.
+// Workflow: docs/runbooks/case-study-data.md
 import raw from "./data.json";
 
 export type RainWindow = { obs: number; exp: number; pct: number; days: number };

@@ -19,9 +19,8 @@ import {
   type YearTrace,
 } from "./storyData";
 
-// Every chart here is a port of the corresponding function in
-// experiments/build_story_draft.py: same coordinate system, same marks, so the
-// published page matches the reviewed draft.
+// Every chart reads from data.json and draws its own SVG; none of them call
+// the API. See docs/runbooks/case-study-data.md for how that file is made.
 
 // The Copernicus licence prescribes this wording for modified products.
 const SOURCE =

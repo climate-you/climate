@@ -101,11 +101,12 @@ echo
 echo "  logs: $LOGDIR"
 echo
 echo "  Then, by hand:"
-echo "    - the wet window in experiments/build_story_draft.py is 16-28 Aug;"
+echo "    - check the wet window in scripts/make_summer_2026_story_data.py"
 echo "      move WET1 to 2026-08-31 so the pivot covers the whole fortnight"
 echo "    - with August complete, the historical comparison can move from"
 echo "      June-July to a full JJA. Worth checking whether 2026 is still the"
 echo "      hottest AND driest on record once late-August rain is included —"
 echo "      it may not be, and that changes the story's strongest claim"
-echo "    - regenerate the draft: python experiments/build_story_draft.py"
+echo "    - regenerate the page data:"
+echo "        python scripts/make_summer_2026_story_data.py"
 exit $fail

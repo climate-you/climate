@@ -173,6 +173,7 @@ Detailed runbooks:
 - [`docs/runbooks/locations-and-ocean-mask.md`](docs/runbooks/locations-and-ocean-mask.md)
 - [`docs/runbooks/reef-mask.md`](docs/runbooks/reef-mask.md)
 - [`docs/runbooks/story-coastline-overlay.md`](docs/runbooks/story-coastline-overlay.md)
+- [`docs/runbooks/case-study-data.md`](docs/runbooks/case-study-data.md)
 - [`docs/runbooks/dataset-cache-and-packaging.md`](docs/runbooks/dataset-cache-and-packaging.md)
 
 ## Cloud Deployment
@@ -193,6 +194,7 @@ This repository also includes scripts and configuration to deploy the platform t
 | Prepare locations + ocean masks                    | [`docs/runbooks/locations-and-ocean-mask.md`](docs/runbooks/locations-and-ocean-mask.md)       |
 | Rebuild reef-domain masks                          | [`docs/runbooks/reef-mask.md`](docs/runbooks/reef-mask.md)                                     |
 | Rebuild story map coastline overlay                | [`docs/runbooks/story-coastline-overlay.md`](docs/runbooks/story-coastline-overlay.md)         |
+| Generate a case study's figures and data file      | [`docs/runbooks/case-study-data.md`](docs/runbooks/case-study-data.md)                         |
 | Build dataset caches, package metrics/maps         | [`docs/runbooks/dataset-cache-and-packaging.md`](docs/runbooks/dataset-cache-and-packaging.md) |
 | Run backend + frontend (with optional Redis cache) | [`docs/runbooks/backend-frontend.md`](docs/runbooks/backend-frontend.md)                       |
 | Set up and operate the climate assistant           | [`docs/runbooks/chat.md`](docs/runbooks/chat.md)                                               |
