@@ -224,8 +224,8 @@ export default function HeatwaveStory() {
           Published <time dateTime="2026-07-19">19 July 2026</time>
         </p>
         <p className={styles.meta}>
-          Contains modified Copernicus Climate Change Service information 2026
-          · ERA5/ERA5T 2&#8202;m air temperature · anomalies vs the 1991–2020
+          Contains modified Copernicus Climate Change Service information 2026 ·
+          ERA5/ERA5T 2&#8202;m air temperature · anomalies vs the 1991–2020
           average for the same time of year · record through 13 July 2026 ·
           processed with the{" "}
           <a href="https://github.com/climate-you/climate">

@@ -344,9 +344,7 @@ def test_get_chat_stats_report_effort_with_and_without_canned(
     db = _db(tmp_path)
     _record(db, message_id="c1", tier="canned", total_ms=1500, step_count=0)
     _record(db, message_id="c2", tier="templated", total_ms=1500, step_count=0)
-    _record(
-        db, message_id="l1", tier="groq_primary_free", total_ms=6000, step_count=3
-    )
+    _record(db, message_id="l1", tier="groq_primary_free", total_ms=6000, step_count=3)
     _record(db, message_id="l2", tier="groq_small_free", total_ms=10000, step_count=5)
 
     stats = db.get_chat_stats()

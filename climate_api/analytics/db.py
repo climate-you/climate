@@ -33,6 +33,7 @@ def _latency_summary(values: list[int]) -> tuple[int | None, int | None]:
     p95_idx = max(0, int(len(values) * 0.95) - 1)
     return mean, values[p95_idx]
 
+
 _CREATE_CLICK_EVENTS = """
 CREATE TABLE IF NOT EXISTS click_events (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,

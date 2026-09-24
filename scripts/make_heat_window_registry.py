@@ -38,13 +38,32 @@ CLIM_START, CLIM_END = 1991, 2020
 # Same ramp and range as the other heat maps on the site, so a reader stepping
 # the slider is comparing like with like.
 COLORS = [
-    "#ffffcc", "#ffeda0", "#fed976", "#feb24c",
-    "#fd8d3c", "#fc4e2a", "#e31a1c", "#b10026",
+    "#ffffcc",
+    "#ffeda0",
+    "#fed976",
+    "#feb24c",
+    "#fd8d3c",
+    "#fc4e2a",
+    "#e31a1c",
+    "#b10026",
 ]
 VMIN, VMAX = 0.0, 12.0
 
-MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+MONTHS = [
+    "",
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+]
 
 
 def windows() -> list[tuple[str, dt.date, dt.date]]:
@@ -86,7 +105,7 @@ def label(a: dt.date, b: dt.date) -> str:
 
 def metric_entry(mid: str, a: dt.date, b: dt.date) -> str:
     months = sorted({a.month, b.month})
-    return f'''  "{mid}_anomaly_c": {{
+    return f"""  "{mid}_anomaly_c": {{
     "id": "{mid}_anomaly_c",
     "title": "Air temperature anomaly, {label(a, b)} 2026 vs {CLIM_START}-{CLIM_END}",
     "unit": "C",
@@ -113,12 +132,12 @@ def metric_entry(mid: str, a: dt.date, b: dt.date) -> str:
       ]
     }},
     "storage": {{ "tiled": true, "compression": {{ "codec": "zstd", "level": 10 }} }}
-  }}'''
+  }}"""
 
 
 def map_entry(mid: str, a: dt.date, b: dt.date) -> str:
     colors = ",\n        ".join(f'"{c}"' for c in COLORS)
-    return f'''  "{mid}_mercator_texture": {{
+    return f"""  "{mid}_mercator_texture": {{
     "id": "{mid}_mercator_texture",
     "title": "Air temperature anomaly, {label(a, b)} 2026 (Mercator)",
     "type": "texture",
@@ -145,11 +164,11 @@ def map_entry(mid: str, a: dt.date, b: dt.date) -> str:
       "width": 1440,
       "height": 2150
     }}
-  }}'''
+  }}"""
 
 
 def layer_entry(mid: str, a: dt.date, b: dt.date) -> str:
-    return f'''  "{mid}": {{
+    return f"""  "{mid}": {{
     "id": "{mid}",
     "enable": false,
     "label": "{label(a, b)}",
@@ -158,7 +177,7 @@ def layer_entry(mid: str, a: dt.date, b: dt.date) -> str:
     "map_id": "{mid}_mercator_texture",
     "opacity": 0.8,
     "resampling": "nearest"
-  }}'''
+  }}"""
 
 
 def splice(path: Path, blocks: list[str], dry_run: bool) -> None:
@@ -186,8 +205,10 @@ def splice(path: Path, blocks: list[str], dry_run: bool) -> None:
     text = head + ",\n" + body + "\n}\n"
     json.loads(text)  # parse check before writing
     if dry_run:
-        print(f"  would write {path.relative_to(REPO_ROOT)} "
-              f"({len(body.splitlines())} lines)")
+        print(
+            f"  would write {path.relative_to(REPO_ROOT)} "
+            f"({len(body.splitlines())} lines)"
+        )
         return
     io.open(path, "w", encoding="utf-8").write(text)
     print(f"  wrote {path.relative_to(REPO_ROOT)} ({len(body.splitlines())} lines)")
@@ -199,24 +220,37 @@ def main() -> int:
     args = ap.parse_args()
 
     wins = windows()
-    print(f"{len(wins)} windows of up to {STEP_DAYS} days, "
-          f"{WINDOW_START} to {WINDOW_END}:")
+    print(
+        f"{len(wins)} windows of up to {STEP_DAYS} days, "
+        f"{WINDOW_START} to {WINDOW_END}:"
+    )
     for mid, a, b in wins:
         print(f"  {mid}  {label(a, b)}")
     print()
 
-    splice(REPO_ROOT / "registry/metrics.json",
-           [metric_entry(m, a, b) for m, a, b in wins], args.dry_run)
-    splice(REPO_ROOT / "registry/maps.json",
-           [map_entry(m, a, b) for m, a, b in wins], args.dry_run)
-    splice(REPO_ROOT / "registry/layers.json",
-           [layer_entry(m, a, b) for m, a, b in wins], args.dry_run)
+    splice(
+        REPO_ROOT / "registry/metrics.json",
+        [metric_entry(m, a, b) for m, a, b in wins],
+        args.dry_run,
+    )
+    splice(
+        REPO_ROOT / "registry/maps.json",
+        [map_entry(m, a, b) for m, a, b in wins],
+        args.dry_run,
+    )
+    splice(
+        REPO_ROOT / "registry/layers.json",
+        [layer_entry(m, a, b) for m, a, b in wins],
+        args.dry_run,
+    )
 
     print()
     print("Then render (local only, no downloads):")
     maps = " ".join(f"--map {m}_mercator_texture" for m, _, _ in wins)
-    print(f"  python scripts/build/packager.py --release dev --all --resume \\\n"
-          f"      --start-year 2026 --end-year 2026 {maps}")
+    print(
+        f"  python scripts/build/packager.py --release dev --all --resume \\\n"
+        f"      --start-year 2026 --end-year 2026 {maps}"
+    )
     return 0
 
 

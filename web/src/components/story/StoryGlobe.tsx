@@ -191,7 +191,9 @@ export default function StoryGlobe({
           toDate={panelToDate}
           periodLabel={panelPeriodLabel}
           charts={panelCharts}
-          highlight={panelHighlightFor ? panelHighlightFor(activeLayerId) : null}
+          highlight={
+            panelHighlightFor ? panelHighlightFor(activeLayerId) : null
+          }
           onClose={closePanel}
         />
       )}

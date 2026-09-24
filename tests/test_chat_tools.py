@@ -616,10 +616,15 @@ class TestFindExtremeRegionMinimumSize:
 
     def test_missing_cell_count_is_treated_as_too_small(self):
         """An aggregate predating the field must not silently rank."""
-        regions = {"country:XX": {"name": "Nowhere", "type": "country",
-                                  "values": [7.0, 7.0]}}
+        regions = {
+            "country:XX": {"name": "Nowhere", "type": "country", "values": [7.0, 7.0]}
+        }
         res = tools.find_extreme_region(
-            metric_id="m", aggregation="mean", extremum="max",
-            region_type="country", limit=5, tile_store=_AggStore(regions),
+            metric_id="m",
+            aggregation="mean",
+            extremum="max",
+            region_type="country",
+            limit=5,
+            tile_store=_AggStore(regions),
         )
         assert "results" not in res or not res.get("results")

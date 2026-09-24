@@ -128,14 +128,14 @@ def main() -> int:
         "--source",
         default="Contains modified Copernicus Climate Change Service information 2026",
         help="Attribution line. The Copernicus licence prescribes this wording "
-             "for products derived from its data.",
+        "for products derived from its data.",
     )
     ap.add_argument(
         "--texture-right",
         type=Path,
         help="Second texture. When given the map is split down the middle, "
-             "the way the story's opening comparison is, with this one on the "
-             "right half.",
+        "the way the story's opening comparison is, with this one on the "
+        "right half.",
     )
     ap.add_argument("--label-left", default="HEAT")
     ap.add_argument("--label-right", default="RAIN")
@@ -173,8 +173,11 @@ def main() -> int:
         out = left.copy()
         out.paste(right.crop((half, 0, right.width, right.height)), (half, 0))
         d = ImageDraw.Draw(out, "RGBA")
-        d.line([(half, 0), (half, out.height - 1)], fill=(255, 255, 255, 235),
-               width=max(2, width // 280))
+        d.line(
+            [(half, 0), (half, out.height - 1)],
+            fill=(255, 255, 255, 235),
+            width=max(2, width // 280),
+        )
         tag = font(_SANS_BOLD, max(13, width // 34))
         pad = max(5, width // 90)
         for text, x, anchor in (

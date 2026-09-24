@@ -4,7 +4,12 @@
 // Workflow: docs/runbooks/case-study-data.md
 import raw from "./data.json";
 
-export type RainWindow = { obs: number; exp: number; pct: number; days: number };
+export type RainWindow = {
+  obs: number;
+  exp: number;
+  pct: number;
+  days: number;
+};
 export type Episode = { a: string; b: string; d: number; peak: number };
 export type Rank = {
   hotter: number;
@@ -32,7 +37,11 @@ export type StoryData = {
   joint: Record<string, [number, number, number][]>;
   ranks: Record<string, Rank>;
   cum: Record<string, { obs: [string, number][]; norm: [string, number][] }>;
-  monthly: { periods: string[]; names: string[]; grid: Record<string, number[]> };
+  monthly: {
+    periods: string[];
+    names: string[];
+    grid: Record<string, number[]>;
+  };
   warm: [string, number][];
   europeDecades: {
     first: [number, number];
@@ -74,11 +83,17 @@ export function hottestOnRecord(): string[] {
 }
 
 /** Country names that read with a definite article in running prose. */
-const TAKES_ARTICLE = new Set(["United Kingdom", "Netherlands", "United States"]);
+const TAKES_ARTICLE = new Set([
+  "United Kingdom",
+  "Netherlands",
+  "United States",
+]);
 
 /** "A, the B and C" */
 export function listOf(names: string[]): string {
-  const withArticles = names.map((n) => (TAKES_ARTICLE.has(n) ? `the ${n}` : n));
+  const withArticles = names.map((n) =>
+    TAKES_ARTICLE.has(n) ? `the ${n}` : n,
+  );
   if (withArticles.length <= 1) return withArticles[0] ?? "";
   return `${withArticles.slice(0, -1).join(", ")} and ${withArticles[withArticles.length - 1]}`;
 }

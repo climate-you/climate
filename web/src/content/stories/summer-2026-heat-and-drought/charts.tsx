@@ -33,7 +33,9 @@ const SOURCE =
  * 6px, so the charts that have to fit whole switch to a narrower viewBox
  * instead, which draws close to 1:1 and keeps the type at its nominal size.
  */
-function useNarrowChart(threshold = 430): [React.RefObject<HTMLDivElement | null>, boolean] {
+function useNarrowChart(
+  threshold = 430,
+): [React.RefObject<HTMLDivElement | null>, boolean] {
   const ref = useRef<HTMLDivElement | null>(null);
   const [narrow, setNarrow] = useState(false);
   useEffect(() => {
@@ -232,8 +234,9 @@ const TIMELINE_ORDER = [
 const TIMELINE_SCOPES = ["Northern hemisphere", "Europe only"] as const;
 
 export function HeatTimeline() {
-  const [scope, setScope] =
-    useState<(typeof TIMELINE_SCOPES)[number]>("Northern hemisphere");
+  const [scope, setScope] = useState<(typeof TIMELINE_SCOPES)[number]>(
+    "Northern hemisphere",
+  );
   const rows =
     scope === "Europe only"
       ? TIMELINE_ORDER.filter((n) => EUROPE.has(n))
@@ -788,7 +791,13 @@ export function CumulativeRain() {
           .filter((v) => v <= hi)
           .map((v) => (
             <g key={v}>
-              <line x1={L} x2={W - Rt} y1={Y(v)} y2={Y(v)} className="sc-grid" />
+              <line
+                x1={L}
+                x2={W - Rt}
+                y1={Y(v)}
+                y2={Y(v)}
+                className="sc-grid"
+              />
               <text x={L - 8} y={Y(v) + 4} textAnchor="end" className="sc-tick">
                 {v}
               </text>
@@ -944,7 +953,11 @@ function JointSvg({ country }: { country: string }) {
   );
 }
 
-export function JointHistoryPicker({ initial = "France" }: { initial?: string }) {
+export function JointHistoryPicker({
+  initial = "France",
+}: {
+  initial?: string;
+}) {
   const [country, setCountry] = useState(initial);
   const r = DATA.ranks[country];
   return (
@@ -988,7 +1001,9 @@ function tracePath(
   X: (d: number) => number,
   Y: (v: number) => number,
 ): string {
-  return t.v.map((v, i) => `${X(t.d0 + i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+  return t.v
+    .map((v, i) => `${X(t.d0 + i).toFixed(1)},${Y(v).toFixed(1)}`)
+    .join(" ");
 }
 
 function SpaghettiSvg({ country }: { country: string }) {
@@ -1078,8 +1093,8 @@ export function SpaghettiTabs({ initial = "France" }: { initial?: string }) {
         <>
           One grey line per year, {BASE_LABEL}, so the grey band is the range
           the date has run in over thirty years. Red is 2026. Where red sits
-          above the band, that day was hotter than the same date in any of
-          those thirty years.
+          above the band, that day was hotter than the same date in any of those
+          thirty years.
         </>
       }
     >
@@ -1103,7 +1118,9 @@ export function WarmingBars() {
   return (
     <Frame
       title="Europe is warming faster than any other continent"
-      subtitle={"Warming rate in °C per decade, 1979–2025, from the annual mean 2\u200Am air temperature"}
+      subtitle={
+        "Warming rate in °C per decade, 1979–2025, from the annual mean 2\u200Am air temperature"
+      }
       filename="warming-rate-by-region.png"
       minWidth={narrow ? 0 : 380}
       wrapRefExternal={wrapRef}

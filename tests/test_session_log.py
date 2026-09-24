@@ -29,8 +29,13 @@ def _msg(**overrides) -> dict:
         feedback_status=None,
         total_ms=93000,
         steps_timing=[
-            {"step": 1, "model_ms": 42000, "tools_ms": 50000, "prompt_tokens": 6573,
-             "completion_tokens": 217},
+            {
+                "step": 1,
+                "model_ms": 42000,
+                "tools_ms": 50000,
+                "prompt_tokens": 6573,
+                "completion_tokens": 217,
+            },
             {"step": 2, "model_ms": 94, "error": True},
         ],
         error=None,

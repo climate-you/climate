@@ -157,11 +157,18 @@ def coords(path: Path):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--cache", type=Path, default=CACHE)
-    ap.add_argument("--sample", type=int, default=0,
-                    help="check only N files per directory (0 = all)")
+    ap.add_argument(
+        "--sample",
+        type=int,
+        default=0,
+        help="check only N files per directory (0 = all)",
+    )
     ap.add_argument("--csv", type=Path, default=None)
-    ap.add_argument("--include-backup", action="store_true",
-                    help="also audit backup-aug26 (excluded by default)")
+    ap.add_argument(
+        "--include-backup",
+        action="store_true",
+        help="also audit backup-aug26 (excluded by default)",
+    )
     args = ap.parse_args()
 
     dirs = sorted(p for p in args.cache.rglob("*") if p.is_dir())
@@ -208,17 +215,29 @@ def main() -> int:
             cl_lon = classify(lon) if lon is not None else "-"
             key = f"{cl_lat}/{cl_lon}"
             per_dir[str(rel)][key] += 1
-            span[str(rel)].add((round(float(lat[0]), 4), round(float(lat[-1]), 4), lat.size))
-            rows.append({"dir": str(rel), "file": f.name, "lat_class": cl_lat,
-                         "lon_class": cl_lon, "lat0": float(lat[0]),
-                         "lat1": float(lat[-1]), "nlat": int(lat.size),
-                         "lat_frac": offset_in_cells(lat),
-                         "lat_unc": frac_uncertainty(lat),
-                         "lon_frac": (offset_in_cells(lon)
-                                      if lon is not None else float("nan")),
-                         "lon_unc": (frac_uncertainty(lon)
-                                     if lon is not None else float("nan")),
-                         "lon0": float(lon[0]) if lon is not None else float("nan")})
+            span[str(rel)].add(
+                (round(float(lat[0]), 4), round(float(lat[-1]), 4), lat.size)
+            )
+            rows.append(
+                {
+                    "dir": str(rel),
+                    "file": f.name,
+                    "lat_class": cl_lat,
+                    "lon_class": cl_lon,
+                    "lat0": float(lat[0]),
+                    "lat1": float(lat[-1]),
+                    "nlat": int(lat.size),
+                    "lat_frac": offset_in_cells(lat),
+                    "lat_unc": frac_uncertainty(lat),
+                    "lon_frac": (
+                        offset_in_cells(lon) if lon is not None else float("nan")
+                    ),
+                    "lon_unc": (
+                        frac_uncertainty(lon) if lon is not None else float("nan")
+                    ),
+                    "lon0": float(lon[0]) if lon is not None else float("nan"),
+                }
+            )
 
     print(f"\naudited {total} file(s) across {len(per_dir)} directories\n")
 
@@ -250,7 +269,9 @@ def main() -> int:
 
     others = [r for r in rows if r["lat_class"] == "other" or r["lon_class"] == "other"]
     if others:
-        print(f"\n  !! {len(others)} file(s) on a THIRD registration (neither native nor cell):")
+        print(
+            f"\n  !! {len(others)} file(s) on a THIRD registration (neither native nor cell):"
+        )
         seen: set = set()
         for r in others:
             key = (r["dir"], round(r["lat_frac"], 4), round(r["lon_frac"], 4))
@@ -259,9 +280,11 @@ def main() -> int:
             seen.add(key)
             print(f"     {r['dir'][-52:]}")
             print(f"       e.g. {r['file'][-56:]}")
-            print(f"       lat0={r['lat0']:>12} off {r['lat_frac']:.5f} cells "
-                  f"({r['lat_class']}) | lon0={r['lon0']:>12} off "
-                  f"{r['lon_frac']:.5f} cells ({r['lon_class']})")
+            print(
+                f"       lat0={r['lat0']:>12} off {r['lat_frac']:.5f} cells "
+                f"({r['lat_class']}) | lon0={r['lon0']:>12} off "
+                f"{r['lon_frac']:.5f} cells ({r['lon_class']})"
+            )
     else:
         print("\n  no files outside the native/cell two-state model")
 
@@ -285,7 +308,8 @@ def main() -> int:
     if args.csv:
         with open(args.csv, "w", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
-            w.writeheader(); w.writerows(rows)
+            w.writeheader()
+            w.writerows(rows)
         print(f"\n  per-file detail -> {args.csv}")
     return 0
 

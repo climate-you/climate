@@ -253,9 +253,7 @@ def _compute_tiles_from_cds_downloads(
                     ds.close()
         if debug:
             print("[cds] Concatenating daily parts")
-        _check_block_coords_consistent(
-            daily_parts_all, metric_id=metric_id, grid=grid
-        )
+        _check_block_coords_consistent(daily_parts_all, metric_id=metric_id, grid=grid)
         da_daily = xr.concat(daily_parts_all, dim=find_time_dim(daily_parts_all[0]))
         da_daily = da_daily.sortby(find_time_dim(da_daily))
         if debug:
@@ -469,9 +467,7 @@ def _compute_tiles_from_erddap_downloads(
                     ds.close()
         if debug:
             print("[erddap] Concatenating daily parts")
-        _check_block_coords_consistent(
-            daily_parts_all, metric_id=metric_id, grid=grid
-        )
+        _check_block_coords_consistent(daily_parts_all, metric_id=metric_id, grid=grid)
         da_daily = xr.concat(daily_parts_all, dim=find_time_dim(daily_parts_all[0]))
         da_daily = da_daily.sortby(find_time_dim(da_daily))
         if debug:
@@ -1504,9 +1500,7 @@ def _nearest_match_offset(
     if src.size == 0 or tgt.size == 0:
         return np.zeros(0, dtype=np.float64)
     probe = xr.DataArray(src, dims=("c",), coords={"c": src})
-    matched = probe.reindex(
-        {"c": tgt}, method="nearest", tolerance=tolerance
-    ).values
+    matched = probe.reindex({"c": tgt}, method="nearest", tolerance=tolerance).values
     return np.abs(np.asarray(matched, dtype=np.float64) - tgt)
 
 
@@ -2631,9 +2625,7 @@ def _package_derived_metrics(
                     for iso in (str(daily_axis[i]) for i in win_idx):
                         m = int(iso[5:7])
                         day_counts[m] = day_counts.get(m, 0) + 1
-                    uncovered = [
-                        m for m in day_counts if m not in set(clim_months)
-                    ]
+                    uncovered = [m for m in day_counts if m not in set(clim_months)]
                     if uncovered:
                         raise ValueError(
                             f"window covers month(s) {sorted(uncovered)} absent "
@@ -2755,9 +2747,7 @@ def _package_derived_metrics(
                 )
                 observed = obs_mean.astype(np.float64) * float(len(win_idx))
 
-                days_per_month = Counter(
-                    int(str(daily_axis[i])[5:7]) for i in win_idx
-                )
+                days_per_month = Counter(int(str(daily_axis[i])[5:7]) for i in win_idx)
                 expected = np.zeros_like(observed)
                 for month, ndays in sorted(days_per_month.items()):
                     clim_idx = climatology_month_indices(

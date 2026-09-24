@@ -40,16 +40,46 @@ MAPS = ROOT / "data/releases/dev/maps/global_0p25"
 DRY0, DRY1 = "2026-06-01", "2026-08-15"
 WET0, WET1 = "2026-08-16", "2026-08-31"
 BASE = (1991, 2020)
-EUR = {"Portugal", "Spain", "France", "Germany", "Italy", "United Kingdom",
-       "Greece", "Netherlands"}
-CC = {"Portugal": "PT", "Spain": "ES", "France": "FR", "Germany": "DE",
-      "United Kingdom": "GB", "Italy": "IT", "Greece": "GR", "Netherlands": "NL",
-      "United States": "US", "China": "CN", "India": "IN", "Japan": "JP",
-      "Canada": "CA", "Russia": "RU", "Turkey": "TR", "Mexico": "MX",
-      "Pakistan": "PK"}
-WARM = [("Europe", 0.503), ("North America", 0.387), ("Asia", 0.362),
-        ("Global land", 0.333), ("Africa", 0.315), ("South America", 0.235),
-        ("Globe incl. ocean", 0.211), ("Antarctica", 0.153), ("Oceania", 0.137)]
+EUR = {
+    "Portugal",
+    "Spain",
+    "France",
+    "Germany",
+    "Italy",
+    "United Kingdom",
+    "Greece",
+    "Netherlands",
+}
+CC = {
+    "Portugal": "PT",
+    "Spain": "ES",
+    "France": "FR",
+    "Germany": "DE",
+    "United Kingdom": "GB",
+    "Italy": "IT",
+    "Greece": "GR",
+    "Netherlands": "NL",
+    "United States": "US",
+    "China": "CN",
+    "India": "IN",
+    "Japan": "JP",
+    "Canada": "CA",
+    "Russia": "RU",
+    "Turkey": "TR",
+    "Mexico": "MX",
+    "Pakistan": "PK",
+}
+WARM = [
+    ("Europe", 0.503),
+    ("North America", 0.387),
+    ("Asia", 0.362),
+    ("Global land", 0.333),
+    ("Africa", 0.315),
+    ("South America", 0.235),
+    ("Globe incl. ocean", 0.211),
+    ("Antarctica", 0.153),
+    ("Oceania", 0.137),
+]
 
 
 # --------------------------------------------------------------------------- data
@@ -82,10 +112,15 @@ def rain_windows() -> dict:
             days: dict[int, int] = {}
             for t, x in zip(dax, dv):
                 if a <= str(t) <= b and x is not None:
-                    m = int(str(t)[5:7]); days[m] = days.get(m, 0) + 1
+                    m = int(str(t)[5:7])
+                    days[m] = days.get(m, 0) + 1
             exp = sum(clim[m] * n for m, n in days.items())
-            row[tag] = {"obs": obs, "exp": exp, "pct": 100 * obs / exp,
-                        "days": sum(days.values())}
+            row[tag] = {
+                "obs": obs,
+                "exp": exp,
+                "pct": 100 * obs / exp,
+                "days": sum(days.values()),
+            }
         row["ratio"] = row["wet"]["obs"] / row["dry"]["obs"]
         out[name] = row
     return out
@@ -101,7 +136,9 @@ def episodes() -> dict:
     """
     files = glob.glob(str(ROOT / "logs/**/episodes_global.json"), recursive=True)
     if not files:
-        raise SystemExit("no episodes_global.json — run experiments/heatwave_analysis.py")
+        raise SystemExit(
+            "no episodes_global.json — run experiments/heatwave_analysis.py"
+        )
     newest = max(files, key=lambda p: Path(p).stat().st_mtime)
     print(f"  episodes from {Path(newest).relative_to(ROOT)}")
     return json.load(open(newest))
@@ -118,7 +155,8 @@ def joint_history(country="France", months=(6, 7, 8)) -> list:
     key = f"country:{CC[country]}"
 
     def by_year(a, ax):
-        v = a["regions"][key]["values"]; out = {}
+        v = a["regions"][key]["values"]
+        out = {}
         for t, x in zip(ax, v):
             if x is None:
                 continue
@@ -131,10 +169,19 @@ def joint_history(country="France", months=(6, 7, 8)) -> list:
     yrs = sorted(set(ts) & set(ps))
     b = [y for y in yrs if BASE[0] <= y <= BASE[1]]
     tb = np.mean([np.mean(list(ts[y].values())) for y in b])
-    pb = np.mean([sum(ps[y][m] * calendar.monthrange(y, m)[1] for m in months) for y in b])
-    return [(y, float(np.mean(list(ts[y].values())) - tb),
-             float(sum(ps[y][m] * calendar.monthrange(y, m)[1] for m in months) / pb * 100))
-            for y in yrs]
+    pb = np.mean(
+        [sum(ps[y][m] * calendar.monthrange(y, m)[1] for m in months) for y in b]
+    )
+    return [
+        (
+            y,
+            float(np.mean(list(ts[y].values())) - tb),
+            float(
+                sum(ps[y][m] * calendar.monthrange(y, m)[1] for m in months) / pb * 100
+            ),
+        )
+        for y in yrs
+    ]
 
 
 def cumulative_daily(countries) -> dict:
@@ -173,28 +220,7 @@ def cumulative_daily(countries) -> dict:
     return out
 
 
-
-
 # --------------------------------------------------------------------------- charts
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # --------------------------------------------------------------------------- page
@@ -202,20 +228,35 @@ def cumulative_daily(countries) -> dict:
 
 def monthly_grid() -> dict:
     """The period-by-country % of normal behind c_monthly, as plain data."""
-    D = agg("tp_daily_total_mm"); M = agg("tp_monthly_mean_mm_per_day")
+    D = agg("tp_daily_total_mm")
+    M = agg("tp_monthly_mean_mm_per_day")
     dax, max_ = D["time_axis"], M["time_axis"]
-    periods = [("June", "2026-06-01", "2026-06-30"), ("July", "2026-07-01", "2026-07-31"),
-               ("1–15 Aug", "2026-08-01", "2026-08-15"), ("16–31 Aug", "2026-08-16", "2026-08-31")]
-    names = ["Portugal", "Spain", "France", "Italy", "Germany", "United Kingdom", "Greece"]
+    periods = [
+        ("June", "2026-06-01", "2026-06-30"),
+        ("July", "2026-07-01", "2026-07-31"),
+        ("1–15 Aug", "2026-08-01", "2026-08-15"),
+        ("16–31 Aug", "2026-08-16", "2026-08-31"),
+    ]
+    names = [
+        "Portugal",
+        "Spain",
+        "France",
+        "Italy",
+        "Germany",
+        "United Kingdom",
+        "Greece",
+    ]
     grid = {}
     for n in names:
         dv = D["regions"][f"country:{CC[n]}"]["values"]
         mv = M["regions"][f"country:{CC[n]}"]["values"]
         clim = {}
         for t, x in zip(max_, mv):
-            if x is None: continue
+            if x is None:
+                continue
             y, m = int(str(t)[:4]), int(str(t)[5:7])
-            if BASE[0] <= y <= BASE[1]: clim.setdefault(m, []).append(x)
+            if BASE[0] <= y <= BASE[1]:
+                clim.setdefault(m, []).append(x)
         clim = {m: sum(v) / len(v) for m, v in clim.items()}
         row = []
         for _, a, b in periods:
@@ -268,8 +309,11 @@ def peaks_2026(countries) -> dict:
         if c not in df.columns:
             continue
         s = df[c][df.index.year == 2026].dropna()
-        out[c] = {"date": str(s.idxmax().date()), "value": round(float(s.max()), 1),
-                  "aug13": round(float(s.get(pd.Timestamp("2026-08-13"), float("nan"))), 1)}
+        out[c] = {
+            "date": str(s.idxmax().date()),
+            "value": round(float(s.max()), 1),
+            "aug13": round(float(s.get(pd.Timestamp("2026-08-13"), float("nan"))), 1),
+        }
     return out
 
 
@@ -287,8 +331,10 @@ def days_in_window(events: dict, a: str, b: str) -> dict:
             lo = max(e["a"], a)
             hi = min(e["b"], b)
             if lo <= hi:
-                n += (dt.date(*map(int, hi.split("-")))
-                      - dt.date(*map(int, lo.split("-")))).days + 1
+                n += (
+                    dt.date(*map(int, hi.split("-")))
+                    - dt.date(*map(int, lo.split("-")))
+                ).days + 1
         out[name] = n
     return out
 
@@ -301,9 +347,11 @@ def europe_decades() -> dict:
     against the start of the satellite record.
     """
     a = agg("t2m_yearly_mean_c")
-    yr = {int(str(t)[:4]): x for t, x in zip(a["time_axis"],
-                                             a["regions"]["continent:europe"]["values"])
-          if x is not None}
+    yr = {
+        int(str(t)[:4]): x
+        for t, x in zip(a["time_axis"], a["regions"]["continent:europe"]["values"])
+        if x is not None
+    }
     first = [y for y in sorted(yr) if y <= sorted(yr)[0] + 9]
     last = [y for y in sorted(yr) if y <= 2025][-10:]
     fm = sum(yr[y] for y in first) / len(first)
@@ -317,11 +365,14 @@ def europe_decades() -> dict:
     recent5 = [y for y in sorted(yr) if y <= 2025][-5:]
     sb = sum(yr[y] for y in site_base) / len(site_base)
     r5 = sum(yr[y] for y in recent5) / len(recent5)
-    return {"first": [first[0], first[-1]], "last": [last[0], last[-1]],
-            "delta": round(lm - fm, 2),
-            "siteBase": [site_base[0], site_base[-1]],
-            "siteRecent": [recent5[0], recent5[-1]],
-            "siteDelta": round(r5 - sb, 2)}
+    return {
+        "first": [first[0], first[-1]],
+        "last": [last[0], last[-1]],
+        "delta": round(lm - fm, 2),
+        "siteBase": [site_base[0], site_base[-1]],
+        "siteRecent": [recent5[0], recent5[-1]],
+        "siteDelta": round(r5 - sb, 2),
+    }
 
 
 def export_json(path: Path) -> None:
@@ -334,35 +385,63 @@ def export_json(path: Path) -> None:
     E = episodes()
     # Every European country the analysis covers, so the page can offer a
     # selector rather than hard-coding France and Spain.
-    story_countries = ["France", "Spain", "Portugal", "Italy", "Germany",
-                       "United Kingdom", "Greece", "Netherlands"]
+    story_countries = [
+        "France",
+        "Spain",
+        "Portugal",
+        "Italy",
+        "Germany",
+        "United Kingdom",
+        "Greece",
+        "Netherlands",
+    ]
     joint = {c: joint_history(c) for c in story_countries}
     cum = cumulative_daily(story_countries)
 
     def rank(pts):
         cur = [q for q in pts if q[0] == 2026][0]
-        return {"hotter": sum(1 for q in pts if q[1] > cur[1]),
-                "drier": sum(1 for q in pts if q[2] < cur[2]),
-                "n": len(pts), "anomaly": round(cur[1], 2), "pct": round(cur[2], 1)}
+        return {
+            "hotter": sum(1 for q in pts if q[1] > cur[1]),
+            "drier": sum(1 for q in pts if q[2] < cur[2]),
+            "n": len(pts),
+            "anomaly": round(cur[1], 2),
+            "pct": round(cur[2], 1),
+        }
 
     r3 = lambda x: round(float(x), 3)
     data = {
         "generated": dt.date.today().isoformat(),
         "dataThrough": WET1,
-        "dry": [DRY0, DRY1], "wet": [WET0, WET1], "base": list(BASE),
+        "dry": [DRY0, DRY1],
+        "wet": [WET0, WET1],
+        "base": list(BASE),
         "europe": sorted(EUR),
-        "rain": {n: {"dry": {k: r3(v) for k, v in r["dry"].items()},
-                     "wet": {k: r3(v) for k, v in r["wet"].items()},
-                     "ratio": r3(r["ratio"])} for n, r in R.items()},
+        "rain": {
+            n: {
+                "dry": {k: r3(v) for k, v in r["dry"].items()},
+                "wet": {k: r3(v) for k, v in r["wet"].items()},
+                "ratio": r3(r["ratio"]),
+            }
+            for n, r in R.items()
+        },
         "days": {r["region"]: r["days"] for r in E["summary"]},
         "daysInDryWindow": days_in_window(E["events"], DRY0, DRY1),
-        "episodes": {n: [{"a": e["a"], "b": e["b"], "d": e["d"], "peak": e["peak"]} for e in evs]
-                     for n, evs in E["events"].items()},
-        "joint": {c: [[y, round(t, 3), round(p, 1)] for y, t, p in pts]
-                  for c, pts in joint.items()},
+        "episodes": {
+            n: [{"a": e["a"], "b": e["b"], "d": e["d"], "peak": e["peak"]} for e in evs]
+            for n, evs in E["events"].items()
+        },
+        "joint": {
+            c: [[y, round(t, 3), round(p, 1)] for y, t, p in pts]
+            for c, pts in joint.items()
+        },
         "ranks": {c: rank(pts) for c, pts in joint.items()},
-        "cum": {n: {"obs": [[t, v] for t, v in d["obs"]], "norm": [[t, v] for t, v in d["norm"]]}
-                for n, d in cum.items()},
+        "cum": {
+            n: {
+                "obs": [[t, v] for t, v in d["obs"]],
+                "norm": [[t, v] for t, v in d["norm"]],
+            }
+            for n, d in cum.items()
+        },
         "monthly": monthly_grid(),
         "warm": [[n, v] for n, v in WARM],
         "europeDecades": europe_decades(),
@@ -379,8 +458,7 @@ def main() -> int:
     ap.add_argument(
         "--json",
         type=Path,
-        default=ROOT
-        / "web/src/content/stories/summer-2026-heat-and-drought/data.json",
+        default=ROOT / "web/src/content/stories/summer-2026-heat-and-drought/data.json",
         help="where to write the page's data file",
     )
     args = ap.parse_args()

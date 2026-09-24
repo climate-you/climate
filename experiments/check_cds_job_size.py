@@ -147,8 +147,12 @@ def run_case(name: str) -> dict | None:
     # sleep_max matches climate/datasets/sources/cds.py so this measures what an
     # actual ingest would experience, not cdsapi's 120s default polling backoff.
     client = cdsapi.Client(
-        quiet=True, wait_until_complete=True, sleep_max=20,
-        info_callback=on_info, warning_callback=on_info, error_callback=on_info,
+        quiet=True,
+        wait_until_complete=True,
+        sleep_max=20,
+        info_callback=on_info,
+        warning_callback=on_info,
+        error_callback=on_info,
     )
     utc = time.strftime("%H:%M UTC", time.gmtime())
     print(f"\n### {name}  ({nfields} fields, whole globe)  submitted {utc}")
@@ -161,8 +165,10 @@ def run_case(name: str) -> dict | None:
             if target.exists():
                 size_mb = target.stat().st_size / 1048576
     except Exception as exc:  # noqa: BLE001 — rejection is a valid outcome
-        print(f"   REJECTED/FAILED after {time.time() - t0:.0f}s: "
-              f"{type(exc).__name__}: {str(exc).splitlines()[0][:120]}")
+        print(
+            f"   REJECTED/FAILED after {time.time() - t0:.0f}s: "
+            f"{type(exc).__name__}: {str(exc).splitlines()[0][:120]}"
+        )
         return None
 
     def first_at(substr: str) -> float | None:
@@ -177,8 +183,9 @@ def run_case(name: str) -> dict | None:
     total = t_end - t0
     queued = (t_run - (t_acc or t0)) if t_run else None
     running = (t_end - t_run) if t_run else None
-    print(f"   total       {total:7.0f}s"
-          + (f"   ({size_mb:.0f} MB)" if size_mb else ""))
+    print(
+        f"   total       {total:7.0f}s" + (f"   ({size_mb:.0f} MB)" if size_mb else "")
+    )
     if queued is not None:
         print(f"   queued      {queued:7.0f}s   (accepted -> running)")
         print(f"   generating  {running:7.0f}s   (running -> downloaded)")
@@ -188,10 +195,18 @@ def run_case(name: str) -> dict | None:
             print(f"     +{t - t0:5.0f}s  {m[:90]}")
     base = PEAK_BASELINE.get(name)
     if base:
-        print(f"   vs peak     {base:7.0f}s   -> {base / total:.1f}x "
-              f"{'faster' if total < base else 'slower'} than the daytime run")
-    return {"name": name, "total": total, "mb": size_mb, "utc": utc,
-            "fields": nfields, "queued": queued}
+        print(
+            f"   vs peak     {base:7.0f}s   -> {base / total:.1f}x "
+            f"{'faster' if total < base else 'slower'} than the daytime run"
+        )
+    return {
+        "name": name,
+        "total": total,
+        "mb": size_mb,
+        "utc": utc,
+        "fields": nfields,
+        "queued": queued,
+    }
 
 
 def _warn_if_ingest_running() -> None:
@@ -221,16 +236,22 @@ def _warn_if_ingest_running() -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--big", action="store_true",
-                    help="also submit the 47-year request (may queue a long time)")
-    ap.add_argument("--only", choices=sorted(CASES),
-                    help="run a single case")
-    ap.add_argument("--compare", action="store_true",
-                    help="daily-stats vs hourly for the same globe-month, "
-                         "bracketed by a repeat of the daily case (3 requests, "
-                         "~1.2 GB) — the run to do in the quiet window")
-    ap.add_argument("--no-check", action="store_true",
-                    help="skip the concurrent-ingest check")
+    ap.add_argument(
+        "--big",
+        action="store_true",
+        help="also submit the 47-year request (may queue a long time)",
+    )
+    ap.add_argument("--only", choices=sorted(CASES), help="run a single case")
+    ap.add_argument(
+        "--compare",
+        action="store_true",
+        help="daily-stats vs hourly for the same globe-month, "
+        "bracketed by a repeat of the daily case (3 requests, "
+        "~1.2 GB) — the run to do in the quiet window",
+    )
+    ap.add_argument(
+        "--no-check", action="store_true", help="skip the concurrent-ingest check"
+    )
     args = ap.parse_args()
 
     if not args.no_check:
@@ -250,42 +271,65 @@ def main() -> int:
         order.append("daily_control_1month")
 
     print("Timing CDS queue behaviour by dataset (one job at a time).")
-    print("Queue time tracks the DATASET, not request size: derived daily "
-          "statistics is capped at 60 concurrent requests globally, while "
-          "monthly-means and hourly are not.")
-    print("Congestion is also diurnal (quiet roughly 22:00-06:00 UTC), so "
-          "results are only comparable to runs made at a similar hour.")
+    print(
+        "Queue time tracks the DATASET, not request size: derived daily "
+        "statistics is capped at 60 concurrent requests globally, while "
+        "monthly-means and hourly are not."
+    )
+    print(
+        "Congestion is also diurnal (quiet roughly 22:00-06:00 UTC), so "
+        "results are only comparable to runs made at a similar hour."
+    )
     results = [r for r in (run_case(n) for n in order) if r]
 
     if len(results) > 1:
         print("\n" + "=" * 72)
-        print(f"{'case':22s} {'submitted':11s} {'total':>8s} {'MB':>7s} {'vs peak':>9s}")
+        print(
+            f"{'case':22s} {'submitted':11s} {'total':>8s} {'MB':>7s} {'vs peak':>9s}"
+        )
         for r in results:
             base = PEAK_BASELINE.get(r["name"])
             rel = f"{base / r['total']:.1f}x" if base else "-"
             mb = f"{r['mb']:.0f}" if r["mb"] else "-"
-            print(f"{r['name']:22s} {r['utc']:11s} {r['total']:7.0f}s {mb:>7s} {rel:>9s}")
+            print(
+                f"{r['name']:22s} {r['utc']:11s} {r['total']:7.0f}s {mb:>7s} {rel:>9s}"
+            )
 
         daily = [r["total"] for r in results if r["name"] == "daily_control_1month"]
         hourly = [r["total"] for r in results if r["name"] == "hourly_1month"]
         if len(daily) >= 2:
             spread = max(daily) / min(daily)
-            print(f"\ncontrol spread {spread:.2f}x — "
-                  + ("stable, results comparable" if spread < 1.5
-                     else "LOAD MOVED mid-run, treat as indicative only"))
+            print(
+                f"\ncontrol spread {spread:.2f}x — "
+                + (
+                    "stable, results comparable"
+                    if spread < 1.5
+                    else "LOAD MOVED mid-run, treat as indicative only"
+                )
+            )
         if daily and hourly:
             d, h = sum(daily) / len(daily), hourly[0]
-            print(f"\ndaily-stats {d:.0f}s vs hourly {h:.0f}s for the same globe-month "
-                  f"({h / 60:.0f} min, ~1 GB).")
+            print(
+                f"\ndaily-stats {d:.0f}s vs hourly {h:.0f}s for the same globe-month "
+                f"({h / 60:.0f} min, ~1 GB)."
+            )
             if d <= h:
-                print("VERDICT: daily-statistics is no slower off-peak. Do NOT build the")
-                print("hourly route — schedule daily ingests for the quiet window instead.")
+                print(
+                    "VERDICT: daily-statistics is no slower off-peak. Do NOT build the"
+                )
+                print(
+                    "hourly route — schedule daily ingests for the quiet window instead."
+                )
             else:
                 n = 504
-                print(f"VERDICT: hourly is {d / h:.1f}x faster even off-peak. For the v3 "
-                      f"re-download ({n} globe-months) that is "
-                      f"{n * d / 3600:.0f}h vs {n * h / 3600:.0f}h at ~{n} GB transfer.")
-                print("Worth pricing the pipeline change; stream and discard the hourly.")
+                print(
+                    f"VERDICT: hourly is {d / h:.1f}x faster even off-peak. For the v3 "
+                    f"re-download ({n} globe-months) that is "
+                    f"{n * d / 3600:.0f}h vs {n * h / 3600:.0f}h at ~{n} GB transfer."
+                )
+                print(
+                    "Worth pricing the pipeline change; stream and discard the hourly."
+                )
     return 0
 
 

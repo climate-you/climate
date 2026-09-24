@@ -844,7 +844,10 @@ class TestEstimateRequestTokens:
 
     def test_does_not_over_count_an_empty_conversation(self):
         """The fixed base is ~4,450 tokens; a fresh question must still fit."""
-        assert _estimate_request_tokens([{"role": "user", "content": "Hot or cold"}]) < 8000
+        assert (
+            _estimate_request_tokens([{"role": "user", "content": "Hot or cold"}])
+            < 8000
+        )
 
     def test_grows_with_message_size(self):
         small = _estimate_request_tokens([{"role": "user", "content": "hi"}])
@@ -926,9 +929,7 @@ class TestOversizedRequestFallsBackMidStream:
         )
         second = _ScriptedClient([[_chunk(content="Paris is the warmest.")]])
         tiers = [
-            ProviderTier(
-                name="free", client=first, model="m", max_request_tokens=None
-            ),
+            ProviderTier(name="free", client=first, model="m", max_request_tokens=None),
             ProviderTier(
                 name="paid", client=second, model="m", max_request_tokens=None
             ),
@@ -962,9 +963,7 @@ class TestOversizedRequestFallsBackMidStream:
 
 
 class TestPreflightSkipsOversizedTier:
-    def test_tier_under_its_ceiling_is_skipped_without_a_round_trip(
-        self, monkeypatch
-    ):
+    def test_tier_under_its_ceiling_is_skipped_without_a_round_trip(self, monkeypatch):
         """A request the estimate already rejects should not be sent at all."""
         first = _ScriptedClient([[_chunk(content="never reached")]])
         second = _ScriptedClient([[_chunk(content="Paris is the warmest.")]])

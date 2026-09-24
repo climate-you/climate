@@ -89,7 +89,15 @@ const AnomalyMap = forwardRef<AnomalyMapHandle, Props>(function AnomalyMap(
   const aspect = mercatorAspect(bbox);
 
   const source: AnomalyMapSource = useMemo(
-    () => ({ textureUrl, textureWidth, textureHeight, bbox, linesUrl, latMax, maskUrl }),
+    () => ({
+      textureUrl,
+      textureWidth,
+      textureHeight,
+      bbox,
+      linesUrl,
+      latMax,
+      maskUrl,
+    }),
     [textureUrl, textureWidth, textureHeight, bbox, linesUrl, latMax, maskUrl],
   );
 
@@ -99,7 +107,9 @@ const AnomalyMap = forwardRef<AnomalyMapHandle, Props>(function AnomalyMap(
     if (!canvas) return;
 
     const dpr =
-      typeof window === "undefined" ? 1 : Math.min(window.devicePixelRatio || 1, 3);
+      typeof window === "undefined"
+        ? 1
+        : Math.min(window.devicePixelRatio || 1, 3);
     const w = Math.min(
       MAX_BACKING_WIDTH,
       Math.round(cssWidth > 0 ? cssWidth * dpr : renderHeight * aspect),

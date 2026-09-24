@@ -61,17 +61,34 @@ GLOBE = Path(
 CACHE_DIR = ROOT / "logs" / "analysis"
 
 EUROPE = {
-    "GB": "United Kingdom", "FR": "France", "ES": "Spain", "PT": "Portugal",
-    "IT": "Italy", "DE": "Germany", "GR": "Greece", "NL": "Netherlands",
+    "GB": "United Kingdom",
+    "FR": "France",
+    "ES": "Spain",
+    "PT": "Portugal",
+    "IT": "Italy",
+    "DE": "Germany",
+    "GR": "Greece",
+    "NL": "Netherlands",
 }
 # Northern hemisphere only: the story is a boreal summer, so southern countries
 # are in winter and a May-Aug count there means nothing.
-GLOBAL = dict(EUROPE, **{
-    "US": "United States", "CA": "Canada", "MX": "Mexico",
-    "CN": "China", "IN": "India", "JP": "Japan", "KR": "South Korea",
-    "RU": "Russia", "TR": "Turkey", "IR": "Iran", "EG": "Egypt",
-    "PK": "Pakistan",
-})
+GLOBAL = dict(
+    EUROPE,
+    **{
+        "US": "United States",
+        "CA": "Canada",
+        "MX": "Mexico",
+        "CN": "China",
+        "IN": "India",
+        "JP": "Japan",
+        "KR": "South Korea",
+        "RU": "Russia",
+        "TR": "Turkey",
+        "IR": "Iran",
+        "EG": "Egypt",
+        "PK": "Pakistan",
+    },
+)
 SETS = {"europe": EUROPE, "global": GLOBAL}
 
 
@@ -151,9 +168,13 @@ def main() -> int:
     ap.add_argument("--pctl", type=float, default=90)
     ap.add_argument("--window", type=int, default=7)
     ap.add_argument("--min-run", type=int, default=3)
-    ap.add_argument("--detect-from-month", type=int, default=5,
-                    help="ignore episodes before this month; a floorless "
-                         "percentile flags March warm spells as heatwaves")
+    ap.add_argument(
+        "--detect-from-month",
+        type=int,
+        default=5,
+        help="ignore episodes before this month; a floorless "
+        "percentile flags March warm spells as heatwaves",
+    )
     ap.add_argument("--cache", type=Path, default=None)
     ap.add_argument("--csv-only", action="store_true", help="build the cache and stop")
     ap.add_argument("--json-out", type=Path, default=None)
@@ -164,17 +185,22 @@ def main() -> int:
     tag = f"{args.setname}_m{min(args.months)}-{max(args.months)}_{args.target_year}"
     cache = args.cache or CACHE_DIR / f"daily_max_{tag}.csv"
 
-    allser = load_or_build(regions, args.months, args.target_year,
-                           range(b0, b1 + 1), cache)
+    allser = load_or_build(
+        regions, args.months, args.target_year, range(b0, b1 + 1), cache
+    )
     if args.csv_only:
         return 0
 
     target = {k: v[v.index.year == args.target_year] for k, v in allser.items()}
-    base = {k: v[(v.index.year >= b0) & (v.index.year <= b1)] for k, v in allser.items()}
+    base = {
+        k: v[(v.index.year >= b0) & (v.index.year <= b1)] for k, v in allser.items()
+    }
 
     print("\n" + "=" * 78)
-    print(f"Episodes: daily max > {args.pctl:g}th pctl of {b0}-{b1} "
-          f"(+/-{args.window}d), {args.min_run}+ consecutive days")
+    print(
+        f"Episodes: daily max > {args.pctl:g}th pctl of {b0}-{b1} "
+        f"(+/-{args.window}d), {args.min_run}+ consecutive days"
+    )
     print("=" * 78)
 
     summary, events = [], {}
@@ -184,8 +210,14 @@ def main() -> int:
         t, b = target[name], base[name]
         bdoy, bval = b.index.dayofyear.values, b.values
         thr = pd.Series(
-            [np.percentile(bval[np.abs(bdoy - d.dayofyear) <= args.window], args.pctl)
-             for d in t.index], index=t.index)
+            [
+                np.percentile(
+                    bval[np.abs(bdoy - d.dayofyear) <= args.window], args.pctl
+                )
+                for d in t.index
+            ],
+            index=t.index,
+        )
         exc = t - thr
         hot = (exc > 0).values
         runs, start = [], None
@@ -193,25 +225,39 @@ def main() -> int:
             if f and start is None:
                 start = i
             elif not f and start is not None:
-                runs.append((start, i - 1)); start = None
+                runs.append((start, i - 1))
+                start = None
         if start is not None:
             runs.append((start, len(hot) - 1))
-        ev = [(a, bb) for a, bb in runs
-              if bb - a + 1 >= args.min_run
-              and t.index[bb].month >= args.detect_from_month]
-        print(f"\n### {name}   ({len(ev)} episodes, "
-              f"{sum(bb - a + 1 for a, bb in ev)} days)")
+        ev = [
+            (a, bb)
+            for a, bb in runs
+            if bb - a + 1 >= args.min_run
+            and t.index[bb].month >= args.detect_from_month
+        ]
+        print(
+            f"\n### {name}   ({len(ev)} episodes, "
+            f"{sum(bb - a + 1 for a, bb in ev)} days)"
+        )
         events[name] = []
         for k, (a, bb) in enumerate(ev, 1):
-            tseg, seg = t.iloc[a:bb + 1], exc.iloc[a:bb + 1]
+            tseg, seg = t.iloc[a : bb + 1], exc.iloc[a : bb + 1]
             tail = "  [truncated by data end]" if bb == len(hot) - 1 else ""
-            print(f"   {k}. {t.index[a].date()} -> {t.index[bb].date()} "
-                  f"({bb - a + 1:2d}d)  peak {tseg.max():5.1f} C on "
-                  f"{tseg.idxmax().date()}  +{seg.max():.1f} C{tail}")
-            events[name].append({"a": str(t.index[a].date()), "b": str(t.index[bb].date()),
-                                 "d": int(bb - a + 1), "peak": round(float(tseg.max()), 2),
-                                 "excess": round(float(seg.max()), 2),
-                                 "truncated": bb == len(hot) - 1})
+            print(
+                f"   {k}. {t.index[a].date()} -> {t.index[bb].date()} "
+                f"({bb - a + 1:2d}d)  peak {tseg.max():5.1f} C on "
+                f"{tseg.idxmax().date()}  +{seg.max():.1f} C{tail}"
+            )
+            events[name].append(
+                {
+                    "a": str(t.index[a].date()),
+                    "b": str(t.index[bb].date()),
+                    "d": int(bb - a + 1),
+                    "peak": round(float(tseg.max()), 2),
+                    "excess": round(float(seg.max()), 2),
+                    "truncated": bb == len(hot) - 1,
+                }
+            )
         print(f"   hottest day: {t.idxmax().date()} at {t.max():.1f} C")
         summary.append((name, len(ev), sum(bb - a + 1 for a, bb in ev)))
 
@@ -222,10 +268,16 @@ def main() -> int:
 
     if args.json_out:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
-        json.dump({"events": events,
-                   "summary": [{"region": n, "episodes": e, "days": d}
-                               for n, e, d in summary]},
-                  open(args.json_out, "w"), indent=1)
+        json.dump(
+            {
+                "events": events,
+                "summary": [
+                    {"region": n, "episodes": e, "days": d} for n, e, d in summary
+                ],
+            },
+            open(args.json_out, "w"),
+            indent=1,
+        )
         print(f"\nwrote {args.json_out}")
     return 0
 
