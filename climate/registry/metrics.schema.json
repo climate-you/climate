@@ -42,6 +42,16 @@
           "enum": ["global", "ocean", "land", "dataset_mask"],
           "description": "Expected spatial domain for coverage validation."
         },
+        "coverage": {
+          "type": "object",
+          "properties": {
+            "min_real_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+            "reason": { "type": "string" }
+          },
+          "required": ["min_real_pct", "reason"],
+          "additionalProperties": false,
+          "description": "Floor for this metric's coverage check, replacing the suite-wide threshold, for metrics whose own definition leaves cells undefined. A reason is required so an exemption cannot be added silently."
+        },
         "time_axis": {
           "type": "string",
           "enum": ["yearly", "monthly", "daily", "subdaily"]

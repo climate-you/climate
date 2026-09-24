@@ -705,12 +705,20 @@ def main() -> None:
             else stats["real_coverage_pct"]
         )
         check_label = "domain coverage" if args.domain_aware else "real coverage"
-        if (
-            args.require_real_coverage_pct is not None
-            and check_pct < args.require_real_coverage_pct
-        ):
+        # A metric may declare its own floor when its definition leaves cells
+        # undefined — a percentage of a near-zero normal, say. The registry
+        # entry has to carry a reason, so the exemption sits where the metric is
+        # defined rather than buried in a suite-wide flag.
+        coverage_rule = (metrics_by_id.get(metric_id) or {}).get("coverage") or {}
+        required_pct = coverage_rule.get("min_real_pct", args.require_real_coverage_pct)
+        if required_pct is not None and check_pct < required_pct:
             failures.append(
-                f"{metric_id}: {check_label} {check_pct:.2f}% < {args.require_real_coverage_pct:.2f}%"
+                f"{metric_id}: {check_label} {check_pct:.2f}% < {required_pct:.2f}%"
+            )
+        elif coverage_rule:
+            print(
+                f"   declared coverage floor {required_pct:.2f}%: "
+                f"{coverage_rule.get('reason', '')}"
             )
 
     if failures:

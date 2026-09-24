@@ -510,6 +510,10 @@
     "dtype": "float32",
     "missing": "nan",
     "domain": "global",
+    "coverage": {
+      "min_real_pct": 98.0,
+      "reason": "Cells whose 1991-2020 normal for the window is under 1 mm are left undefined: a percentage of a near-zero normal is meaningless, and shading it would read as a deep deficit over the Sahara and Arabia."
+    },
     "time_axis": "yearly",
     "llm_hidden": true,
     "source": {
@@ -1436,6 +1440,10 @@
     "dtype": "float32",
     "missing": "nan",
     "domain": "global",
+    "coverage": {
+      "min_real_pct": 95.0,
+      "reason": "Cells whose 1991-2020 normal for the window is under 1 mm are left undefined: a percentage of a near-zero normal is meaningless, and shading it would read as a deep deficit over the Sahara and Arabia."
+    },
     "time_axis": "yearly",
     "llm_hidden": true,
     "source": {
