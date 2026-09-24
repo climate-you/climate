@@ -66,7 +66,14 @@ baseline or a country set. The generator prints which episode file it used.
 4. **Prose interpolates the same helpers.** If a sentence states a number, it
    reads it from `DATA`. If a number cannot be computed, it needs a footnote to
    an external source, not a literal.
-5. **Watch the bundle.** Daily series dominate: eight countries of daily
+5. **No HTML entities in JSX text.** A text node containing `&#8202;` or
+   `&apos;` loses its leading space in the compiled output, and the obvious
+   workaround (`</b>{" "}text`) is undone by prettier the next time it joins
+   the line. Use the literal character instead: `U+200A` for a hair space,
+   `’` for an apostrophe, `&` for an ampersand. Check a rendered page with
+   `curl <url> | grep -oE '</(b|em|strong|span|a|sup)>[A-Za-z][a-z]{2,}'`;
+   it should print nothing.
+6. **Watch the bundle.** Daily series dominate: eight countries of daily
    maximum over a 31-year baseline is ~225 KB of a 273 KB file. Store them as
    `{d0, v[]}` (start day-of-year plus consecutive values) rather than pairs;
    that halved it. If it grows past a few hundred KB, load it on demand instead

@@ -292,10 +292,10 @@ export function HeatTimeline() {
       }
       caption={
         <>
-          Each bar is three or more consecutive days above that country&apos;s
-          own {BASE_LABEL} 90th percentile <b>of daily maximum temperature</b>{" "}
-          for the date, on its area-weighted national average. The blue band is
-          the late-August rain.
+          Each bar is three or more consecutive days above that country’s own{" "}
+          {BASE_LABEL} 90th percentile <b>of daily maximum temperature</b> for
+          the date, on its area-weighted national average. The blue band is the
+          late-August rain.
         </>
       }
     >
@@ -405,7 +405,7 @@ export function RainGrid() {
       caption={
         <>
           Brown = drier than normal, blue = wetter. Iberia was already failing
-          in June; Britain&apos;s drought did not begin until July.
+          in June; Britain’s drought did not begin until July.
         </>
       }
     >
@@ -985,7 +985,7 @@ export function JointHistoryPicker({
             ? "none has been drier"
             : `${r.drier} ${r.drier === 1 ? "has" : "have"} been drier`}
           , out of {r.n}. It finished {r.anomaly >= 0 ? "+" : ""}
-          {r.anomaly.toFixed(2)}&#8202;°C against the {BASE_LABEL} average on{" "}
+          {r.anomaly.toFixed(2)} °C against the {BASE_LABEL} average on{" "}
           {Math.round(r.pct)}% of its normal rain.
         </>
       }

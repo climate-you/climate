@@ -328,8 +328,8 @@ export default function SummerStory() {
         <h1>{TITLE_VALUE}</h1>
         <p className={styles.dek}>
           Much of the northern hemisphere was hot this summer. Almost all of it
-          still got its normal rain. Western Europe did not, and went on to lose
-          more land to fire than in any summer on record. A look into the
+          still got its normal rain. Western Europe did not, and went on to set
+          national wildfire records in Spain and France. A look into the
           Copernicus ERA5/ERA5T record.
         </p>
         <p className={styles.published}>
@@ -337,7 +337,7 @@ export default function SummerStory() {
         </p>
         <p className={styles.meta}>
           Contains modified Copernicus Climate Change Service information 2026 ·
-          ERA5/ERA5T 2&#8202;m air temperature and total precipitation · record
+          ERA5/ERA5T 2 m air temperature and total precipitation · record
           through 31 August 2026 · processed with the{" "}
           <a href="https://github.com/climate-you/climate">
             open-source pipeline
@@ -431,8 +431,9 @@ export default function SummerStory() {
             <Ref n={1} />
           </p>
           <p>
-            It was a hot summer, but not only here. Russia spent{" "}
-            <strong>{days("Russia")}</strong> days in heat episodes, Canada{" "}
+            It was a hot summer, but not only here. Counting heat episodes as
+            runs of days well above what is normal for the date in that country,
+            Russia spent <strong>{days("Russia")}</strong> days in one, Canada{" "}
             <strong>{days("Canada")}</strong>, China{" "}
             <strong>{days("China")}</strong>, Japan{" "}
             <strong>{days("Japan")}</strong>. Heat alone was not unusual this
@@ -461,10 +462,9 @@ export default function SummerStory() {
             <div
               className={`${styles.stat} ${styles.statDry} ${styles.statText}`}
             >
-              <span className={styles.num}>Hottest &amp; driest</span>
+              <span className={styles.num}>Hottest & driest</span>
               <span className={styles.lab}>
-                France&apos;s summer was both, out of the {fr.n} summers since
-                1979
+                France’s summer was both, out of the {fr.n} summers since 1979
               </span>
             </div>
             <div className={`${styles.stat} ${styles.statDry}`}>
@@ -484,7 +484,7 @@ export default function SummerStory() {
             <div className={`${styles.stat} ${styles.statNeutral}`}>
               <span className={styles.num}>{RATIO_GLOBE}×</span>
               <span className={styles.lab}>
-                Europe&apos;s warming rate against the globe since 1979
+                Europe’s warming rate against the globe since 1979
               </span>
             </div>
           </div>
@@ -512,23 +512,22 @@ export default function SummerStory() {
               continent.
             </p>
             <p>
-              The last of them, in mid-August, was the United Kingdom&apos;s
-              sharpest. On{" "}
+              The August episode was the United Kingdom’s sharpest. On{" "}
               <strong>
-                13 August the Met Office recorded 38.1&#8202;°C at Kew Gardens,
-                the fifth-hottest day in the UK record
+                13 August the Met Office recorded 38.1 °C at Kew Gardens, the
+                fifth-hottest day in the UK record
               </strong>
-              , and the second day of 2026 to reach 38&#8202;°C.
+              , and the second day of 2026 to reach 38 °C.
               <Ref n={3} /> Only 2022, the hottest year the UK has had, has
-              managed two such days. Three days in 2026 reached 37&#8202;°C.
+              managed two such days. Three days in 2026 reached 37 °C.
             </p>
             <p>
               In our own gridded figures it was the hottest day of the year for
-              the UK, at {n1(peaks["United Kingdom"].aug13)}&#8202;°C averaged
-              across the whole country by land area. France and Spain were in
-              the same episode and close to their own August peaks,{" "}
-              {n1(peaks.France.aug13)}&#8202;°C and {n1(peaks.Spain.aug13)}
-              &#8202;°C, though neither beat its June and July highs.
+              the UK, at {n1(peaks["United Kingdom"].aug13)} °C averaged across
+              the whole country by land area. France and Spain were in the same
+              episode and close to their own August peaks,{" "}
+              {n1(peaks.France.aug13)} °C and {n1(peaks.Spain.aug13)}
+               °C, though neither beat its June and July highs.
             </p>
           </div>
           <div className={s.fullWidth}>
@@ -539,9 +538,8 @@ export default function SummerStory() {
               uses fixed county thresholds; Météo-France requires a daytime
               maximum <em>and</em> a night-time minimum to be passed together
               for three days and nights, on thresholds set per département.
-              <Ref n={4} /> The episodes here are not any one country&apos;s
-              official heatwaves, and are not comparable to their published
-              counts.
+              <Ref n={4} /> The episodes here are not any one country’s official
+              heatwaves, and are not comparable to their published counts.
             </p>
           </div>
         </section>
@@ -626,11 +624,11 @@ export default function SummerStory() {
             {n0(pct("Canada"))}%, Russia {n0(pct("Russia"))}%. Two other brown
             patches are worth naming. <b>Southern Pakistan</b> is a real and
             severe failure of the monsoon, worse in places than anything in
-            Europe: around Sukkur the window brought 1&#8202;mm against a normal
-            of 68. <b>California</b> is the opposite case, an artefact of the
-            ratio: its summers are normally almost rainless, so 1&#8202;mm
-            against a normal of 7 reads as a deep deficit on a map while meaning
-            very little on the ground. The grey gaps, most of the Sahara and the
+            Europe: around Sukkur the window brought 1 mm against a normal of
+            68. <b>California</b> is the opposite case, an artefact of the
+            ratio: its summers are normally almost rainless, so 1 mm against a
+            normal of 7 reads as a deep deficit on a map while meaning very
+            little on the ground. The grey gaps, most of the Sahara and the
             Arabian peninsula, are drier still and are left out entirely.
           </figcaption>
         </figure>
@@ -724,9 +722,9 @@ export default function SummerStory() {
             the summer, moved back over it. In the fortnight that followed,
             Portugal received{" "}
             <span className={s.wet}>
-              {n0(pt.wet.obs)}&#8202;mm, {n0(pt.wet.pct)}% of normal for those
-              two weeks, and {n1(pt.ratio)} times everything it had received in
-              the preceding {n0(pt.dry.days)} days
+              {n0(pt.wet.obs)} mm, {n0(pt.wet.pct)}% of normal for those two
+              weeks, and {n1(pt.ratio)} times everything it had received in the
+              preceding {n0(pt.dry.days)} days
             </span>
             .
           </p>
@@ -779,14 +777,14 @@ export default function SummerStory() {
         )}
         <p className={styles.cap}>
           Drag the slider to step through the whole summer in five-day windows,
-          1 June to 31 August. Each is measured against that month&apos;s own
+          1 June to 31 August. Each is measured against that month’s own
           average, which is why Spain looks most extreme in late June rather
           than in July: its hottest <em>absolute</em> day came on 6 July, but
           July is normally hot in Spain, so the same heat is a smaller departure
-          from normal. Click anywhere for that place&apos;s daily record. Values
-          are for the 0.25° grid cell around the point, not a weather station.
-          The two rain windows are the dry stretch and the fortnight it broke.
-          The window you pick is marked on the matching chart when you click a
+          from normal. Click anywhere for that place’s daily record. Values are
+          for the 0.25° grid cell around the point, not a weather station. The
+          two rain windows are the dry stretch and the fortnight it broke. The
+          window you pick is marked on the matching chart when you click a
           place.
         </p>
       </section>
@@ -829,19 +827,18 @@ export default function SummerStory() {
             burn: EFFIS counted about <strong>23,400 hectares</strong> across 72
             fires larger than 30 hectares by 10 August.
             <Ref n={5} /> But that is roughly half the area lost in 2025, which
-            remains the UK&apos;s worst year in the EFFIS record at 47,900
-            hectares. Ten of its {ukRank.n} summers were drier than 2026. Heat
-            without the same depth of drought produced a bad fire year, not a
-            record one.
+            remains the UK’s worst year in the EFFIS record at 47,900 hectares.
+            Ten of its {ukRank.n} summers were drier than 2026. Heat without the
+            same depth of drought produced a bad fire year, not a record one.
           </p>
           <p>
             Two break the pattern on the dry axis.{" "}
             <span className={s.wet}>Portugal</span> finished its summer{" "}
             <em>wetter</em> than normal ({n0(DATA.ranks.Portugal.pct)}%) once
-            the late-August rain is counted, and Greece was both cooler and
-            wetter than most of the record. Neither was among the countries
-            named in the season&apos;s fire reporting, which centred on Spain,
-            France and Italy.
+            the late-August rain is counted, and Greece, though it had one of
+            its warmer summers, was wetter than most of the record. Neither was
+            among the countries named in the season’s fire reporting, which
+            centred on Spain, France and Italy.
             <Ref n={1} />
           </p>
           <p>
@@ -860,17 +857,13 @@ export default function SummerStory() {
         <div className={s.prose}>
           <p>
             None of this happened to a stable climate. Europe has warmed by{" "}
-            <strong>
-              {WARM_EUROPE.toFixed(2)}&#8202;°C per decade since 1979
-            </strong>
-            . Against the whole planet, land and ocean together, that is{" "}
+            <strong>{WARM_EUROPE.toFixed(2)} °C per decade since 1979</strong>.
+            Against the whole planet, land and ocean together, that is{" "}
             <strong>{RATIO_GLOBE} times the global rate</strong>; against the
-            world&apos;s land alone, which warms faster than the sea,{" "}
-            <strong>{RATIO_LAND} times</strong>.
-          </p>
-          <p>
-            Europe&apos;s last five years averaged{" "}
-            <strong>{n1(dec.siteDelta)}&#8202;°C</strong> warmer than its{" "}
+            world’s land alone, which warms faster than the sea,{" "}
+            <strong>{RATIO_LAND} times</strong>. Put as a temperature rather
+            than a rate, Europe’s last five years averaged{" "}
+            <strong>{n1(dec.siteDelta)} °C</strong> warmer than its{" "}
             {dec.siteBase[0]}–{dec.siteBase[1]} average.
           </p>
         </div>
@@ -893,11 +886,11 @@ export default function SummerStory() {
       <footer className={styles.methods}>
         <h2 className={s.footHead}>How to read these numbers</h2>
         <p>
-          2&#8202;m air temperature and total precipitation from the Copernicus
-          ERA5 climate record at 0.25° resolution. ERA5 is the ECMWF reanalysis,
-          a physically consistent reconstruction of past weather; the most
-          recent months use its preliminary near-real-time release, ERA5T, which
-          is revised later. The data is ingested and tiled by the{" "}
+          2 m air temperature and total precipitation from the Copernicus ERA5
+          climate record at 0.25° resolution. ERA5 is the ECMWF reanalysis, a
+          physically consistent reconstruction of past weather; the most recent
+          months use its preliminary near-real-time release, ERA5T, which is
+          revised later. The data is ingested and tiled by the{" "}
           <a href="https://github.com/climate-you/climate">
             open-source pipeline
           </a>{" "}
@@ -908,18 +901,16 @@ export default function SummerStory() {
         <ul className={s.methodsList}>
           <li>
             <b>Grid values are not station values.</b> A 0.25° cell is about 19
-            × 28&#8202;km and averages town with countryside, so it runs cooler
-            than the hottest thermometer inside it. Station records quoted here
-            come from the national weather service, not from us.
+            × 28 km and averages town with countryside, so it runs cooler than
+            the hottest thermometer inside it. Station records quoted here come
+            from the national weather service, not from us.
           </li>
           <li>
-            <b>
-              Heat episodes are ours, not any country&apos;s official heatwaves.
-            </b>{" "}
-            Three or more consecutive days above that country&apos;s own{" "}
-            {BASE_LABEL} day-of-year 90th percentile of daily maximum, ±7-day
-            window, on the area-weighted national average. National definitions
-            differ and none travels across borders.
+            <b>Heat episodes are ours, not any country’s official heatwaves.</b>{" "}
+            Three or more consecutive days above that country’s own {BASE_LABEL}{" "}
+            day-of-year 90th percentile of daily maximum, ±7-day window, on the
+            area-weighted national average. National definitions differ and none
+            travels across borders.
           </li>
           <li>
             <b>Rainfall as a percentage of normal</b> is total observed divided
@@ -927,9 +918,10 @@ export default function SummerStory() {
             from the {BASE_LABEL} monthly climatology.
           </li>
           <li>
-            <b>Two windows are in play</b>: 1 June – 15 August for the rainfall
-            deficit, and the full June–August for the historical comparison.
-            Each is named wherever it is used.
+            <b>Several windows are in play</b>: May–August for the heat-episode
+            counts, 1 June – 15 August wherever heat and rain are compared, the
+            full June–August for the historical comparison, and 16–31 August for
+            the rain’s return. Each is named wherever it is used.
           </li>
           <li>
             <b>We show a coincidence, not a cause.</b> For the attribution see
@@ -944,16 +936,16 @@ export default function SummerStory() {
             <li id="source-1">
               CNN, 10 August 2026,{" "}
               <a href="https://www.cnn.com/2026/08/10/climate/europe-heatwave-wildfire-intl-hnk">
-                Europe&apos;s heatwave and wildfires
+                Europe’s heatwave and wildfires
               </a>
               : area burned and evacuations.
             </li>
             <li id="source-2">
               World Economic Forum,{" "}
               <a href="https://www.weforum.org/stories/nature-and-biodiversity/europe-heatwaves-wildfires-charts/">
-                Europe&apos;s heatwaves and wildfires, in charts
+                Europe’s heatwaves and wildfires, in charts
               </a>
-              : the Ávila fire and France&apos;s annual record.
+              : the Ávila fire and France’s annual record.
             </li>
             <li id="source-3">
               Met Office, 13 August 2026,{" "}
@@ -965,7 +957,7 @@ export default function SummerStory() {
                 Latest heatwave peaks with 38.1°C recorded
               </a>
               : the Kew Gardens reading, its place in the UK record, and the
-              count of 38&#8202;°C and 37&#8202;°C days in 2026.
+              count of 38 °C and 37 °C days in 2026.
             </li>
             <li id="source-4">
               Météo-France,{" "}
@@ -1013,9 +1005,9 @@ export default function SummerStory() {
             contains.
           </p>
           <p>
-            © 2026 Benoit Leveau &amp; Fanny Chaléon. This article, its figures,
-            and images exported from it are all rights reserved and are not
-            covered by the pipeline&apos;s AGPL licence.{" "}
+            © 2026 Benoit Leveau & Fanny Chaléon. This article, its figures, and
+            images exported from it are all rights reserved and are not covered
+            by the pipeline’s AGPL licence.{" "}
             <a
               href="https://github.com/climate-you/climate/blob/main/CONTENT-LICENSE.md"
               target="_blank"

@@ -225,9 +225,9 @@ export default function HeatwaveStory() {
         </p>
         <p className={styles.meta}>
           Contains modified Copernicus Climate Change Service information 2026 ·
-          ERA5/ERA5T 2&#8202;m air temperature · anomalies vs the 1991–2020
-          average for the same time of year · record through 13 July 2026 ·
-          processed with the{" "}
+          ERA5/ERA5T 2 m air temperature · anomalies vs the 1991–2020 average
+          for the same time of year · record through 13 July 2026 · processed
+          with the{" "}
           <a href="https://github.com/climate-you/climate">
             open-source pipeline
           </a>{" "}
@@ -256,9 +256,9 @@ export default function HeatwaveStory() {
         </div>
       )}
       <p className={styles.cap}>
-        Mean 2&#8202;m air temperature over each window, shown as the difference
-        from the 1991–2020 average for the same month: red is how far above
-        normal it ran, not how hot it was. Copernicus ERA5/ERA5T.
+        Mean 2 m air temperature over each window, shown as the difference from
+        the 1991–2020 average for the same month: red is how far above normal it
+        ran, not how hot it was. Copernicus ERA5/ERA5T.
       </p>
       <div className={styles.scale}>
         <span>0°C</span>
@@ -362,17 +362,17 @@ export default function HeatwaveStory() {
 
       <footer className={styles.methods}>
         <p>
-          <strong>How this page was made.</strong> 2&#8202;m air temperature
-          from the Copernicus ERA5 climate record at 0.25° resolution. ERA5 is
-          the ECMWF reanalysis, a physically consistent reconstruction of past
-          weather; the most recent days use its preliminary near-real-time
-          release, ERA5T. The data is ingested and tiled by the{" "}
+          <strong>How this page was made.</strong> 2 m air temperature from the
+          Copernicus ERA5 climate record at 0.25° resolution. ERA5 is the ECMWF
+          reanalysis, a physically consistent reconstruction of past weather;
+          the most recent days use its preliminary near-real-time release,
+          ERA5T. The data is ingested and tiled by the{" "}
           <a href="https://github.com/climate-you/climate">
             open-source pipeline
           </a>{" "}
           that powers <a href="https://climate.you">climate.you</a>, the same
           dataset behind the interactive globe. Each map shows the mean over its
-          time window minus that grid cell&apos;s 1991–2020 average for the same
+          time window minus that grid cell’s 1991–2020 average for the same
           month. The daily line is the mean across 15 major Western and Central
           European cities. Data runs through 13 July 2026.
         </p>
@@ -383,9 +383,9 @@ export default function HeatwaveStory() {
           contains.
         </p>
         <p className={styles.copyright}>
-          © 2026 Benoit Leveau &amp; Fanny Chaléon. This article, its figures,
-          and images exported from it are all rights reserved and are not
-          covered by the pipeline&apos;s AGPL licence.{" "}
+          © 2026 Benoit Leveau & Fanny Chaléon. This article, its figures, and
+          images exported from it are all rights reserved and are not covered by
+          the pipeline’s AGPL licence.{" "}
           <a
             href="https://github.com/climate-you/climate/blob/main/CONTENT-LICENSE.md"
             target="_blank"
