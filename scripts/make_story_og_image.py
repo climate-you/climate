@@ -124,7 +124,21 @@ def main() -> int:
     ap.add_argument("--title", required=True, help="Headline shown on the card")
     ap.add_argument("--out", type=Path, required=True, help="Output PNG path")
     ap.add_argument("--kicker", default="climate.you · Case study")
-    ap.add_argument("--source", default="Source: ECMWF ERA5/ERA5T")
+    ap.add_argument(
+        "--source",
+        default="Contains modified Copernicus Climate Change Service information 2026",
+        help="Attribution line. The Copernicus licence prescribes this wording "
+             "for products derived from its data.",
+    )
+    ap.add_argument(
+        "--texture-right",
+        type=Path,
+        help="Second texture. When given the map is split down the middle, "
+             "the way the story's opening comparison is, with this one on the "
+             "right half.",
+    )
+    ap.add_argument("--label-left", default="HEAT")
+    ap.add_argument("--label-right", default="RAIN")
     ap.add_argument("--lines", type=Path, default=_DEFAULT_LINES)
     ap.add_argument("--logo", type=Path, default=_DEFAULT_LOGO)
     ap.add_argument(
@@ -144,10 +158,39 @@ def main() -> int:
     )
     args = ap.parse_args()
 
-    if args.map_only:
-        thumb = render_map(
-            args.texture, args.lines, tuple(args.bbox), args.map_only, args.lat_max
+    def build_map(width: int) -> Image.Image:
+        left = render_map(
+            args.texture, args.lines, tuple(args.bbox), width, args.lat_max
         )
+        if not args.texture_right:
+            return left
+        right = render_map(
+            args.texture_right, args.lines, tuple(args.bbox), width, args.lat_max
+        )
+        # Same frame, split down the middle: the card should read as the
+        # comparison the page opens with, not as one of the two maps.
+        half = left.width // 2
+        out = left.copy()
+        out.paste(right.crop((half, 0, right.width, right.height)), (half, 0))
+        d = ImageDraw.Draw(out, "RGBA")
+        d.line([(half, 0), (half, out.height - 1)], fill=(255, 255, 255, 235),
+               width=max(2, width // 280))
+        tag = font(_SANS_BOLD, max(13, width // 34))
+        pad = max(5, width // 90)
+        for text, x, anchor in (
+            (args.label_left, pad, "la"),
+            (args.label_right, out.width - pad, "ra"),
+        ):
+            box = d.textbbox((x, pad), text, font=tag, anchor=anchor)
+            d.rectangle(
+                [box[0] - pad, box[1] - pad // 2, box[2] + pad, box[3] + pad // 2],
+                fill=(17, 17, 17, 200),
+            )
+            d.text((x, pad), text, font=tag, fill=(255, 255, 255), anchor=anchor)
+        return out
+
+    if args.map_only:
+        thumb = build_map(args.map_only)
         out = args.out.resolve()
         out.parent.mkdir(parents=True, exist_ok=True)
         thumb.save(out, "PNG")
@@ -166,9 +209,7 @@ def main() -> int:
 
     # ── Right: framed map ────────────────────────────────────────────────
     map_w = 560
-    map_img = render_map(
-        args.texture, args.lines, tuple(args.bbox), map_w, args.lat_max
-    )
+    map_img = build_map(map_w)
     map_x = W - MARGIN - map_w
     map_y = (H - map_img.height) // 2
     card.paste(map_img, (map_x, map_y))
@@ -208,10 +249,19 @@ def main() -> int:
     # Centre the headline block in the space below the mark, so the card does
     # not sit top-heavy with a dead band along the bottom.
     title_font = font(_SERIF_BOLD, 62)
-    source_font = font(_SANS_BOLD, 26)
+    source_font = font(_SANS, 21)
     lines = wrap(args.title, title_font, text_w)
-    line_h, rule_gap, source_gap = 74, 22, 32
-    block_h = len(lines) * line_h + rule_gap + 3 + source_gap + 32
+    # The attribution is a sentence, not a short credit, so it wraps inside the
+    # text column instead of running on under the map.
+    source_lines = wrap(args.source, source_font, text_w)
+    line_h, rule_gap, source_gap, source_line_h = 74, 22, 30, 28
+    block_h = (
+        len(lines) * line_h
+        + rule_gap
+        + 3
+        + source_gap
+        + len(source_lines) * source_line_h
+    )
     top = y + logo_size + 24
     bottom = H - MARGIN
     y = top + max(0, (bottom - top - block_h) // 2)
@@ -222,7 +272,10 @@ def main() -> int:
 
     rule_y = y + rule_gap
     draw.line([(MARGIN, rule_y), (MARGIN + 132, rule_y)], fill=INK, width=3)
-    draw.text((MARGIN, rule_y + source_gap), args.source, font=source_font, fill=MUTED)
+    sy = rule_y + source_gap
+    for line in source_lines:
+        draw.text((MARGIN, sy), line, font=source_font, fill=MUTED)
+        sy += source_line_h
 
     out = args.out.resolve()
     out.parent.mkdir(parents=True, exist_ok=True)

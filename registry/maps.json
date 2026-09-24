@@ -173,6 +173,57 @@
       "height": 2150
     }
   },
+  "tp_summer_2026_pct_of_normal_mercator_texture": {
+    "id": "tp_summer_2026_pct_of_normal_mercator_texture",
+    "title": "Summer 2026 rainfall as % of the 1991\u20132020 normal (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "tp_summer_2026_pct_of_normal",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": ["#5c3708", "#c98a10", "#f7f7f7", "#74add1", "#313695"],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 200.0
+    },
+    "output": {
+      "filename": "tp_summer_2026_pct_of_normal_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "tp_june_2026_anomaly_mercator_texture": {
+    "id": "tp_june_2026_anomaly_mercator_texture",
+    "title": "June 2026 rainfall anomaly vs 1991\u20132020 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "tp_june_2026_anomaly_vs_1991_2020_mm",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": ["#8c510a", "#e6b800", "#f7f7f7", "#74add1", "#313695"],
+      "nan_color": "#000000"
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": -3.0,
+      "vmax": 3.0
+    },
+    "output": {
+      "filename": "tp_june_2026_anomaly_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
   "t2m_heatwave_2026_w1_mercator_texture": {
     "id": "t2m_heatwave_2026_w1_mercator_texture",
     "title": "June 20–22 2026 heat anomaly vs 1991–2020 (Mercator)",
@@ -253,6 +304,31 @@
     "scale": { "mode": "linear", "vmin": 0.0, "vmax": 12.0 },
     "output": {
       "filename": "t2m_heatwave_2026_w4_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatwave_2026_w5_mercator_texture": {
+    "id": "t2m_heatwave_2026_w5_mercator_texture",
+    "title": "August 11\u201314 2026 heat anomaly vs 1991\u20132020 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatwave_2026_w5_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": ["#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#b10026"],
+      "nan_color": "#fff9d7"
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatwave_2026_w5_mercator.webp",
       "width": 1440,
       "height": 2150
     }
@@ -540,5 +616,696 @@
     "title": "Score 1 everywhere",
     "type": "score",
     "constant_score": 1
+  },
+  "t2m_summer_2026_anomaly_mercator_texture": {
+    "id": "t2m_summer_2026_anomaly_mercator_texture",
+    "title": "Summer 2026 (1 Jun \u2013 15 Aug) air temperature anomaly vs 1991\u20132020 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_summer_2026_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 5.0
+    },
+    "output": {
+      "filename": "t2m_summer_2026_anomaly_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_00_mercator_texture": {
+    "id": "t2m_heatslider_sum26_00_mercator_texture",
+    "title": "Air temperature anomaly, 1–5 Jun 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_00_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_00_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_01_mercator_texture": {
+    "id": "t2m_heatslider_sum26_01_mercator_texture",
+    "title": "Air temperature anomaly, 6–10 Jun 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_01_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_01_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_02_mercator_texture": {
+    "id": "t2m_heatslider_sum26_02_mercator_texture",
+    "title": "Air temperature anomaly, 11–15 Jun 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_02_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_02_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_03_mercator_texture": {
+    "id": "t2m_heatslider_sum26_03_mercator_texture",
+    "title": "Air temperature anomaly, 16–20 Jun 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_03_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_03_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_04_mercator_texture": {
+    "id": "t2m_heatslider_sum26_04_mercator_texture",
+    "title": "Air temperature anomaly, 21–25 Jun 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_04_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_04_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_05_mercator_texture": {
+    "id": "t2m_heatslider_sum26_05_mercator_texture",
+    "title": "Air temperature anomaly, 26–30 Jun 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_05_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_05_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_06_mercator_texture": {
+    "id": "t2m_heatslider_sum26_06_mercator_texture",
+    "title": "Air temperature anomaly, 1–5 Jul 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_06_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_06_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_07_mercator_texture": {
+    "id": "t2m_heatslider_sum26_07_mercator_texture",
+    "title": "Air temperature anomaly, 6–10 Jul 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_07_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_07_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_08_mercator_texture": {
+    "id": "t2m_heatslider_sum26_08_mercator_texture",
+    "title": "Air temperature anomaly, 11–15 Jul 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_08_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_08_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_09_mercator_texture": {
+    "id": "t2m_heatslider_sum26_09_mercator_texture",
+    "title": "Air temperature anomaly, 16–20 Jul 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_09_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_09_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_10_mercator_texture": {
+    "id": "t2m_heatslider_sum26_10_mercator_texture",
+    "title": "Air temperature anomaly, 21–25 Jul 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_10_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_10_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_11_mercator_texture": {
+    "id": "t2m_heatslider_sum26_11_mercator_texture",
+    "title": "Air temperature anomaly, 26–31 Jul 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_11_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_11_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_12_mercator_texture": {
+    "id": "t2m_heatslider_sum26_12_mercator_texture",
+    "title": "Air temperature anomaly, 1–5 Aug 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_12_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_12_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_13_mercator_texture": {
+    "id": "t2m_heatslider_sum26_13_mercator_texture",
+    "title": "Air temperature anomaly, 6–10 Aug 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_13_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_13_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_14_mercator_texture": {
+    "id": "t2m_heatslider_sum26_14_mercator_texture",
+    "title": "Air temperature anomaly, 11–15 Aug 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_14_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_14_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_15_mercator_texture": {
+    "id": "t2m_heatslider_sum26_15_mercator_texture",
+    "title": "Air temperature anomaly, 16–20 Aug 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_15_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_15_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_16_mercator_texture": {
+    "id": "t2m_heatslider_sum26_16_mercator_texture",
+    "title": "Air temperature anomaly, 21–25 Aug 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_16_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_16_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "t2m_heatslider_sum26_17_mercator_texture": {
+    "id": "t2m_heatslider_sum26_17_mercator_texture",
+    "title": "Air temperature anomaly, 26–31 Aug 2026 (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "t2m_heatslider_sum26_17_anomaly_c",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": [
+        "#ffffcc",
+        "#ffeda0",
+        "#fed976",
+        "#feb24c",
+        "#fd8d3c",
+        "#fc4e2a",
+        "#e31a1c",
+        "#b10026"
+      ],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 12.0
+    },
+    "output": {
+      "filename": "t2m_heatslider_sum26_17_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
+  },
+  "tp_late_aug_2026_pct_of_normal_mercator_texture": {
+    "id": "tp_late_aug_2026_pct_of_normal_mercator_texture",
+    "title": "Rainfall 16\u201331 Aug 2026 as % of the 1991\u20132020 normal (Mercator)",
+    "type": "texture",
+    "file_format": "webp",
+    "projection": "mercator",
+    "mercator_lat_max": 85.05112878,
+    "web_write": true,
+    "source_metric": "tp_late_aug_2026_pct_of_normal",
+    "reducer": { "op": "year", "year": 2026 },
+    "palette": {
+      "colors": ["#5c3708", "#c98a10", "#f7f7f7", "#74add1", "#313695"],
+      "nan_color": "#000000",
+      "nan_alpha": 0.0
+    },
+    "scale": {
+      "mode": "linear",
+      "vmin": 0.0,
+      "vmax": 200.0
+    },
+    "output": {
+      "filename": "tp_late_aug_2026_pct_of_normal_mercator.webp",
+      "width": 1440,
+      "height": 2150
+    }
   }
 }

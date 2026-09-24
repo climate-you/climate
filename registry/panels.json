@@ -402,6 +402,74 @@
               "transform": { "fn": "linear_trend_line" }
             }
           ]
+        },
+        {
+          "id": "tp_monthly",
+          "title": "Monthly rainfall",
+          "ui": {
+            "info_text": "Rainfall as a mean daily rate: the 12-month running mean of ERA5 monthly total precipitation for 1979-2026, and, zoomed in, the daily totals of 2026 against the monthly mean. Source: CDS.",
+            "chart_mode": "temperature_line",
+            "axis_title_mode": "year"
+          },
+          "x_axis_label": "Year",
+          "y_axis_label": "Rainfall (mm/day)",
+          "source": "CDS ERA5 monthly mean total precipitation (1979-2026) and daily totals (2026)",
+          "animation": {
+            "autoplay": false,
+            "loop": false,
+            "steps": [
+              {
+                "id": "all_years",
+                "title": "Climate",
+                "series_keys": ["tp_monthly_12m", "tp_monthly_trend"]
+              },
+              {
+                "id": "zoom_in",
+                "title": "This year",
+                "time_range": { "last": { "value": 1, "unit": "years" } },
+                "series_keys": ["tp_daily_total", "tp_monthly_mean"]
+              }
+            ]
+          },
+          "series": [
+            {
+              "key": "tp_daily_total",
+              "metric": "tp_daily_total_mm",
+              "label": "Daily total",
+              "ui": { "role": "raw" },
+              "unit": "mm/day",
+              "style": { "type": "line", "color": "rgba(180,180,180,0.7)" }
+            },
+            {
+              "key": "tp_monthly_mean",
+              "metric": "tp_monthly_mean_mm_per_day",
+              "label": "Monthly mean",
+              "ui": { "role": "mean" },
+              "unit": "mm/day",
+              "style": { "type": "line", "color": "#1736ff" }
+            },
+            {
+              "key": "tp_monthly_12m",
+              "metric": "tp_monthly_mean_mm_per_day",
+              "label": "12-month mean",
+              "ui": { "role": "mean" },
+              "unit": "mm/day",
+              "style": { "type": "line", "color": "#1736ff" },
+              "transform": {
+                "fn": "rolling_mean",
+                "params": { "window": 12, "centered": true }
+              }
+            },
+            {
+              "key": "tp_monthly_trend",
+              "metric": "tp_monthly_mean_mm_per_day",
+              "label": "Trend",
+              "ui": { "role": "trend" },
+              "unit": "mm/day",
+              "style": { "type": "line", "color": "rgba(0,0,255,0.24)" },
+              "transform": { "fn": "linear_trend_line" }
+            }
+          ]
         }
       ]
     },

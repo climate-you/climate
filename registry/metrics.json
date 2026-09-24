@@ -12,9 +12,9 @@
     "aggregates": ["mean", "min", "max"],
     "source": {
       "type": "cds",
-      "dataset_ref": "era5_daily_t2m",
+      "dataset_ref": "era5_monthly_t2m",
       "batch_tiles_override": 4,
-      "agg": "annual_mean_from_daily",
+      "agg": "annual_mean_from_monthly",
       "time_range": {
         "start_year": 1979,
         "end_year": 2025
@@ -333,13 +333,13 @@
     "aggregates": ["mean"],
     "source": {
       "type": "cds",
-      "dataset_ref": "era5_daily_t2m",
+      "dataset_ref": "era5_monthly_t2m",
       "batch_tiles_override": 4,
-      "agg": "monthly_mean_from_daily",
+      "agg": "identity",
       "time_range": {
         "start_year": 1979,
         "end_year": 2026,
-        "end_month": 6
+        "end_month": 8
       }
     },
     "storage": {
@@ -369,7 +369,7 @@
       "time_range": {
         "start_year": 1979,
         "end_year": 2026,
-        "end_month": 6
+        "end_month": 7
       }
     },
     "storage": {
@@ -399,7 +399,201 @@
       "time_range": {
         "start_year": 1979,
         "end_year": 2026,
-        "end_month": 6
+        "end_month": 7
+      }
+    },
+    "storage": {
+      "tiled": true,
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
+    }
+  },
+  "tp_monthly_mean_mm_per_day": {
+    "id": "tp_monthly_mean_mm_per_day",
+    "title": "Precipitation monthly mean",
+    "description": "Mean daily precipitation for each month. ERA5 monthly tp is a mean DAILY accumulation, so m_to_mm alone yields mm/day - unlike the daily product, which is per hour and needs an extra factor of 24.",
+    "unit": "mm/day",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "monthly",
+    "aggregates": ["mean"],
+    "source": {
+      "type": "cds",
+      "dataset_ref": "era5_monthly_tp",
+      "batch_tiles_override": 4,
+      "agg": "identity",
+      "time_range": {
+        "start_year": 1979,
+        "end_year": 2026,
+        "end_month": 8
+      }
+    },
+    "storage": {
+      "tiled": true,
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
+    }
+  },
+  "tp_daily_total_mm": {
+    "id": "tp_daily_total_mm",
+    "title": "Precipitation daily total",
+    "unit": "mm",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "daily",
+    "llm_hidden": true,
+    "aggregates": ["mean"],
+    "source": {
+      "type": "cds",
+      "dataset_ref": "era5_daily_tp",
+      "batch_tiles_override": 4,
+      "agg": "identity",
+      "time_range": {
+        "start_year": 2026,
+        "end_year": 2026,
+        "end_month": 8,
+        "end_day": 31
+      }
+    },
+    "storage": {
+      "tiled": true,
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
+    }
+  },
+  "tp_june_2026_anomaly_vs_1991_2020_mm": {
+    "id": "tp_june_2026_anomaly_vs_1991_2020_mm",
+    "title": "June 2026 rainfall anomaly vs 1991-2020 June average",
+    "description": "Departure from the 1991-2020 June mean, as a daily rate. Pairs month-for-month with t2m_june_2026_anomaly_vs_1991_2020_c so the two can be swiped against each other.",
+    "unit": "mm/day",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["tp_monthly_mean_mm_per_day"],
+      "steps": [
+        {
+          "fn": "monthly_climatology_anomaly",
+          "params": {
+            "target_year": 2026,
+            "target_month": 6,
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": {
+      "tiled": true,
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
+    }
+  },
+  "tp_summer_2026_pct_of_normal": {
+    "id": "tp_summer_2026_pct_of_normal",
+    "title": "Rainfall 1 Jun - 15 Aug 2026 as a percentage of the 1991-2020 normal",
+    "unit": "%",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["tp_daily_total_mm", "tp_monthly_mean_mm_per_day"],
+      "steps": [
+        {
+          "fn": "window_accumulation_anomaly",
+          "params": {
+            "window_start": "2026-06-01",
+            "window_end": "2026-08-15",
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "output": "pct_of_normal",
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": {
+      "tiled": true,
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
+    }
+  },
+  "t2m_heatwave_2026_w5_anomaly_c": {
+    "id": "t2m_heatwave_2026_w5_anomaly_c",
+    "title": "August 11-14 2026 heat anomaly vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-08-11",
+            "window_end": "2026-08-14",
+            "clim_month": 8,
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": {
+      "tiled": true,
+      "compression": {
+        "codec": "zstd",
+        "level": 10
+      }
+    }
+  },
+  "t2m_daily_max_c": {
+    "id": "t2m_daily_max_c",
+    "title": "2m temperature daily maximum",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "daily",
+    "llm_hidden": true,
+    "aggregates": ["mean", "max"],
+    "source": {
+      "type": "cds",
+      "dataset_ref": "era5_daily_t2m_max",
+      "batch_tiles_override": 4,
+      "agg": "identity",
+      "params": {
+        "daily_statistic": "daily_maximum"
+      },
+      "time_range": {
+        "start_year": 2021,
+        "end_year": 2026,
+        "end_month": 8,
+        "end_day": 31
       }
     },
     "storage": {
@@ -431,8 +625,8 @@
       "time_range": {
         "start_year": 2021,
         "end_year": 2026,
-        "end_month": 7,
-        "end_day": 13
+        "end_month": 8,
+        "end_day": 31
       }
     },
     "storage": {
@@ -702,5 +896,565 @@
         "level": 10
       }
     }
+  },
+  "t2m_summer_2026_anomaly_c": {
+    "id": "t2m_summer_2026_anomaly_c",
+    "title": "Summer 2026 (1 Jun \u2013 15 Aug) air temperature anomaly vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-06-01",
+            "window_end": "2026-08-15",
+            "clim_months": [6, 7, 8],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_00_anomaly_c": {
+    "id": "t2m_heatslider_sum26_00_anomaly_c",
+    "title": "Air temperature anomaly, 1–5 Jun 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-06-01",
+            "window_end": "2026-06-05",
+            "clim_months": [6],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_01_anomaly_c": {
+    "id": "t2m_heatslider_sum26_01_anomaly_c",
+    "title": "Air temperature anomaly, 6–10 Jun 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-06-06",
+            "window_end": "2026-06-10",
+            "clim_months": [6],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_02_anomaly_c": {
+    "id": "t2m_heatslider_sum26_02_anomaly_c",
+    "title": "Air temperature anomaly, 11–15 Jun 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-06-11",
+            "window_end": "2026-06-15",
+            "clim_months": [6],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_03_anomaly_c": {
+    "id": "t2m_heatslider_sum26_03_anomaly_c",
+    "title": "Air temperature anomaly, 16–20 Jun 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-06-16",
+            "window_end": "2026-06-20",
+            "clim_months": [6],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_04_anomaly_c": {
+    "id": "t2m_heatslider_sum26_04_anomaly_c",
+    "title": "Air temperature anomaly, 21–25 Jun 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-06-21",
+            "window_end": "2026-06-25",
+            "clim_months": [6],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_05_anomaly_c": {
+    "id": "t2m_heatslider_sum26_05_anomaly_c",
+    "title": "Air temperature anomaly, 26–30 Jun 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-06-26",
+            "window_end": "2026-06-30",
+            "clim_months": [6],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_06_anomaly_c": {
+    "id": "t2m_heatslider_sum26_06_anomaly_c",
+    "title": "Air temperature anomaly, 1–5 Jul 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-07-01",
+            "window_end": "2026-07-05",
+            "clim_months": [7],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_07_anomaly_c": {
+    "id": "t2m_heatslider_sum26_07_anomaly_c",
+    "title": "Air temperature anomaly, 6–10 Jul 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-07-06",
+            "window_end": "2026-07-10",
+            "clim_months": [7],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_08_anomaly_c": {
+    "id": "t2m_heatslider_sum26_08_anomaly_c",
+    "title": "Air temperature anomaly, 11–15 Jul 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-07-11",
+            "window_end": "2026-07-15",
+            "clim_months": [7],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_09_anomaly_c": {
+    "id": "t2m_heatslider_sum26_09_anomaly_c",
+    "title": "Air temperature anomaly, 16–20 Jul 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-07-16",
+            "window_end": "2026-07-20",
+            "clim_months": [7],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_10_anomaly_c": {
+    "id": "t2m_heatslider_sum26_10_anomaly_c",
+    "title": "Air temperature anomaly, 21–25 Jul 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-07-21",
+            "window_end": "2026-07-25",
+            "clim_months": [7],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_11_anomaly_c": {
+    "id": "t2m_heatslider_sum26_11_anomaly_c",
+    "title": "Air temperature anomaly, 26–31 Jul 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-07-26",
+            "window_end": "2026-07-31",
+            "clim_months": [7],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_12_anomaly_c": {
+    "id": "t2m_heatslider_sum26_12_anomaly_c",
+    "title": "Air temperature anomaly, 1–5 Aug 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-08-01",
+            "window_end": "2026-08-05",
+            "clim_months": [8],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_13_anomaly_c": {
+    "id": "t2m_heatslider_sum26_13_anomaly_c",
+    "title": "Air temperature anomaly, 6–10 Aug 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-08-06",
+            "window_end": "2026-08-10",
+            "clim_months": [8],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_14_anomaly_c": {
+    "id": "t2m_heatslider_sum26_14_anomaly_c",
+    "title": "Air temperature anomaly, 11–15 Aug 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-08-11",
+            "window_end": "2026-08-15",
+            "clim_months": [8],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_15_anomaly_c": {
+    "id": "t2m_heatslider_sum26_15_anomaly_c",
+    "title": "Air temperature anomaly, 16–20 Aug 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-08-16",
+            "window_end": "2026-08-20",
+            "clim_months": [8],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_16_anomaly_c": {
+    "id": "t2m_heatslider_sum26_16_anomaly_c",
+    "title": "Air temperature anomaly, 21–25 Aug 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-08-21",
+            "window_end": "2026-08-25",
+            "clim_months": [8],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "t2m_heatslider_sum26_17_anomaly_c": {
+    "id": "t2m_heatslider_sum26_17_anomaly_c",
+    "title": "Air temperature anomaly, 26–31 Aug 2026 vs 1991-2020",
+    "unit": "C",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["t2m_daily_mean_c", "t2m_monthly_mean_c"],
+      "steps": [
+        {
+          "fn": "daily_window_anomaly",
+          "params": {
+            "window_start": "2026-08-26",
+            "window_end": "2026-08-31",
+            "clim_months": [8],
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+  },
+  "tp_late_aug_2026_pct_of_normal": {
+    "id": "tp_late_aug_2026_pct_of_normal",
+    "title": "Rainfall 16\u201331 Aug 2026 as a percentage of the 1991-2020 normal",
+    "unit": "%",
+    "dtype": "float32",
+    "missing": "nan",
+    "domain": "global",
+    "time_axis": "yearly",
+    "llm_hidden": true,
+    "source": {
+      "type": "derived",
+      "inputs": ["tp_daily_total_mm", "tp_monthly_mean_mm_per_day"],
+      "steps": [
+        {
+          "fn": "window_accumulation_anomaly",
+          "params": {
+            "window_start": "2026-08-16",
+            "window_end": "2026-08-31",
+            "clim_start_year": 1991,
+            "clim_end_year": 2020,
+            "output": "pct_of_normal",
+            "label_year": 2026
+          }
+        }
+      ]
+    },
+    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
   }
 }

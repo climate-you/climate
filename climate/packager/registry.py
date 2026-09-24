@@ -253,6 +253,9 @@ def _compute_tiles_from_cds_downloads(
                     ds.close()
         if debug:
             print("[cds] Concatenating daily parts")
+        _check_block_coords_consistent(
+            daily_parts_all, metric_id=metric_id, grid=grid
+        )
         da_daily = xr.concat(daily_parts_all, dim=find_time_dim(daily_parts_all[0]))
         da_daily = da_daily.sortby(find_time_dim(da_daily))
         if debug:
@@ -294,6 +297,9 @@ def _compute_tiles_from_cds_downloads(
                 print(
                     "[cds] Concatenating monthly parts for cmip_multi_model_offset_from_monthly"
                 )
+            _check_block_coords_consistent(
+                monthly_parts_all, metric_id=metric_id, grid=grid
+            )
             da_monthly = xr.concat(
                 monthly_parts_all,
                 dim=find_time_dim(monthly_parts_all[0]),
@@ -366,6 +372,9 @@ def _compute_tiles_from_cds_downloads(
                         print(
                             f"[cds] Concatenating daily parts for years {years_part[0]}..{years_part[-1]}"
                         )
+                    _check_block_coords_consistent(
+                        daily_parts, metric_id=metric_id, grid=grid
+                    )
                     da_daily = xr.concat(daily_parts, dim=find_time_dim(daily_parts[0]))
                     da_daily = da_daily.sortby(find_time_dim(da_daily))
                     if debug:
@@ -460,6 +469,9 @@ def _compute_tiles_from_erddap_downloads(
                     ds.close()
         if debug:
             print("[erddap] Concatenating daily parts")
+        _check_block_coords_consistent(
+            daily_parts_all, metric_id=metric_id, grid=grid
+        )
         da_daily = xr.concat(daily_parts_all, dim=find_time_dim(daily_parts_all[0]))
         da_daily = da_daily.sortby(find_time_dim(da_daily))
         if debug:
@@ -971,6 +983,58 @@ def _select_years_if_present(
     return da_out.sel(year=keep)
 
 
+def _check_block_coords_consistent(
+    da_parts: list[xr.DataArray], *, metric_id: str, grid: GridSpec
+) -> bool:
+    """Report download blocks that do not share one spatial grid.
+
+    `xr.concat(..., join="outer")` unions mismatched latitudes instead of
+    failing, so blocks on two geometries produce an interleaved axis with each
+    block NaN-filled at the other's rows. The nearest reindex downstream then
+    finds one block's coordinate *exactly* and binds there, reading NaN for
+    every other block - which is why the tile-write distance warning cannot see
+    this failure and reports an offset of 0.000000. The check therefore has to
+    be here, on the blocks, before they are merged.
+
+    Warns rather than raises: this pass is diagnostic, and aborting would stop
+    the package run that is meant to enumerate which metrics are affected.
+    """
+    if len(da_parts) < 2:
+        return True
+    # Well above float32 noise at these magnitudes (~1e-5 deg near the poles),
+    # far below any real registration difference (half a cell = 0.125 deg).
+    tol = float(grid.deg) * 1e-3
+    ok = True
+    ref = da_parts[0]
+    ref_lat, ref_lon = _find_lat_lon_names(ref.to_dataset(name="v"))
+    for i, part in enumerate(da_parts[1:], start=1):
+        for name in (ref_lat, ref_lon):
+            a = np.asarray(ref[name].values, dtype=np.float64)
+            b = np.asarray(part[name].values, dtype=np.float64)
+            if a.shape != b.shape:
+                print(
+                    f"[warn] Metric {metric_id}: download block {i} has "
+                    f"{b.size} {name} values against block 0's {a.size}. "
+                    f"Concatenating them unions the two axes and NaN-fills each "
+                    f"block at the other's coordinates."
+                )
+                ok = False
+                continue
+            delta = float(np.max(np.abs(a - b))) if a.size else 0.0
+            if delta > tol:
+                print(
+                    f"[warn] Metric {metric_id}: download block {i} is offset "
+                    f"from block 0 by up to {delta:.6f} deg in {name} "
+                    f"({delta / float(grid.deg):.3f} of a {float(grid.deg):g} deg "
+                    f"cell) - the blocks are on different grids. Concatenating "
+                    f"them unions the two axes and NaN-fills each block at the "
+                    f"other's coordinates; the surviving values are whichever "
+                    f"block the reindex binds to."
+                )
+                ok = False
+    return ok
+
+
 def _concat_and_write_time_tiles(
     *,
     da_parts: list[xr.DataArray],
@@ -989,6 +1053,8 @@ def _concat_and_write_time_tiles(
 ) -> int:
     if not da_parts:
         raise RuntimeError(f"No data blocks for metric={metric_id}")
+
+    _check_block_coords_consistent(da_parts, metric_id=metric_id, grid=grid)
 
     if time_axis == "yearly":
         da = xr.concat(da_parts, dim="year", join="outer").sortby("year")
@@ -1012,11 +1078,13 @@ def _concat_and_write_time_tiles(
         )
 
     time_dim = find_time_dim(da_parts[0])
-    # Concatenate the per-block arrays along time only. join="outer" preserves
-    # the historical (verified-correct) behaviour and sets the value explicitly
-    # so xarray's future default change (join="exact") does not warn; any minor
-    # coordinate differences between blocks are corrected when each tile is
-    # reindexed to the canonical grid in _tiles_from_time_da.
+    # Concatenate the per-block arrays along time only. join="outer" is set
+    # explicitly so xarray's future default change (join="exact") does not warn.
+    # It does NOT make coordinate differences between blocks harmless: the union
+    # it takes is what silently NaN-fills a metric whose blocks sit on two
+    # geometries, and the reindex in _tiles_from_time_da cannot undo that
+    # because the union has already put an exact match in the index. That is
+    # what _check_block_coords_consistent above is for.
     da = xr.concat(da_parts, dim=time_dim, join="outer").sortby(time_dim)
     years_set = set(int(y) for y in output_years)
     da = da.where(da[time_dim].dt.year.isin(sorted(years_set)), drop=True)
@@ -1419,6 +1487,34 @@ def _resolve_year_ranges(
     return (analysis_start, analysis_end, download_start, download_end)
 
 
+def _nearest_match_offset(
+    source: np.ndarray, target: np.ndarray, tolerance: float
+) -> np.ndarray:
+    """How far each target coordinate moves to reach the source coordinate a
+    nearest-match reindex binds it to.
+
+    Measured against the *source* coordinates on purpose: ``reindex`` relabels
+    its result with the target values, so comparing the reindexed coordinate
+    against the target reports zero however far the data actually travelled.
+    Targets with no source inside ``tolerance`` come back as NaN, matching the
+    reindex that will drop them.
+    """
+    src = np.asarray(source, dtype=np.float64)
+    tgt = np.asarray(target, dtype=np.float64)
+    if src.size == 0 or tgt.size == 0:
+        return np.zeros(0, dtype=np.float64)
+    probe = xr.DataArray(src, dims=("c",), coords={"c": src})
+    matched = probe.reindex(
+        {"c": tgt}, method="nearest", tolerance=tolerance
+    ).values
+    return np.abs(np.asarray(matched, dtype=np.float64) - tgt)
+
+
+def _finite_max(values: np.ndarray) -> float:
+    finite = values[np.isfinite(values)]
+    return float(finite.max()) if finite.size else 0.0
+
+
 def _tiles_from_time_da(
     *,
     da: xr.DataArray,
@@ -1474,34 +1570,42 @@ def _tiles_from_time_da(
     written = 0
     debug_tiles_printed = 0
 
+    src_lat = np.asarray(da[lat_name].values, dtype=np.float64)
+    src_lon = np.asarray(da[lon_name].values, dtype=np.float64)
+    max_lat_offset = 0.0
+    max_lon_offset = 0.0
+
+    # Deliberately loose: this reindex also serves sources that legitimately
+    # arrive on another grid (CMIP6 regridded to the metric grid, the 0.05 deg
+    # DHW products), so tightening it here would turn working metrics into NaN.
+    # The cost is that it also absorbs the failure it should catch - at
+    # 0.51 * deg a half-cell displacement binds every target row to its
+    # neighbour instead of being refused. Measure what the match actually moved,
+    # and warn below.
+    tol = grid.deg * 0.51
+
     for tr in range(tile_range.tile_r0, tile_range.tile_r1 + 1):
         for tc in range(tile_range.tile_c0, tile_range.tile_c1 + 1):
             lats_expected, lons_expected, _area, valid_h, valid_w = (
                 _compute_tile_bbox_clamped(grid, tr, tc)
             )
 
-            tol = grid.deg * 0.51
             da_tile = da.reindex(
                 {lat_name: lats_expected, lon_name: lons_expected},
                 method="nearest",
                 tolerance=tol,
             )
 
-            if debug:
-                lat_sel = np.asarray(da_tile[lat_name].values, dtype=np.float64)
-                lon_sel = np.asarray(da_tile[lon_name].values, dtype=np.float64)
-                lat_exp = np.asarray(lats_expected, dtype=np.float64)
-                lon_exp = np.asarray(lons_expected, dtype=np.float64)
+            lat_offset = _nearest_match_offset(src_lat, lats_expected, tol)
+            lon_offset = _nearest_match_offset(src_lon, lons_expected, tol)
+            max_lat_offset = max(max_lat_offset, _finite_max(lat_offset))
+            max_lon_offset = max(max_lon_offset, _finite_max(lon_offset))
 
-                max_lat_err = (
-                    float(np.max(np.abs(lat_sel - lat_exp))) if lat_sel.size else 0.0
-                )
-                max_lon_err = (
-                    float(np.max(np.abs(lon_sel - lon_exp))) if lon_sel.size else 0.0
-                )
+            if debug:
                 print(
-                    f"tile r{tr:03d} c{tc:03d}: max coord error "
-                    f"lat={max_lat_err:.6f}, lon={max_lon_err:.6f}"
+                    f"tile r{tr:03d} c{tc:03d}: max coord offset "
+                    f"lat={_finite_max(lat_offset):.6f}, "
+                    f"lon={_finite_max(lon_offset):.6f}"
                 )
 
             arr = da_tile.transpose(lat_name, lon_name, time_dim).values
@@ -1583,6 +1687,23 @@ def _tiles_from_time_da(
                 print(
                     f"Wrote {out_path} (tile r{tr:03d} c{tc:03d} valid={valid_h}x{valid_w})"
                 )
+
+    # A match that lands further out than float noise means the source is not on
+    # the metric grid and its values are being relabelled onto it, not
+    # resampled. Some sources do that legitimately; the point of the warning is
+    # to make it visible which metrics rely on it, since the tolerance itself
+    # cannot be tightened without breaking those. The threshold matches the one
+    # the daily slicer was tightened to (`_slice_daily_cache_to_tile_batch`).
+    offset_warn_tol = float(grid.deg) * 0.01
+    worst_offset = max(max_lat_offset, max_lon_offset)
+    if worst_offset > offset_warn_tol:
+        print(
+            f"[warn] Metric {metric_id}: tile reindex matched source coordinates "
+            f"up to lat={max_lat_offset:.6f} deg, lon={max_lon_offset:.6f} deg "
+            f"from their targets ({worst_offset / float(grid.deg):.3f} of a "
+            f"{float(grid.deg):g} deg cell, tolerance {tol:.6f}). Values are "
+            f"relabelled onto grid={grid.grid_id}, not resampled onto it."
+        )
 
     if not debug:
         print(f"Wrote {written} tile(s) for metric={metric_id}")
@@ -1978,7 +2099,13 @@ def _slice_daily_cache_to_tile_batch(
     tile_range: TileRange,
 ) -> None:
     target_lat, target_lon = _batch_target_lat_lon(grid, tile_range)
-    tol = float(grid.deg) * 0.51
+    # Must stay well below half a cell. A tolerance of 0.51 * deg silently
+    # absorbed a half-cell (0.5 * deg) grid displacement in the CDS response,
+    # relabelling a neighbouring row as if it were the target row; the resulting
+    # error tracked the local spatial gradient (~1 K at coasts and mountains).
+    # Source and target must genuinely coincide here, so only float noise is
+    # tolerated and any real displacement raises below.
+    tol = float(grid.deg) * 0.01
     with xr.open_dataset(src_path) as ds:
         lat_name, lon_name = _find_lat_lon_names(ds)
         ds_norm = ds.sortby(lat_name)
@@ -1988,19 +2115,45 @@ def _slice_daily_cache_to_tile_batch(
             ds_norm = ds_norm.assign_coords({lon_name: lon_norm})
         ds_norm = ds_norm.sortby(lon_name)
 
+        src_lat = np.asarray(ds_norm[lat_name].values, dtype=np.float64)
+        src_lon = np.asarray(ds_norm[lon_name].values, dtype=np.float64)
+
         ds_sub = ds_norm.reindex(
             {lat_name: target_lat, lon_name: target_lon},
             method="nearest",
             tolerance=tol,
         )
-        if (
-            ds_sub.sizes.get(lat_name, 0) != target_lat.size
-            or ds_sub.sizes.get(lon_name, 0) != target_lon.size
-        ):
+        # The size check this replaced could never fire: reindex always returns
+        # exactly the target size, filling unmatched coordinates with NaN. A
+        # native-latitude globe file sliced onto cell-centre targets therefore
+        # produced a fully-NaN cache file and no error, and that file then sat
+        # in the cache as if it were valid. Check the coordinates instead.
+        lat_unmatched = int(
+            np.count_nonzero(
+                ~np.isfinite(_nearest_match_offset(src_lat, target_lat, tol))
+            )
+        )
+        lon_unmatched = int(
+            np.count_nonzero(
+                ~np.isfinite(_nearest_match_offset(src_lon, target_lon, tol))
+            )
+        )
+        if lat_unmatched == target_lat.size or lon_unmatched == target_lon.size:
             raise RuntimeError(
-                "Sliced cache does not match requested batch grid: "
-                f"got ({ds_sub.sizes.get(lat_name, 0)} lat x {ds_sub.sizes.get(lon_name, 0)} lon), "
-                f"expected ({target_lat.size} lat x {target_lon.size} lon)"
+                f"Cannot slice {src_path.name} onto the requested batch grid: "
+                f"no source coordinate lies within {tol:.6f} deg of any target "
+                f"({lat_unmatched}/{target_lat.size} {lat_name} and "
+                f"{lon_unmatched}/{target_lon.size} {lon_name} unmatched). "
+                f"Source starts at {lat_name}={src_lat[0]:.6f}, "
+                f"{lon_name}={src_lon[0]:.6f}; targets start at "
+                f"{target_lat[0]:.6f}, {target_lon[0]:.6f}. Slicing anyway would "
+                f"write an all-NaN file into the cache."
+            )
+        if lat_unmatched or lon_unmatched:
+            print(
+                f"[warn] Slicing {src_path.name}: {lat_unmatched} {lat_name} and "
+                f"{lon_unmatched} {lon_name} target coordinates have no source "
+                f"within {tol:.6f} deg and will be NaN in the sliced cache."
             )
         dst_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = dst_path.with_suffix(dst_path.suffix + ".tmp")
@@ -2468,27 +2621,180 @@ def _package_derived_metrics(
                         f"window {params['window_start']}..{params['window_end']} "
                         "not present in daily axis"
                     )
-                clim_idx = climatology_month_indices(
-                    monthly_axis,
-                    int(params["clim_month"]),
-                    int(params["clim_start_year"]),
-                    int(params["clim_end_year"]),
-                )
-                if not clim_idx:
-                    raise ValueError("climatology months not present in monthly axis")
+                # A window inside one month names that month; a window spanning
+                # several ("clim_months") weights each month's climatology by how
+                # many of the window's days fall in it, so a 1 Jun - 15 Aug mean
+                # is not compared against a flat three-month average.
+                clim_months = params.get("clim_months")
+                if clim_months:
+                    day_counts: dict[int, int] = {}
+                    for iso in (str(daily_axis[i]) for i in win_idx):
+                        m = int(iso[5:7])
+                        day_counts[m] = day_counts.get(m, 0) + 1
+                    uncovered = [
+                        m for m in day_counts if m not in set(clim_months)
+                    ]
+                    if uncovered:
+                        raise ValueError(
+                            f"window covers month(s) {sorted(uncovered)} absent "
+                            f"from clim_months {sorted(clim_months)}"
+                        )
+                    total = sum(day_counts.values())
+                    clim = None
+                    for month, ndays in sorted(day_counts.items()):
+                        idx = climatology_month_indices(
+                            monthly_axis,
+                            int(month),
+                            int(params["clim_start_year"]),
+                            int(params["clim_end_year"]),
+                        )
+                        if not idx:
+                            raise ValueError(
+                                f"climatology month {month} not present in monthly axis"
+                            )
+                        part, _ = reduce_metric_mean_over_indices(
+                            series_root=series_root,
+                            metric_id=monthly_id,
+                            metric_spec=monthly_spec,
+                            indices=idx,
+                        )
+                        weighted = part.astype(np.float64) * (ndays / total)
+                        clim = weighted if clim is None else clim + weighted
+                else:
+                    clim_idx = climatology_month_indices(
+                        monthly_axis,
+                        int(params["clim_month"]),
+                        int(params["clim_start_year"]),
+                        int(params["clim_end_year"]),
+                    )
+                    if not clim_idx:
+                        raise ValueError(
+                            "climatology months not present in monthly axis"
+                        )
+                    clim, _ = reduce_metric_mean_over_indices(
+                        series_root=series_root,
+                        metric_id=monthly_id,
+                        metric_spec=monthly_spec,
+                        indices=clim_idx,
+                    )
                 win_mean, grid = reduce_metric_mean_over_indices(
                     series_root=series_root,
                     metric_id=daily_id,
                     metric_spec=daily_spec,
                     indices=win_idx,
                 )
-                clim, _ = reduce_metric_mean_over_indices(
-                    series_root=series_root,
-                    metric_id=monthly_id,
-                    metric_spec=monthly_spec,
-                    indices=clim_idx,
-                )
                 scalar = (win_mean - clim).astype(np.float64)
+            except (FileNotFoundError, ValueError) as exc:
+                print(
+                    f"[derived] skip metric={metric_id} fn={fn} "
+                    f"reason=input not ready ({exc})"
+                )
+                continue
+            scalar_grid = scalar[:, :, np.newaxis]  # (nlat, nlon, 1)
+
+        elif fn == "window_accumulation_anomaly":
+            # Rainfall accumulated over a date window, against the accumulation
+            # the climatology would lead you to expect for the same window.
+            #
+            # Units are the trap here and the two products disagree: the daily
+            # metric is a per-day total in mm, while ERA5's monthly product is a
+            # mean DAILY accumulation (mm/day after m_to_mm, with no factor of
+            # 24). Expected accumulation is therefore built month by month, each
+            # month's climatological mm/day multiplied by the number of window
+            # days falling inside that month — which also handles windows that
+            # straddle month boundaries or cover partial months.
+            inputs = source.get("inputs", [])
+            if len(inputs) != 2:
+                raise ValueError(
+                    f"{metric_id}: window_accumulation_anomaly requires 2 inputs "
+                    "(daily accumulation metric, monthly mm/day climatology metric)"
+                )
+            from collections import Counter
+
+            from climate.packager.maps import (
+                _load_metric_axis,
+                climatology_month_indices,
+                reduce_metric_mean_over_indices,
+                window_day_indices,
+            )
+            from climate.tiles.layout import grid_from_id
+
+            daily_id, monthly_id = inputs
+            daily_spec = manifest[daily_id]
+            monthly_spec = manifest[monthly_id]
+            try:
+                daily_grid = grid_from_id(
+                    str(daily_spec["grid_id"]),
+                    tile_size=int(daily_spec.get("storage", {}).get("tile_size", 64)),
+                )
+                monthly_grid = grid_from_id(
+                    str(monthly_spec["grid_id"]),
+                    tile_size=int(monthly_spec.get("storage", {}).get("tile_size", 64)),
+                )
+                daily_axis = _load_metric_axis(
+                    series_root, daily_grid, daily_id, "daily"
+                )
+                monthly_axis = _load_metric_axis(
+                    series_root, monthly_grid, monthly_id, "monthly"
+                )
+                win_idx = window_day_indices(
+                    daily_axis,
+                    str(params["window_start"]),
+                    str(params["window_end"]),
+                )
+                if not win_idx:
+                    raise ValueError(
+                        f"window {params['window_start']}..{params['window_end']} "
+                        "not present in daily axis"
+                    )
+                obs_mean, grid = reduce_metric_mean_over_indices(
+                    series_root=series_root,
+                    metric_id=daily_id,
+                    metric_spec=daily_spec,
+                    indices=win_idx,
+                )
+                observed = obs_mean.astype(np.float64) * float(len(win_idx))
+
+                days_per_month = Counter(
+                    int(str(daily_axis[i])[5:7]) for i in win_idx
+                )
+                expected = np.zeros_like(observed)
+                for month, ndays in sorted(days_per_month.items()):
+                    clim_idx = climatology_month_indices(
+                        monthly_axis,
+                        month,
+                        int(params["clim_start_year"]),
+                        int(params["clim_end_year"]),
+                    )
+                    if not clim_idx:
+                        raise ValueError(
+                            f"climatology for month {month:02d} not present in "
+                            "monthly axis"
+                        )
+                    clim_rate, _ = reduce_metric_mean_over_indices(
+                        series_root=series_root,
+                        metric_id=monthly_id,
+                        metric_spec=monthly_spec,
+                        indices=clim_idx,
+                    )
+                    expected = expected + clim_rate.astype(np.float64) * float(ndays)
+
+                mode = str(params.get("output", "pct_of_normal"))
+                if mode == "pct_of_normal":
+                    # Deserts divide by ~0 and would produce meaningless spikes,
+                    # so a normal below 1 mm over the whole window is masked out
+                    # rather than reported as a percentage.
+                    with np.errstate(divide="ignore", invalid="ignore"):
+                        scalar = np.where(
+                            expected >= 1.0, 100.0 * observed / expected, np.nan
+                        )
+                elif mode == "mm_difference":
+                    scalar = observed - expected
+                else:
+                    raise ValueError(
+                        f"{metric_id}: unknown output mode {mode!r} "
+                        "(expected 'pct_of_normal' or 'mm_difference')"
+                    )
             except (FileNotFoundError, ValueError) as exc:
                 print(
                     f"[derived] skip metric={metric_id} fn={fn} "
