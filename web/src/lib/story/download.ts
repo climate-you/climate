@@ -12,6 +12,8 @@ export type DownloadScale = {
 
 export type DownloadMeta = {
   title: string;
+  /** Second line under the title, matching the figure's on-page subtitle. */
+  subtitle?: string;
   sourceText: string;
   scale?: DownloadScale;
 };
@@ -60,6 +62,7 @@ export async function composeAndDownload(
   const frame = Math.max(2, Math.round(w * 0.004));
   const gap = Math.round(w * 0.016);
   const titleH = Math.round(w * 0.05);
+  const subH = meta.subtitle ? Math.round(w * 0.032) : 0;
   const scaleH = meta.scale ? Math.round(w * 0.05) : 0;
   const stripH = Math.round(w * 0.05);
 
@@ -68,6 +71,7 @@ export async function composeAndDownload(
   out.height =
     border +
     titleH +
+    subH +
     gap +
     frame +
     h +
@@ -101,8 +105,16 @@ export async function composeAndDownload(
   }
   ctx.fillText(meta.title, gx, border + titleH / 2);
 
+  if (meta.subtitle) {
+    const subPx = Math.max(11, Math.round(subH * 0.52));
+    ctx.font = `400 ${subPx}px ${SANS}`;
+    ctx.fillStyle = "#555555";
+    ctx.fillText(meta.subtitle, gx, border + titleH + subH / 2);
+    ctx.fillStyle = "#111111";
+  }
+
   // Framed graphic
-  const gy = border + titleH + gap + frame;
+  const gy = border + titleH + subH + gap + frame;
   ctx.drawImage(source, gx, gy, w, h);
   ctx.strokeStyle = "#111111";
   ctx.lineWidth = frame;
@@ -143,10 +155,22 @@ export async function composeAndDownload(
   const fontPx = Math.round(stripH * 0.42);
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#111111";
-  ctx.font = `500 ${fontPx}px ${SANS}`;
+  // The Copernicus licence wording is a long sentence rather than a short
+  // credit, so it is set smaller and greyer than the brand it sits opposite,
+  // and shrinks further if it would otherwise reach the brand.
+  const sourcePx = Math.round(stripH * 0.3);
+  ctx.font = `400 ${sourcePx}px ${SANS}`;
+  ctx.fillStyle = "#555555";
   ctx.textAlign = "left";
+  let px = sourcePx;
+  const room = w * 0.62;
+  while (px > 8 && ctx.measureText(meta.sourceText).width > room) {
+    px -= 1;
+    ctx.font = `400 ${px}px ${SANS}`;
+  }
   ctx.fillText(meta.sourceText, gx, midY);
 
+  ctx.fillStyle = "#111111";
   ctx.font = `600 ${fontPx}px ${SANS}`;
   ctx.textAlign = "right";
   ctx.fillText("climate.you", rightX, midY);
@@ -172,6 +196,9 @@ const BAKED_PROPS = [
   "fill",
   "stroke",
   "stroke-width",
+  // Without this every dashed line — the 100%-of-normal baseline, the
+  // climatological curves — exported as a solid one.
+  "stroke-dasharray",
   "opacity",
   "font",
 ] as const;
@@ -201,9 +228,12 @@ export function downloadSvgWithAttribution(
     if (!target) continue;
     for (const prop of BAKED_PROPS) {
       const value = cs.getPropertyValue(prop);
-      if (value && value !== "none" && value !== "normal") {
-        target.setAttribute(prop, value.trim());
-      }
+      if (!value || value === "normal") continue;
+      // "none" is junk for most properties but load-bearing for paint: an
+      // unstyled <polyline> defaults to a black fill, which flooded the area
+      // under every line chart in the export.
+      if (value === "none" && prop !== "fill" && prop !== "stroke") continue;
+      target.setAttribute(prop, value.trim());
     }
   }
   clone.setAttribute("width", String(vbW));

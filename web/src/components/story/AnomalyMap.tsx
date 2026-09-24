@@ -36,11 +36,20 @@ type Props = {
   /** Public URL of the coastline/border overlay JSON. */
   linesUrl: string;
   latMax?: number;
-  /** Backing-store height in device pixels; width follows the crop aspect. */
+  /** Land mask in the texture's projection; sea is knocked out when given. */
+  maskUrl?: string;
+  /**
+   * Fallback backing-store height, used only until the canvas has been laid
+   * out. Once it has, the backing store is sized from the element's real width
+   * times the device pixel ratio.
+   */
   renderHeight?: number;
   alt: string;
   className?: string;
 };
+
+// Beyond this the coastlines gain nothing and the canvas costs real memory.
+const MAX_BACKING_WIDTH = 3000;
 
 const AnomalyMap = forwardRef<AnomalyMapHandle, Props>(function AnomalyMap(
   {
@@ -49,6 +58,7 @@ const AnomalyMap = forwardRef<AnomalyMapHandle, Props>(function AnomalyMap(
     textureHeight,
     bbox,
     linesUrl,
+    maskUrl,
     latMax = DEFAULT_MERCATOR_LAT_MAX,
     renderHeight = 900,
     alt,
@@ -58,14 +68,29 @@ const AnomalyMap = forwardRef<AnomalyMapHandle, Props>(function AnomalyMap(
 ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [ready, setReady] = useState(false);
+  // Rendering at a fixed height and letting the browser scale the result up
+  // softened the coastlines on dense displays; track the laid-out width so the
+  // backing store can match the device pixels actually on screen.
+  const [cssWidth, setCssWidth] = useState(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      if (w > 0) setCssWidth(w);
+    });
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
 
   // Display/export at the TRUE conformal mercator aspect (the stored texture is
   // non-square in pixels, so the crop's pixel aspect would stretch it ~1.5×).
   const aspect = mercatorAspect(bbox);
 
   const source: AnomalyMapSource = useMemo(
-    () => ({ textureUrl, textureWidth, textureHeight, bbox, linesUrl, latMax }),
-    [textureUrl, textureWidth, textureHeight, bbox, linesUrl, latMax],
+    () => ({ textureUrl, textureWidth, textureHeight, bbox, linesUrl, latMax, maskUrl }),
+    [textureUrl, textureWidth, textureHeight, bbox, linesUrl, latMax, maskUrl],
   );
 
   useEffect(() => {
@@ -73,16 +98,22 @@ const AnomalyMap = forwardRef<AnomalyMapHandle, Props>(function AnomalyMap(
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const h = Math.round(renderHeight);
-    const w = Math.round(h * aspect);
+    const dpr =
+      typeof window === "undefined" ? 1 : Math.min(window.devicePixelRatio || 1, 3);
+    const w = Math.min(
+      MAX_BACKING_WIDTH,
+      Math.round(cssWidth > 0 ? cssWidth * dpr : renderHeight * aspect),
+    );
+    const h = Math.round(w / aspect);
     canvas.width = w;
     canvas.height = h;
 
     async function render() {
       try {
-        const [img, lines] = await Promise.all([
+        const [img, lines, mask] = await Promise.all([
           loadImage(textureUrl),
           loadLines(linesUrl),
+          maskUrl ? loadImage(maskUrl) : Promise.resolve(null),
         ]);
         if (cancelled) return;
         const ctx = canvas!.getContext("2d");
@@ -97,6 +128,7 @@ const AnomalyMap = forwardRef<AnomalyMapHandle, Props>(function AnomalyMap(
           latMax,
           w,
           h,
+          mask,
         );
         if (!cancelled) setReady(true);
       } catch {
@@ -114,9 +146,11 @@ const AnomalyMap = forwardRef<AnomalyMapHandle, Props>(function AnomalyMap(
     textureHeight,
     bbox,
     linesUrl,
+    maskUrl,
     latMax,
     renderHeight,
     aspect,
+    cssWidth,
   ]);
 
   useImperativeHandle(

@@ -5,10 +5,48 @@ import styles from "./story.module.css";
 
 type SeriesPayload = { x: string[]; y: (number | null)[]; unit?: string };
 
+type Daily = { date: string; value: number }[];
+
 type PanelData = {
   label: string;
-  daily: { date: string; value: number }[];
+  series: Record<string, Daily>;
 };
+
+/**
+ * A date span to mark on one of the panel's charts, so the window chosen on
+ * the map can be found in the place's own daily record.
+ */
+export type PanelHighlight = {
+  /** Which chart it belongs to; the others are drawn unmarked. */
+  seriesKey: string;
+  /** Inclusive ISO dates. */
+  from: string;
+  to: string;
+  /** Which accent to mark it in; defaults to the heat tone. */
+  tone?: "heat" | "rain";
+};
+
+/** One mini chart in the panel, drawn from one series of the /panel payload. */
+export type PanelChartSpec = {
+  /** Key in the /panel `series` map, e.g. "t2m_daily_mean". */
+  seriesKey: string;
+  /** Subtitle above the chart. */
+  title: string;
+  kind?: "line" | "bar";
+  /** Appended to values in the tooltip and axis, e.g. "°" or " mm". */
+  unit?: string;
+  /** Pin the axis floor to zero (rainfall). */
+  fromZero?: boolean;
+};
+
+const DEFAULT_CHARTS: PanelChartSpec[] = [
+  {
+    seriesKey: "t2m_daily_mean",
+    title: "Daily mean temperature",
+    kind: "line",
+    unit: "°",
+  },
+];
 
 type Props = {
   apiBase: string;
@@ -17,14 +55,20 @@ type Props = {
   lon: number;
   /** Only plot days on/after this ISO date (omit to plot the whole series). */
   fromDate?: string;
+  /** Only plot days on/before this ISO date. */
+  toDate?: string;
   /** Period shown in the subtitle, e.g. "2026". */
   periodLabel?: string;
+  /** Span to mark on the chart whose seriesKey it names. */
+  highlight?: PanelHighlight | null;
+  /** Charts to draw, top to bottom. Defaults to the daily mean temperature. */
+  charts?: PanelChartSpec[];
   onClose: () => void;
 };
 
 const CHART_W = 320;
 const CHART_H = 150;
-const PAD_L = 34;
+const PAD_L = 38;
 const PAD_R = 10;
 const PAD_T = 14;
 const PAD_B = 22;
@@ -34,30 +78,40 @@ async function fetchDaily(
   release: string,
   lat: number,
   lon: number,
+  keys: string[],
   fromDate: string | undefined,
+  toDate: string | undefined,
   signal: AbortSignal,
 ): Promise<PanelData> {
   const url = `${apiBase}/api/v/${encodeURIComponent(release)}/panel?lat=${lat}&lon=${lon}&unit=C`;
   const r = await fetch(url, { signal });
   if (!r.ok) throw new Error(await r.text());
   const data = await r.json();
-  const series: SeriesPayload | undefined = data.series?.t2m_daily_mean;
   const place = data.location?.place ?? {};
   const label: string =
     place.label ||
     [place.name, place.country_code].filter(Boolean).join(", ") ||
     `${lat.toFixed(1)}°, ${lon.toFixed(1)}°`;
-  const daily: { date: string; value: number }[] = [];
-  if (series?.x && series?.y) {
-    for (let i = 0; i < series.x.length; i++) {
-      const d = series.x[i];
-      const v = series.y[i];
-      if (typeof v === "number" && (!fromDate || d >= fromDate)) {
-        daily.push({ date: d, value: v });
+  const series: Record<string, Daily> = {};
+  for (const key of keys) {
+    const payload: SeriesPayload | undefined = data.series?.[key];
+    const daily: Daily = [];
+    if (payload?.x && payload?.y) {
+      for (let i = 0; i < payload.x.length; i++) {
+        const d = payload.x[i];
+        const v = payload.y[i];
+        if (
+          typeof v === "number" &&
+          (!fromDate || d >= fromDate) &&
+          (!toDate || d <= toDate)
+        ) {
+          daily.push({ date: d, value: v });
+        }
       }
     }
+    series[key] = daily;
   }
-  return { label, daily };
+  return { label, series };
 }
 
 function niceTicks(
@@ -65,7 +119,7 @@ function niceTicks(
   hi: number,
 ): { min: number; max: number; ticks: number[] } {
   const span = hi - lo;
-  const step = span > 28 ? 10 : span > 12 ? 5 : 2;
+  const step = span > 28 ? 10 : span > 12 ? 5 : span > 5 ? 2 : 1;
   const min = Math.floor(lo / step) * step;
   const max = Math.ceil(hi / step) * step;
   const ticks: number[] = [];
@@ -78,7 +132,21 @@ function shortDate(iso: string) {
   return `${d.getDate()} ${d.toLocaleString("en", { month: "short" })}`;
 }
 
-function MiniChart({ daily }: { daily: { date: string; value: number }[] }) {
+function MiniChart({
+  daily,
+  kind = "line",
+  unit = "",
+  fromZero = false,
+  ariaLabel,
+  highlight,
+}: {
+  daily: Daily;
+  kind?: "line" | "bar";
+  unit?: string;
+  fromZero?: boolean;
+  ariaLabel: string;
+  highlight?: PanelHighlight | null;
+}) {
   const values = daily.map((d) => d.value);
   let peakI = 0;
   for (let i = 1; i < values.length; i++)
@@ -86,7 +154,7 @@ function MiniChart({ daily }: { daily: { date: string; value: number }[] }) {
   const [hover, setHover] = useState<number>(peakI);
 
   if (daily.length < 2) return null;
-  const dataMin = Math.min(...values);
+  const dataMin = fromZero ? 0 : Math.min(...values);
   const dataMax = Math.max(...values);
   const { min, max, ticks } = niceTicks(dataMin, dataMax);
   const range = max - min || 1;
@@ -94,6 +162,7 @@ function MiniChart({ daily }: { daily: { date: string; value: number }[] }) {
   const plotH = CHART_H - PAD_T - PAD_B;
   const xOf = (i: number) => PAD_L + (i / (daily.length - 1)) * plotW;
   const yOf = (v: number) => PAD_T + (1 - (v - min) / range) * plotH;
+  const barW = Math.max(0.8, plotW / daily.length - 0.4);
 
   const linePath = daily
     .map(
@@ -118,10 +187,29 @@ function MiniChart({ daily }: { daily: { date: string; value: number }[] }) {
     }
   });
 
+  // The window may fall partly outside the plotted range, so it is clamped to
+  // the days actually drawn rather than skipped.
+  let band: { x: number; w: number } | null = null;
+  if (highlight) {
+    const first = daily.findIndex((d) => d.date >= highlight.from);
+    let last = -1;
+    for (let i = daily.length - 1; i >= 0; i--) {
+      if (daily[i].date <= highlight.to) {
+        last = i;
+        break;
+      }
+    }
+    if (first !== -1 && last !== -1 && last >= first) {
+      const x0 = xOf(first);
+      const x1 = xOf(last);
+      band = { x: x0, w: Math.max(1.5, x1 - x0) };
+    }
+  }
+
   const hv = daily[hover];
   const hx = xOf(hover);
   const hy = yOf(hv.value);
-  const tipText = `${hv.value.toFixed(1)}° · ${shortDate(hv.date)}`;
+  const tipText = `${hv.value.toFixed(1)}${unit} · ${shortDate(hv.date)}`;
   const tipW = tipText.length * 5.2 + 12;
   const tipX = Math.max(2, Math.min(CHART_W - tipW - 2, hx - tipW / 2));
   const tipY = Math.max(2, hy - 24);
@@ -138,10 +226,21 @@ function MiniChart({ daily }: { daily: { date: string; value: number }[] }) {
       viewBox={`0 0 ${CHART_W} ${CHART_H}`}
       className={styles.panelChart}
       role="img"
-      aria-label="Daily mean temperature at the selected location"
+      aria-label={ariaLabel}
       onPointerMove={onMove}
       onPointerLeave={() => setHover(peakI)}
     >
+      {band ? (
+        <rect
+          x={band.x}
+          y={PAD_T}
+          width={band.w}
+          height={plotH}
+          className={
+            highlight?.tone === "rain" ? styles.panelBandRain : styles.panelBand
+          }
+        />
+      ) : null}
       {ticks.map((t) => (
         <g key={t}>
           <line
@@ -157,11 +256,25 @@ function MiniChart({ daily }: { daily: { date: string; value: number }[] }) {
             textAnchor="end"
             className={styles.panelAx}
           >
-            {t}°
+            {t}
+            {unit.trim()}
           </text>
         </g>
       ))}
-      <path d={linePath} className={styles.panelLine} />
+      {kind === "bar" ? (
+        daily.map((d, i) => (
+          <rect
+            key={d.date}
+            x={xOf(i) - barW / 2}
+            y={yOf(d.value)}
+            width={barW}
+            height={Math.max(0, yOf(min) - yOf(d.value))}
+            className={styles.panelBar}
+          />
+        ))
+      ) : (
+        <path d={linePath} className={styles.panelLine} />
+      )}
 
       {/* hover guide + point */}
       <line
@@ -171,7 +284,12 @@ function MiniChart({ daily }: { daily: { date: string; value: number }[] }) {
         y2={PAD_T + plotH}
         className={styles.panelGuide}
       />
-      <circle cx={hx} cy={hy} r={2.8} className={styles.panelPeak} />
+      <circle
+        cx={hx}
+        cy={hy}
+        r={2.8}
+        className={kind === "bar" ? styles.panelPeakBar : styles.panelPeak}
+      />
       <g>
         <rect
           x={tipX}
@@ -212,28 +330,42 @@ export default function LocationPanel({
   lat,
   lon,
   fromDate,
+  toDate,
   periodLabel,
+  charts = DEFAULT_CHARTS,
+  highlight,
   onClose,
 }: Props) {
   const [data, setData] = useState<PanelData | null>(null);
   const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
   const reqId = useRef(0);
+  const keys = charts.map((c) => c.seriesKey).join(",");
 
   useEffect(() => {
     const id = ++reqId.current;
     const controller = new AbortController();
-    fetchDaily(apiBase, release, lat, lon, fromDate, controller.signal)
+    fetchDaily(
+      apiBase,
+      release,
+      lat,
+      lon,
+      keys.split(","),
+      fromDate,
+      toDate,
+      controller.signal,
+    )
       .then((d) => {
         if (id !== reqId.current) return;
         setData(d);
-        setStatus(d.daily.length >= 2 ? "ok" : "error");
+        const any = Object.values(d.series).some((s) => s.length >= 2);
+        setStatus(any ? "ok" : "error");
       })
       .catch(() => {
         if (id !== reqId.current) return;
         setStatus("error");
       });
     return () => controller.abort();
-  }, [apiBase, release, lat, lon, fromDate]);
+  }, [apiBase, release, lat, lon, fromDate, toDate, keys]);
 
   return (
     <aside className={styles.panel}>
@@ -248,14 +380,36 @@ export default function LocationPanel({
       <div className={styles.panelLabel}>
         {data?.label ?? "Selected location"}
       </div>
-      <div className={styles.panelSub}>
-        Daily mean temperature{periodLabel ? ` · ${periodLabel}` : ""}
-      </div>
       {status === "loading" && <div className={styles.panelMsg}>Loading…</div>}
       {status === "error" && (
         <div className={styles.panelMsg}>No daily data for this location.</div>
       )}
-      {status === "ok" && data && <MiniChart daily={data.daily} />}
+      {status === "ok" &&
+        data &&
+        charts.map((c) => {
+          const daily = data.series[c.seriesKey] ?? [];
+          if (daily.length < 2) return null;
+          return (
+            <div key={c.seriesKey}>
+              <div className={styles.panelSub}>
+                {c.title}
+                {periodLabel ? ` · ${periodLabel}` : ""}
+              </div>
+              <MiniChart
+                daily={daily}
+                kind={c.kind}
+                unit={c.unit}
+                fromZero={c.fromZero}
+                ariaLabel={`${c.title} at the selected location`}
+                highlight={
+                  highlight && highlight.seriesKey === c.seriesKey
+                    ? highlight
+                    : null
+                }
+              />
+            </div>
+          );
+        })}
     </aside>
   );
 }

@@ -14,6 +14,8 @@
   --hairline-strong: rgba(17, 17, 17, 0.6);
   --blue: #0f50ff;
   --heat: #b10026;
+  --dry: #8c510a;
+  --warm: #d9480f;
   --grid: rgba(17, 17, 17, 0.16);
   --bandbg: rgba(17, 17, 17, 0.05);
   --bandbg-alt: rgba(15, 80, 255, 0.07);
@@ -40,6 +42,8 @@
     --hairline-strong: rgba(242, 242, 242, 0.6);
     --blue: #7fa0ff;
     --heat: #ff7b66;
+  --dry: #d9a066;
+  --warm: #ffa94d;
     --grid: rgba(242, 242, 242, 0.18);
     --bandbg: rgba(242, 242, 242, 0.06);
     --bandbg-alt: rgba(127, 160, 255, 0.12);
@@ -56,6 +60,8 @@
   --hairline-strong: rgba(17, 17, 17, 0.6);
   --blue: #0f50ff;
   --heat: #b10026;
+  --dry: #8c510a;
+  --warm: #d9480f;
   --grid: rgba(17, 17, 17, 0.16);
   --bandbg: rgba(17, 17, 17, 0.05);
   --bandbg-alt: rgba(15, 80, 255, 0.07);
@@ -71,6 +77,8 @@
   --hairline-strong: rgba(242, 242, 242, 0.6);
   --blue: #7fa0ff;
   --heat: #ff7b66;
+  --dry: #d9a066;
+  --warm: #ffa94d;
   --grid: rgba(242, 242, 242, 0.18);
   --bandbg: rgba(242, 242, 242, 0.06);
   --bandbg-alt: rgba(127, 160, 255, 0.12);
@@ -472,9 +480,9 @@
   transform: translateX(-50%);
   z-index: 4;
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  justify-content: center;
+  flex-direction: column;
+  gap: 5px;
+  align-items: center;
   /* Anchored at left:50%, so the default shrink-to-fit width is limited to
      half the stage and the row wraps early. Size to content instead, capped
      to the stage. */
@@ -484,6 +492,21 @@
   background: color-mix(in srgb, var(--surface) 82%, transparent);
   border: 1px solid var(--hairline);
   backdrop-filter: blur(6px);
+}
+.globeStepRow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.globeStepLabel {
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--muted);
+  padding-right: 2px;
 }
 .stepBtn {
   font: inherit;
@@ -588,6 +611,13 @@
 .panelPeak {
   fill: #ff0000;
 }
+.panelBar {
+  fill: var(--blue);
+  opacity: 0.85;
+}
+.panelPeakBar {
+  fill: var(--ink);
+}
 .panelTipBox {
   fill: var(--ink);
 }
@@ -626,6 +656,8 @@
   --hairline-strong: rgba(17, 17, 17, 0.6);
   --blue: #0f50ff;
   --heat: #b10026;
+  --dry: #8c510a;
+  --warm: #d9480f;
   --grid: rgba(17, 17, 17, 0.16);
   --bandbg: rgba(17, 17, 17, 0.05);
   --bandbg-alt: rgba(15, 80, 255, 0.07);
@@ -809,8 +841,17 @@
     transform: none;
     width: auto;
     max-width: none;
+  }
+  /* Buttons go two-up rather than shrinking to an unreadable strip; the group
+     label spans the row above them. */
+  .globeStepRow {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
+    width: 100%;
+  }
+  .globeStepLabel {
+    grid-column: 1 / -1;
+    text-align: center;
   }
 }
 
@@ -903,4 +944,137 @@
   .heroFrame {
     transition: none !important;
   }
+}
+
+/* Stat variants for stories whose figures are not all heat. */
+.statDry .num {
+  color: var(--dry);
+}
+.statNeutral .num {
+  color: var(--ink);
+}
+.statText .num {
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+/* Swipe comparison: two same-frame maps, the right one revealed by a handle. */
+.swipe {
+  position: relative;
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-alt);
+  overflow: hidden;
+  user-select: none;
+  touch-action: pan-y;
+  cursor: col-resize;
+}
+.swipeLayer {
+  position: absolute;
+  inset: 0;
+}
+.swipeLayer > * {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.swipeDivider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--paper);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+.swipeHandle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1.5px solid var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.swipeHandle svg {
+  width: 16px;
+  height: 16px;
+}
+.swipeLabel {
+  position: absolute;
+  top: 10px;
+  transition: opacity 0.12s linear;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  background: rgba(17, 17, 17, 0.78);
+  color: #fff;
+  pointer-events: none;
+  z-index: 3;
+}
+.swipeLabelLeft {
+  left: 10px;
+}
+.swipeLabelRight {
+  right: 10px;
+}
+.swipeRange {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: col-resize;
+}
+.swipeRange:focus-visible + .swipeDivider {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 0 4px var(--blue);
+}
+
+.globeSlider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 280px;
+}
+.globeRange {
+  flex: 1;
+  accent-color: var(--heat);
+  cursor: pointer;
+  margin: 0;
+}
+.globeRange:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+}
+.globeSliderValue {
+  font-size: 0.76rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+  min-width: 8.5ch;
+  text-align: right;
+}
+
+/* The window selected on the map, marked on the place's own daily record. */
+.panelBand {
+  fill: var(--heat);
+  opacity: 0.14;
+}
+.panelBandRain {
+  fill: var(--blue);
+  opacity: 0.14;
 }
