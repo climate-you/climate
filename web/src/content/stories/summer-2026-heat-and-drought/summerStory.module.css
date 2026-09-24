@@ -1,0 +1,618 @@
+/* Styles specific to the summer-2026 story: its chart marks, the period grid,
+   the country table and the tabbed seasonal charts. Palette tokens come from
+   the shared story stylesheet (.story), which wraps everything here. */
+
+.section {
+  margin: 56px 0 0;
+}
+
+/* The opening runs the lead paragraphs and the first section down the left
+   column while the figure rail keeps pace on the right; charts break out
+   across both. Without this the rail was a lone 700px tower beside three
+   paragraphs. */
+.openingGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 216px;
+  column-gap: 44px;
+  row-gap: 0;
+  align-items: start;
+  margin: 44px 0 0;
+}
+.openingGrid > * {
+  grid-column: 1;
+  min-width: 0;
+}
+/* `display: contents` keeps the <section> in the document outline while its
+   children become rows of the grid above. */
+.contents {
+  display: contents;
+}
+.railCol {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+}
+.railHeading {
+  margin-top: 34px;
+}
+.fullWidth {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+}
+
+@media (max-width: 760px) {
+  .openingGrid {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-top: 30px;
+    /* Must be reset from the grid rule above: in a column flex container
+       `start` sizes children to their content width, which let the figure
+       rail grow to the full width of its seven pills instead of scrolling
+       inside the viewport. */
+    align-items: stretch;
+  }
+  .railCol {
+    order: -1;
+    margin-bottom: 20px;
+  }
+  .railHeading {
+    margin-top: 26px;
+  }
+}
+.section h2 {
+  margin-bottom: 6px;
+}
+
+.prose p {
+  font-size: 1.05rem;
+  margin: 0 0 18px;
+  max-width: 62ch;
+}
+.prose strong {
+  color: var(--heat);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.prose em {
+  font-style: normal;
+  color: var(--dry);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.prose .wet {
+  color: var(--blue);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.prose sup {
+  font-size: 0.7em;
+  line-height: 0;
+}
+.prose sup a {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+.mapPair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 24px;
+  margin: 8px 0 0;
+}
+/* The scale labels do not wrap; side by side they overflow a phone. */
+@media (max-width: 600px) {
+  .mapPair {
+    grid-template-columns: 1fr;
+  }
+}
+.scaleLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+.gradRain {
+  flex: 1;
+  min-width: 70px;
+  height: 8px;
+  background: linear-gradient(
+    90deg,
+    #5c3708,
+    #8c510a,
+    #e6b800,
+    #f7f7f7,
+    #74add1,
+    #313695
+  );
+}
+
+/* Figure: title row, optional controls, chart, legend, caption. */
+.fig {
+  margin: 0;
+}
+.figHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 10px;
+}
+.figTitle {
+  font-family: Georgia, "Iowan Old Style", serif;
+  font-weight: 600;
+  font-size: 1.12rem;
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  margin: 0;
+  text-wrap: balance;
+}
+.figSub {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: 3px 0 0;
+  max-width: 78ch;
+  text-wrap: pretty;
+}
+.figDl {
+  flex: none;
+  width: 30px;
+  height: 30px;
+}
+.figDl svg {
+  width: 15px;
+  height: 15px;
+  min-width: 0;
+}
+
+/* The hemisphere map sits on a warm grey so the masked desert cells read as
+   "left out" rather than as holes in the page. */
+.worldMap {
+  background: #bdb7ad;
+  border: 1px solid var(--hairline-strong);
+  line-height: 0;
+}
+.worldMap canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: transparent;
+}
+.chartWrap {
+  position: relative;
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--hairline-strong);
+  padding: 14px 10px 8px;
+}
+/* A blanket floor made every chart scroll on a phone, including ones that read
+   perfectly well narrower. Each chart sets its own via --chart-min. */
+.chartWrap svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-width: var(--chart-min, 540px);
+  font-family: inherit;
+}
+.chartWrap.narrowOk svg {
+  min-width: 0;
+}
+.legend {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 10px 2px 0;
+}
+.legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 0.35rem;
+  vertical-align: -1px;
+}
+.figcap {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 10px 2px 0;
+  max-width: 72ch;
+}
+
+/* SVG marks. Class names are global inside the chart wrapper so the chart
+   components can use plain strings, the same way the heatwave chart does. */
+.chartWrap :global(.sc-grid) {
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+.chartWrap :global(.sc-baseline) {
+  stroke: var(--hairline-strong);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+.chartWrap :global(.sc-tlbase) {
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+.chartWrap :global(.sc-tick) {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.chartWrap :global(.sc-axlab) {
+  fill: var(--muted);
+  font-size: 11.5px;
+}
+.chartWrap :global(.sc-quad) {
+  fill: var(--dry);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.chartWrap :global(.sc-quad-blue) {
+  fill: var(--blue);
+}
+.chartWrap :global(.sc-rowlab) {
+  fill: var(--muted);
+  font-size: 12px;
+}
+.chartWrap :global(.sc-rowlab-hi) {
+  fill: var(--ink);
+  font-weight: 650;
+}
+.chartWrap :global(.sc-val),
+.chartWrap :global(.sc-endlab) {
+  fill: var(--muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.chartWrap :global(.sc-pt) {
+  stroke: var(--paper);
+  stroke-width: 2;
+}
+.chartWrap :global(.sc-pt-eu) {
+  fill: var(--heat);
+}
+.chartWrap :global(.sc-pt-other) {
+  fill: var(--blue);
+}
+.chartWrap :global(.sc-ptlab) {
+  font-size: 11.5px;
+  fill: var(--muted);
+}
+.chartWrap :global(.sc-ptlab-eu) {
+  fill: var(--heat);
+  font-weight: 650;
+}
+.chartWrap :global(.sc-bar-eu) {
+  fill: var(--heat);
+}
+.chartWrap :global(.sc-bar-other) {
+  fill: var(--muted);
+  opacity: 0.55;
+}
+.chartWrap :global(.sc-bar-ref) {
+  fill: var(--muted);
+  opacity: 0.3;
+}
+.chartWrap :global(.sc-ev-eu) {
+  fill: var(--heat);
+}
+.chartWrap :global(.sc-ev-other) {
+  fill: var(--warm);
+}
+.chartWrap :global(.sc-yr) {
+  fill: var(--muted);
+  opacity: 0.45;
+  stroke: var(--paper);
+  stroke-width: 1;
+}
+.chartWrap :global(.sc-yr-recent) {
+  opacity: 0.75;
+}
+.chartWrap :global(.sc-cur) {
+  fill: var(--heat);
+  stroke: var(--paper);
+  stroke-width: 2.5;
+}
+.chartWrap :global(.sc-curlab) {
+  fill: var(--heat);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.chartWrap :global(.sc-past) {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1;
+  opacity: 0.28;
+}
+.chartWrap :global(.sc-now) {
+  fill: none;
+  stroke: var(--heat);
+  stroke-width: 2.2;
+}
+.chartWrap :global(.sc-line-dry) {
+  fill: none;
+  stroke: var(--dry);
+  stroke-width: 2.6;
+}
+.chartWrap :global(.sc-line-heat) {
+  fill: none;
+  stroke: var(--heat);
+  stroke-width: 2.2;
+}
+.chartWrap :global(.sc-line-blue) {
+  fill: none;
+  stroke: var(--blue);
+  stroke-width: 2.2;
+}
+.chartWrap :global(.sc-normline) {
+  stroke-dasharray: 4 3;
+  opacity: 0.5;
+  stroke-width: 1.4;
+}
+.chartWrap :global(.sc-endlab-dry) {
+  fill: var(--dry);
+  font-weight: 650;
+}
+.chartWrap :global(.sc-endlab-heat) {
+  fill: var(--heat);
+  font-weight: 650;
+}
+.chartWrap :global(.sc-endlab-blue) {
+  fill: var(--blue);
+  font-weight: 650;
+}
+/* No fill here: the country class alongside it supplies the colour, so a
+   dashed normal reads as belonging to its solid line. */
+.chartWrap :global(.sc-normlab) {
+  font-size: 10.5px;
+  font-weight: 400;
+  opacity: 0.85;
+}
+.chartWrap :global(.sc-cell) {
+  fill: var(--ink);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+.chartWrap :global(.sc-cell-strong) {
+  opacity: 1;
+  font-weight: 700;
+}
+.chartWrap rect,
+.chartWrap circle {
+  transition: opacity 0.12s;
+}
+.chartWrap rect:hover,
+.chartWrap circle:hover {
+  opacity: 0.72;
+}
+
+.pair {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 820px) {
+  .pair {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+.tabs button {
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.tabs button:hover {
+  border-color: var(--hairline-strong);
+}
+.tabs button[aria-selected="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.tabs button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  margin: 22px 0;
+}
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+}
+.table th,
+.table td {
+  padding: 0.45rem 0.7rem;
+  text-align: right;
+  border-bottom: 1px solid var(--hairline);
+}
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+}
+.table thead th {
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--hairline-strong);
+}
+.table tbody tr:global(.hi) td {
+  font-weight: 650;
+}
+.table td:global(.dry) {
+  color: var(--dry);
+}
+.table td:global(.hot) {
+  color: var(--heat);
+}
+.table td:global(.cool) {
+  color: var(--blue);
+}
+.table td:global(.outcome) {
+  text-align: left;
+}
+
+.defn {
+  margin: 14px 0 0;
+  padding: 14px 18px;
+  background: var(--surface-alt);
+  border-left: 3px solid var(--hairline-strong);
+  font-size: 0.88rem;
+  color: var(--muted);
+  max-width: 72ch;
+}
+.defn b {
+  color: var(--ink);
+}
+
+.sources {
+  margin-top: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  max-width: 72ch;
+}
+.sources ol {
+  margin: 6px 0 0;
+  padding-left: 1.2rem;
+  line-height: 1.55;
+}
+.sources li {
+  margin-bottom: 4px;
+}
+.sources a {
+  color: var(--blue);
+  text-decoration: none;
+}
+.sources a:hover {
+  text-decoration: underline;
+}
+.methodsList {
+  margin: 10px 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 72ch;
+}
+.methodsList li {
+  margin-bottom: 6px;
+}
+.methodsList b {
+  color: var(--ink);
+}
+.methodsList a {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+/* Scale bars on the left, the pair download on the right. */
+.swipeFoot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 10px;
+}
+.swipeFoot .mapPair {
+  flex: 1;
+  margin: 0;
+}
+
+.tableNote {
+  font-size: 0.76rem;
+  color: var(--muted);
+  margin: 8px 2px 0;
+}
+
+/* Prose that follows a figure needs to clear its caption. */
+.fig + .prose {
+  margin-top: 26px;
+}
+
+/* Diverging heat ramp, matching the season anomaly map's palette. */
+.gradHeat {
+  flex: 1;
+  min-width: 70px;
+  height: 8px;
+  background: linear-gradient(
+    90deg,
+    #313695,
+    #74add1,
+    #f7f7f7,
+    #fd8d3c,
+    #e31a1c,
+    #b10026
+  );
+}
+
+.table td:global(.record) {
+  color: var(--heat);
+  font-weight: 650;
+}
+/* Outcomes that are not records read as ordinary body text. */
+.table td:global(.outcome) {
+  color: var(--ink);
+  font-weight: 400;
+}
+.table td:global(.outcome):global(.record) {
+  color: var(--heat);
+  font-weight: 650;
+}
+
+/* The backmatter was five blocks in four typographic styles. Now three, each
+   opening with the same small label so they read as a deliberate set. */
+/* Doubled deliberately: the shared stylesheet's `.story h2` is more specific
+   than a single class, and would otherwise render these as full-size serif
+   section headings. */
+.footHead.footHead {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+.sources .footHead,
+.rights .footHead {
+  margin-top: 30px;
+}
+.rights {
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 72ch;
+}
+.rights p {
+  margin: 0 0 8px;
+}
+.rights a {
+  color: var(--blue);
+  text-decoration: none;
+}
+.rights a:hover {
+  text-decoration: underline;
+}
