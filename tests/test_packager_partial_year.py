@@ -240,8 +240,15 @@ class TestRegistryLoads:
         from climate.registry.metrics import load_metrics
 
         manifest = load_metrics(path="registry/metrics.json", validate=True)
+        # Read the expectation from the metric's own declared range rather than
+        # hardcoding a month: the ingest is extended as new data lands, and a
+        # literal here fails on every refresh without anything being wrong.
+        declared = manifest["t2m_monthly_mean_c"]["source"]["time_range"]
         tr = manifest["t2m_monthly_mean_c"]["source"]["_analysis_time_range"]
-        assert tr["end_year"] == 2026 and tr["end_month"] == 6
+        assert tr["end_year"] == declared["end_year"]
+        assert tr["end_month"] == declared["end_month"]
+        # A partial final month is what this is for, so guard the premise too.
+        assert 1 <= tr["end_month"] <= 12
         # Yearly metrics remain capped at the last complete year
         yearly_tr = manifest["t2m_yearly_mean_c"]["source"]["_analysis_time_range"]
-        assert yearly_tr["end_year"] == 2025
+        assert yearly_tr["end_year"] == declared["end_year"] - 1
