@@ -399,6 +399,28 @@ If both pass, open `http://<PUBLIC_IP>` in browser and validate web + API integr
 
 ## 10) Deploy Updates
 
+### Order: code before data whenever a registry schema changed
+
+A release bundle carries `registry/`, and the API validates it at startup
+against the schema shipped in the **code**. Schema changes are additive
+(new optional fields), which makes the coupling one-directional: new code reads
+an old release without complaint, but old code rejects a new release, and from
+then on every request that touches the registry fails with
+`metrics.json failed schema validation: ... was unexpected` until the code is
+updated. This happened on 2026-09-25 when a release carrying a new `coverage`
+field was published a few days ahead of the code that understood it.
+
+So, before publishing a release, check whether the code you are about to
+publish from touches a schema:
+
+```bash
+git diff <deployed-tag>..HEAD --stat -- climate/registry/
+```
+
+If that prints anything, deploy the code first and publish the release second.
+If it prints nothing, either order is safe. There is no supported way to
+publish a schema-changing release and defer the code.
+
 ### Deploying application code (any release format)
 
 Recommended workflow on the VM:

@@ -93,6 +93,12 @@ So a deploy needs the release published for:
 
 It does **not** need the release for any chart or any figure in the text.
 
+One more coupling: if the story's pipeline work added a field to a file under
+`climate/registry/*.schema.json`, the **code must be deployed before the
+release is published**, or the old API rejects the new registry and the whole
+site breaks — not just the story. See the deployment runbook, "Order: code
+before data".
+
 If a story's maps render as grey placeholders, check first whether the API is
 reachable from the client: it binds `127.0.0.1` by default, so a phone on the
 LAN gets the page from Next (which binds all interfaces) and nothing from the
