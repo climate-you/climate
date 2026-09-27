@@ -90,6 +90,7 @@ class LocationIndex:
         self._bboxes: List[Optional[Tuple[float, float, float, float]]] = []
         self._region_ids: List[Optional[str]] = []
         self._by_id: Dict[int, int] = {}
+        self._by_region_id: Dict[str, int] = {}
         self._prefix_map: Dict[str, List[int]] = {}
         self._name_to_idx: Dict[str, int] = {}
         # Only names shared by more than one place ("Cologne" → Köln and Cologne
@@ -138,6 +139,8 @@ class LocationIndex:
 
                 if geonameid:
                     self._by_id[geonameid] = i
+                if region_id:
+                    self._by_region_id[region_id] = i
 
                 self._add_prefixes(i, norm_label)
                 self._add_prefixes(i, norm_city)
@@ -257,6 +260,13 @@ class LocationIndex:
 
     def resolve_by_id(self, geonameid: int) -> Optional[LocationHit]:
         idx = self._by_id.get(int(geonameid))
+        if idx is None:
+            return None
+        return self._hit(idx)
+
+    def resolve_by_region_id(self, region_id: str) -> Optional[LocationHit]:
+        """The index entry for an aggregate region, e.g. ``country:FR``."""
+        idx = self._by_region_id.get(region_id)
         if idx is None:
             return None
         return self._hit(idx)

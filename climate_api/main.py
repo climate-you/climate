@@ -45,7 +45,7 @@ from .schemas import (
     ReleaseResolveResponse,
 )
 from .services.panels import (
-    build_global_panels,
+    build_region_panels,
     build_panel_tiles_registry,
     build_scored_panels_tiles_registry,
 )
@@ -744,11 +744,53 @@ def create_app() -> FastAPI:
             else:
                 # Alias (e.g. "latest") — don't let proxies cache; browser may revalidate
                 response.headers["Cache-Control"] = "private, max-age=300"
-        return build_global_panels(
+        return build_region_panels(
             tile_store=context.tile_store,
             panels_manifest=context.panels_manifest,
             unit=unit,
             release=context.release,
+        )
+
+    @app.get("/api/v/{release}/panel/region", response_model=PanelListResponse)
+    def get_region_panel(
+        release: str,
+        region_id: str = Query(..., min_length=1, max_length=128),
+        unit: str = Query("C", pattern="^(C|F|c|f)$"),
+        response: Response = None,
+    ):
+        context = release_resolver.resolve_release_context(release)
+        # Only regions a user can select: a search entry *and* data in this
+        # release. The aggregates also hold continents and the globe, but
+        # continents are not searchable, and the globe has its own endpoint.
+        hit = location_index.resolve_by_region_id(region_id)
+        if hit is None or region_id not in context.tile_store.region_ids:
+            raise HTTPException(status_code=404, detail=f"Unknown region: {region_id}")
+        place = PlaceInfo(
+            geonameid=hit.geonameid,
+            label=hit.label,
+            lat=hit.lat,
+            lon=hit.lon,
+            distance_km=0.0,
+            country_code=hit.country_code,
+            # Suppressed for regions: the only figure available is eight years
+            # stale, and the cell count is the useful provenance.
+            population=None,
+        )
+        region_label = hit.label
+
+        if response is not None:
+            if release == context.release:
+                response.headers["Cache-Control"] = "public, max-age=3600"
+            else:
+                response.headers["Cache-Control"] = "private, max-age=300"
+        return build_region_panels(
+            tile_store=context.tile_store,
+            panels_manifest=context.panels_manifest,
+            unit=unit,
+            release=context.release,
+            region_id=region_id,
+            region_label=region_label,
+            place=place,
         )
 
     @app.get("/api/v/{release}/panel", response_model=PanelListResponse)

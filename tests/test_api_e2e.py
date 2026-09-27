@@ -232,3 +232,83 @@ def test_release_endpoint_resolves_requested_and_latest_alias() -> None:
     assert isinstance(latest.get("release"), str) and bool(latest["release"])
     assert "layers" in latest
     assert isinstance(latest.get("version"), dict)
+
+
+def _region_panel(app: Any, region_id: str) -> tuple[int, dict]:
+    return asyncio.run(
+        _asgi_get_json(
+            app,
+            f"/api/v/{API_E2E_RELEASE}/panel/region",
+            {"region_id": region_id, "unit": "C"},
+        )
+    )
+
+
+def test_country_search_hands_back_a_region_the_panel_endpoint_serves() -> None:
+    app = create_app()
+    status, data = asyncio.run(
+        _asgi_get_json(
+            app,
+            f"/api/v/{API_E2E_RELEASE}/locations/autocomplete",
+            {"q": "France", "limit": 1},
+        )
+    )
+    assert status == 200
+    (france,) = data["results"]
+    assert france["kind"] == "country"
+    assert france["region_id"] == "country:FR"
+
+    status, panel = _region_panel(app, france["region_id"])
+    assert status == 200
+    assert panel["location"]["region_id"] == "country:FR"
+    assert panel["location"]["place"]["label"] == "France"
+    assert panel["location"]["region_cell_count"] > 0
+    assert panel["location"]["place"]["population"] is None
+
+
+def test_country_region_panel_has_no_sea_temperature() -> None:
+    status, panel = _region_panel(create_app(), "country:FR")
+    assert status == 200
+    ids = {p["panel"]["id"] for p in panel["panels"]}
+    assert {"air_temperature", "precipitation"} <= ids
+    assert "sea_temperature" not in ids
+    keys = {h["key"] for h in panel["headlines"]}
+    assert "precip_global" in keys
+    assert not keys & {"sst_recent_global", "sst_hotdays_global"}
+
+
+def test_sea_region_panel_includes_sea_temperature() -> None:
+    status, panel = _region_panel(create_app(), "ocean:north_sea")
+    assert status == 200
+    ids = {p["panel"]["id"] for p in panel["panels"]}
+    assert "sea_temperature" in ids
+
+
+@pytest.mark.parametrize(
+    "region_id",
+    [
+        # Aggregates exist, but nothing in search can select them.
+        "continent:europe",
+        "globe",
+        # Searchable, but too small or erased in the mask, so no aggregate.
+        "country:MC",
+        "ocean:great_barrier_reef",
+        # Not a region at all.
+        "country:ZZ",
+        "../../etc/passwd",
+    ],
+)
+def test_region_panel_refuses_anything_search_cannot_select(region_id: str) -> None:
+    status, _ = _region_panel(create_app(), region_id)
+    assert status == 404
+
+
+def test_global_panel_carries_no_region_fields() -> None:
+    status, panel = asyncio.run(
+        _asgi_get_json(
+            create_app(), f"/api/v/{API_E2E_RELEASE}/panel/global", {"unit": "C"}
+        )
+    )
+    assert status == 200
+    assert panel["location"]["region_id"] is None
+    assert panel["location"]["region_cell_count"] is None

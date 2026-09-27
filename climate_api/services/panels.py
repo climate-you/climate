@@ -29,6 +29,7 @@ from ..schemas import (
 from ..store.place_resolver import PlaceResolver
 from ..store.tile_data_store import TileDataStore
 from climate.datasets.derive.series import rolling_mean_centered, linear_trend_line
+from climate.geo.regions import REGION_ID_GLOBE
 from climate.datasets.derive.units import c_to_f
 from climate.registry.panels import DEFAULT_PANELS_PATH, load_panels
 from climate.tiles.layout import GridSpec, locate_tile, cell_center_latlon
@@ -1310,8 +1311,8 @@ def build_panel_tiles_registry(
             lat=lat,
             lon=lon,
         ),
-        _compute_global_t2m_preindustrial_headline(tile_store=tile_store, unit=unit),
-        _global_aggregate_recent_delta_headline(
+        _compute_aggregate_t2m_preindustrial_headline(tile_store=tile_store, unit=unit),
+        _aggregate_recent_delta_headline(
             tile_store=tile_store,
             metric="t2m_yearly_mean_c",
             key="t2m_recent_global",
@@ -1320,7 +1321,7 @@ def build_panel_tiles_registry(
             unit_out=unit,
             baseline_year=1979,
         ),
-        _global_aggregate_trend_headline(
+        _aggregate_trend_headline(
             tile_store=tile_store,
             metric="t2m_hotdays_per_year",
             key="t2m_hotdays_global",
@@ -1328,7 +1329,7 @@ def build_panel_tiles_registry(
             unit="days",
             baseline_year=1979,
         ),
-        _global_aggregate_recent_delta_headline(
+        _aggregate_recent_delta_headline(
             tile_store=tile_store,
             metric="sst_yearly_mean_c",
             key="sst_recent_global",
@@ -1337,7 +1338,7 @@ def build_panel_tiles_registry(
             unit_out=unit,
             baseline_year=1982,
         ),
-        _global_aggregate_trend_headline(
+        _aggregate_trend_headline(
             tile_store=tile_store,
             metric="sst_hotdays_per_year",
             key="sst_hotdays_global",
@@ -1345,7 +1346,7 @@ def build_panel_tiles_registry(
             unit="days",
             baseline_year=1982,
         ),
-        _global_aggregate_trend_headline(
+        _aggregate_trend_headline(
             tile_store=tile_store,
             metric="tp_annual_total_mm",
             key="precip_global",
@@ -1353,7 +1354,7 @@ def build_panel_tiles_registry(
             unit="mm",
             baseline_year=1979,
         ),
-        _global_aggregate_trend_headline(
+        _aggregate_trend_headline(
             tile_store=tile_store,
             metric="tp_cdd_per_year",
             key="cdd_global",
@@ -1552,8 +1553,8 @@ def build_scored_panels_tiles_registry(
             lat=lat,
             lon=lon,
         ),
-        _compute_global_t2m_preindustrial_headline(tile_store=tile_store, unit=unit),
-        _global_aggregate_recent_delta_headline(
+        _compute_aggregate_t2m_preindustrial_headline(tile_store=tile_store, unit=unit),
+        _aggregate_recent_delta_headline(
             tile_store=tile_store,
             metric="t2m_yearly_mean_c",
             key="t2m_recent_global",
@@ -1562,7 +1563,7 @@ def build_scored_panels_tiles_registry(
             unit_out=unit,
             baseline_year=1979,
         ),
-        _global_aggregate_trend_headline(
+        _aggregate_trend_headline(
             tile_store=tile_store,
             metric="t2m_hotdays_per_year",
             key="t2m_hotdays_global",
@@ -1570,7 +1571,7 @@ def build_scored_panels_tiles_registry(
             unit="days",
             baseline_year=1979,
         ),
-        _global_aggregate_recent_delta_headline(
+        _aggregate_recent_delta_headline(
             tile_store=tile_store,
             metric="sst_yearly_mean_c",
             key="sst_recent_global",
@@ -1579,7 +1580,7 @@ def build_scored_panels_tiles_registry(
             unit_out=unit,
             baseline_year=1982,
         ),
-        _global_aggregate_trend_headline(
+        _aggregate_trend_headline(
             tile_store=tile_store,
             metric="sst_hotdays_per_year",
             key="sst_hotdays_global",
@@ -1587,7 +1588,7 @@ def build_scored_panels_tiles_registry(
             unit="days",
             baseline_year=1982,
         ),
-        _global_aggregate_trend_headline(
+        _aggregate_trend_headline(
             tile_store=tile_store,
             metric="tp_annual_total_mm",
             key="precip_global",
@@ -1595,7 +1596,7 @@ def build_scored_panels_tiles_registry(
             unit="mm",
             baseline_year=1979,
         ),
-        _global_aggregate_trend_headline(
+        _aggregate_trend_headline(
             tile_store=tile_store,
             metric="tp_cdd_per_year",
             key="cdd_global",
@@ -1617,7 +1618,7 @@ def build_scored_panels_tiles_registry(
     )
 
 
-def _global_aggregate_recent_delta_headline(
+def _aggregate_recent_delta_headline(
     *,
     tile_store: TileDataStore,
     metric: str,
@@ -1626,21 +1627,20 @@ def _global_aggregate_recent_delta_headline(
     unit_in: str,
     unit_out: str,
     baseline_year: int,
-) -> HeadlinePayload:
+    region_id: str = REGION_ID_GLOBE,
+    scope: str = "Global",
+) -> HeadlinePayload | None:
     baseline = str(baseline_year)
-    method = f"Global area-weighted mean: latest {_HEADLINE_RECENT_YEARS}-year mean minus {baseline_year} value"
+    method = f"{scope} area-weighted mean: latest {_HEADLINE_RECENT_YEARS}-year mean minus {baseline_year} value"
     agg_data = tile_store.aggregates.get((metric, "mean"))
-    if agg_data is None:
-        return HeadlinePayload(
-            key=key,
-            label=label,
-            value=None,
-            unit=unit_out,
-            baseline=baseline,
-            method=method,
-        )
-    globe = agg_data["regions"].get("globe")
-    if globe is None:
+    region = agg_data["regions"].get(region_id) if agg_data is not None else None
+    if agg_data is not None and region is None and region_id != REGION_ID_GLOBE:
+        # A region this metric does not cover — sea-surface temperature over a
+        # country, say. Omit the tile rather than show a blank one (decision
+        # 9.1). The globe keeps its long-standing blank headline, and so does a
+        # metric missing from the release entirely, which is worth surfacing.
+        return None
+    if region is None:
         return HeadlinePayload(
             key=key,
             label=label,
@@ -1653,7 +1653,7 @@ def _global_aggregate_recent_delta_headline(
         [_axis_to_numeric(v) for v in agg_data["time_axis"]], dtype=np.float64
     )
     y = np.asarray(
-        [float("nan") if v is None else float(v) for v in globe["values"]],
+        [float("nan") if v is None else float(v) for v in region["values"]],
         dtype=np.float64,
     )
     years = x.astype(int)
@@ -1685,7 +1685,7 @@ def _global_aggregate_recent_delta_headline(
     )
 
 
-def _global_aggregate_trend_headline(
+def _aggregate_trend_headline(
     *,
     tile_store: TileDataStore,
     metric: str,
@@ -1693,21 +1693,20 @@ def _global_aggregate_trend_headline(
     label: str,
     unit: str,
     baseline_year: int,
-) -> HeadlinePayload:
+    region_id: str = REGION_ID_GLOBE,
+    scope: str = "global",
+) -> HeadlinePayload | None:
     baseline = str(baseline_year)
-    method = "OLS trend value at last year of global area-weighted mean"
+    method = f"OLS trend value at last year of {scope} area-weighted mean"
     agg_data = tile_store.aggregates.get((metric, "mean"))
-    if agg_data is None:
-        return HeadlinePayload(
-            key=key,
-            label=label,
-            value=None,
-            unit=unit,
-            baseline=baseline,
-            method=method,
-        )
-    globe = agg_data["regions"].get("globe")
-    if globe is None:
+    region = agg_data["regions"].get(region_id) if agg_data is not None else None
+    if agg_data is not None and region is None and region_id != REGION_ID_GLOBE:
+        # A region this metric does not cover — sea-surface temperature over a
+        # country, say. Omit the tile rather than show a blank one (decision
+        # 9.1). The globe keeps its long-standing blank headline, and so does a
+        # metric missing from the release entirely, which is worth surfacing.
+        return None
+    if region is None:
         return HeadlinePayload(
             key=key,
             label=label,
@@ -1720,7 +1719,7 @@ def _global_aggregate_trend_headline(
         [_axis_to_numeric(v) for v in agg_data["time_axis"]], dtype=np.float64
     )
     y = np.asarray(
-        [float("nan") if v is None else float(v) for v in globe["values"]],
+        [float("nan") if v is None else float(v) for v in region["values"]],
         dtype=np.float64,
     )
     trend = linear_trend_line(x, y)
@@ -1752,19 +1751,28 @@ def _global_aggregate_trend_headline(
     )
 
 
-def _compute_global_t2m_preindustrial_headline(
+def _compute_aggregate_t2m_preindustrial_headline(
     *,
     tile_store: TileDataStore,
     unit: str,
-) -> HeadlinePayload:
+    region_id: str = REGION_ID_GLOBE,
+    scope: str = "global",
+) -> HeadlinePayload | None:
     key = "t2m_vs_preindustrial_global"
-    label = "Air temperature change vs pre-industrial (global)"
+    label = f"Air temperature change vs pre-industrial ({scope})"
     baseline = "1850-1900"
-    method = "Precomputed CMIP+ERA5 global mean warming vs 1850-1900"
+    method = f"Precomputed CMIP+ERA5 {scope} mean warming vs 1850-1900"
     agg_data = tile_store.aggregates.get(
         ("t2m_total_warming_vs_preindustrial_c", "mean")
     )
-    if agg_data is None:
+    region = agg_data["regions"].get(region_id) if agg_data is not None else None
+    if agg_data is not None and region is None and region_id != REGION_ID_GLOBE:
+        # A region this metric does not cover — sea-surface temperature over a
+        # country, say. Omit the tile rather than show a blank one (decision
+        # 9.1). The globe keeps its long-standing blank headline, and so does a
+        # metric missing from the release entirely, which is worth surfacing.
+        return None
+    if region is None:
         return HeadlinePayload(
             key=key,
             label=label,
@@ -1773,17 +1781,7 @@ def _compute_global_t2m_preindustrial_headline(
             baseline=baseline,
             method=method,
         )
-    globe = agg_data["regions"].get("globe")
-    if globe is None:
-        return HeadlinePayload(
-            key=key,
-            label=label,
-            value=None,
-            unit=unit,
-            baseline=baseline,
-            method=method,
-        )
-    values = globe["values"]
+    values = region["values"]
     if not values:
         return HeadlinePayload(
             key=key,
@@ -1853,14 +1851,26 @@ def _with_coral_info_bubble(
     }
 
 
-def build_global_panels(
+def build_region_panels(
     *,
     tile_store: TileDataStore,
     panels_manifest: dict[str, Any],
     unit: str,
     release: str,
+    region_id: str = REGION_ID_GLOBE,
+    region_label: str = "Global",
+    place: PlaceInfo | None = None,
 ) -> PanelListResponse:
+    """Build a panel from precomputed aggregates for one region.
+
+    Defaults to the globe, which is the long-standing "Global" panel; pass a
+    region_id such as ``country:FR`` for a country or sea. Graphs whose metric
+    has no entry for the region are dropped, and a panel whose graphs are all
+    dropped disappears with them — which is how a country ends up with no
+    sea-temperature panel without any rule saying so.
+    """
     unit = unit.upper()
+    is_globe = region_id == REGION_ID_GLOBE
     panels = panels_manifest.get("panels", {})
 
     merged_series: dict[str, SeriesPayload] = {}
@@ -1901,11 +1911,11 @@ def build_global_panels(
                 if agg_data is None:
                     continue
 
-                globe = agg_data["regions"].get("globe")
-                if globe is None:
+                region = agg_data["regions"].get(region_id)
+                if region is None:
                     continue
 
-                values = globe["values"]
+                values = region["values"]
                 time_axis = agg_data["time_axis"]
 
                 y_raw = np.asarray(
@@ -1945,7 +1955,11 @@ def build_global_panels(
                 graph_series_keys.append(key)
 
             if not graph_series_keys:
-                graph_error = "Global data not available for this graph."
+                graph_error = (
+                    "Global data not available for this graph."
+                    if is_globe
+                    else f"No {region_label}-wide data for this graph."
+                )
 
             out_animation = None
             if animation_spec:
@@ -1993,9 +2007,17 @@ def build_global_panels(
                 )
             )
 
+    # "global" reads naturally in the globe panel's wording; a region uses its
+    # own name in the same slots.
+    scope = "global" if is_globe else region_label
+
     location = LocationInfo(
-        query=QueryPoint(lat=0.0, lon=0.0),
-        place=PlaceInfo(
+        query=QueryPoint(
+            lat=place.lat if place else 0.0,
+            lon=place.lon if place else 0.0,
+        ),
+        place=place
+        or PlaceInfo(
             geonameid=0,
             label="Global",
             lat=0.0,
@@ -2008,7 +2030,79 @@ def build_global_panels(
         panel_valid_bbox=None,
         panel_bbox_grid_id=None,
         panel_cell_indices=None,
+        region_id=None if is_globe else region_id,
+        region_cell_count=(
+            None if is_globe else _region_cell_count(tile_store, region_id)
+        ),
     )
+
+    headlines = [
+        _compute_aggregate_t2m_preindustrial_headline(
+            tile_store=tile_store, unit=unit, region_id=region_id, scope=scope
+        ),
+        _aggregate_recent_delta_headline(
+            tile_store=tile_store,
+            metric="t2m_yearly_mean_c",
+            key="t2m_recent_global",
+            label=f"Air temperature recent change ({scope})",
+            unit_in="C",
+            unit_out=unit,
+            baseline_year=1979,
+            region_id=region_id,
+            scope="Global" if is_globe else region_label,
+        ),
+        _aggregate_trend_headline(
+            tile_store=tile_store,
+            metric="t2m_hotdays_per_year",
+            key="t2m_hotdays_global",
+            label=f"Air hot days per year ({scope})",
+            unit="days",
+            baseline_year=1979,
+            region_id=region_id,
+            scope=scope,
+        ),
+        _aggregate_recent_delta_headline(
+            tile_store=tile_store,
+            metric="sst_yearly_mean_c",
+            key="sst_recent_global",
+            label=f"Sea surface temperature recent change ({scope})",
+            unit_in="C",
+            unit_out=unit,
+            baseline_year=1982,
+            region_id=region_id,
+            scope="Global" if is_globe else region_label,
+        ),
+        _aggregate_trend_headline(
+            tile_store=tile_store,
+            metric="sst_hotdays_per_year",
+            key="sst_hotdays_global",
+            label=f"Sea hot days per year ({scope})",
+            unit="days",
+            baseline_year=1982,
+            region_id=region_id,
+            scope=scope,
+        ),
+    ]
+
+    if not is_globe:
+        # The globe panel has no precipitation headline on purpose — a global
+        # mean rainfall trend says little, and the frontend shows a fixed
+        # "unavailable globally" note in its place. A country or sea is a scale
+        # where the trend means something, and a point panel already shows one
+        # (`_compute_precip_headline`), so a region gets the aggregate
+        # equivalent under the key the frontend looks up for aggregate panels.
+        headlines.append(
+            _aggregate_trend_headline(
+                tile_store=tile_store,
+                metric="tp_annual_total_mm",
+                key="precip_global",
+                label=f"Annual precipitation ({scope})",
+                unit="mm",
+                baseline_year=1979,
+                region_id=region_id,
+                scope=scope,
+            )
+        )
 
     return PanelListResponse(
         release=release,
@@ -2016,47 +2110,30 @@ def build_global_panels(
         location=location,
         panels=scored_panels,
         series=merged_series,
-        headlines=[
-            _compute_global_t2m_preindustrial_headline(
-                tile_store=tile_store, unit=unit
-            ),
-            _global_aggregate_recent_delta_headline(
-                tile_store=tile_store,
-                metric="t2m_yearly_mean_c",
-                key="t2m_recent_global",
-                label="Air temperature recent change (global)",
-                unit_in="C",
-                unit_out=unit,
-                baseline_year=1979,
-            ),
-            _global_aggregate_trend_headline(
-                tile_store=tile_store,
-                metric="t2m_hotdays_per_year",
-                key="t2m_hotdays_global",
-                label="Air hot days per year (global)",
-                unit="days",
-                baseline_year=1979,
-            ),
-            _global_aggregate_recent_delta_headline(
-                tile_store=tile_store,
-                metric="sst_yearly_mean_c",
-                key="sst_recent_global",
-                label="Sea surface temperature recent change (global)",
-                unit_in="C",
-                unit_out=unit,
-                baseline_year=1982,
-            ),
-            _global_aggregate_trend_headline(
-                tile_store=tile_store,
-                metric="sst_hotdays_per_year",
-                key="sst_hotdays_global",
-                label="Sea hot days per year (global)",
-                unit="days",
-                baseline_year=1982,
-            ),
-        ],
+        headlines=[h for h in headlines if h is not None],
         layer_overrides=_layer_overrides_from_manifest(panels_manifest),
     )
+
+
+def _region_record(tile_store: TileDataStore, region_id: str) -> dict[str, Any] | None:
+    """A region's metadata record — name, type, cell count — from any metric.
+
+    Every aggregate file records the same name and footprint for a given
+    region, so the first metric that mentions it answers for all of them.
+    """
+    for agg in tile_store.aggregates.values():
+        record = (agg.get("regions") or {}).get(region_id)
+        if record:
+            return record
+    return None
+
+
+def _region_cell_count(tile_store: TileDataStore, region_id: str) -> int | None:
+    """Cells behind a region's mean, which the panel shows as provenance."""
+    record = _region_record(tile_store, region_id)
+    if record is None or record.get("cell_count") is None:
+        return None
+    return int(record["cell_count"])
 
 
 def _grid_from_id(grid_id: str) -> GridSpec:

@@ -62,6 +62,12 @@ class LocationInfo(BaseModel):
     panel_valid_bbox: Optional["PanelValidBBox"] = None
     panel_bbox_grid_id: Optional[str] = None
     panel_cell_indices: Optional[list["PanelCellIndex"]] = None
+    # Set on a region panel, where the figures are an area-weighted mean over a
+    # whole country or sea rather than a reading at `place`. `region_cell_count`
+    # is how many grid cells went into that mean, which the panel shows as the
+    # provenance line under the region's name.
+    region_id: Optional[str] = None
+    region_cell_count: Optional[int] = None
 
 
 class PanelResponse(BaseModel):
