@@ -1496,13 +1496,17 @@ export default function MapLibreGlobe({
     if (!focusLocation) return;
 
     const { lat, lon } = focusLocation;
+    // This runs a frame after the focus effect above and has the last word on
+    // the camera, so it must frame an area selection too — otherwise it snaps
+    // straight back to the point zoom and undoes the fit.
+    const areaTarget = focusBbox ? bboxCameraTarget(focusBbox) : null;
     let rafId: number | null = null;
     const recenterToVisibleArea = () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
         map.easeTo({
-          center: [lon, lat],
-          zoom: focusZoomTarget(map),
+          center: areaTarget?.center ?? [lon, lat],
+          zoom: areaTarget?.zoom ?? focusZoomTarget(map),
           padding: panelPaddingForViewport(map, true),
           duration: FOCUS_RECENTER_DURATION_MS,
           easing: cubicOut,
@@ -1522,7 +1526,7 @@ export default function MapLibreGlobe({
       window.removeEventListener("resize", recenterToVisibleArea);
       media.removeEventListener?.("change", recenterToVisibleArea);
     };
-  }, [panelOpen, focusLocation]);
+  }, [panelOpen, focusLocation, focusBbox]);
 
   useEffect(() => {
     const map = mapRef.current;

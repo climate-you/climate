@@ -100,10 +100,15 @@ def test_region_panel_reads_the_region_series_not_the_globe() -> None:
     assert resp.series[air_key].y == pytest.approx([12.0, 12.2, 12.4, 12.6, 12.8])
 
 
-def test_panel_with_no_region_data_disappears() -> None:
-    # France has no sea metric: the sea panel goes, without any rule naming it.
+def test_panel_with_no_region_data_is_kept_as_a_stub() -> None:
+    # France has no sea metric. The panel stays, with its graphs empty, so the
+    # frontend gets its title and headline config and can show "not available
+    # here" — rather than paging onto blank, untitled placeholders.
     resp = _build("country:FR", region_label="France", place=_france_place())
-    assert _panel_ids(resp) == ["air"]
+    assert _panel_ids(resp) == ["air", "sea"]
+    (sea,) = [p.panel for p in resp.panels if p.panel.id == "sea"]
+    assert [g.series_keys for g in sea.graphs] == [[]]
+    assert sea.graphs[0].id == "g_sea"
 
 
 def test_graph_without_region_data_says_so_in_the_regions_own_words() -> None:

@@ -1864,10 +1864,11 @@ def build_region_panels(
     """Build a panel from precomputed aggregates for one region.
 
     Defaults to the globe, which is the long-standing "Global" panel; pass a
-    region_id such as ``country:FR`` for a country or sea. Graphs whose metric
-    has no entry for the region are dropped, and a panel whose graphs are all
-    dropped disappears with them — which is how a country ends up with no
-    sea-temperature panel without any rule saying so.
+    region_id such as ``country:FR`` for a country or sea. A graph whose metric
+    has no entry for the region comes back empty — which is how a country ends
+    up with no sea temperature, without any rule saying so. For a region, a
+    panel left with only empty graphs is kept as a stub so the frontend can
+    explain the gap; the globe, which has data for every panel, drops them.
     """
     unit = unit.upper()
     is_globe = region_id == REGION_ID_GLOBE
@@ -1995,7 +1996,13 @@ def build_region_panels(
                 )
             )
 
-        if any(g.series_keys for g in graphs_out):
+        # A region keeps a panel it has no data for — sea temperature over a
+        # country, say — as a stub of empty graphs, the same convention the
+        # point panel follows for an inland location. The frontend pages over
+        # a fixed list of graphs, so a dropped panel would come back as blank,
+        # untitled placeholders; a stub instead carries its title and headline
+        # config, and renders as an explained "not available here" card.
+        if any(g.series_keys for g in graphs_out) or not is_globe:
             scored_panels.append(
                 ScoredPanelPayload(
                     score=100,

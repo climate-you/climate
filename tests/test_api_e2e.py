@@ -266,12 +266,15 @@ def test_country_search_hands_back_a_region_the_panel_endpoint_serves() -> None:
     assert panel["location"]["place"]["population"] is None
 
 
-def test_country_region_panel_has_no_sea_temperature() -> None:
+def test_country_region_panel_has_no_sea_temperature_data() -> None:
     status, panel = _region_panel(create_app(), "country:FR")
     assert status == 200
-    ids = {p["panel"]["id"] for p in panel["panels"]}
-    assert {"air_temperature", "precipitation"} <= ids
-    assert "sea_temperature" not in ids
+    by_id = {p["panel"]["id"]: p["panel"] for p in panel["panels"]}
+    assert {"air_temperature", "precipitation"} <= set(by_id)
+    # Kept as a stub, so the frontend can say "not available here".
+    sea = by_id["sea_temperature"]
+    assert all(g["series_keys"] == [] for g in sea["graphs"])
+    assert all(g["title"] for g in sea["graphs"])
     keys = {h["key"] for h in panel["headlines"]}
     assert "precip_global" in keys
     assert not keys & {"sst_recent_global", "sst_hotdays_global"}

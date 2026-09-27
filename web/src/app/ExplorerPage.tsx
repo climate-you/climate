@@ -20,6 +20,7 @@ import ColdOpenOverlay from "@/components/explorer/ColdOpenOverlay";
 import SiteNav from "@/components/explorer/SiteNav";
 import CaseStudiesOverlay from "@/components/CaseStudiesOverlay";
 import type { CaseStudy } from "@/components/CaseStudiesOverlay";
+import { isAggregateScope, panelScope } from "@/lib/explorer/panelScope";
 import type { OverlayRoute } from "@/lib/explorer/routing";
 import SearchOverlay from "@/components/explorer/SearchOverlay";
 import type { AutocompleteItem } from "@/components/explorer/SearchOverlay";
@@ -211,6 +212,10 @@ type PanelResponse = {
       lon_max: number;
     } | null;
     panel_bbox_grid_id?: string | null;
+    // Set on a region panel: the figures are an area-weighted mean over a whole
+    // country or sea, computed over `region_cell_count` grid cells.
+    region_id?: string | null;
+    region_cell_count?: number | null;
   };
   panels: Array<{
     score: number;
@@ -283,6 +288,9 @@ function pickGlobeBackground(): GlobeBackground {
   }
   return entry;
 }
+
+// Region panels kept in memory at once; see regionPanelCacheRef.
+const REGION_PANEL_CACHE_SIZE = 12;
 
 const FIXED_GRAPH_ORDER = [
   "t2m_annual",
@@ -443,6 +451,10 @@ export default function ExplorerPage({
   const [selectedGeonameidForPanel, setSelectedGeonameidForPanel] = useState<
     number | null
   >(null);
+  // The aggregate region the panel is showing ("country:FR"), or null for a
+  // point or the globe. Kept apart from the geonameid so a reload — a unit
+  // toggle, a retry — asks for the same kind of panel it is replacing.
+  const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const [panelStale, setPanelStale] = useState<boolean>(false);
   const panelStaleTimerRef = useRef<number | null>(null);
   const panelAbortControllerRef = useRef<AbortController | null>(null);
@@ -470,6 +482,9 @@ export default function ExplorerPage({
   const lastTrackedLayerIdRef = useRef<string | null>(null);
   const globalPrefetchDoneRef = useRef(false);
   const globalPanelCacheRef = useRef<Map<string, PanelResponse>>(new Map());
+  // Recent region panels, so flipping °C/°F or revisiting a region is instant.
+  // Bounded: unlike the one global panel, a reader can visit any number.
+  const regionPanelCacheRef = useRef<Map<string, PanelResponse>>(new Map());
   const preloadedBackgroundsRef = useRef<Set<string>>(new Set());
   const [graphsPerPage, setGraphsPerPage] = useState(2);
   const prevGraphsPerPageRef = useRef(2);
@@ -684,17 +699,27 @@ export default function ExplorerPage({
     const graph = visibleGraphs[0]?.graph ?? null;
     const config = graph?.headline ?? null;
     if (!config) return null;
-    const isGlobal = resp.location.place.geonameid === 0;
+    const scope = panelScope(resp.location);
+    // Headline keys follow the scope: aggregate panels (globe or region) use
+    // *_global, points use *_local. Behaviour that is genuinely about the whole
+    // planet — the precipitation note, the global coral view — keys off
+    // isGlobal alone.
+    const isGlobal = scope === "global";
+    const isAggregate = isAggregateScope(scope);
     const convertDelta = (v: number) =>
       unit === respUnit ? v : unit === "F" ? v * (9 / 5) : v * (5 / 9);
 
     switch (config.type) {
       case "air_temp": {
         const pi = h(
-          isGlobal ? config.primary_metric_global : config.primary_metric_local,
+          isAggregate
+            ? config.primary_metric_global
+            : config.primary_metric_local,
         );
         const recent = h(
-          isGlobal ? config.recent_metric_global : config.recent_metric_local,
+          isAggregate
+            ? config.recent_metric_global
+            : config.recent_metric_local,
         );
         const piVal =
           typeof pi?.value === "number" && Number.isFinite(pi.value)
@@ -716,7 +741,7 @@ export default function ExplorerPage({
         } as const;
       }
       case "sea_temp": {
-        const sst = h(isGlobal ? config.metric_global : config.metric_local);
+        const sst = h(isAggregate ? config.metric_global : config.metric_local);
         const sstVal =
           typeof sst?.value === "number" && Number.isFinite(sst.value)
             ? sst.value
@@ -734,7 +759,7 @@ export default function ExplorerPage({
                 text: config.no_warming_text,
               } as const);
         }
-        if (!isGlobal) {
+        if (!isAggregate) {
           const globalSst = h(config.metric_global);
           const globalDelta =
             typeof globalSst?.value === "number" &&
@@ -755,7 +780,7 @@ export default function ExplorerPage({
         if (isGlobal && isPrecipGraph) {
           return { type: "global_precip_unavailable" } as const;
         }
-        const hd = h(isGlobal ? config.metric_global : config.metric_local);
+        const hd = h(isAggregate ? config.metric_global : config.metric_local);
         if (typeof hd?.value === "number" && Number.isFinite(hd.value)) {
           const delta =
             typeof hd.baseline_value === "number" &&
@@ -771,7 +796,7 @@ export default function ExplorerPage({
             suffix: hd.baseline ? `since ${hd.baseline}` : "",
           } as const;
         }
-        if (!isGlobal && config.unavailable_global_metric) {
+        if (!isAggregate && config.unavailable_global_metric) {
           const globalSst = h(config.unavailable_global_metric);
           const globalDelta =
             typeof globalSst?.value === "number" &&
@@ -1105,21 +1130,27 @@ export default function ExplorerPage({
     }
   }
 
+  // Turn to the page holding `graphId`. Returns whether it did, so a caller
+  // can fall back to a default of its own.
+  function showGraphPage(graphId: string | undefined): boolean {
+    if (!graphId) return false;
+    const graphIndex = (FIXED_GRAPH_ORDER as readonly string[]).indexOf(
+      graphId,
+    );
+    if (graphIndex < 0) return false;
+    setGraphPage(Math.floor(graphIndex / Math.max(1, graphsPerPage)));
+    return true;
+  }
+
   function applyLayerDefaultGraphPage(
     layerOverrides:
       | Record<string, { default_graph_ids: string[] }>
       | undefined
       | null,
-  ) {
-    const firstGraphId =
-      layerOverrides?.[activeLayerId]?.default_graph_ids?.[0];
-    if (!firstGraphId) return;
-    const graphIndex = (FIXED_GRAPH_ORDER as readonly string[]).indexOf(
-      firstGraphId,
+  ): boolean {
+    return showGraphPage(
+      layerOverrides?.[activeLayerId]?.default_graph_ids?.[0],
     );
-    if (graphIndex >= 0) {
-      setGraphPage(Math.floor(graphIndex / Math.max(1, graphsPerPage)));
-    }
   }
 
   async function loadGlobalPanel(
@@ -1143,6 +1174,7 @@ export default function ExplorerPage({
     setFocusBbox(null);
     setPicked(null);
     setSelectedGeonameidForPanel(null);
+    setSelectedRegionId(null);
     setSelectedLocation({
       geonameid: 0,
       label: "Global",
@@ -1191,6 +1223,85 @@ export default function ExplorerPage({
     }
   }
 
+  async function loadRegionPanel(
+    regionId: string,
+    nextUnit: "C" | "F" = unit,
+    // A fresh selection may land on a default graph; a unit toggle or a retry
+    // leaves the reader on the page they were already reading.
+    defaultGraphId: string | null = null,
+  ) {
+    panelAbortControllerRef.current?.abort("superseded");
+    const controller = new AbortController();
+    panelAbortControllerRef.current = controller;
+    const timeoutId = window.setTimeout(
+      () => controller.abort("timeout"),
+      FETCH_TIMEOUT_MS,
+    );
+    setPanelLoadError(null);
+
+    const show = (data: PanelResponse) => {
+      // A layer the reader chose outranks the region's own default.
+      if (defaultGraphId && !applyLayerDefaultGraphPage(data.layer_overrides)) {
+        showGraphPage(defaultGraphId);
+      }
+      setResp(data);
+      setRespUnit(nextUnit);
+    };
+
+    const cache = regionPanelCacheRef.current;
+    const cacheKey = `${releaseForSession}:${regionId}:${nextUnit}`;
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      window.clearTimeout(timeoutId);
+      controller.abort("superseded");
+      // Re-insert so eviction always drops the least recently used entry.
+      cache.delete(cacheKey);
+      cache.set(cacheKey, cached);
+      show(cached);
+      return;
+    }
+
+    setResp(null);
+    setPanelLoading(true);
+    try {
+      const params = new URLSearchParams({
+        region_id: regionId,
+        unit: nextUnit,
+      });
+      const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/panel/region?${params.toString()}`;
+      const r = await fetch(url, { signal: controller.signal });
+      if (!r.ok) throw new Error(await r.text());
+      const data = (await r.json()) as PanelResponse;
+      window.clearTimeout(timeoutId);
+      pinSessionRelease(data.release);
+      cache.set(cacheKey, data);
+      while (cache.size > REGION_PANEL_CACHE_SIZE) {
+        const oldest = cache.keys().next().value;
+        if (oldest === undefined) break;
+        cache.delete(oldest);
+      }
+      show(data);
+      setPanelLoadError(null);
+      setPanelLoading(false);
+    } catch {
+      window.clearTimeout(timeoutId);
+      if (controller.signal.reason === "superseded") return;
+      setPanelLoading(false);
+      setPanelLoadError(CLIMATE_DATA_LOAD_ERROR);
+    }
+  }
+
+  // Reload whatever the panel is showing — a region, the globe, or a point —
+  // in `nextUnit`. The unit toggles and the retry button all come through
+  // here, so none of them can swap a region panel for a point one.
+  function reloadActivePanel(nextUnit: "C" | "F" = unit) {
+    if (selectedRegionId) return loadRegionPanel(selectedRegionId, nextUnit);
+    if (selectedLocation?.geonameid === 0) {
+      return loadGlobalPanel(nextUnit, false, panelOpen, false);
+    }
+    return loadPanel(lat, lon, nextUnit);
+  }
+
   async function fetchNearestLocation(nextLat: number, nextLon: number) {
     const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
       nextLon,
@@ -1213,14 +1324,32 @@ export default function ExplorerPage({
     // Countries, seas and lakes carry a bounding box: frame the whole area
     // rather than zooming in on its representative point.
     setFocusBbox(item.bbox ?? null);
-    setSelectedGeonameidForPanel(item.geonameid);
     setSelectedLocation({
       geonameid: item.geonameid,
       label: item.label,
       countryCode: item.country_code,
-      population: item.population,
+      // A region panel shows its cell count in this slot rather than a
+      // population, whose only source is years stale. Anything read as a point
+      // keeps its population exactly as before.
+      population: item.region_id ? null : item.population,
     });
     setPanelOpen(true);
+    // An area the release has aggregates for gets a region-wide panel; any
+    // other selection — a city, a lake, a country too small for the mask —
+    // reads the point it was placed at.
+    if (item.region_id) {
+      setSelectedGeonameidForPanel(null);
+      setSelectedRegionId(item.region_id);
+      // A sea opens on sea-surface temperature, the reason to look at one.
+      void loadRegionPanel(
+        item.region_id,
+        unit,
+        item.kind === "marine" ? "sst_annual" : null,
+      );
+      return;
+    }
+    setSelectedRegionId(null);
+    setSelectedGeonameidForPanel(item.geonameid);
     void loadPanel(item.lat, item.lon, unit, item.geonameid);
   }
 
@@ -1240,6 +1369,8 @@ export default function ExplorerPage({
     }
     setFocusBbox(null);
     setSelectedGeonameidForPanel(null);
+    // A click is always a point, even inside a highlighted region.
+    setSelectedRegionId(null);
 
     // When the panel is closed, wait up to PANEL_OPEN_AWAIT_MS for the API so
     // the panel can open with data already populated rather than flashing a
@@ -1625,6 +1756,20 @@ export default function ExplorerPage({
     );
   })();
   const populationText = formatPopulation(selectedLocation?.population);
+  // "Country average · 1,295 cells": what a region panel's figures were
+  // computed over, in the slot a point panel uses for population. Tied to the
+  // current selection, so it cannot linger beside a newly chosen city while
+  // that city's panel is still loading.
+  const regionSubtitle = (() => {
+    const regionId = resp?.location.region_id;
+    const cells = resp?.location.region_cell_count;
+    if (!regionId || regionId !== selectedRegionId) return null;
+    if (typeof cells !== "number") return null;
+    const scope = regionId.startsWith("ocean:")
+      ? "Sea average"
+      : "Country average";
+    return `${scope} · ${new Intl.NumberFormat("en-US").format(cells)} cells`;
+  })();
   const debugBbox = resp?.location?.panel_valid_bbox ?? null;
   const debugInBbox = inBbox(lat, lon, debugBbox);
   // Only emitted while a touch drag is actually moving the panel: a resting
@@ -1732,10 +1877,8 @@ export default function ExplorerPage({
                 onClick={() => {
                   const nextUnit: "C" | "F" = unit === "C" ? "F" : "C";
                   setUnit(nextUnit);
-                  if (selectedLocation?.geonameid === 0) {
-                    void loadGlobalPanel(nextUnit, false, panelOpen, false);
-                  } else if (selectedLocation !== null) {
-                    void loadPanel(lat, lon, nextUnit);
+                  if (selectedLocation !== null) {
+                    void reloadActivePanel(nextUnit);
                   }
                 }}
               >
@@ -2167,7 +2310,9 @@ export default function ExplorerPage({
                     ) : null}
                   </h2>
                 </div>
-                {populationText ? (
+                {regionSubtitle ? (
+                  <p className={styles.panelPopulation}>{regionSubtitle}</p>
+                ) : populationText ? (
                   <p className={styles.panelPopulation}>
                     Population: {populationText}
                   </p>
@@ -2180,12 +2325,7 @@ export default function ExplorerPage({
                       onClick={async () => {
                         if (panelRetrying) return;
                         setPanelRetrying(true);
-                        await loadPanel(
-                          lat,
-                          lon,
-                          unit,
-                          selectedGeonameidForPanel,
-                        );
+                        await reloadActivePanel(unit);
                         setPanelRetrying(false);
                       }}
                     >
@@ -2378,11 +2518,7 @@ export default function ExplorerPage({
                   onClick={() => {
                     if (unit === "C") return;
                     setUnit("C");
-                    if (selectedLocation?.geonameid === 0) {
-                      void loadGlobalPanel("C");
-                    } else {
-                      void loadPanel(lat, lon, "C");
-                    }
+                    void reloadActivePanel("C");
                   }}
                 >
                   °C
@@ -2397,11 +2533,7 @@ export default function ExplorerPage({
                   onClick={() => {
                     if (unit === "F") return;
                     setUnit("F");
-                    if (selectedLocation?.geonameid === 0) {
-                      void loadGlobalPanel("F");
-                    } else {
-                      void loadPanel(lat, lon, "F");
-                    }
+                    void reloadActivePanel("F");
                   }}
                 >
                   °F
