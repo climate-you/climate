@@ -2105,7 +2105,7 @@ export default function ExplorerPage({
                         {panelHeadline.globalDelta !== null ? (
                           <>
                             <span className={styles.panelTitleSmall}>
-                              Globally, the sea has warmed of{" "}
+                              Globally, the sea has warmed by{" "}
                             </span>
                             <span
                               className={
