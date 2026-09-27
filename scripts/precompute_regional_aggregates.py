@@ -17,7 +17,6 @@ import argparse
 import json
 import sys
 import time
-import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,6 +26,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from climate.geo.continents import CONTINENT_TO_CC
+from climate.geo.regions import (
+    continent_region_id,
+    country_region_id,
+    ocean_region_id,
+)
 from climate.registry.metrics import load_metrics
 from climate.tiles.layout import GridSpec, tile_counts, tile_path
 from climate.tiles.spec import read_tile_array
@@ -49,13 +53,6 @@ def _load_npz_mask(path: Path) -> tuple[np.ndarray, float]:
     """Load mask data and deg from NPZ file. Returns (data, deg)."""
     with np.load(path, allow_pickle=False) as f:
         return np.asarray(f["data"]), float(f["deg"])
-
-
-def _slugify(name: str) -> str:
-    """Convert ocean name to a URL-safe slug: lowercase, spaces→underscores."""
-    normalized = unicodedata.normalize("NFD", name)
-    ascii_str = normalized.encode("ascii", "ignore").decode("ascii")
-    return ascii_str.lower().replace(" ", "_").replace("-", "_")
 
 
 # ---------------------------------------------------------------------------
@@ -522,7 +519,7 @@ def precompute_aggregates(
             code = country_id_to_code.get(uid)
             if code is None:
                 continue
-            key = f"country:{code}"
+            key = country_region_id(code)
             named_regions.append((key, frac))
             region_meta[key] = {
                 "name": country_code_to_name.get(code, code),
@@ -531,7 +528,7 @@ def precompute_aggregates(
             }
 
         for cont_name, frac in continent_weights.items():
-            key = f"continent:{cont_name.replace(' ', '_')}"
+            key = continent_region_id(cont_name)
             named_regions.append((key, frac))
             region_meta[key] = {
                 "name": cont_name.title(),
@@ -541,7 +538,7 @@ def precompute_aggregates(
 
         for uid, frac in ocean_weights.items():
             name = ocean_id_to_name.get(uid, f"ocean_{uid}")
-            key = f"ocean:{_slugify(name)}"
+            key = ocean_region_id(name)
             named_regions.append((key, frac))
             region_meta[key] = {
                 "name": name,

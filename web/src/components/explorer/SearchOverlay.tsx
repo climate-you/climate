@@ -16,6 +16,9 @@ export type AutocompleteItem = {
   // a box that straddles the antimeridian.
   kind?: string;
   bbox?: [number, number, number, number] | null;
+  // Present only when this release has aggregates for the area, so it doubles
+  // as the signal to open a region panel instead of a point one.
+  region_id?: string | null;
 };
 
 const KIND_LABELS: Record<string, string> = {

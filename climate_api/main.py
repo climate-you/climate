@@ -113,6 +113,28 @@ class _FeedbackBody(BaseModel):
     feedback: str | None  # "good", "bad", or null to clear
 
 
+def _autocomplete_item(hit, region_ids) -> LocationAutocompleteItem:
+    """Shape a location hit for the wire.
+
+    `region_id` is carried by the index for every country and sea, but only
+    surfaced when this release actually holds aggregates for it. Gating here
+    means the client can treat its presence as "a region panel will work",
+    with no extra round trip to discover the fallback.
+    """
+    region_id = getattr(hit, "region_id", None)
+    return LocationAutocompleteItem(
+        geonameid=hit.geonameid,
+        label=hit.label,
+        lat=hit.lat,
+        lon=hit.lon,
+        country_code=hit.country_code,
+        population=hit.population,
+        kind=hit.kind,
+        bbox=hit.bbox,
+        region_id=region_id if region_id in region_ids else None,
+    )
+
+
 def _normalize_lon(lon: float) -> float:
     # Normalize wrapped-world longitudes (e.g. 359, 529) into [-180, 180).
     return ((float(lon) + 180.0) % 360.0) - 180.0
@@ -778,21 +800,10 @@ def create_app() -> FastAPI:
         q: str = Query(..., min_length=2),
         limit: int = Query(10, ge=1, le=50),
     ):
-        release_resolver.resolve_release_context(release)
+        context = release_resolver.resolve_release_context(release)
+        region_ids = context.tile_store.region_ids
         hits = location_index.autocomplete(q, limit=limit)
-        results = [
-            LocationAutocompleteItem(
-                geonameid=h.geonameid,
-                label=h.label,
-                lat=h.lat,
-                lon=h.lon,
-                country_code=h.country_code,
-                population=h.population,
-                kind=h.kind,
-                bbox=h.bbox,
-            )
-            for h in hits
-        ]
+        results = [_autocomplete_item(h, region_ids) for h in hits]
         return LocationAutocompleteResponse(query=q, results=results)
 
     @app.get(
@@ -804,7 +815,7 @@ def create_app() -> FastAPI:
         geonameid: int | None = Query(None),
         label: str | None = Query(None),
     ):
-        release_resolver.resolve_release_context(release)
+        context = release_resolver.resolve_release_context(release)
         hit = None
         if geonameid is not None:
             hit = location_index.resolve_by_id(geonameid)
@@ -815,16 +826,7 @@ def create_app() -> FastAPI:
 
         result = None
         if hit is not None:
-            result = LocationAutocompleteItem(
-                geonameid=hit.geonameid,
-                label=hit.label,
-                lat=hit.lat,
-                lon=hit.lon,
-                country_code=hit.country_code,
-                population=hit.population,
-                kind=hit.kind,
-                bbox=hit.bbox,
-            )
+            result = _autocomplete_item(hit, context.tile_store.region_ids)
 
         return LocationResolveResponse(
             query=str(geonameid or label or ""),

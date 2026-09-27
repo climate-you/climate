@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from climate_api.store.location_index import LocationIndex, _norm
+from climate_api.store.location_index import LocationHit, LocationIndex, _norm
 
 
 def _write_index(path: Path) -> None:
@@ -149,3 +149,58 @@ def test_index_without_kind_or_bbox_columns_reads_as_cities(tmp_path: Path) -> N
     hit = index.resolve_by_id(3)
     assert hit.kind == "city"
     assert hit.bbox is None
+    assert hit.region_id is None
+
+
+def _write_index_with_region_ids(path: Path) -> None:
+    path.write_text(
+        "geonameid,label,lat,lon,country_code,population,norm_label,norm_city,"
+        "city_name,kind,bbox,region_id\n"
+        '3,"Paris, France",48.8,2.3,FR,2148000,paris france,paris,Paris,city,,\n'
+        '2000000001,"North Sea",56.0,3.0,OC,0,north sea,north sea,North Sea,'
+        'marine,"-4.0,51.0,12.0,61.0",ocean:north_sea\n'
+        '2100000001,"Lake Ontario",43.7,-77.9,LK,0,lake ontario,lake ontario,'
+        'Lake Ontario,lake,"-79.0,43.2,-76.0,44.2",\n'
+        '2200000001,"France",46.5,2.5,FR,67000000,france,france,France,country,'
+        '"-4.0,42.0,8.0,51.0",country:FR\n',
+        encoding="utf-8",
+    )
+
+
+def test_region_id_is_read_for_areas_and_absent_elsewhere(tmp_path: Path) -> None:
+    index_csv = tmp_path / "locations.index.csv"
+    _write_index_with_region_ids(index_csv)
+    index = LocationIndex(index_csv, min_query_len=3, prefix_len=3)
+
+    assert index.resolve_by_id(2200000001).region_id == "country:FR"
+    assert index.resolve_by_id(2000000001).region_id == "ocean:north_sea"
+    # A lake has no mask and so no region; a city never has one.
+    assert index.resolve_by_id(2100000001).region_id is None
+    assert index.resolve_by_id(3).region_id is None
+    # It also survives the autocomplete path, not just direct resolution.
+    assert index.autocomplete("france")[0].region_id == "country:FR"
+
+
+def test_autocomplete_item_gates_region_id_on_release_coverage() -> None:
+    """The wire payload must only promise a region the release can serve."""
+    from climate_api.main import _autocomplete_item
+
+    index_hit = LocationHit(
+        geonameid=2200000001,
+        label="France",
+        lat=46.5,
+        lon=2.5,
+        country_code="FR",
+        population=0,
+        kind="country",
+        region_id="country:FR",
+    )
+
+    served = _autocomplete_item(index_hit, frozenset({"country:FR", "globe"}))
+    assert served.region_id == "country:FR"
+
+    # Same index entry, a release whose aggregates do not cover it: the client
+    # is told nothing rather than being sent to an endpoint that would 404.
+    not_served = _autocomplete_item(index_hit, frozenset({"globe"}))
+    assert not_served.region_id is None
+    assert not_served.kind == "country"

@@ -35,6 +35,7 @@ from climate.geo.lakes import (
     LAKE_SOURCE_NATURAL_EARTH,
     NATURAL_EARTH_LAKES_MIRROR_URL,
 )
+from climate.geo.regions import country_region_id, ocean_region_id
 from climate.geo.marine import (
     MARINE_SOURCE_NATURAL_EARTH,
     NATURAL_EARTH_MARINE_POLYS_MIRROR_URL,
@@ -70,6 +71,7 @@ INDEX_COLS = [
     "alt_names",
     "kind",
     "bbox",
+    "region_id",
 ]
 
 OUT_COLS = [
@@ -165,6 +167,7 @@ class _IndexCandidate(TypedDict):
     alt_names: str
     kind: str
     bbox: str
+    region_id: str
 
 
 class _Bounds(TypedDict):
@@ -649,6 +652,9 @@ def _load_area_index_rows(
                 "alt_names": "",
                 "kind": kind,
                 "bbox": _format_bbox(_bounds_to_bbox(agg["bounds"])),
+                # Seas line up with the ocean regions in the aggregates; lakes
+                # have no mask and so no region to point at.
+                "region_id": (ocean_region_id(label) if kind == KIND_MARINE else ""),
             }
         )
     return out
@@ -784,6 +790,7 @@ def load_country_index_rows(
                 "alt_names": "",
                 "kind": KIND_COUNTRY,
                 "bbox": _format_bbox(bbox),
+                "region_id": country_region_id(code),
             }
         )
     return out
@@ -999,6 +1006,7 @@ def write_locations_csv(
                     "alt_names": row["alt_names"],
                     "kind": KIND_CITY,
                     "bbox": "",
+                    "region_id": "",
                 }
             )
 
@@ -1041,6 +1049,7 @@ def write_locations_csv(
                     "alt_names": row.get("alt_names", ""),
                     "kind": row.get("kind", KIND_CITY),
                     "bbox": row.get("bbox", ""),
+                    "region_id": row.get("region_id", ""),
                 }
             )
 

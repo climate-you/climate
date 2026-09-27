@@ -12,6 +12,12 @@ from climate.geo.marine import (
     NATURAL_EARTH_MARINE_POLYS_FALLBACK_URLS,
     normalize_marine_name,
 )
+from climate.geo.regions import (
+    continent_region_id,
+    country_region_id,
+    ocean_region_id,
+    slugify_region_name,
+)
 
 
 def test_lon_helpers_available_from_package_root() -> None:
@@ -50,3 +56,21 @@ def test_country_name_overrides_leave_input_untouched() -> None:
 
 def test_legacy_country_names_still_map_to_their_code() -> None:
     assert LEGACY_COUNTRY_NAMES["palestinian territory"] == "PS"
+
+
+def test_region_ids_match_the_spelling_used_by_the_aggregates() -> None:
+    # These strings are the contract between the aggregate precompute, which
+    # writes the keys, and the location index, which writes the column the API
+    # looks them up by. Changing one without the other breaks region panels
+    # silently, so pin the exact spelling here.
+    assert country_region_id("fr") == "country:FR"
+    assert country_region_id(" fr ") == "country:FR"
+    assert ocean_region_id("North Sea") == "ocean:north_sea"
+    assert ocean_region_id("Bahía de Campeche") == "ocean:bahia_de_campeche"
+    assert ocean_region_id("Bab el Mandeb") == "ocean:bab_el_mandeb"
+    assert continent_region_id("north america") == "continent:north_america"
+
+
+def test_slugify_strips_accents_and_folds_separators() -> None:
+    assert slugify_region_name("Baía de Marajó") == "baia_de_marajo"
+    assert slugify_region_name("Bass Strait-North") == "bass_strait_north"

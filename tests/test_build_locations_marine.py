@@ -105,6 +105,11 @@ def test_load_marine_index_rows_assigns_stable_ids(tmp_path: Path) -> None:
     ]
     assert all(r["country_code"] == "OC" for r in rows)
     assert all(r["population"] == "0" for r in rows)
+    # Seas map onto the ocean regions in the aggregates, slug and all.
+    assert [r["region_id"] for r in rows] == [
+        "ocean:barents_sea",
+        "ocean:north_atlantic_ocean",
+    ]
 
 
 def test_write_locations_csv_keeps_city_csv_city_only_and_adds_marine_to_index(
@@ -269,6 +274,8 @@ def test_load_lake_index_rows(tmp_path: Path) -> None:
     assert row["country_code"] == "LK"
     assert int(row["geonameid"]) == LAKE_SYNTHETIC_ID_START
     assert row["bbox"] == "-79.00000,43.20000,-76.00000,44.20000"
+    # No lake mask exists, so a lake points at no aggregate region.
+    assert row["region_id"] == ""
 
 
 def test_load_country_index_rows_uses_label_point_and_mainland_bbox(
@@ -296,6 +303,8 @@ def test_load_country_index_rows_uses_label_point_and_mainland_bbox(
     assert (float(france["lat"]), float(france["lon"])) == (46.5, 2.5)
     # The mainland box, not one stretched across the Atlantic.
     assert france["bbox"] == "-4.00000,42.00000,8.00000,51.00000"
+    assert france["region_id"] == "country:FR"
+    assert by_code["FJ"]["region_id"] == "country:FJ"
 
     # A box across the antimeridian stays narrow, with east running past 180.
     assert by_code["FJ"]["bbox"] == "178.00000,-18.00000,181.00000,-17.00000"

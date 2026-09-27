@@ -34,6 +34,10 @@ class LocationHit:
     # (west, south, east, north) for area entries; None for cities. `east` may
     # exceed 180 for a box that straddles the antimeridian.
     bbox: Optional[Tuple[float, float, float, float]] = None
+    # Key into the release's regional aggregates ("country:FR"), or None
+    # for a place that has no region. Whether the region actually has data
+    # is a per-release question the API answers, not the index.
+    region_id: Optional[str] = None
 
 
 def _parse_bbox(raw: Optional[str]) -> Optional[Tuple[float, float, float, float]]:
@@ -84,6 +88,7 @@ class LocationIndex:
         self._alt_names: List[str] = []
         self._kinds: List[str] = []
         self._bboxes: List[Optional[Tuple[float, float, float, float]]] = []
+        self._region_ids: List[Optional[str]] = []
         self._by_id: Dict[int, int] = {}
         self._prefix_map: Dict[str, List[int]] = {}
         self._name_to_idx: Dict[str, int] = {}
@@ -114,6 +119,7 @@ class LocationIndex:
                 alt_names = (row.get("alt_names") or "").strip()
                 kind = (row.get("kind") or "").strip().lower() or KIND_CITY
                 bbox = _parse_bbox(row.get("bbox"))
+                region_id = (row.get("region_id") or "").strip() or None
 
                 i = len(self._labels)
                 self._labels.append(label)
@@ -128,6 +134,7 @@ class LocationIndex:
                 self._alt_names.append(alt_names)
                 self._kinds.append(kind)
                 self._bboxes.append(bbox)
+                self._region_ids.append(region_id)
 
                 if geonameid:
                     self._by_id[geonameid] = i
@@ -191,6 +198,7 @@ class LocationIndex:
             alt_names=self._alt_names[i] if i < len(self._alt_names) else "",
             kind=self._kinds[i] if i < len(self._kinds) else KIND_CITY,
             bbox=self._bboxes[i] if i < len(self._bboxes) else None,
+            region_id=(self._region_ids[i] if i < len(self._region_ids) else None),
         )
 
     def _match_rank(self, i: int, q: str) -> int:

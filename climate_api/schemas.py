@@ -201,6 +201,10 @@ class LocationAutocompleteItem(BaseModel):
     # 180 where the box straddles the antimeridian.
     kind: str = "city"
     bbox: Optional[Tuple[float, float, float, float]] = None
+    # Set only when this release actually has aggregates for the region, so its
+    # presence is the client's signal to ask for a region panel rather than a
+    # point one. Null for cities, lakes, and areas with no data.
+    region_id: Optional[str] = None
 
 
 class LocationAutocompleteResponse(BaseModel):
