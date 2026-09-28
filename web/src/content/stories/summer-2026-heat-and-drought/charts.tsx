@@ -1103,48 +1103,95 @@ export function SpaghettiTabs({ initial = "France" }: { initial?: string }) {
   );
 }
 
-// ─── 08: warming rate by region ─────────────────────────────────────────────
+// ─── 08: warming by region ──────────────────────────────────────────────────
+const WARM_VIEWS = ["Per decade", "Since 1979"] as const;
+type WarmView = (typeof WARM_VIEWS)[number];
+
 export function WarmingBars() {
-  const rows = DATA.warm;
+  const [view, setView] = useState<WarmView>("Per decade");
+  const perDecade = view === "Per decade";
+  // Column 1 is the rate, column 2 the change since the reference period. Each
+  // view is ordered by its own measure.
+  const col = perDecade ? 1 : 2;
+  const rows = [...DATA.warm].sort((a, b) => b[col] - a[col]);
+  const [ref0, ref1] = DATA.warmRef;
+  const [rec0, rec1] = DATA.warmRecent;
   const [wrapRef, narrow] = useNarrowChart();
   const W = narrow ? 336 : 680,
     L = narrow ? 104 : 118,
-    R = narrow ? 44 : 52,
+    // The since-1979 values carry their unit, so they need a wider margin.
+    R = perDecade ? (narrow ? 44 : 52) : narrow ? 64 : 74,
     T = 8;
   const H = rows.length * 24 + 34;
+  const max = Math.max(...rows.map((r) => r[col]));
   const pw = W - L - R,
-    hi = 0.55;
+    hi = perDecade ? 0.55 : Math.ceil(max * 1.1 * 10) / 10;
   const X = (v: number) => L + (v / hi) * pw;
+  const ticks = perDecade
+    ? narrow
+      ? [0.2, 0.4]
+      : [0.1, 0.2, 0.3, 0.4, 0.5]
+    : narrow
+      ? [0.5, 1, 1.5]
+      : [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75].filter((v) => v < hi);
+  const fmt = (v: number) => (perDecade ? v.toFixed(3) : v.toFixed(2));
+  const valueLabel = (v: number) =>
+    perDecade ? `+${fmt(v)}` : `+${fmt(v)}\u200A°C`;
   return (
     <Frame
       title="Europe is warming faster than any other continent"
       subtitle={
-        "Warming rate in °C per decade, 1979–2025, from the annual mean 2\u200Am air temperature"
+        perDecade
+          ? "Warming rate in °C per decade, 1979–2025, from the annual mean 2\u200Am air temperature"
+          : `Warming in °C, the ${rec0}–${rec1} average against ${ref0}–${ref1}, from the annual mean 2\u200Am air temperature`
       }
-      filename="warming-rate-by-region.png"
+      filename={
+        perDecade
+          ? "warming-rate-by-region.png"
+          : "warming-since-1979-by-region.png"
+      }
       minWidth={narrow ? 0 : 380}
       wrapRefExternal={wrapRef}
+      controls={
+        <Choices
+          options={WARM_VIEWS}
+          value={view}
+          onChange={setView}
+          label="How to measure warming"
+        />
+      }
       caption={
-        <>
-          Least-squares trend on the annual mean. Global aggregates are shown
-          faint.
-        </>
+        perDecade ? (
+          <>
+            Least-squares trend on the annual mean. Global aggregates are shown
+            faint.
+          </>
+        ) : (
+          <>
+            The {rec0}–{rec1} annual mean minus the {ref0}–{ref1} mean. Global
+            aggregates are shown faint.
+          </>
+        )
       }
     >
       <svg
         viewBox={`0 0 ${W} ${H}`}
         role="img"
-        aria-label="Warming rate by region"
+        aria-label={
+          perDecade ? "Warming rate by region" : "Warming since 1979 by region"
+        }
       >
-        {(narrow ? [0.2, 0.4] : [0.1, 0.2, 0.3, 0.4, 0.5]).map((v) => (
+        {ticks.map((v) => (
           <g key={v}>
             <line x1={X(v)} x2={X(v)} y1={T} y2={H - 24} className="sc-grid" />
             <text x={X(v)} y={H - 8} textAnchor="middle" className="sc-tick">
-              {v.toFixed(1)}
+              {perDecade ? v.toFixed(1) : String(v)}
             </text>
           </g>
         ))}
-        {rows.map(([n, v], i) => {
+        {rows.map((row, i) => {
+          const n = row[0];
+          const v = row[col];
           const y = T + i * 24 + 3;
           const cls = n.startsWith("Glob")
             ? "sc-bar-ref"
@@ -1161,7 +1208,11 @@ export function WarmingBars() {
                 rx={4}
                 className={cls}
               >
-                <title>{`${n}: +${v.toFixed(3)} °C/decade`}</title>
+                <title>
+                  {perDecade
+                    ? `${n}: +${fmt(v)} °C/decade`
+                    : `${n}: +${fmt(v)} °C, ${rec0}–${rec1} against ${ref0}–${ref1}`}
+                </title>
               </rect>
               <text
                 x={L - 8}
@@ -1172,7 +1223,7 @@ export function WarmingBars() {
                 {narrow ? n.replace("Globe incl. ocean", "Globe + ocean") : n}
               </text>
               <text x={X(v) + 6} y={y + 11} className="sc-val">
-                +{v.toFixed(3)}
+                {valueLabel(v)}
               </text>
             </g>
           );

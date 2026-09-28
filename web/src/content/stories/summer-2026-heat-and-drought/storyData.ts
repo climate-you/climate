@@ -42,7 +42,10 @@ export type StoryData = {
     names: string[];
     grid: Record<string, number[]>;
   };
-  warm: [string, number][];
+  /** [region, °C per decade over the record, °C of warmRecent against warmRef] */
+  warm: [string, number, number][];
+  warmRef: [number, number];
+  warmRecent: [number, number];
   europeDecades: {
     first: [number, number];
     last: [number, number];

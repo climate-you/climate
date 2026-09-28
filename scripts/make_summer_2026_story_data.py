@@ -69,17 +69,21 @@ CC = {
     "Mexico": "MX",
     "Pakistan": "PK",
 }
-WARM = [
-    ("Europe", 0.503),
-    ("North America", 0.387),
-    ("Asia", 0.362),
-    ("Global land", 0.333),
-    ("Africa", 0.315),
-    ("South America", 0.235),
-    ("Globe incl. ocean", 0.211),
-    ("Antarctica", 0.153),
-    ("Oceania", 0.137),
-]
+# Regions for the warming chart: display name -> aggregate key suffix. "Global
+# land" has no aggregate of its own and is built from the continents below.
+WARM_CONTINENTS = {
+    "Europe": "europe",
+    "North America": "north_america",
+    "Asia": "asia",
+    "Africa": "africa",
+    "South America": "south_america",
+    "Antarctica": "antarctica",
+    "Oceania": "oceania",
+}
+# The "since" view compares the latest five years with the 1979-2000 mean,
+# the convention of the site's local warming headline.
+WARM_REF = (1979, 2000)
+WARM_RECENT = (2021, 2025)
 
 
 # --------------------------------------------------------------------------- data
@@ -339,6 +343,83 @@ def days_in_window(events: dict, a: str, b: str) -> dict:
     return out
 
 
+def continent_land_areas() -> dict[str, float]:
+    """Area of each continent exactly as the regional aggregates define it.
+
+    precompute_regional_aggregates.py builds a continent as the union of its
+    countries' cells on the 0.05 degree country mask, weighted by cos(latitude).
+    Summing the same weights gives each continent's share of the land, which is
+    what an area-weighted mean over all continents needs.
+    """
+    sys.path.insert(0, str(ROOT))
+    from climate.geo.continents import CONTINENT_TO_CC
+    from climate.tiles.layout import GridSpec
+
+    loc = ROOT / "data/locations"
+    with np.load(loc / "country_mask.npz", allow_pickle=False) as f:
+        mask, mask_deg = np.asarray(f["data"]), float(f["deg"])
+    codes = {
+        int(k): str(v)
+        for k, v in json.loads((loc / "country_codes.json").read_text()).items()
+    }
+    names = list(CONTINENT_TO_CC)
+    lut = np.zeros(int(mask.max()) + 1, dtype=np.uint8)
+    for uid, code in codes.items():
+        for i, cont in enumerate(names, start=1):
+            if code in CONTINENT_TO_CC[cont] and uid < lut.size:
+                lut[uid] = i
+    grid = GridSpec.global_0p25()
+    k = int(round(grid.deg / mask_deg))
+    cont = lut[mask].reshape(grid.nlat, k, grid.nlon, k)
+    lat = grid.lat_max - (np.arange(grid.nlat) + 0.5) * grid.deg
+    coslat = np.cos(np.deg2rad(lat))[:, None]
+    areas = {}
+    for i, name in enumerate(names, start=1):
+        frac = (cont == i).mean(axis=(1, 3))
+        areas[name.replace(" ", "_")] = float((frac * coslat).sum())
+    return areas
+
+
+def warming() -> list:
+    """Per-region warming, as [name, °C per decade, °C since the reference].
+
+    Rate: least-squares trend on the annual mean over the whole record.
+    Since: the 2021-2025 mean minus the 1979-2000 mean.
+    """
+    a = agg("t2m_yearly_mean_c")
+
+    def series(key: str) -> dict[int, float]:
+        return {
+            int(str(t)[:4]): x
+            for t, x in zip(a["time_axis"], a["regions"][key]["values"])
+            if x is not None and int(str(t)[:4]) <= WARM_RECENT[1]
+        }
+
+    def summarise(yr: dict[int, float]) -> tuple[float, float]:
+        ys = np.array(sorted(yr), dtype=float)
+        vs = np.array([yr[int(y)] for y in ys])
+        rate = float(np.polyfit(ys, vs, 1)[0]) * 10
+        ref = [yr[y] for y in yr if WARM_REF[0] <= y <= WARM_REF[1]]
+        recent = [yr[y] for y in yr if WARM_RECENT[0] <= y <= WARM_RECENT[1]]
+        return rate, float(np.mean(recent) - np.mean(ref))
+
+    by_region = {
+        name: series(f"continent:{key}") for name, key in WARM_CONTINENTS.items()
+    }
+    areas = continent_land_areas()
+    total = sum(areas[WARM_CONTINENTS[n]] for n in by_region)
+    years = sorted(set.intersection(*(set(s) for s in by_region.values())))
+    land = {
+        y: sum(areas[WARM_CONTINENTS[n]] * s[y] for n, s in by_region.items()) / total
+        for y in years
+    }
+    rows = [(n, *summarise(s)) for n, s in by_region.items()]
+    rows.append(("Global land", *summarise(land)))
+    rows.append(("Globe incl. ocean", *summarise(series("globe"))))
+    rows.sort(key=lambda r: -r[1])
+    return [[n, round(rate, 3), round(since, 2)] for n, rate, since in rows]
+
+
 def europe_decades() -> dict:
     """Europe's mean temperature in the first and last ten years of the record.
 
@@ -443,7 +524,9 @@ def export_json(path: Path) -> None:
             for n, d in cum.items()
         },
         "monthly": monthly_grid(),
-        "warm": [[n, v] for n, v in WARM],
+        "warm": warming(),
+        "warmRef": list(WARM_REF),
+        "warmRecent": list(WARM_RECENT),
         "europeDecades": europe_decades(),
         "spaghetti": spaghetti_data(story_countries),
         "peaks": peaks_2026(story_countries),
