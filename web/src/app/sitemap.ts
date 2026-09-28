@@ -32,7 +32,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     {
       url: `${SITE_URL}/stories/summer-2026-heat-and-drought`,
-      lastModified: new Date("2026-09-25"),
+      lastModified: new Date("2026-09-29"),
       changeFrequency: "yearly",
       priority: 0.8,
     },

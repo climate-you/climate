@@ -8,7 +8,7 @@ const DESCRIPTION =
   "Much of the northern hemisphere was hot in summer 2026, and almost all of it still got its normal rain. Western Europe did not. Heat and rainfall, country by country, from the Copernicus ERA5/ERA5T record.";
 const SHORT_DESCRIPTION =
   "Heat was everywhere in summer 2026. Only western Europe went without rain. The two measured together, from the Copernicus ERA5/ERA5T record.";
-const PUBLISHED = "2026-09-25";
+const PUBLISHED = "2026-09-29";
 const AUTHORS = ["Benoit Leveau", "Fanny Chaléon"];
 const OG_IMAGE = "/story/summer-2026-heat-and-drought-og.png";
 const OG_IMAGE_ALT =

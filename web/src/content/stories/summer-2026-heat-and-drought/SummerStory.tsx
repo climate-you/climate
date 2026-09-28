@@ -177,18 +177,25 @@ const PANEL_CHARTS: PanelChartSpec[] = [
   },
 ];
 
-// Spain, France and Italy are the countries the outcome column is really
-// about; the other two rows are there to show what not setting a record looks
-// like, so they stay unemphasised.
-const RECORD_SETTERS = new Set(["Spain", "France", "Italy"]);
+// The three countries with the most land burned this year (EFFIS). Only
+// Spain and France set national records, so only their outcomes are
+// emphasised; Portugal and Greece are covered in "Has this happened before?".
+const RECORD_SETTERS = new Set(["Spain", "France"]);
 
 const OUTCOMES: [string, string][] = [
   ["Spain", "Largest fire in its recorded history"],
   ["France", "Most land burned in a year on record"],
-  ["Italy", "Longest in heat episodes, but no fire record"],
-  ["Portugal", "Driest of the eight, and no fire record"],
-  ["Greece", "Wetter than normal, and no fire record"],
+  ["Italy", "Twice its average area burned, fourth-largest since 2006"],
 ];
+
+// The fortnight's rain above normal, as a rounded range for the prose: the
+// exact figures are on the cumulative chart.
+const WET_AFTER = ["Spain", "Italy", "Germany", "France", "United Kingdom"];
+const WET_ABOVE = WET_AFTER.map((c) => pct(c, "wet") - 100);
+const WET_EXTRA = {
+  lo: Math.floor(Math.min(...WET_ABOVE) / 10) * 10,
+  hi: Math.ceil(Math.max(...WET_ABOVE) / 10) * 10,
+};
 
 const WARM_EUROPE = DATA.warm.find(([n]) => n === "Europe")![1];
 const WARM_GLOBE = DATA.warm.find(([n]) => n.startsWith("Globe"))![1];
@@ -201,6 +208,17 @@ function Ref({ n }: { n: number }) {
     <sup>
       <a href={`#source-${n}`} aria-label={`Source ${n}`}>
         [{n}]
+      </a>
+    </sup>
+  );
+}
+
+/** A pointer to a lettered note in "How to read these numbers". */
+function NoteRef({ id }: { id: string }) {
+  return (
+    <sup>
+      <a href={`#note-${id}`} aria-label={`Note ${id}`}>
+        [{id}]
       </a>
     </sup>
   );
@@ -306,11 +324,8 @@ export default function SummerStory() {
   const fr = DATA.ranks.France;
   const es = DATA.ranks.Spain;
   const pt = DATA.rain.Portugal;
-  const uk = DATA.monthly.grid["United Kingdom"];
-  const ukRank = DATA.ranks["United Kingdom"];
+  const ranks = DATA.ranks;
   const hottest = hottestOnRecord();
-  const dec = DATA.europeDecades;
-  const peaks = DATA.peaks;
 
   return (
     <article className={styles.story}>
@@ -328,12 +343,12 @@ export default function SummerStory() {
         <h1>{TITLE_VALUE}</h1>
         <p className={styles.dek}>
           Much of the northern hemisphere was hot this summer. Almost all of it
-          still got its normal rain. Western Europe did not, and went on to set
-          national wildfire records in Spain and France. A look into the
-          Copernicus ERA5/ERA5T record.
+          still got its normal rain. Western Europe did not. France burned more
+          land than in any year on record, and Spain had its largest single
+          fire. A look into the Copernicus ERA5/ERA5T record.
         </p>
         <p className={styles.published}>
-          Published <time dateTime="2026-09-25">25 September 2026</time>
+          Published <time dateTime="2026-09-29">29 September 2026</time>
         </p>
         <p className={styles.meta}>
           Contains modified Copernicus Climate Change Service information 2026 ·
@@ -421,27 +436,25 @@ export default function SummerStory() {
       <div className={s.openingGrid}>
         <div className={s.prose}>
           <p>
-            More than 1.2 million acres burned across Europe this summer.
-            <Ref n={1} /> Spain lost the largest single fire in its recorded
+            More than 680,000 hectares burned in the EU alone this year,
+            three-quarters of it in Spain, France and Italy.
+            <Ref n={1} /> Spain had the largest single fire in its recorded
             history, near Ávila.
             <Ref n={2} /> More land burned in France than in any year since
             national records began.
             <Ref n={2} /> Across the two countries, more than 300,000 people
             were told to leave their homes.
-            <Ref n={1} />
+            <Ref n={3} />
           </p>
           <p>
-            It was a hot summer, but not only here. Counting heat episodes as
-            runs of days well above what is normal for the date in that country,
-            Russia spent <strong>{days("Russia")}</strong> days in one, Canada{" "}
-            <strong>{days("Canada")}</strong>, China{" "}
-            <strong>{days("China")}</strong>, Japan{" "}
-            <strong>{days("Japan")}</strong>. Heat alone was not unusual this
-            year.
+            It was a hot summer, but not only in Europe. Across the northern
+            hemisphere, many countries experienced heat episodes.
+            <NoteRef id="a" />
           </p>
           <p>
-            What set western Europe apart was that{" "}
-            <em>the rain did not come with it</em>.
+            Below, we’ll see that what set western Europe apart was{" "}
+            <em>the combination of prolonged heat and the lack of rain</em> from
+            June to mid-August.
           </p>
         </div>
         <div className={`${styles.statsCol} ${s.railCol}`}>
@@ -502,32 +515,14 @@ export default function SummerStory() {
             <p>
               Summer 2026 did not arrive as a single heatwave. It came in
               episodes of different lengths, in different places, and they
-              overlapped. France was in one for sixteen days from 13 June; for
-              the week of <strong>18 to 24 June</strong> it was joined by Spain,
-              Italy, Germany and the Netherlands, all five in an episode at the
-              same time. That June spell is the subject of{" "}
+              overlapped. France was in a heat episode for sixteen days from 13
+              June; for the week of <strong>18 to 24 June</strong> it was joined
+              by Spain, Italy, Germany and the Netherlands, all five in an
+              episode at the same time. That June spell is the subject of{" "}
               {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
               <a href="/stories/june-2026-heatwave">our previous case study</a>,
               which follows the heat dome as it tracked north-east across the
               continent.
-            </p>
-            <p>
-              The August episode was the United Kingdom’s sharpest. On{" "}
-              <strong>
-                13 August the Met Office recorded 38.1 °C at Kew Gardens, the
-                fifth-hottest day in the UK record
-              </strong>
-              , and the second day of 2026 to reach 38 °C.
-              <Ref n={3} /> Only 2022, the hottest year the UK has had, has
-              managed two such days. Three days in 2026 reached 37 °C.
-            </p>
-            <p>
-              In our own gridded figures it was the hottest day of the year for
-              the UK, at {n1(peaks["United Kingdom"].aug13)} °C averaged across
-              the whole country by land area. France and Spain were in the same
-              episode and close to their own August peaks,{" "}
-              {n1(peaks.France.aug13)} °C and {n1(peaks.Spain.aug13)}
-               °C, though neither beat its June and July highs.
             </p>
           </div>
           <div className={s.fullWidth}>
@@ -550,28 +545,18 @@ export default function SummerStory() {
         <h2>The rain that never came</h2>
         <div className={s.prose}>
           <p>
-            Heat on its own is survivable. What turns a hot summer into a
-            burning one is what the heat arrives on: soil that has already given
-            up its moisture, rivers running low, vegetation that has been drying
-            since spring. So the second question is how much rain fell while all
-            this was happening.
-          </p>
-          <p>
-            In western Europe, not much. From 1 June to 15 August,{" "}
+            From 1 June to 15 August,{" "}
             <em>
               Portugal, Spain and France each received about half the rain they
               would normally expect
             </em>
-            , and Germany was not far behind. Italy and the United Kingdom
-            finished the window nearer normal, though that total hides a savage
-            July in Britain.
+            , with Germany not far behind.
           </p>
           <p>
-            But the rain did not stop everywhere at once. In Iberia it was
-            already failing in June. In Britain, June was{" "}
-            <span className={s.wet}>wetter</span> than normal, at {n0(uk[0])}%,
-            and the drought only began in July, when barely a third of the usual
-            rain arrived.
+            The rain did not stop everywhere at once though. Portugal and Spain
+            were already dry in June, while the United Kingdom had a{" "}
+            <span className={s.wet}>wetter</span> than normal June followed by a
+            very dry July.
           </p>
         </div>
         <RainGrid />
@@ -639,21 +624,18 @@ export default function SummerStory() {
         <h2>Heat on dry ground</h2>
         <div className={s.prose}>
           <p>
-            The two halves of the story have been told separately so far: how
-            hot each country was, then how dry. Neither on its own picks western
-            Europe out. Plenty of the northern hemisphere was as hot; a handful
-            of places were as dry. What follows puts both measurements on the
-            same chart, one country per dot, to show which of them had to take
-            the two together.
+            Neither measure alone singles out western Europe: other countries
+            were as hot, and a few were as dry. But when we put the two together
+            on the same graph, a clear picture emerges.
           </p>
         </div>
         <HeatRainScatter />
         <div className={s.prose}>
           <p>
-            The dry corner is not an abstraction. The countries that landed in
-            it are the ones where the summer ended in evacuations and burnt
-            ground, and the ones just outside it came through without a national
-            record to show for the heat.
+            Less land burned across the EU than in 2025, but far more of it was
+            in Spain, France and Italy, and all three sit in the shaded hot and
+            dry corner.
+            <Ref n={1} />
           </p>
         </div>
         <div className={s.tableWrap}>
@@ -694,20 +676,10 @@ export default function SummerStory() {
         </div>
         <div className={s.prose}>
           <p>
-            Over those same eleven weeks Russia spent{" "}
-            <strong>{DATA.daysInDryWindow.Russia}</strong> days in heat
-            episodes, almost as many as France, and still finished on{" "}
-            {n0(pct("Russia"))}% of its normal rain. Canada, China and Japan
-            were all hot and all wet. Italy was in heat episodes longest of all,{" "}
+            Italy was in heat episodes longest of all,{" "}
             <strong>{DATA.daysInDryWindow.Italy}</strong> days, but at{" "}
             {n0(pct("Italy"))}% it was wetter than Spain or France, and it did
             not set the records they did.
-          </p>
-          <p>
-            <strong>
-              Heat was common this summer. Heat arriving on ground that had not
-              been rained on was not.
-            </strong>
           </p>
         </div>
       </section>
@@ -717,24 +689,19 @@ export default function SummerStory() {
         <h2>The break, mid-August</h2>
         <div className={s.prose}>
           <p>
-            Around the 16th of August the weather pattern broke and the Atlantic
-            rain belt, which had been steered around western Europe for most of
-            the summer, moved back over it. In the fortnight that followed,
-            Portugal received{" "}
+            In the second half of August the rain came back. Portugal received{" "}
+            {n0(pt.wet.obs)} mm,{" "}
             <span className={s.wet}>
-              {n0(pt.wet.obs)} mm, {n0(pt.wet.pct)}% of normal for those two
-              weeks, and {n1(pt.ratio)} times everything it had received in the
-              preceding {n0(pt.dry.days)} days
+              {n0(pt.wet.pct)}% of normal for those two weeks
             </span>
-            .
+            , and {n1(pt.ratio)} times everything it had received in the
+            preceding {n0(pt.dry.days)} days.
           </p>
           <p>
-            Elsewhere the return was real but ordinary: Spain{" "}
-            {n0(pct("Spain", "wet"))}% of normal for the fortnight, Italy{" "}
-            {n0(pct("Italy", "wet"))}%, Germany {n0(pct("Germany", "wet"))}%,
-            France {n0(pct("France", "wet"))}%, the United Kingdom{" "}
-            {n0(pct("United Kingdom", "wet"))}%. Not a deluge: just a normal
-            fortnight, arriving after the fires were out.
+            Elsewhere the return was real but ordinary, with {WET_EXTRA.lo}–
+            {WET_EXTRA.hi}% more rain than normal for the fortnight in Spain,
+            Italy, Germany, France and the United Kingdom. Not a deluge: just a
+            slightly wetter fortnight.
           </p>
         </div>
         <CumulativeRain />
@@ -794,58 +761,32 @@ export default function SummerStory() {
         <h2>Has this happened before?</h2>
         <div className={s.prose}>
           <p>
-            A hot, dry summer is not in itself remarkable; western Europe has
-            had plenty. The question is whether this particular combination, at
-            this size, has a precedent in the record. The chart below plots one
-            dot per June–August since 1979, temperature against rainfall, with
-            2026 highlighted. If earlier summers were routinely hotter and
-            drier, they would sit above and to the left of it.
-          </p>
-          <p>
-            The heat, on its own, is not what separates these countries. In{" "}
+            The chart below plots one dot per June–August since 1979,
+            temperature against rainfall, with 2026 highlighted. In{" "}
             <strong>
               {hottest.length} of the {STORY_COUNTRIES.length}
             </strong>{" "}
-            ({listOf(hottest)}) no summer since 1979 has been hotter than 2026.
-            What varies is the rain. Switch country and watch the dot move
-            sideways.
+            countries ({listOf(hottest)}) no summer since 1979 was hotter than
+            2026, so what separates them is the rain.
           </p>
         </div>
         <JointHistoryPicker />
         <div className={s.prose} style={{ marginTop: 26 }}>
           <p>
-            For {listOf(hottest)} the corner is empty: nothing in the record was
-            both hotter and drier. What separates them is how close the rest of
-            the record comes. <strong>France</strong> stands alone in having no
-            summer that beat it on <em>either</em> measure, hotter or drier.
-            Spain has two drier, Italy five, the Netherlands seven, the United
-            Kingdom ten.
+            Of those, only <strong>France</strong> had no drier summer either.
+            Spain had {ranks.Spain.drier} drier summers, Italy{" "}
+            {ranks.Italy.drier}, the Netherlands {ranks.Netherlands.drier} and
+            the United Kingdom {ranks["United Kingdom"].drier}.
           </p>
           <p>
-            The United Kingdom is the case that shows heat is not the whole
-            story. It had its hottest summer in {ukRank.n} years and it did
-            burn: EFFIS counted about <strong>23,400 hectares</strong> across 72
-            fires larger than 30 hectares by 10 August.
-            <Ref n={5} /> But that is roughly half the area lost in 2025, which
-            remains the UK’s worst year in the EFFIS record at 47,900 hectares.
-            Ten of its {ukRank.n} summers were drier than 2026. Heat without the
-            same depth of drought produced a bad fire year, not a record one.
-          </p>
-          <p>
-            Two break the pattern on the dry axis.{" "}
-            <span className={s.wet}>Portugal</span> finished its summer{" "}
-            <em>wetter</em> than normal ({n0(DATA.ranks.Portugal.pct)}%) once
-            the late-August rain is counted, and Greece, though it had one of
-            its warmer summers, was wetter than most of the record. Neither was
-            among the countries named in the season’s fire reporting, which
-            centred on Spain, France and Italy.
-            <Ref n={1} />
-          </p>
-          <p>
-            It is not that heat is new, or that dry summers are new. It is that
-            across western Europe they have not arrived together at this size
-            before: not in France, not in Spain, and not in a United Kingdom
-            that has just had its hottest summer of the {ukRank.n} on record.
+            Portugal and Greece were different. Once the late-August rain is
+            counted, both finished June–August with{" "}
+            <span className={s.wet}>normal rainfall or more</span>. In an
+            average year the two account for 40% of the EU’s burned area. This
+            year both burned less than usual.
+            <Ref n={1} /> Portugal was the driest of the eight countries until
+            mid-August, but it spent far fewer days in heat episodes than France
+            or Italy.
           </p>
         </div>
         <SpaghettiTabs />
@@ -856,28 +797,22 @@ export default function SummerStory() {
         <h2>The long view</h2>
         <div className={s.prose}>
           <p>
-            None of this happened to a stable climate. Europe has warmed by{" "}
-            <strong>{WARM_EUROPE.toFixed(2)} °C per decade since 1979</strong>.
-            Against the whole planet, land and ocean together, that is{" "}
-            <strong>{RATIO_GLOBE} times the global rate</strong>; against the
-            world’s land alone, which warms faster than the sea,{" "}
-            <strong>{RATIO_LAND} times</strong>. Put as a temperature rather
-            than a rate, Europe’s last five years averaged{" "}
-            <strong>{n1(dec.siteDelta)} °C</strong> warmer than its{" "}
-            {dec.siteBase[0]}–{dec.siteBase[1]} average.
+            This summer happened in a warming climate. Europe has warmed by{" "}
+            <strong>{WARM_EUROPE.toFixed(2)} °C per decade since 1979</strong>:{" "}
+            {RATIO_GLOBE} times the global rate for land and ocean together, and{" "}
+            {RATIO_LAND} times the rate for the world’s land alone. Europe’s
+            last five years averaged <strong>2.4 °C</strong> warmer than during
+            pre-industrial times (1850–1900, the baseline the Paris Agreement
+            uses). Europe has already crossed the 1.5 °C threshold by a large
+            margin.
+            <Ref n={5} />
           </p>
         </div>
         <WarmingBars />
         <div className={s.prose} style={{ marginTop: 26 }}>
           <p>
-            Warming does not decide what any one summer does, but it sets the
-            ground the weather arrives on. That is the summer this page has
-            measured. Heat almost everywhere in the northern hemisphere, and
-            rain nearly everywhere it was expected, except across a band of
-            western Europe where the two failed to arrive together. Whether 2026
-            reads as an outlier or as an early draft of an ordinary summer is
-            not something the record can answer yet. It can only say that
-            nothing in the last {fr.n} years looks quite like it.
+            The next few years will tell us whether the 2026 summer in Europe
+            was exceptional or just the new baseline.
           </p>
         </div>
       </section>
@@ -902,10 +837,10 @@ export default function SummerStory() {
           <li>
             <b>Grid values are not station values.</b> A 0.25° cell is about 19
             × 28 km and averages town with countryside, so it runs cooler than
-            the hottest thermometer inside it. Station records quoted here come
-            from the national weather service, not from us.
+            the hottest thermometer inside it.
           </li>
-          <li>
+          <li id="note-a">
+            [a]{" "}
             <b>Heat episodes are ours, not any country’s official heatwaves.</b>{" "}
             Three or more consecutive days above that country’s own {BASE_LABEL}{" "}
             day-of-year 90th percentile of daily maximum, ±7-day window, on the
@@ -934,11 +869,18 @@ export default function SummerStory() {
           <h2 className={s.footHead}>Sources</h2>
           <ol>
             <li id="source-1">
-              CNN, 10 August 2026,{" "}
-              <a href="https://www.cnn.com/2026/08/10/climate/europe-heatwave-wildfire-intl-hnk">
-                Europe’s heatwave and wildfires
+              European Forest Fire Information System (EFFIS),{" "}
+              <a
+                href="https://forest-fire.emergency.copernicus.eu/apps/effis.statistics/estimates"
+                target="_blank"
+                rel="noreferrer"
+              >
+                burnt area statistics
               </a>
-              : area burned and evacuations.
+              , accessed 28 September 2026, counting fires of about 30 hectares
+              or more: estimates by EU country for 2025 and 2026 against each
+              country’s 2006–2025 annual average, and annual totals for
+              2006–2026 for the EU and for Italy.
             </li>
             <li id="source-2">
               World Economic Forum,{" "}
@@ -948,16 +890,11 @@ export default function SummerStory() {
               : the Ávila fire and France’s annual record.
             </li>
             <li id="source-3">
-              Met Office, 13 August 2026,{" "}
-              <a
-                href="https://www.metoffice.gov.uk/about-us/news-and-media/media-centre/weather-and-climate-news/2026/latest-heatwave-peaks-with-381c-recorded-and-rain-on-the-horizon-in-the-south"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Latest heatwave peaks with 38.1°C recorded
+              CNN, 10 August 2026,{" "}
+              <a href="https://www.cnn.com/2026/08/10/climate/europe-heatwave-wildfire-intl-hnk">
+                Europe’s heatwave and wildfires
               </a>
-              : the Kew Gardens reading, its place in the UK record, and the
-              count of 38 °C and 37 °C days in 2026.
+              : evacuations in Spain and France.
             </li>
             <li id="source-4">
               Météo-France,{" "}
@@ -971,16 +908,16 @@ export default function SummerStory() {
               : the paired day and night thresholds.
             </li>
             <li id="source-5">
-              European Forest Fire Information System (EFFIS) annual statistics
-              for the United Kingdom, as summarised in{" "}
+              Copernicus Climate Change Service,{" "}
               <a
-                href="https://en.wikipedia.org/wiki/2026_United_Kingdom_wildfires"
+                href="https://climate.copernicus.eu/esotc/2025/temperature"
                 target="_blank"
                 rel="noreferrer"
               >
-                2026 United Kingdom wildfires
+                European State of the Climate 2025: Temperature
               </a>
-              : area burned in 2026 and the 2025 comparison.
+              : Europe 2.4 °C and the globe 1.4 °C above the pre-industrial
+              level, as the latest five-year average.
             </li>
             <li id="source-6">
               World Weather Attribution,{" "}
