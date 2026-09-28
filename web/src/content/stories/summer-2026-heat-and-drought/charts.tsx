@@ -658,11 +658,15 @@ function cumClass(n: string) {
 export function CumulativeRain() {
   const [pick, setPick] = useState<string>(CUM_ALL_LABEL);
   const shown = pick === CUM_ALL_LABEL ? CUM_ALL : [pick];
+  const single = shown.length === 1;
 
+  // With several countries the end labels name the country, so they need a
+  // wider margin than a single country's "(2026)" and "(normal)". Both margins
+  // leave the longest label about 10 units clear of the edge.
   const W = 680,
     H = 360,
     L = 54,
-    Rt = 132,
+    Rt = single ? 108 : 162,
     T = 30,
     B = 40;
   const pw = W - L - Rt,
@@ -684,7 +688,8 @@ export function CumulativeRain() {
   );
   const endLabel = `${new Date(DATA.wet[1] + "T00:00:00Z").getUTCDate()} Aug`;
   const lx = X(DATA.wet[1]) + 7;
-  const single = shown.length === 1;
+  const endText = (n: string, v: number, what: "2026" | "normal") =>
+    `${Math.round(v)} mm (${single ? what : `${n} – ${what}`})`;
   const endLabels = spreadLabels(
     shown.flatMap((n) => {
       const d = DATA.cum[n];
@@ -695,13 +700,13 @@ export function CumulativeRain() {
         {
           key: `${n}-obs`,
           y: Y(lv),
-          text: `${single ? "2026" : n} ${Math.round(lv)} mm`,
+          text: endText(n, lv, "2026"),
           cls: `sc-endlab ${k.lab}`,
         },
         {
           key: `${n}-norm`,
           y: Y(nv),
-          text: `normal ${Math.round(nv)} mm`,
+          text: endText(n, nv, "normal"),
           cls: `sc-endlab sc-normlab ${k.lab}`,
         },
       ];
