@@ -1,0 +1,191 @@
+.page {
+  --ink: #111;
+  --muted: rgba(17, 17, 17, 0.6);
+  --hairline: rgba(17, 17, 17, 0.15);
+  --blue: #0f50ff;
+  --heat: #b10026;
+  --changed: #fff8e1;
+  background: #fff;
+  color: var(--ink);
+  min-height: 100vh;
+  padding: 24px 16px 80px;
+  max-width: 1320px;
+  margin: 0 auto;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.top {
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.top h1 {
+  font-family: Georgia, "Iowan Old Style", serif;
+  font-size: 1.6rem;
+  margin: 0 0 4px;
+}
+.hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0;
+  max-width: 70ch;
+}
+.toggle {
+  display: flex;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.toggle button {
+  border: 0;
+  background: #fff;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.toggle button.on {
+  background: var(--ink);
+  color: #fff;
+}
+
+.colHeads {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
+  padding: 8px 0;
+  border-bottom: 2px solid var(--ink);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.row {
+  border-bottom: 1px solid var(--hairline);
+  padding: 18px 0 8px;
+  position: relative;
+}
+.secHead {
+  font-family: Georgia, "Iowan Old Style", serif;
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin: 0 0 8px;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.count {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+}
+/* Diff mode keeps the cells rendered off-screen so their text stays readable. */
+.measure {
+  position: absolute;
+  left: -20000px;
+  top: 0;
+  width: 640px;
+}
+.cell {
+  align-self: start;
+  min-width: 0;
+  padding: 0 10px;
+  border-radius: 6px;
+}
+.cell.changed {
+  background: var(--changed);
+}
+.cell p,
+.cell li {
+  margin: 0 0 12px;
+}
+.gone {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.ref {
+  color: var(--blue);
+  font-size: 0.7em;
+  line-height: 0;
+}
+.wet {
+  color: var(--blue);
+  font-weight: 650;
+}
+
+.fig {
+  border: 1px dashed var(--hairline);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 0 0 12px;
+  background: #fafafa;
+}
+.figName {
+  margin: 0 0 4px !important;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.figCap {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9rem;
+  margin: 0 0 8px;
+}
+.table th,
+.table td {
+  text-align: left;
+  border-bottom: 1px solid var(--hairline);
+  padding: 4px 6px;
+}
+.record {
+  color: var(--heat);
+  font-weight: 700;
+}
+
+.diff {
+  white-space: pre-wrap;
+  padding: 0 10px 10px;
+  max-width: 90ch;
+}
+.diff del {
+  background: #ffe0e0;
+  color: #8a1c1c;
+}
+.diff ins {
+  background: #dcf5dc;
+  color: #145214;
+  text-decoration: none;
+}
+
+@media (max-width: 760px) {
+  .cols,
+  .colHeads {
+    grid-template-columns: 1fr;
+  }
+}

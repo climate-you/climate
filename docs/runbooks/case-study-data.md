@@ -124,6 +124,60 @@ python scripts/build/packager.py --release dev --all --resume \
 the CDS cache. Note `--maps` takes a comma list; a shell-built string of
 repeated `--map` flags does not word-split under zsh.
 
+## Reworking the prose
+
+Editing a finished page in place makes large rewrites hard to judge: cut
+paragraphs disappear and there is nothing to compare against. For a real
+editorial pass, work on a throwaway side-by-side page instead, then port the
+result back. `web/src/components/proseDraft/` holds the reusable parts:
+`ProseCompare` lays the committed text and the draft side by side, one row per
+section, with word counts, a tint on changed sections, and a "Changes" toggle
+that shows a word-level diff. `Fig`, `Ref` and `Wet` stand in for charts,
+citation markers and the blue emphasis.
+
+1. **Create a route** at `web/src/app/drafts/<slug>/`. It never ships: guard
+   it and keep it out of search.
+
+   ```tsx
+   // web/src/app/drafts/<slug>/page.tsx
+   import type { Metadata } from "next";
+   import { notFound } from "next/navigation";
+   import ProseCompare from "@/components/proseDraft/ProseCompare";
+   import { COMMITTED } from "./committed";
+   import { DRAFT } from "./draft";
+
+   export const metadata: Metadata = {
+     title: "Prose draft",
+     robots: { index: false, follow: false },
+   };
+
+   export default function ProseDraftPage() {
+     if (process.env.NODE_ENV === "production") notFound();
+     return (
+       <ProseCompare
+         title="<Story>: prose draft"
+         draftPath="app/drafts/<slug>/draft.tsx"
+         left={COMMITTED}
+         right={DRAFT}
+       />
+     );
+   }
+   ```
+
+2. **Transcribe the committed prose** into `committed.tsx` as an array of
+   `ProseSection` (`{ key, title, body }`), one per page section, plus the
+   standfirst, captions, methods and sources. Take it from `git show HEAD:`,
+   not the working copy, so the left column is what is live. Keep the numbers
+   interpolated from the story's `storyData` helpers so both columns show real
+   values.
+3. **Copy it to `draft.tsx`** with the same keys, and iterate there. Fast
+   Refresh updates the page, the counts and the diff as you save. A section
+   left out of the draft shows as cut.
+4. **Port back** into the story component once the draft settles, then
+   delete `web/src/app/drafts/<slug>/`. Re-check the rendered page for
+   dropped spaces (rule 5 above), renumber sources if any were cut, and keep
+   the page's hair spaces between numbers and units.
+
 ## Attribution
 
 The Copernicus licence prescribes the wording for derived products. Pages and
