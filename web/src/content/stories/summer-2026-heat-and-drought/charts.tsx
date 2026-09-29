@@ -244,8 +244,9 @@ export function HeatTimeline() {
 
   const [wrapRef, narrow] = useNarrowChart();
   // Narrow: a viewBox close to the rendered width, so nothing is scaled down.
+  // L fits "United Kingdom" in bold, the widest name, with a few units spare.
   const W = narrow ? 336 : 680,
-    L = narrow ? 86 : 104,
+    L = narrow ? 86 : 112,
     Rt = narrow ? 8 : 14,
     T = 22;
   const H = rows.length * 22 + 42 + (T - 10);

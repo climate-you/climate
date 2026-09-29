@@ -200,7 +200,14 @@ const BAKED_PROPS = [
   // climatological curves — exported as a solid one.
   "stroke-dasharray",
   "opacity",
-  "font",
+  // Separate font properties, not the "font" shorthand: SVG has no "font"
+  // attribute, so the shorthand was dropped and every exported label fell back
+  // to the default 16px serif, wider than the chart's gutters allow.
+  "font-family",
+  "font-size",
+  "font-weight",
+  "font-style",
+  "letter-spacing",
 ] as const;
 
 /**
