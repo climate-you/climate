@@ -14,10 +14,26 @@ from climate_api.store.sovereignty import is_sovereign
 # and carries a bounding box.
 KIND_CITY = "city"
 
+KIND_COUNTRY = "country"
+
 # Autocomplete match ranks, best first. See `LocationIndex._match_rank`.
 _RANK_AREA_NAMED = 0
 _RANK_AREA_PARTIAL = 1
-_RANK_DEFAULT = 2
+_RANK_WORD_START = 2
+_RANK_MID_WORD = 3
+_RANK_LABEL_ONLY = 4
+
+# A city at least this populous can outrank a sea or lake that the query has
+# only partly named. "san francis" should mean San Francisco (827 k) before its
+# bay, and "rio de" Rio de Janeiro before the Río de la Plata — but "north s"
+# should still mean the North Sea, not North Stamford (121 k). Any cut-off
+# between those two keeps all three right; this is a round "major city".
+_MAJOR_CITY_POPULATION = 500_000
+
+
+def _starts_a_word(q: str, name: str) -> bool:
+    """Whether `q` begins one of the words of `name`: "fran" in "san francisco"."""
+    return name.startswith(q) or f" {q}" in name
 
 
 @dataclass(frozen=True)
@@ -52,6 +68,16 @@ def _parse_bbox(raw: Optional[str]) -> Optional[Tuple[float, float, float, float
     except ValueError:
         return None
     return (west, south, east, north)
+
+
+def _without_article(norm: str) -> str:
+    """A normalised name without a leading "the".
+
+    GeoNames spells one country "The Netherlands", and a reader may type "the
+    United Kingdom" as readily as "United Kingdom". The article belongs to the
+    name only in running text, so matching ignores it on both sides.
+    """
+    return norm[4:] if norm.startswith("the ") else norm
 
 
 def _norm(s: str) -> str:
@@ -98,8 +124,16 @@ class LocationIndex:
         # owner are served from _name_to_idx instead: holding a list for all
         # ~800k names costs ~100 MB for the ~6% that actually need it.
         self._name_collisions: Dict[str, List[int]] = {}
+        # Largest city population per country code; see `_sort_population`.
+        self._largest_city_population: Dict[str, int] = {}
 
         self._load()
+        for i, kind in enumerate(self._kinds):
+            if kind != KIND_CITY:
+                continue
+            cc = self._country_codes[i]
+            if self._populations[i] > self._largest_city_population.get(cc, 0):
+                self._largest_city_population[cc] = self._populations[i]
 
     def _load(self) -> None:
         if not self.index_csv.exists():
@@ -208,30 +242,69 @@ class LocationIndex:
         """
         How well entry `i` answers query `q` — lower is better.
 
-        Population alone would bury every country, sea and lake, since they
-        carry no population of their own that is comparable to a city's: the
-        North Sea would rank below the Long Island village of the same name.
         Naming an area outright, or typing enough words to be clearly after one,
-        promotes it. Only areas are promoted — cities are left to sort on
-        population as they always have, so "par" still means Paris and not the
-        Cornish village of Par that the query happens to name exactly.
+        promotes it above everything: the North Sea, not the Long Island village
+        of the same name.
+
+        Otherwise, people type the start of a word, so the rest is graded by
+        where the query lands in the place's *own* name: at the start of a word
+        ("ger" → Germany), inside one ("ger" → Nigeria), or nowhere in the name
+        at all but in the region or country a city's label carries ("ger" →
+        "Lagos, Nigeria"). Without that grading "fran" buried France under every
+        French city, and "ger" listed Nigerian cities before Germany.
         """
+        own = self._norm_cities[i]
+        own_names = (own, _without_article(own))
         if self._kinds[i] == KIND_CITY:
-            return _RANK_DEFAULT
-        norm_label = self._norm_labels[i]
-        norm_city = self._norm_cities[i]
-        if q == norm_label or q == norm_city:
+            if (
+                " " in q
+                and self._populations[i] >= _MAJOR_CITY_POPULATION
+                and any(name.startswith(q) for name in own_names)
+            ):
+                # A major city the reader may still be typing competes with a
+                # partly named sea on equal terms, and wins on population.
+                return _RANK_AREA_PARTIAL
+            if any(_starts_a_word(q, name) for name in own_names):
+                return _RANK_WORD_START
+            if any(q in name for name in own_names):
+                return _RANK_MID_WORD
+            return _RANK_LABEL_ONLY
+        names = {
+            name
+            for norm in (self._norm_labels[i], self._norm_cities[i])
+            for name in (norm, _without_article(norm))
+        }
+        if q in names:
             return _RANK_AREA_NAMED
-        if " " in q and (norm_label.startswith(q) or norm_city.startswith(q)):
+        if " " in q and any(name.startswith(q) for name in names):
             return _RANK_AREA_PARTIAL
-        return _RANK_DEFAULT
+        if any(_starts_a_word(q, name) for name in names):
+            return _RANK_WORD_START
+        return _RANK_MID_WORD
 
     def _sort_population(self, i: int) -> int:
-        """Population for ranking: an area's own population is not comparable."""
-        return self._populations[i] if self._kinds[i] == KIND_CITY else 0
+        """Population used to order matches of the same rank.
+
+        A city ranks by its own population. A country ranks as prominently as
+        its largest city: its own population would put it above almost every
+        city sharing its first letters — Paraguay above Paris for "par",
+        Madagascar above Madrid for "mad" — while zero would drop it out of the
+        list entirely. Seas and lakes have no population to borrow, and are
+        found by naming them.
+        """
+        kind = self._kinds[i]
+        if kind == KIND_CITY:
+            return self._populations[i]
+        if kind == KIND_COUNTRY:
+            return self._largest_city_population.get(self._country_codes[i], 0)
+        return 0
 
     def autocomplete(self, query: str, *, limit: int = 10) -> List[LocationHit]:
         q = _norm(query)
+        # "the north sea" should find the North Sea; keep the query as typed
+        # when the article is all there is, so "the" still finds The Hague.
+        if len(_without_article(q)) >= self.min_query_len:
+            q = _without_article(q)
         if len(q) < self.min_query_len:
             return []
 
