@@ -81,3 +81,66 @@ def test_city_override_allows_ocean_label_when_farther(tmp_path: Path) -> None:
     place = resolver.resolve_place(37.90000, -25.15000)
     assert place.label.startswith("North Atlantic Ocean")
     assert place.population is None
+
+
+def test_ocean_label_takes_the_even_with_a_city_appended(tmp_path: Path) -> None:
+    csv_path = tmp_path / "locations.csv"
+    _write_locations_csv(csv_path)
+    resolver = PlaceResolver(
+        locations_csv=csv_path,
+        ocean_classifier=_AlwaysOcean(),
+        ocean_city_override_max_km=0.1,
+        ocean_off_city_max_km=80.0,
+        cache=None,
+    )
+
+    # "the North Atlantic Ocean off Nordeste, Portugal": the water body leads.
+    place = resolver.resolve_place(37.90000, -25.15000)
+    assert " off " in place.label
+    assert place.definite_article is True
+
+
+def test_city_label_takes_no_article(tmp_path: Path) -> None:
+    csv_path = tmp_path / "locations.csv"
+    _write_locations_csv(csv_path)
+    resolver = PlaceResolver(
+        locations_csv=csv_path,
+        ocean_classifier=_AlwaysOcean(),
+        ocean_city_override_max_km=5.0,
+        cache=None,
+    )
+
+    place = resolver.resolve_place(37.83333, -25.15000)
+    assert place.label == "Nordeste, Portugal"
+    assert place.definite_article is False
+
+
+class _DictCache:
+    """In-memory stand-in for the resolver's JSON cache."""
+
+    def __init__(self) -> None:
+        self.store: dict = {}
+
+    def get_json(self, key):
+        return self.store.get(key)
+
+    def set_json(self, key, value, ttl_s=None) -> None:
+        self.store[key] = value
+
+
+def test_article_survives_the_resolution_cache(tmp_path: Path) -> None:
+    csv_path = tmp_path / "locations.csv"
+    _write_locations_csv(csv_path)
+    cache = _DictCache()
+    resolver = PlaceResolver(
+        locations_csv=csv_path,
+        ocean_classifier=_AlwaysOcean(),
+        ocean_city_override_max_km=0.1,
+        cache=cache,
+    )
+
+    first = resolver.resolve_place(37.90000, -25.15000)
+    assert cache.store, "expected the first resolution to be cached"
+    second = resolver.resolve_place(37.90000, -25.15000)
+    assert second.label == first.label
+    assert second.definite_article is True

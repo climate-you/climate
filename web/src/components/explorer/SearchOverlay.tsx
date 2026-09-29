@@ -19,6 +19,8 @@ export type AutocompleteItem = {
   // Present only when this release has aggregates for the area, so it doubles
   // as the signal to open a region panel instead of a point one.
   region_id?: string | null;
+  // Whether `label` needs "the" mid-sentence ("In the North Sea, …").
+  definite_article?: boolean;
 };
 
 const KIND_LABELS: Record<string, string> = {

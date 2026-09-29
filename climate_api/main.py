@@ -25,6 +25,7 @@ from fastapi.responses import (
 from uvicorn.logging import AccessFormatter
 
 from climate.geo.country import apply_country_name_overrides
+from climate.geo.names import takes_definite_article
 
 from .analytics.db import AnalyticsDB, IPBlocklist
 from .analytics.session_log import format_session_log, session_log_filename
@@ -132,6 +133,9 @@ def _autocomplete_item(hit, region_ids) -> LocationAutocompleteItem:
         kind=hit.kind,
         bbox=hit.bbox,
         region_id=region_id if region_id in region_ids else None,
+        definite_article=takes_definite_article(
+            hit.label, getattr(hit, "kind", "city")
+        ),
     )
 
 
@@ -775,6 +779,7 @@ def create_app() -> FastAPI:
             # Suppressed for regions: the only figure available is eight years
             # stale, and the cell count is the useful provenance.
             population=None,
+            definite_article=takes_definite_article(hit.label, hit.kind),
         )
         region_label = hit.label
 
@@ -815,6 +820,7 @@ def create_app() -> FastAPI:
                     distance_km=0.0,
                     country_code=hit.country_code,
                     population=hit.population,
+                    definite_article=takes_definite_article(hit.label, hit.kind),
                 )
         return build_scored_panels_tiles_registry(
             place_resolver=place_resolver,
@@ -897,6 +903,7 @@ def create_app() -> FastAPI:
                 distance_km=float(place.distance_km),
                 country_code=place.country_code,
                 population=place.population,
+                definite_article=getattr(place, "definite_article", False),
             ),
         )
 

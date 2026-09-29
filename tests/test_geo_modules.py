@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 import xarray as xr
 
 from climate.geo import ensure_lon_pm180, normalize_lon_pm180
@@ -12,6 +13,7 @@ from climate.geo.marine import (
     NATURAL_EARTH_MARINE_POLYS_FALLBACK_URLS,
     normalize_marine_name,
 )
+from climate.geo.names import takes_definite_article
 from climate.geo.regions import (
     continent_region_id,
     country_region_id,
@@ -74,3 +76,57 @@ def test_region_ids_match_the_spelling_used_by_the_aggregates() -> None:
 def test_slugify_strips_accents_and_folds_separators() -> None:
     assert slugify_region_name("Baía de Marajó") == "baia_de_marajo"
     assert slugify_region_name("Bass Strait-North") == "bass_strait_north"
+
+
+@pytest.mark.parametrize(
+    "name, kind, expected",
+    [
+        # Cities never take one, whatever they are called.
+        ("North Sea NY, USA", "city", False),
+        ("The Hague, Netherlands", "city", False),
+        # Countries: plain names do not; unions and plurals do.
+        ("France", "country", False),
+        ("Spain", "country", False),
+        ("United Kingdom", "country", True),
+        ("United States", "country", True),
+        ("Solomon Islands", "country", True),
+        ("Democratic Republic of the Congo", "country", True),
+        ("Philippines", "country", True),
+        ("Gambia", "country", True),
+        # Already carries it, capitalised: counts as taking one.
+        ("The Netherlands", "country", True),
+        # Named after a first part that takes none.
+        ("South Georgia and the South Sandwich Islands", "country", False),
+        ("Saint Vincent and the Grenadines", "country", False),
+        # Seas, oceans, gulfs, straits, channels, rivers: yes.
+        ("North Sea", "marine", True),
+        ("Pacific Ocean", "marine", True),
+        ("Gulf of Mexico", "marine", True),
+        ("Persian Gulf", "marine", True),
+        ("Bay of Bengal", "marine", True),
+        ("Strait of Gibraltar", "marine", True),
+        ("Davis Strait", "marine", True),
+        ("English Channel", "marine", True),
+        ("Amazon River", "marine", True),
+        ("Great Barrier Reef", "marine", True),
+        ("The North Western Passages", "marine", True),
+        # A proper name before its generic noun: no.
+        ("Hudson Bay", "marine", False),
+        ("Puget Sound", "marine", False),
+        ("Cook Inlet", "marine", False),
+        # Local usage beats the strait pattern.
+        ("Bass Strait", "marine", False),
+        # Lakes: no, except seas, reservoirs and a few by convention.
+        ("Lake Ontario", "lake", False),
+        ("Great Bear Lake", "lake", False),
+        ("Lago Titicaca", "lake", False),
+        ("Tai Hu", "lake", False),
+        ("Dead Sea", "lake", True),
+        ("Sea of Galilee", "lake", True),
+        ("Bratsk Reservoir", "lake", True),
+        ("Lake of the Woods", "lake", True),
+        ("Great Salt Lake", "lake", True),
+    ],
+)
+def test_definite_article(name: str, kind: str, expected: bool) -> None:
+    assert takes_definite_article(name, kind) is expected

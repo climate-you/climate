@@ -21,6 +21,7 @@ import SiteNav from "@/components/explorer/SiteNav";
 import CaseStudiesOverlay from "@/components/CaseStudiesOverlay";
 import type { CaseStudy } from "@/components/CaseStudiesOverlay";
 import { isAggregateScope, panelScope } from "@/lib/explorer/panelScope";
+import { sentenceParts } from "@/lib/explorer/placeName";
 import type { OverlayRoute } from "@/lib/explorer/routing";
 import SearchOverlay from "@/components/explorer/SearchOverlay";
 import type { AutocompleteItem } from "@/components/explorer/SearchOverlay";
@@ -204,6 +205,7 @@ type PanelResponse = {
       distance_km: number;
       country_code?: string | null;
       population?: number | null;
+      definite_article?: boolean;
     };
     panel_valid_bbox?: {
       lat_min: number;
@@ -249,6 +251,7 @@ type NearestLocationResponse = {
     distance_km: number;
     country_code?: string | null;
     population?: number | null;
+    definite_article?: boolean;
   };
 };
 
@@ -262,6 +265,8 @@ type SelectedLocationMeta = {
   label: string;
   countryCode: string;
   population: number | null;
+  // Whether `label` needs "the" mid-sentence ("In the North Sea, …").
+  definiteArticle: boolean;
 };
 type PagedGraphItem = {
   panelId: string;
@@ -447,6 +452,7 @@ export default function ExplorerPage({
       label: "Global",
       countryCode: "",
       population: null,
+      definiteArticle: false,
     });
   const [selectedGeonameidForPanel, setSelectedGeonameidForPanel] = useState<
     number | null
@@ -759,8 +765,11 @@ export default function ExplorerPage({
                 text: config.no_warming_text,
               } as const);
         }
-        if (!isAggregate) {
-          const globalSst = h(config.metric_global);
+        if (!isGlobal) {
+          // No sea data here. A point can quote the global figure instead; a
+          // region's response carries no separate global one, so it only says
+          // the data is unavailable — rather than falling back to a bare name.
+          const globalSst = isAggregate ? null : h(config.metric_global);
           const globalDelta =
             typeof globalSst?.value === "number" &&
             Number.isFinite(globalSst.value)
@@ -796,8 +805,10 @@ export default function ExplorerPage({
             suffix: hd.baseline ? `since ${hd.baseline}` : "",
           } as const;
         }
-        if (!isAggregate && config.unavailable_global_metric) {
-          const globalSst = h(config.unavailable_global_metric);
+        if (!isGlobal && config.unavailable_global_metric) {
+          const globalSst = isAggregate
+            ? null
+            : h(config.unavailable_global_metric);
           const globalDelta =
             typeof globalSst?.value === "number" &&
             Number.isFinite(globalSst.value)
@@ -1089,6 +1100,7 @@ export default function ExplorerPage({
           Number.isFinite(place.population)
             ? place.population
             : null,
+        definiteArticle: place.definite_article ?? false,
       });
     }
     return data;
@@ -1180,6 +1192,7 @@ export default function ExplorerPage({
       label: "Global",
       countryCode: "",
       population: null,
+      definiteArticle: false,
     });
     if (switchToGraphTab) setPanelTab("graph");
     if (openPanel) setPanelOpen(true);
@@ -1332,6 +1345,7 @@ export default function ExplorerPage({
       // population, whose only source is years stale. Anything read as a point
       // keeps its population exactly as before.
       population: item.region_id ? null : item.population,
+      definiteArticle: item.definite_article ?? false,
     });
     setPanelOpen(true);
     // An area the release has aggregates for gets a region-wide panel; any
@@ -1408,6 +1422,7 @@ export default function ExplorerPage({
             Number.isFinite(place.population)
               ? place.population
               : null,
+          definiteArticle: place.definite_article ?? false,
         });
         setResp((prev) => {
           if (!prev) return prev;
@@ -1425,6 +1440,7 @@ export default function ExplorerPage({
                 distance_km: place.distance_km,
                 country_code: place.country_code ?? null,
                 population: place.population ?? null,
+                definite_article: place.definite_article ?? false,
               },
             },
           };
@@ -1745,6 +1761,20 @@ export default function ExplorerPage({
   const locationLabel =
     selectedLocation?.label ?? resp?.location.place.label ?? "";
   const titleLocationLabel = locationLabel || "this location";
+  // The same name as it reads mid-sentence: "In the North Sea, …". It is split
+  // so "the" is set small with the words before it ("In the") and only the
+  // name itself is emphasised. The article comes from wherever the label did,
+  // so the two can never disagree.
+  const { article: locationArticle, name: sentenceLocationName } = locationLabel
+    ? sentenceParts(
+        locationLabel,
+        selectedLocation?.label
+          ? selectedLocation.definiteArticle
+          : (resp?.location.place.definite_article ?? false),
+      )
+    : { article: "", name: titleLocationLabel };
+  const withArticle = (words: string) =>
+    locationArticle ? `${words} ${locationArticle}` : words;
   const panelTitleInfoText = (() => {
     if (!panelHeadline) {
       return "Headline values are derived from local climate trend data. See the chart below for the full time series.";
@@ -2048,8 +2078,10 @@ export default function ExplorerPage({
                           <>Globally, </>
                         ) : (
                           <>
-                            <span className={styles.panelTitleSmall}>In</span>{" "}
-                            {titleLocationLabel},{" "}
+                            <span className={styles.panelTitleSmall}>
+                              {withArticle("In")}
+                            </span>{" "}
+                            {sentenceLocationName},{" "}
                           </>
                         )}
                         {panelHeadline.warming ? (
@@ -2110,8 +2142,10 @@ export default function ExplorerPage({
                           <>Globally, </>
                         ) : (
                           <>
-                            <span className={styles.panelTitleSmall}>In</span>{" "}
-                            {titleLocationLabel},{" "}
+                            <span className={styles.panelTitleSmall}>
+                              {withArticle("In")}
+                            </span>{" "}
+                            {sentenceLocationName},{" "}
                           </>
                         )}
                         <span className={styles.panelTitleSmall}>
@@ -2137,8 +2171,10 @@ export default function ExplorerPage({
                           <>Globally, </>
                         ) : (
                           <>
-                            <span className={styles.panelTitleSmall}>In</span>{" "}
-                            {titleLocationLabel},{" "}
+                            <span className={styles.panelTitleSmall}>
+                              {withArticle("In")}
+                            </span>{" "}
+                            {sentenceLocationName},{" "}
                           </>
                         )}
                         <span className={styles.panelTitleSmall}>
@@ -2151,8 +2187,10 @@ export default function ExplorerPage({
                           <>Globally, </>
                         ) : (
                           <>
-                            <span className={styles.panelTitleSmall}>In</span>{" "}
-                            {titleLocationLabel},{" "}
+                            <span className={styles.panelTitleSmall}>
+                              {withArticle("In")}
+                            </span>{" "}
+                            {sentenceLocationName},{" "}
                           </>
                         )}
                         {Math.round(panelHeadline.value) === 0 ? (
@@ -2204,8 +2242,10 @@ export default function ExplorerPage({
                       </>
                     ) : panelHeadline?.type === "coral_worst_year" ? (
                       <>
-                        <span className={styles.panelTitleSmall}>In</span>{" "}
-                        {titleLocationLabel},{" "}
+                        <span className={styles.panelTitleSmall}>
+                          {withArticle("In")}
+                        </span>{" "}
+                        {sentenceLocationName},{" "}
                         <span className={styles.panelTitleSmall}>
                           {Math.round(panelHeadline.days) === 1
                             ? "there was "
@@ -2232,8 +2272,10 @@ export default function ExplorerPage({
                       </>
                     ) : panelHeadline?.type === "coral_no_days" ? (
                       <>
-                        <span className={styles.panelTitleSmall}>In</span>{" "}
-                        {titleLocationLabel},{" "}
+                        <span className={styles.panelTitleSmall}>
+                          {withArticle("In")}
+                        </span>{" "}
+                        {sentenceLocationName},{" "}
                         <span className={styles.panelTitleSmall}>
                           no days of coral heat stress have been recorded since
                           1985.
@@ -2242,9 +2284,9 @@ export default function ExplorerPage({
                     ) : panelHeadline?.type === "sst_unavailable" ? (
                       <>
                         <span className={styles.panelTitleSmall}>
-                          Sea temperature data not available in
+                          {withArticle("Sea temperature data not available in")}
                         </span>{" "}
-                        {titleLocationLabel}.{" "}
+                        {sentenceLocationName}.{" "}
                         {panelHeadline.globalDelta !== null ? (
                           <>
                             <span className={styles.panelTitleSmall}>
@@ -2272,9 +2314,9 @@ export default function ExplorerPage({
                     ) : panelHeadline?.type === "coral_unavailable" ? (
                       <>
                         <span className={styles.panelTitleSmall}>
-                          Coral stress data not available in
+                          {withArticle("Coral stress data not available in")}
                         </span>{" "}
-                        {titleLocationLabel}.{" "}
+                        {sentenceLocationName}.{" "}
                         <span className={styles.panelTitleSmall}>
                           Globally,{" "}
                         </span>

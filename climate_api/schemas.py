@@ -157,6 +157,9 @@ class PlaceInfo(BaseModel):
     distance_km: float
     country_code: str | None = None
     population: int | None = None
+    # Whether `label` needs "the" in a sentence — "In the North Sea, …". The
+    # label itself stays bare, as it is also shown on its own.
+    definite_article: bool = False
 
 
 class DataCell(BaseModel):
@@ -211,6 +214,8 @@ class LocationAutocompleteItem(BaseModel):
     # presence is the client's signal to ask for a region panel rather than a
     # point one. Null for cities, lakes, and areas with no data.
     region_id: Optional[str] = None
+    # Whether `label` needs "the" in a sentence; see PlaceInfo.
+    definite_article: bool = False
 
 
 class LocationAutocompleteResponse(BaseModel):
