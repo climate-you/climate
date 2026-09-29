@@ -379,7 +379,7 @@ const CASE_STUDIES: CaseStudy[] = [
     title: "Europe's summer of heat and drought",
     href: "/stories/summer-2026-heat-and-drought",
     thumbnail: "/story/summer-2026-heat-and-drought-thumb.png",
-    meta: "25 September 2026",
+    meta: "29 September 2026",
   },
   {
     title: "The June 2026 heatwave over Europe",
