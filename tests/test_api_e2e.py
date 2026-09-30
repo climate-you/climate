@@ -315,3 +315,35 @@ def test_global_panel_carries_no_region_fields() -> None:
     assert status == 200
     assert panel["location"]["region_id"] is None
     assert panel["location"]["region_cell_count"] is None
+
+
+def _region_shape(app: Any, region_id: str) -> tuple[int, dict]:
+    return asyncio.run(
+        _asgi_get_json(
+            app,
+            f"/api/v/{API_E2E_RELEASE}/regions/shape",
+            {"region_id": region_id},
+        )
+    )
+
+
+def test_a_selectable_region_has_an_outline() -> None:
+    status, shape = _region_shape(create_app(), "country:FR")
+    assert status == 200
+    assert shape["type"] == "MultiPolygon"
+    assert shape["coordinates"]
+
+
+@pytest.mark.parametrize(
+    "region_id",
+    [
+        "continent:europe",
+        "globe",
+        "country:MC",
+        "ocean:great_barrier_reef",
+        "../../etc/passwd",
+    ],
+)
+def test_no_outline_for_a_region_search_cannot_select(region_id: str) -> None:
+    status, _ = _region_shape(create_app(), region_id)
+    assert status == 404

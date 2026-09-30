@@ -68,12 +68,28 @@ export const TEXTURE_LAYER_ID = "climateTextureLayer";
 export const DEBUG_BBOX_SOURCE_ID = "debugPanelBboxSource";
 export const DEBUG_BBOX_FILL_LAYER_ID = "debugPanelBboxFillLayer";
 export const DEBUG_BBOX_LAYER_ID = "debugPanelBboxLayer";
+export const REGION_FILL_SOURCE_ID = "regionOverlayFillSource";
+export const REGION_LINE_SOURCE_ID = "regionOverlayLineSource";
+export const REGION_FILL_LAYER_ID = "regionOverlayFillLayer";
+export const REGION_HALO_LAYER_ID = "regionOverlayHaloLayer";
+export const REGION_LINE_LAYER_ID = "regionOverlayLineLayer";
 
 // MapLibreGlobe — colors
 export const BACKDROP_BLUE = "#0000ff";
 export const BACKDROP_WHITE = "#ffffff";
 export const BACKDROP_DARK_MODE = "#181818";
 export const MARKER_COLOR = "#ff0000";
+// Region overlay: a tint over the greyscale globe, or a wash that dims
+// everything but the region when a data layer is showing. The outline is dark
+// on a white halo so it reads over any colour a layer can produce.
+export const REGION_TINT_COLOR = "#2563eb";
+export const REGION_TINT_OPACITY = 0.16;
+// Grey rather than white: a white wash vanishes over a palette with a
+// near-white centre, such as the precipitation trend.
+export const REGION_DIM_COLOR = "#64748b";
+export const REGION_DIM_OPACITY = 0.5;
+export const REGION_OUTLINE_COLOR = "#111827";
+export const REGION_OUTLINE_HALO_COLOR = "#ffffff";
 
 // MapLibreGlobe — city snap
 export const CITY_SNAP_MAX_ZOOM = 6;

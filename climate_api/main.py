@@ -64,6 +64,7 @@ from .chat.question_tree import (
 )
 from .store.country_classifier import CountryClassifier
 from .store.location_index import LocationIndex
+from .store.region_shapes import RegionShapes
 from .store.ocean_classifier import OceanClassifier
 from .store.place_resolver import PlaceResolver
 from .system_stats import current_rss_bytes, system_memory
@@ -467,6 +468,7 @@ def create_app() -> FastAPI:
         round_decimals=3,
     )
     location_index = LocationIndex(settings.locations_index_csv)
+    region_shapes = RegionShapes(settings.region_shapes_json)
 
     analytics_db = AnalyticsDB(settings.analytics_db_path)
     analytics_db.check_schema()
@@ -796,6 +798,39 @@ def create_app() -> FastAPI:
             region_id=region_id,
             region_label=region_label,
             place=place,
+        )
+
+    @app.get("/api/v/{release}/regions/shape")
+    def get_region_shape(
+        release: str,
+        region_id: str = Query(..., min_length=1, max_length=128),
+    ):
+        """The outline of a region, as a GeoJSON geometry.
+
+        Gated exactly like the region panel, so the map is only ever asked to
+        outline a region the reader could have selected. The id is only used as
+        a dictionary key, never to build a path.
+        """
+        context = release_resolver.resolve_release_context(release)
+        shape = region_shapes.get(region_id)
+        if (
+            shape is None
+            or location_index.resolve_by_region_id(region_id) is None
+            or region_id not in context.tile_store.region_ids
+        ):
+            raise HTTPException(status_code=404, detail=f"No outline for: {region_id}")
+        # Outlines come from the masks, not the release, so they only change
+        # when the location assets are rebuilt; the release in the path still
+        # decides which regions are served.
+        cache_control = (
+            "public, max-age=86400"
+            if release == context.release
+            else "private, max-age=300"
+        )
+        return Response(
+            content=shape,
+            media_type="application/json",
+            headers={"Cache-Control": cache_control},
         )
 
     @app.get("/api/v/{release}/panel", response_model=PanelListResponse)

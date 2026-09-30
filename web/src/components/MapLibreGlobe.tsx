@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
-import type { FeatureCollection, Polygon } from "geojson";
+import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import {
   AUTO_ROTATE_DEG_PER_SEC,
   BACKDROP_BLUE,
@@ -25,6 +25,17 @@ import {
   LAYER_MENU_FADE_MS,
   MARKER_COLOR,
   MERCATOR_MAX_LAT,
+  REGION_DIM_COLOR,
+  REGION_DIM_OPACITY,
+  REGION_FILL_LAYER_ID,
+  REGION_FILL_SOURCE_ID,
+  REGION_HALO_LAYER_ID,
+  REGION_LINE_LAYER_ID,
+  REGION_LINE_SOURCE_ID,
+  REGION_OUTLINE_COLOR,
+  REGION_OUTLINE_HALO_COLOR,
+  REGION_TINT_COLOR,
+  REGION_TINT_OPACITY,
   MOBILE_PANEL_HEIGHT_RATIO,
   MOBILE_TEXTURE_FALLBACK_LIMIT,
   PANEL_BREAKPOINT_PX,
@@ -32,6 +43,11 @@ import {
   TEXTURE_LAYER_ID,
   TEXTURE_SOURCE_ID,
 } from "@/lib/explorer/constants";
+import {
+  regionFeatures,
+  regionOutline,
+  surroundingFeatures,
+} from "@/lib/explorer/regionOverlay";
 
 type LngLat = { lat: number; lon: number };
 export type MapLayerOption = {
@@ -71,6 +87,13 @@ type Props = {
    * selection is an area — a country, sea or lake — rather than a point.
    */
   focusBbox?: [number, number, number, number] | null;
+  /** Outline of the selected region, drawn as an overlay; null for none. */
+  regionShape?: MultiPolygon | null;
+  /**
+   * Hide the pin at `focusLocation`. A region panel describes a whole area, so
+   * a pin on its representative point would suggest a reading taken there.
+   */
+  hideFocusMarker?: boolean;
   layerOptions: MapLayerOption[];
   activeLayerId: string | null;
   onLayerChange: (layerId: string) => void;
@@ -193,6 +216,113 @@ function textureLayerBeforeId(map: maplibregl.Map): string | undefined {
   const styleLayers = map.getStyle()?.layers ?? [];
   const firstSymbol = styleLayers.find((layer) => layer.type === "symbol");
   return firstSymbol?.id;
+}
+
+function setGeoJsonSource(
+  map: maplibregl.Map,
+  id: string,
+  data: FeatureCollection,
+): void {
+  const source = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
+  if (source) source.setData(data);
+  else map.addSource(id, { type: "geojson", data });
+}
+
+/**
+ * Draw, or clear, the overlay for a selected region.
+ *
+ * Over the greyscale globe the region is tinted. With a data layer showing,
+ * the region keeps its full colour and everything else is dimmed instead, so
+ * its neighbours stay legible for comparison. Which one applies depends on
+ * whether a data layer is actually drawn, so this reruns whenever the texture
+ * comes or goes.
+ *
+ * The overlay sits just above the data layer and below the coastlines,
+ * borders and labels, which stay crisp on top of it.
+ */
+function applyRegionOverlay(
+  map: maplibregl.Map,
+  region: MultiPolygon | null,
+): void {
+  if (!region) {
+    for (const id of [
+      REGION_LINE_LAYER_ID,
+      REGION_HALO_LAYER_ID,
+      REGION_FILL_LAYER_ID,
+    ]) {
+      if (map.getLayer(id)) map.removeLayer(id);
+    }
+    for (const id of [REGION_FILL_SOURCE_ID, REGION_LINE_SOURCE_ID]) {
+      if (map.getSource(id)) map.removeSource(id);
+    }
+    return;
+  }
+
+  const dimOutside = Boolean(map.getLayer(TEXTURE_LAYER_ID));
+  setGeoJsonSource(
+    map,
+    REGION_FILL_SOURCE_ID,
+    dimOutside
+      ? surroundingFeatures(region, MERCATOR_MAX_LAT)
+      : regionFeatures(region),
+  );
+  setGeoJsonSource(map, REGION_LINE_SOURCE_ID, regionOutline(region));
+
+  if (!map.getLayer(REGION_FILL_LAYER_ID)) {
+    map.addLayer({
+      id: REGION_FILL_LAYER_ID,
+      type: "fill",
+      source: REGION_FILL_SOURCE_ID,
+      // Anti-aliasing draws a hairline along every edge of the fill, including
+      // the world ring's edges along the antimeridian and at the latitude
+      // limit: a seam down the Pacific and a ring round each pole. The outline
+      // layers already draw every edge that is a real boundary.
+      paint: { "fill-antialias": false },
+    });
+  }
+  map.setPaintProperty(
+    REGION_FILL_LAYER_ID,
+    "fill-color",
+    dimOutside ? REGION_DIM_COLOR : REGION_TINT_COLOR,
+  );
+  map.setPaintProperty(
+    REGION_FILL_LAYER_ID,
+    "fill-opacity",
+    dimOutside ? REGION_DIM_OPACITY : REGION_TINT_OPACITY,
+  );
+  if (!map.getLayer(REGION_HALO_LAYER_ID)) {
+    map.addLayer({
+      id: REGION_HALO_LAYER_ID,
+      type: "line",
+      source: REGION_LINE_SOURCE_ID,
+      layout: { "line-join": "round" },
+      paint: {
+        "line-color": REGION_OUTLINE_HALO_COLOR,
+        "line-width": 3.5,
+        "line-opacity": 0.85,
+      },
+    });
+  }
+  if (!map.getLayer(REGION_LINE_LAYER_ID)) {
+    map.addLayer({
+      id: REGION_LINE_LAYER_ID,
+      type: "line",
+      source: REGION_LINE_SOURCE_ID,
+      layout: { "line-join": "round" },
+      paint: { "line-color": REGION_OUTLINE_COLOR, "line-width": 1.5 },
+    });
+  }
+
+  // Moved one by one to just before the same layer, so they end up stacked
+  // fill, halo, line — all above the texture, which sits before it too.
+  const beforeId = textureLayerBeforeId(map);
+  for (const id of [
+    REGION_FILL_LAYER_ID,
+    REGION_HALO_LAYER_ID,
+    REGION_LINE_LAYER_ID,
+  ]) {
+    map.moveLayer(id, beforeId);
+  }
 }
 
 function focusZoomTarget(map: maplibregl.Map): number {
@@ -403,6 +533,8 @@ export default function MapLibreGlobe({
   panelOpen,
   focusLocation,
   focusBbox = null,
+  regionShape = null,
+  hideFocusMarker = false,
   layerOptions,
   activeLayerId,
   onLayerChange,
@@ -438,6 +570,7 @@ export default function MapLibreGlobe({
   const onLayerMenuOpenRef = useRef(onLayerMenuOpen);
   const panelOpenRef = useRef(panelOpen);
   const focusLocationRef = useRef(focusLocation);
+  const regionShapeRef = useRef(regionShape);
   const layerOptionsRef = useRef(layerOptions);
   const activeLayerIdRef = useRef(activeLayerId);
   const showControlsRef = useRef(showControls);
@@ -1161,6 +1294,12 @@ export default function MapLibreGlobe({
     map.on("load", applyTextureLayer);
     map.on("load", applyDebugBboxLayer);
     map.on("load", applyGlobeBackground);
+    // After the texture: whether it is drawn decides tint or dim, and the
+    // overlay has to end up above it.
+    const applyRegionOverlayNow = () =>
+      applyRegionOverlay(map, regionShapeRef.current);
+    map.on("style.load", applyRegionOverlayNow);
+    map.on("load", applyRegionOverlayNow);
     if (showControlsRef.current) {
       map.addControl(createHomeControl(), "top-left");
       map.addControl(new maplibregl.NavigationControl(), "top-left");
@@ -1252,7 +1391,7 @@ export default function MapLibreGlobe({
     const map = mapRef.current;
     if (!map) return;
 
-    const apply = () => {
+    const applyTexture = () => {
       const selected = layerOptions.find((layer) => layer.id === activeLayerId);
       if (!selected) {
         applyGlobeBackgroundRef.current?.();
@@ -1343,6 +1482,12 @@ export default function MapLibreGlobe({
       const beforeId = textureLayerBeforeId(map);
       map.moveLayer(TEXTURE_LAYER_ID, beforeId);
       layerControlRef.current?.refresh();
+    };
+    // Choosing or clearing a layer flips the overlay between tint and dim, and
+    // a newly added texture would otherwise cover it.
+    const apply = () => {
+      applyTexture();
+      applyRegionOverlay(map, regionShapeRef.current);
     };
 
     if (styleReadyRef.current || map.isStyleLoaded()) {
@@ -1458,12 +1603,36 @@ export default function MapLibreGlobe({
   }, [showDebugOverlay, debugBbox, debugBboxGridId]);
 
   useEffect(() => {
+    regionShapeRef.current = regionShape;
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => applyRegionOverlay(map, regionShape);
+    if (styleReadyRef.current || map.isStyleLoaded()) {
+      styleReadyRef.current = true;
+      apply();
+      return;
+    }
+    const applyAfterStyleReady = () => {
+      styleReadyRef.current = true;
+      apply();
+    };
+    map.once("style.load", applyAfterStyleReady);
+    return () => {
+      map.off("style.load", applyAfterStyleReady);
+    };
+  }, [regionShape]);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     if (!focusLocation) return;
 
     const { lat, lon } = focusLocation;
-    if (!markerRef.current) {
+    if (hideFocusMarker) {
+      // Set in the same render as `focusLocation`, like `focusBbox` below.
+      markerRef.current?.remove();
+      markerRef.current = null;
+    } else if (!markerRef.current) {
       markerRef.current = new maplibregl.Marker({ color: MARKER_COLOR })
         .setLngLat([lon, lat])
         .addTo(map);

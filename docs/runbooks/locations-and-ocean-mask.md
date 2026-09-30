@@ -97,6 +97,26 @@ Primary outputs:
 - `data/locations/ocean_mask.npz` (grid mask used to identify oceanic coordinates)
 - `data/locations/ocean_names.json` (mapping used by `PlaceResolver` to return readable sea/ocean names)
 
+## Build region outlines
+
+```bash
+python scripts/build/build_region_shapes.py
+```
+
+Polygonises the two masks above into one outline per country and sea, which the explorer draws over a region selected from search. It reads the masks, so run it **after** `build_locations.py --write-country-mask` and `build_ocean_mask.py` whenever either mask is rebuilt.
+
+The outline is the mask itself, cell edge for cell edge, not the Natural Earth polygon it was rasterised from, so it shows exactly the area the region's average is computed over. A region with no mask cells (the Great Barrier Reef, erased by the overlapping Coral Sea) gets no outline, just as it gets no average.
+
+Primary output:
+
+- `data/locations/region_shapes.json` (region id → GeoJSON `MultiPolygon`; ~3.7 MB, ~540 KB gzipped, served one region at a time by `GET /api/v/{release}/regions/shape`)
+
+The file is optional at runtime: without it the API logs a warning and region panels still work, with no outline drawn. Override its location with `REGION_SHAPES_JSON`.
+
+## Deploying
+
+The deploy script does not ship `data/locations/`. After rebuilding any of these artifacts, copy the changed files to the server's `data/locations/` by hand and restart the API — in particular `locations.index.csv` (it carries the `region_id` column) and `region_shapes.json`.
+
 ## Notes
 
 - Re-run this runbook when location source data is updated.

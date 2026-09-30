@@ -20,6 +20,7 @@ import ColdOpenOverlay from "@/components/explorer/ColdOpenOverlay";
 import SiteNav from "@/components/explorer/SiteNav";
 import CaseStudiesOverlay from "@/components/CaseStudiesOverlay";
 import type { CaseStudy } from "@/components/CaseStudiesOverlay";
+import type { MultiPolygon } from "geojson";
 import { isAggregateScope, panelScope } from "@/lib/explorer/panelScope";
 import { sentenceParts } from "@/lib/explorer/placeName";
 import type { OverlayRoute } from "@/lib/explorer/routing";
@@ -491,6 +492,10 @@ export default function ExplorerPage({
   // Recent region panels, so flipping °C/°F or revisiting a region is instant.
   // Bounded: unlike the one global panel, a reader can visit any number.
   const regionPanelCacheRef = useRef<Map<string, PanelResponse>>(new Map());
+  // Outline of the selected region, drawn on the map; null when none is
+  // selected, or while it loads, or if the server has no outline for it.
+  const [regionShape, setRegionShape] = useState<MultiPolygon | null>(null);
+  const regionShapeAbortRef = useRef<AbortController | null>(null);
   const preloadedBackgroundsRef = useRef<Set<string>>(new Set());
   const [graphsPerPage, setGraphsPerPage] = useState(2);
   const prevGraphsPerPageRef = useRef(2);
@@ -1187,6 +1192,7 @@ export default function ExplorerPage({
     setPicked(null);
     setSelectedGeonameidForPanel(null);
     setSelectedRegionId(null);
+    clearRegionShape();
     setSelectedLocation({
       geonameid: 0,
       label: "Global",
@@ -1315,6 +1321,38 @@ export default function ExplorerPage({
     return loadPanel(lat, lon, nextUnit);
   }
 
+  // Drop the outline, and any outline still on its way: a slow response for
+  // the previous region must not draw over whatever was chosen next.
+  function clearRegionShape() {
+    regionShapeAbortRef.current?.abort("superseded");
+    regionShapeAbortRef.current = null;
+    setRegionShape(null);
+  }
+
+  async function loadRegionShape(regionId: string) {
+    clearRegionShape();
+    const controller = new AbortController();
+    regionShapeAbortRef.current = controller;
+    const timeoutId = window.setTimeout(
+      () => controller.abort("timeout"),
+      FETCH_TIMEOUT_MS,
+    );
+    try {
+      const params = new URLSearchParams({ region_id: regionId });
+      const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/regions/shape?${params.toString()}`;
+      const r = await fetch(url, { signal: controller.signal });
+      // No outline is not an error: the panel is complete without one.
+      if (!r.ok) return;
+      const geometry = (await r.json()) as MultiPolygon;
+      if (controller.signal.aborted) return;
+      setRegionShape(geometry);
+    } catch {
+      // Superseded, timed out or offline: carry on without an outline.
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
   async function fetchNearestLocation(nextLat: number, nextLon: number) {
     const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
       nextLon,
@@ -1354,6 +1392,7 @@ export default function ExplorerPage({
     if (item.region_id) {
       setSelectedGeonameidForPanel(null);
       setSelectedRegionId(item.region_id);
+      void loadRegionShape(item.region_id);
       // A sea opens on sea-surface temperature, the reason to look at one.
       void loadRegionPanel(
         item.region_id,
@@ -1363,6 +1402,7 @@ export default function ExplorerPage({
       return;
     }
     setSelectedRegionId(null);
+    clearRegionShape();
     setSelectedGeonameidForPanel(item.geonameid);
     void loadPanel(item.lat, item.lon, unit, item.geonameid);
   }
@@ -1385,6 +1425,7 @@ export default function ExplorerPage({
     setSelectedGeonameidForPanel(null);
     // A click is always a point, even inside a highlighted region.
     setSelectedRegionId(null);
+    clearRegionShape();
 
     // When the panel is closed, wait up to PANEL_OPEN_AWAIT_MS for the API so
     // the panel can open with data already populated rather than flashing a
@@ -1823,6 +1864,8 @@ export default function ExplorerPage({
           panelOpen={panelOpen}
           focusLocation={picked}
           focusBbox={focusBbox}
+          regionShape={regionShape}
+          hideFocusMarker={selectedRegionId !== null}
           showDebugOverlay={debugMode}
           debugBbox={
             debugMode ? (resp?.location.panel_valid_bbox ?? null) : null
