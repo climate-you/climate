@@ -354,6 +354,20 @@ def test_alaska_is_a_state_region_of_its_own() -> None:
     assert results["results"][0]["region_id"] == "state:US-AK"
 
 
+def test_a_sea_with_reefs_has_its_own_coral_heat_stress() -> None:
+    status, panel = _region_panel(create_app(), "ocean:coral_sea")
+    assert status == 200
+    coral = [
+        g
+        for p in panel["panels"]
+        for g in p["panel"]["graphs"]
+        if g["id"] == "dhw_risk_days"
+    ][0]
+    assert coral["series_keys"]
+    keys = {h["key"] for h in panel["headlines"]}
+    assert {"dhw_worst_year_local", "dhw_worst_year_days_local"} <= keys
+
+
 def test_global_panel_carries_no_region_fields() -> None:
     status, panel = asyncio.run(
         _asgi_get_json(

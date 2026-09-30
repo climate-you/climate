@@ -986,6 +986,118 @@ def _layer_overrides_from_manifest(
     return out
 
 
+# The coral graph's step a region's headline describes: days on which at least
+# 10% of its reef cells were under heat stress. The same step the chart opens on
+# (`default_step_id: pct90`), and the one the frontend's sentence names.
+REGION_CORAL_AGGREGATION = "fraction_10pct"
+
+# The phrase in the coral graph's registry text that makes it about the globe; a
+# region panel names the region instead. A test pins it to the registry text.
+_CORAL_GLOBAL_PHRASE = "of coral reef cells globally"
+
+
+def _region_graph_ui(graph: dict, region_phrase: str) -> dict | None:
+    """The graph's ui, its info text reworded from the globe to the region."""
+    ui = graph.get("ui")
+    text = (ui or {}).get("info_text")
+    if not isinstance(text, str) or _CORAL_GLOBAL_PHRASE not in text:
+        return ui
+    return {
+        **ui,
+        "info_text": text.replace(
+            _CORAL_GLOBAL_PHRASE, f"of the coral reef cells in {region_phrase}"
+        ),
+    }
+
+
+def _with_region_coral_texts(
+    headline_spec: dict | None, region_phrase: str
+) -> dict | None:
+    """A region's coral headline counts days over a share of its reefs, so its
+    info bubbles say so instead of describing a single location."""
+    if not headline_spec or headline_spec.get("type") != "coral":
+        return headline_spec
+    pct = REGION_CORAL_AGGREGATION[len("fraction_") : -len("pct")]
+    existing = headline_spec.get("info_bubble_texts") or {}
+    return {
+        **headline_spec,
+        "info_bubble_texts": {
+            **existing,
+            "coral_worst_year": (
+                f"The worst year is the calendar year with the most days on which at "
+                f"least {pct}% of the coral reef cells in {region_phrase} were under "
+                f"moderate (4 ≤ DHW < 8) or severe (DHW ≥ 8) heat stress, in the "
+                f"observed record since 1985."
+            ),
+            "coral_no_days": (
+                f"No day since 1985 has seen at least {pct}% of the coral reef cells "
+                f"in {region_phrase} under moderate (DHW ≥ 4) or severe (DHW ≥ 8) "
+                f"heat stress."
+            ),
+        },
+    }
+
+
+def _compute_coral_region_headlines(
+    *, tile_store: TileDataStore, region_id: str
+) -> list[HeadlinePayload]:
+    """A sea's worst coral heat-stress year, in the point panel's headline keys.
+
+    Days are those on which at least 10% of the sea's reef cells were under
+    moderate or severe stress, summed per year; the frontend's coral headline
+    reads the same keys for a point and for a region, and words the sentence by
+    scope. A sea without reef data gets none, which the frontend explains.
+    """
+    severe = tile_store.aggregates.get(
+        ("dhw_severe_risk_days_per_year", REGION_CORAL_AGGREGATION)
+    )
+    moderate = tile_store.aggregates.get(
+        ("dhw_moderate_risk_days_per_year", REGION_CORAL_AGGREGATION)
+    )
+    if severe is None or moderate is None:
+        return []
+    severe_region = severe["regions"].get(region_id)
+    moderate_region = moderate["regions"].get(region_id)
+    if severe_region is None or moderate_region is None:
+        return []
+    totals = [
+        (int(year), (s or 0) + (m or 0))
+        for year, s, m in zip(
+            severe["time_axis"], severe_region["values"], moderate_region["values"]
+        )
+        if s is not None or m is not None
+    ]
+    if not totals:
+        return []
+    # Ties go to the earliest year, as np.argmax does for a point.
+    worst_year, worst_days = max(totals, key=lambda t: (t[1], -t[0]))
+    return [
+        HeadlinePayload(
+            key="dhw_severe_local",
+            label="Severe coral heat stress data available",
+            value=1.0,
+            unit="flag",
+            baseline="1985",
+        ),
+        HeadlinePayload(
+            key="dhw_worst_year_local",
+            label="Worst coral heat stress year",
+            value=float(worst_year),
+            unit="year",
+            baseline="1985",
+            period=str(worst_year),
+        ),
+        HeadlinePayload(
+            key="dhw_worst_year_days_local",
+            label="Coral heat stress days in worst year",
+            value=float(worst_days),
+            unit="days",
+            baseline="1985",
+            period=str(worst_year),
+        ),
+    ]
+
+
 def _local_graph_ui(graph: dict) -> dict | None:
     ui = graph.get("ui")
     local_info_text = graph.get("local_info_text")
@@ -1876,6 +1988,12 @@ def build_region_panels(
     unit = unit.upper()
     is_globe = region_id == REGION_ID_GLOBE
     panels = panels_manifest.get("panels", {})
+    # "the Coral Sea" in running text, where the title says "Coral Sea".
+    region_phrase = (
+        f"the {region_label}"
+        if place is not None and place.definite_article
+        else region_label
+    )
 
     merged_series: dict[str, SeriesPayload] = {}
     scored_panels: list[ScoredPanelPayload] = []
@@ -1983,12 +2101,21 @@ def build_region_panels(
                 if filtered_steps:
                     out_animation = {**animation_spec, "steps": filtered_steps}
 
+            headline = _with_coral_info_bubble(graph.get("headline"), tile_store)
             graphs_out.append(
                 GraphPayload(
                     id=graph.get("id", ""),
                     title=graph.get("title", ""),
-                    headline=_with_coral_info_bubble(graph.get("headline"), tile_store),
-                    ui=graph.get("ui"),
+                    headline=(
+                        headline
+                        if is_globe
+                        else _with_region_coral_texts(headline, region_phrase)
+                    ),
+                    ui=(
+                        graph.get("ui")
+                        if is_globe
+                        else _region_graph_ui(graph, region_phrase)
+                    ),
                     series_keys=graph_series_keys,
                     caption=None,
                     error=graph_error,
@@ -2096,6 +2223,9 @@ def build_region_panels(
     ]
 
     if not is_globe:
+        headlines.extend(
+            _compute_coral_region_headlines(tile_store=tile_store, region_id=region_id)
+        )
         # The globe panel has no precipitation headline on purpose — a global
         # mean rainfall trend says little, and the frontend shows a fixed
         # "unavailable globally" note in its place. A country or sea is a scale
@@ -2129,12 +2259,14 @@ def build_region_panels(
 def _region_record(tile_store: TileDataStore, region_id: str) -> dict[str, Any] | None:
     """A region's metadata record — name, type, cell count — from any metric.
 
-    Every aggregate file records the same name and footprint for a given
-    region, so the first metric that mentions it answers for all of them.
+    Every mean aggregate records the same name and footprint for a given
+    region, so the first metric that mentions it answers for all of them. The
+    coral heat-stress files are skipped: they count 0.05° reef cells
+    (`reef_cell_count`), not the 0.25° cells behind the region's means.
     """
     for agg in tile_store.aggregates.values():
         record = (agg.get("regions") or {}).get(region_id)
-        if record:
+        if record and record.get("cell_count") is not None:
             return record
     return None
 

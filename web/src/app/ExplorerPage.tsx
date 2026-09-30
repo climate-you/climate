@@ -880,9 +880,12 @@ export default function ExplorerPage({
             type: "coral_worst_year",
             days: worstDaysVal,
             year: worstYearVal,
+            // A region counts days on which at least 10% of its reefs were
+            // stressed (the chart's default step), not days at one reef.
+            overReefShare: isAggregate,
           } as const;
         }
-        return { type: "coral_no_days" } as const;
+        return { type: "coral_no_days", overReefShare: isAggregate } as const;
       }
       default:
         return null;
@@ -2294,23 +2297,49 @@ export default function ExplorerPage({
                           {withArticle("In")}
                         </span>{" "}
                         {sentenceLocationName},{" "}
-                        <span className={styles.panelTitleSmall}>
-                          {Math.round(panelHeadline.days) === 1
-                            ? "there was "
-                            : "there were "}
-                        </span>
-                        <span className={styles.panelTitleTempAccent}>
-                          {Math.round(panelHeadline.days)}
-                        </span>{" "}
-                        <span className={styles.panelTitleTempAccent}>
-                          {Math.round(panelHeadline.days) === 1
-                            ? "day"
-                            : "days"}
-                        </span>
-                        <span className={styles.panelTitleSmall}>
-                          {" "}
-                          of coral heat stress in{" "}
-                        </span>
+                        {panelHeadline.overReefShare ? (
+                          <>
+                            <span className={styles.panelTitleSmall}>
+                              at least{" "}
+                            </span>
+                            <span className={styles.panelTitleTempAccent}>
+                              10%
+                            </span>
+                            <span className={styles.panelTitleSmall}>
+                              {" "}
+                              of reefs were under heat stress on{" "}
+                            </span>
+                            <span className={styles.panelTitleTempAccent}>
+                              {Math.round(panelHeadline.days)}
+                            </span>{" "}
+                            <span className={styles.panelTitleTempAccent}>
+                              {Math.round(panelHeadline.days) === 1
+                                ? "day"
+                                : "days"}
+                            </span>
+                            <span className={styles.panelTitleSmall}> of </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className={styles.panelTitleSmall}>
+                              {Math.round(panelHeadline.days) === 1
+                                ? "there was "
+                                : "there were "}
+                            </span>
+                            <span className={styles.panelTitleTempAccent}>
+                              {Math.round(panelHeadline.days)}
+                            </span>{" "}
+                            <span className={styles.panelTitleTempAccent}>
+                              {Math.round(panelHeadline.days) === 1
+                                ? "day"
+                                : "days"}
+                            </span>
+                            <span className={styles.panelTitleSmall}>
+                              {" "}
+                              of coral heat stress in{" "}
+                            </span>
+                          </>
+                        )}
                         <span className={styles.panelTitleTempAccent}>
                           {panelHeadline.year}
                         </span>
@@ -2325,8 +2354,9 @@ export default function ExplorerPage({
                         </span>{" "}
                         {sentenceLocationName},{" "}
                         <span className={styles.panelTitleSmall}>
-                          no days of coral heat stress have been recorded since
-                          1985.
+                          {panelHeadline.overReefShare
+                            ? "heat stress has not reached 10% of reefs on any day since 1985."
+                            : "no days of coral heat stress have been recorded since 1985."}
                         </span>
                       </>
                     ) : panelHeadline?.type === "sst_unavailable" ? (
