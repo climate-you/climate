@@ -184,6 +184,7 @@ CONTINENT_TO_CC: dict[str, frozenset[str]] = {
             "AI",
             "AW",
             "BB",
+            "BQ",
             "BL",
             "BM",
             "BS",

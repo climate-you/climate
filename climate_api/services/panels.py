@@ -29,6 +29,7 @@ from ..schemas import (
 from ..store.place_resolver import PlaceResolver
 from ..store.tile_data_store import TileDataStore
 from climate.datasets.derive.series import rolling_mean_centered, linear_trend_line
+from climate.geo.country_parts import REGION_NOTES
 from climate.geo.regions import REGION_ID_GLOBE
 from climate.datasets.derive.units import c_to_f
 from climate.registry.panels import DEFAULT_PANELS_PATH, load_panels
@@ -2043,6 +2044,7 @@ def build_region_panels(
         region_cell_count=(
             None if is_globe else _region_cell_count(tile_store, region_id)
         ),
+        region_note=None if is_globe else REGION_NOTES.get(region_id),
     )
 
     headlines = [

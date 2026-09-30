@@ -68,6 +68,9 @@ class LocationInfo(BaseModel):
     # provenance line under the region's name.
     region_id: Optional[str] = None
     region_cell_count: Optional[int] = None
+    # What the region's figures cover where that is not the obvious whole:
+    # "Metropolitan France and Corsica. French Guiana, … have their own entries."
+    region_note: Optional[str] = None
 
 
 class PanelResponse(BaseModel):

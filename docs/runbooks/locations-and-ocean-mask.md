@@ -64,6 +64,17 @@ Every area entry carries a `bbox` column (`west,south,east,north`) that the map 
 
 A country's point is Natural Earth's hand-placed `LABEL_X`/`LABEL_Y`, and its box covers only its largest landmass, so France frames the mainland rather than stretching to French Guiana.
 
+### Parts split from their country
+
+Some countries' Natural Earth polygons include territory far from the mainland: French Guiana was 13% of France's average, Alaska 15% of the US's, Svalbard 16% of Norway's. These parts are split off into regions of their own (`climate/geo/country_parts.py`), in the country mask, the search index, the aggregates and the outlines alike:
+
+- Natural Earth admin_0 **map units** carrying an ISO 3166-1 code different from their country's: French Guiana, Guadeloupe, Martinique, Réunion, Mayotte, Svalbard (with Jan Mayen), the Caribbean Netherlands, Tokelau, Christmas Island and the Cocos Islands. The rule picks them, not a list; GeoNames already files their towns under the same codes.
+- Named **subdivisions** from Natural Earth admin-1: Alaska (`US-AK`) and Hawaii (`US-HI`), with region ids `state:US-AK`, `state:US-HI` and kind `state` in the index.
+
+They are burned over their country in `country_mask.npz`, so `country_codes.json` gains codes including `US-AK`; the API's country classifier reports a subdivision as its country, since towns are filed by country. Split parts take index ids from their own block (from 2,300,000,000) so existing country ids do not shift. Countries whose remaining far parts are small (the Azores, the Canaries, the Galápagos) keep them, and their region panel says so (`REGION_NOTES`).
+
+The map units and admin-1 files (`ne_50m_admin_0_map_units.zip`, `ne_50m_admin_1_states_provinces.zip`) are downloaded to the country cache directory on first use.
+
 You can override the polygon sources with:
 
 - `--marine-input` (local GeoJSON/Shapefile/zip), `--marine-source`, `--marine-cache-dir`, `--marine-name-field`
@@ -120,7 +131,9 @@ The file is optional at runtime: without it the API logs a warning and region pa
 
 ## Deploying
 
-The deploy script does not ship `data/locations/`. After rebuilding any of these artifacts, copy the changed files to the server's `data/locations/` by hand and restart the API — in particular `locations.index.csv` (it carries the `region_id` column) and `region_shapes.json`. The overlay mask is only read at build time and need not be copied.
+The deploy script does not ship `data/locations/`. After rebuilding any of these artifacts, copy the changed files to the server's `data/locations/` by hand and restart the API — in particular `locations.index.csv` (it carries the `region_id` column), `region_shapes.json`, and `country_mask.npz` with `country_codes.json`. The overlay mask is only read at build time and need not be copied.
+
+Copy the country mask only together with code that knows about split parts: older code would see `US-AK` as a country with no towns and label clicks in Alaska with the fallback name instead of the nearest town.
 
 ## Notes
 

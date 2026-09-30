@@ -15,6 +15,7 @@ from climate_api.store.sovereignty import is_sovereign
 KIND_CITY = "city"
 
 KIND_COUNTRY = "country"
+KIND_STATE = "state"
 
 # Autocomplete match ranks, best first. See `LocationIndex._match_rank`.
 _RANK_AREA_NAMED = 0
@@ -289,11 +290,12 @@ class LocationIndex:
         its largest city: its own population would put it above almost every
         city sharing its first letters — Paraguay above Paris for "par",
         Madagascar above Madrid for "mad" — while zero would drop it out of the
-        list entirely. Seas and lakes have no population to borrow, and are
-        found by naming them.
+        list entirely. A state (Alaska) carries its largest town's population,
+        set at build time, where towns' states are known. Seas and lakes have
+        no population to borrow, and are found by naming them.
         """
         kind = self._kinds[i]
-        if kind == KIND_CITY:
+        if kind in (KIND_CITY, KIND_STATE):
             return self._populations[i]
         if kind == KIND_COUNTRY:
             return self._largest_city_population.get(self._country_codes[i], 0)

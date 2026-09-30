@@ -325,6 +325,35 @@ def test_the_great_barrier_reef_is_a_region_of_its_own() -> None:
     assert status == 200
 
 
+def test_france_is_the_metropole_and_its_overseas_parts_are_regions() -> None:
+    app = create_app()
+    status, france = _region_panel(app, "country:FR")
+    assert status == 200
+    assert "French Guiana" in france["location"]["region_note"]
+    status, guiana = _region_panel(app, "country:GF")
+    assert status == 200
+    assert guiana["location"]["region_note"] is None
+    assert guiana["location"]["region_cell_count"] > 0
+
+
+def test_alaska_is_a_state_region_of_its_own() -> None:
+    app = create_app()
+    status, alaska = _region_panel(app, "state:US-AK")
+    assert status == 200
+    assert alaska["location"]["place"]["label"] == "Alaska"
+    status, _ = _region_shape(app, "state:US-AK")
+    assert status == 200
+    status, results = asyncio.run(
+        _asgi_get_json(
+            app,
+            f"/api/v/{API_E2E_RELEASE}/locations/autocomplete",
+            {"q": "alaska", "limit": 1},
+        )
+    )
+    assert status == 200
+    assert results["results"][0]["region_id"] == "state:US-AK"
+
+
 def test_global_panel_carries_no_region_fields() -> None:
     status, panel = asyncio.run(
         _asgi_get_json(

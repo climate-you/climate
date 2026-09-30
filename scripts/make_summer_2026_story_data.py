@@ -366,7 +366,8 @@ def continent_land_areas() -> dict[str, float]:
     lut = np.zeros(int(mask.max()) + 1, dtype=np.uint8)
     for uid, code in codes.items():
         for i, cont in enumerate(names, start=1):
-            if code in CONTINENT_TO_CC[cont] and uid < lut.size:
+            # Alaska ("US-AK") counts towards North America as the US does.
+            if code.split("-")[0] in CONTINENT_TO_CC[cont] and uid < lut.size:
                 lut[uid] = i
     grid = GridSpec.global_0p25()
     k = int(round(grid.deg / mask_deg))

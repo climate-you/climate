@@ -13,6 +13,7 @@ from __future__ import annotations
 import unicodedata
 
 REGION_KIND_COUNTRY = "country"
+REGION_KIND_STATE = "state"
 REGION_KIND_OCEAN = "ocean"
 REGION_KIND_CONTINENT = "continent"
 
@@ -29,6 +30,17 @@ def slugify_region_name(name: str) -> str:
 def country_region_id(country_code: str) -> str:
     """Region id for an ISO 3166-1 alpha-2 country code, e.g. FR → country:FR."""
     return f"{REGION_KIND_COUNTRY}:{country_code.strip().upper()}"
+
+
+def state_region_id(code: str) -> str:
+    """Region id for an ISO 3166-2 subdivision code, e.g. US-AK → state:US-AK."""
+    return f"{REGION_KIND_STATE}:{code.strip().upper()}"
+
+
+def country_mask_region_id(code: str) -> str:
+    """Region id for a country-mask code: a country, or a subdivision split from
+    one (see climate.geo.country_parts), told apart by the ISO 3166-2 hyphen."""
+    return state_region_id(code) if "-" in code else country_region_id(code)
 
 
 def ocean_region_id(name: str) -> str:

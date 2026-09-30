@@ -6,6 +6,8 @@ import math
 
 import numpy as np
 
+from climate.geo.country_parts import parent_country_code
+
 
 class CountryClassifier:
     """
@@ -52,7 +54,12 @@ class CountryClassifier:
                         continue
 
     def classify(self, lat: float, lon: float) -> str | None:
-        """Return ISO 3166-1 alpha-2 country code, or None if ocean/unknown."""
+        """Return ISO 3166-1 alpha-2 country code, or None if ocean/unknown.
+
+        A subdivision split from its country in the mask (Alaska, "US-AK") is
+        reported as that country: towns are filed by country, so looking for
+        the nearest "US-AK" town would find none.
+        """
         lat_f = float(lat)
         lon_f = float(lon)
 
@@ -69,4 +76,5 @@ class CountryClassifier:
         if country_id <= 0:
             return None
 
-        return self._codes.get(country_id)
+        code = self._codes.get(country_id)
+        return parent_country_code(code) if code else code

@@ -316,6 +316,22 @@ def test_a_country_ranks_by_its_largest_city_not_its_own_population(
     assert "Paraguay" in labels
 
 
+def test_a_state_ranks_by_its_largest_town(tmp_path: Path) -> None:
+    # The build gives a state entry its largest town's population (Anchorage,
+    # 290k); ranked at zero, Alaska would sink below every "Ala…" town.
+    index_csv = tmp_path / "locations.index.csv"
+    index_csv.write_text(
+        "geonameid,label,lat,lon,country_code,population,norm_label,norm_city,"
+        "city_name,kind\n"
+        '1,"Alassio, Italy",0,0,IT,11000,alassio italy,alassio,Alassio,city\n'
+        '2,"Alaşehir, Turkey",0,0,TR,50000,alasehir turkey,alasehir,Alaşehir,city\n'
+        "2300000009,Alaska,0,0,US,289600,alaska,alaska,Alaska,state\n",
+        encoding="utf-8",
+    )
+    index = LocationIndex(index_csv, min_query_len=3, prefix_len=3)
+    assert _labels(index, "alas")[0] == "Alaska"
+
+
 def _write_index_with_namesake_waters(path: Path) -> None:
     path.write_text(
         "geonameid,label,lat,lon,country_code,population,norm_label,norm_city,"

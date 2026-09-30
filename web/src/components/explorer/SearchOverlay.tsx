@@ -25,6 +25,7 @@ export type AutocompleteItem = {
 
 const KIND_LABELS: Record<string, string> = {
   country: "Country",
+  state: "State",
   marine: "Sea",
   lake: "Lake",
 };

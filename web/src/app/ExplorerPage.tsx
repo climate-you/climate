@@ -219,6 +219,9 @@ type PanelResponse = {
     // country or sea, computed over `region_cell_count` grid cells.
     region_id?: string | null;
     region_cell_count?: number | null;
+    // What the region covers where that is not the obvious whole, e.g.
+    // "Metropolitan France and Corsica. French Guiana, … have their own entries."
+    region_note?: string | null;
   };
   panels: Array<{
     score: number;
@@ -1838,7 +1841,9 @@ export default function ExplorerPage({
     if (typeof cells !== "number") return null;
     const scope = regionId.startsWith("ocean:")
       ? "Sea average"
-      : "Country average";
+      : regionId.startsWith("state:")
+        ? "State average"
+        : "Country average";
     return `${scope} · ${new Intl.NumberFormat("en-US").format(cells)} cells`;
   })();
   const debugBbox = resp?.location?.panel_valid_bbox ?? null;
@@ -2396,7 +2401,15 @@ export default function ExplorerPage({
                   </h2>
                 </div>
                 {regionSubtitle ? (
-                  <p className={styles.panelPopulation}>{regionSubtitle}</p>
+                  <p className={styles.panelPopulation}>
+                    {regionSubtitle}
+                    {resp?.location.region_note ? (
+                      <>
+                        <br />
+                        {resp.location.region_note}
+                      </>
+                    ) : null}
+                  </p>
                 ) : populationText ? (
                   <p className={styles.panelPopulation}>
                     Population: {populationText}

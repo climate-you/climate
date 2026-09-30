@@ -26,9 +26,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from climate.geo.continents import CONTINENT_TO_CC
+from climate.geo.country_parts import SUBDIVISIONS, is_subdivision, parent_country_code
 from climate.geo.regions import (
     continent_region_id,
-    country_region_id,
+    country_mask_region_id,
     ocean_region_id,
 )
 from climate.registry.metrics import load_metrics
@@ -529,7 +530,8 @@ def precompute_aggregates(
             for cont_name, cc_set in CONTINENT_TO_CC.items():
                 cont_frac = np.zeros((grid.nlat, grid.nlon), dtype=np.float32)
                 for uid, code in country_id_to_code.items():
-                    if code in cc_set and uid in country_weights:
+                    # Alaska counts towards North America as the US does.
+                    if parent_country_code(code) in cc_set and uid in country_weights:
                         cont_frac += country_weights[uid]
                 cont_frac = np.clip(cont_frac, 0.0, 1.0)
                 if np.any(cont_frac > 0):
@@ -547,11 +549,12 @@ def precompute_aggregates(
             code = country_id_to_code.get(uid)
             if code is None:
                 continue
-            key = country_region_id(code)
+            # A country, or a subdivision split from one (Alaska, US-AK).
+            key = country_mask_region_id(code)
             named_regions.append((key, frac))
             region_meta[key] = {
-                "name": country_code_to_name.get(code, code),
-                "type": "country",
+                "name": country_code_to_name.get(code) or SUBDIVISIONS.get(code, code),
+                "type": "state" if is_subdivision(code) else "country",
                 "cell_count": int(np.sum(frac > 0)),
             }
 

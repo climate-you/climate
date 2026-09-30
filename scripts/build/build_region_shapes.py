@@ -38,7 +38,7 @@ from scipy.ndimage import find_objects
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from climate.geo.regions import country_region_id, ocean_region_id  # noqa: E402
+from climate.geo.regions import country_mask_region_id, ocean_region_id  # noqa: E402
 
 LOCATIONS = REPO_ROOT / "data" / "locations"
 
@@ -102,7 +102,7 @@ def polygonise_regions(
 
 def _country_region_ids(codes_json: Path) -> dict[int, str]:
     codes = json.loads(codes_json.read_text(encoding="utf-8"))
-    return {int(k): country_region_id(v) for k, v in codes.items() if v}
+    return {int(k): country_mask_region_id(v) for k, v in codes.items() if v}
 
 
 def _ocean_region_ids(names_json: Path) -> dict[int, str]:
