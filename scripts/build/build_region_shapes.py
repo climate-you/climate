@@ -118,23 +118,32 @@ def main() -> None:
     )
     ap.add_argument("--ocean-mask", type=Path, default=LOCATIONS / "ocean_mask.npz")
     ap.add_argument("--ocean-names", type=Path, default=LOCATIONS / "ocean_names.json")
+    ap.add_argument(
+        "--ocean-overlay-mask",
+        type=Path,
+        default=LOCATIONS / "ocean_overlay_mask.npz",
+        help="Seas lying inside another sea (the Great Barrier Reef); skipped if absent",
+    )
     ap.add_argument("--out", type=Path, default=LOCATIONS / "region_shapes.json")
     args = ap.parse_args()
 
-    shapes_by_region: dict[str, dict[str, Any]] = {}
-    for mask_path, region_ids in (
+    ocean_region_ids = _ocean_region_ids(args.ocean_names)
+    masks = [
         (args.country_mask, _country_region_ids(args.country_codes)),
-        (args.ocean_mask, _ocean_region_ids(args.ocean_names)),
-    ):
+        (args.ocean_mask, ocean_region_ids),
+    ]
+    # Last, so an overlay sea's full extent replaces whatever the partition
+    # left it — the same precedence the aggregates give it.
+    if args.ocean_overlay_mask.exists():
+        masks.append((args.ocean_overlay_mask, ocean_region_ids))
+
+    shapes_by_region: dict[str, dict[str, Any]] = {}
+    for mask_path, region_ids in masks:
         mask, deg, lat_max, lon_min = _load_mask(mask_path)
         found = polygonise_regions(
             mask, deg=deg, lat_max=lat_max, lon_min=lon_min, region_ids=region_ids
         )
-        print(
-            f"[ok] {mask_path.name}: {len(found)} regions outlined "
-            f"({len(region_ids) - len(found)} named but with no cells)",
-            file=sys.stderr,
-        )
+        print(f"[ok] {mask_path.name}: {len(found)} regions outlined", file=sys.stderr)
         shapes_by_region.update(found)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

@@ -42,6 +42,9 @@ _DEFAULT_COUNTRY_CODES = REPO_ROOT / "data" / "locations" / "country_codes.json"
 _DEFAULT_COUNTRY_NAMES = REPO_ROOT / "data" / "locations" / "country_names.json"
 _DEFAULT_OCEAN_MASK = REPO_ROOT / "data" / "locations" / "ocean_mask.npz"
 _DEFAULT_OCEAN_NAMES = REPO_ROOT / "data" / "locations" / "ocean_names.json"
+_DEFAULT_OCEAN_OVERLAY_MASK = (
+    REPO_ROOT / "data" / "locations" / "ocean_overlay_mask.npz"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +329,7 @@ def precompute_aggregates(
     country_names_path: Path,
     ocean_mask_path: Path,
     ocean_names_path: Path,
+    ocean_overlay_mask_path: Path | None = None,
 ) -> int:
     releases_root = Path(releases_root)
     series_root = releases_root / release / "series"
@@ -359,6 +363,26 @@ def precompute_aggregates(
         for k, v in json.loads(ocean_names_path.read_text(encoding="utf-8")).items():
             ocean_id_to_name[int(k)] = str(v)
     print(f" {len(ocean_id_to_name)} ocean regions")
+
+    # Seas lying inside another sea (the Great Barrier Reef inside the Coral
+    # Sea), which the partition mask erases. Same ids as the ocean mask; each
+    # replaces its partition footprint with its full extent, so a cell counts
+    # towards both the reef and the Coral Sea — which is physically true.
+    ocean_overlay_mask: np.ndarray | None = None
+    if ocean_overlay_mask_path is not None and ocean_overlay_mask_path.exists():
+        ocean_overlay_mask, overlay_deg = _load_npz_mask(ocean_overlay_mask_path)
+        if overlay_deg != ocean_mask_deg:
+            print(
+                f"ERROR: overlay mask deg={overlay_deg} differs from ocean mask "
+                f"deg={ocean_mask_deg}",
+                file=sys.stderr,
+            )
+            return 1
+        overlay_ids = np.unique(ocean_overlay_mask)
+        print(
+            "[aggregates] ocean overlay regions:",
+            ", ".join(ocean_id_to_name.get(int(i), str(i)) for i in overlay_ids if i),
+        )
 
     # -----------------------------------------------------------------
     # Iterate metrics
@@ -494,6 +518,10 @@ def precompute_aggregates(
         ocean_weights: dict[int, np.ndarray] = {}
         if domain in ("global", "ocean"):
             ocean_weights = _build_fractional_weights(ocean_mask, ocean_mask_deg, grid)
+            if ocean_overlay_mask is not None:
+                ocean_weights.update(
+                    _build_fractional_weights(ocean_overlay_mask, ocean_mask_deg, grid)
+                )
 
         # Continent weights: union of country cell fractions
         continent_weights: dict[str, np.ndarray] = {}
@@ -677,6 +705,15 @@ def main() -> int:
         default=_DEFAULT_OCEAN_NAMES,
         help=f"Ocean names JSON (default: {_DEFAULT_OCEAN_NAMES})",
     )
+    ap.add_argument(
+        "--ocean-overlay-mask",
+        type=Path,
+        default=_DEFAULT_OCEAN_OVERLAY_MASK,
+        help=(
+            "Overlay NPZ of seas lying inside another sea; skipped if absent "
+            f"(default: {_DEFAULT_OCEAN_OVERLAY_MASK})"
+        ),
+    )
     args = ap.parse_args()
 
     return precompute_aggregates(
@@ -689,6 +726,7 @@ def main() -> int:
         country_names_path=args.country_names,
         ocean_mask_path=args.ocean_mask,
         ocean_names_path=args.ocean_names,
+        ocean_overlay_mask_path=args.ocean_overlay_mask,
     )
 
 

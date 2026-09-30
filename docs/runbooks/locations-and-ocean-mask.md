@@ -96,6 +96,11 @@ Primary outputs:
 
 - `data/locations/ocean_mask.npz` (grid mask used to identify oceanic coordinates)
 - `data/locations/ocean_names.json` (mapping used by `PlaceResolver` to return readable sea/ocean names)
+- `data/locations/ocean_overlay_mask.npz` (seas lying *inside* another sea, same ids as the ocean mask; build-time only)
+
+The ocean mask is a partition: each cell belongs to exactly one sea, the last one burned, so a sea wholly inside another is erased by it. The only real case is the Great Barrier Reef, which the Coral Sea covers entirely. Features whose Natural Earth `featurecla` is `reef` are therefore also burned into the overlay mask, where they keep their full extent. The partition itself is unchanged, so point lookups inside the reef still say "Coral Sea"; the overlay is read only by the regional aggregates and the region outlines below, which count a reef cell towards both seas.
+
+The existing mask was built at 0.05°; pass `--deg 0.05` to reproduce it (the script's default is 0.25°).
 
 ## Build region outlines
 
@@ -103,9 +108,9 @@ Primary outputs:
 python scripts/build/build_region_shapes.py
 ```
 
-Polygonises the two masks above into one outline per country and sea, which the explorer draws over a region selected from search. It reads the masks, so run it **after** `build_locations.py --write-country-mask` and `build_ocean_mask.py` whenever either mask is rebuilt.
+Polygonises the masks above (country, ocean and ocean overlay) into one outline per country and sea, which the explorer draws over a region selected from search. It reads the masks, so run it **after** `build_locations.py --write-country-mask` and `build_ocean_mask.py` whenever either mask is rebuilt. `scripts/precompute_regional_aggregates.py` reads the same masks, so rerun it too (see `dataset-cache-and-packaging.md`) and publish a release: a region only gets a panel when the release has its aggregate.
 
-The outline is the mask itself, cell edge for cell edge, not the Natural Earth polygon it was rasterised from, so it shows exactly the area the region's average is computed over. A region with no mask cells (the Great Barrier Reef, erased by the overlapping Coral Sea) gets no outline, just as it gets no average.
+The outline is the mask itself, cell edge for cell edge, not the Natural Earth polygon it was rasterised from, so it shows exactly the area the region's average is computed over. A region with no mask cells (the Drake Passage, which Natural Earth carries as a label with no extent) gets no outline, just as it gets no average.
 
 Primary output:
 
@@ -115,7 +120,7 @@ The file is optional at runtime: without it the API logs a warning and region pa
 
 ## Deploying
 
-The deploy script does not ship `data/locations/`. After rebuilding any of these artifacts, copy the changed files to the server's `data/locations/` by hand and restart the API — in particular `locations.index.csv` (it carries the `region_id` column) and `region_shapes.json`.
+The deploy script does not ship `data/locations/`. After rebuilding any of these artifacts, copy the changed files to the server's `data/locations/` by hand and restart the API — in particular `locations.index.csv` (it carries the `region_id` column) and `region_shapes.json`. The overlay mask is only read at build time and need not be copied.
 
 ## Notes
 

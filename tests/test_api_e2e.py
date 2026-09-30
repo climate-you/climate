@@ -293,9 +293,10 @@ def test_sea_region_panel_includes_sea_temperature() -> None:
         # Aggregates exist, but nothing in search can select them.
         "continent:europe",
         "globe",
-        # Searchable, but too small or erased in the mask, so no aggregate.
+        # Searchable, but too small for the mask, or with no extent in the
+        # source data at all, so no aggregate.
         "country:MC",
-        "ocean:great_barrier_reef",
+        "ocean:drake_passage",
         # Not a region at all.
         "country:ZZ",
         "../../etc/passwd",
@@ -304,6 +305,24 @@ def test_sea_region_panel_includes_sea_temperature() -> None:
 def test_region_panel_refuses_anything_search_cannot_select(region_id: str) -> None:
     status, _ = _region_panel(create_app(), region_id)
     assert status == 404
+
+
+def test_the_great_barrier_reef_is_a_region_of_its_own() -> None:
+    # It lies inside the Coral Sea, which erases it from the partition mask; the
+    # overlay mask brings it back without taking any cells from the Coral Sea.
+    app = create_app()
+    status, reef = _region_panel(app, "ocean:great_barrier_reef")
+    assert status == 200
+    assert "sea_temperature" in {p["panel"]["id"] for p in reef["panels"]}
+    status, coral_sea = _region_panel(app, "ocean:coral_sea")
+    assert status == 200
+    assert (
+        coral_sea["location"]["region_cell_count"]
+        > reef["location"]["region_cell_count"]
+        > 0
+    )
+    status, _ = _region_shape(app, "ocean:great_barrier_reef")
+    assert status == 200
 
 
 def test_global_panel_carries_no_region_fields() -> None:
@@ -340,7 +359,7 @@ def test_a_selectable_region_has_an_outline() -> None:
         "continent:europe",
         "globe",
         "country:MC",
-        "ocean:great_barrier_reef",
+        "ocean:drake_passage",
         "../../etc/passwd",
     ],
 )

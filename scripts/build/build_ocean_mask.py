@@ -10,6 +10,8 @@ Output files:
       lon_min: western bound (typically -180.0)
   - JSON name map:
       {"1": "Pacific Ocean", "2": "Atlantic Ocean", ...}
+  - an overlay NPZ, same layout and ocean ids, holding the regions that lie
+    *inside* another sea rather than beside it (see OVERLAY_FEATURECLA)
 
 Input data should be ocean polygons (GeoJSON/Shapefile/etc.).
 """
@@ -28,13 +30,22 @@ from climate.geo.marine import (
     normalize_marine_name,
 )
 
+# Natural Earth feature classes that sit on top of another sea instead of
+# beside it. The main mask is a partition — each cell belongs to one sea, the
+# last burned — so a region wholly inside another is erased by it: the Coral
+# Sea, burned later, claims every cell of the Great Barrier Reef. These are
+# burned into a separate overlay mask instead, so the reef keeps its full
+# extent while the Coral Sea keeps all of its cells too.
+OVERLAY_FEATURECLA = frozenset({"reef"})
+
 
 def _load_ocean_shapes(
     input_path: Path | str,
     *,
     name_field: str,
     id_field: str | None,
-) -> tuple[list[tuple[dict, int]], dict[int, str]]:
+) -> tuple[list[tuple[dict, int]], list[tuple[dict, int]], dict[int, str]]:
+    """Returns (partition shapes, overlay shapes, id -> name), ids shared."""
     try:
         import fiona
     except Exception as exc:
@@ -43,6 +54,7 @@ def _load_ocean_shapes(
         ) from exc
 
     shapes: list[tuple[dict, int]] = []
+    overlay_shapes: list[tuple[dict, int]] = []
     id_to_name: dict[int, str] = {}
     name_to_id: dict[str, int] = {}
     next_id = 1
@@ -74,7 +86,11 @@ def _load_ocean_shapes(
                     next_id += 1
                     name_to_id[name] = ocean_id
 
+            # Overlay features stay in the partition too, as they always were,
+            # so the main mask — and every sea's footprint — is unchanged.
             shapes.append((geom, ocean_id))
+            if props.get("featurecla") in OVERLAY_FEATURECLA:
+                overlay_shapes.append((geom, ocean_id))
             if ocean_id not in id_to_name:
                 id_to_name[ocean_id] = name
 
@@ -84,7 +100,7 @@ def _load_ocean_shapes(
             f"Check --name-field and optional --id-field."
         )
 
-    return shapes, id_to_name
+    return shapes, overlay_shapes, id_to_name
 
 
 def _download_file(url: str, out_path: Path) -> Path:
@@ -142,6 +158,7 @@ def build_mask(
     input_path: Path,
     output_npz: Path,
     output_names_json: Path,
+    output_overlay_npz: Path,
     deg: float,
     name_field: str,
     id_field: str | None,
@@ -167,7 +184,7 @@ def build_mask(
     else:
         read_path = input_resolved
 
-    shapes, id_to_name = _load_ocean_shapes(
+    shapes, overlay_shapes, id_to_name = _load_ocean_shapes(
         read_path,
         name_field=name_field,
         id_field=id_field,
@@ -186,14 +203,24 @@ def build_mask(
         all_touched=False,
     )
 
-    output_npz.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        output_npz,
-        data=mask.astype(np.int32, copy=False),
-        deg=np.float64(deg),
-        lat_max=np.float64(lat_max),
-        lon_min=np.float64(lon_min),
+    overlay = rasterize(
+        shapes=overlay_shapes,
+        out_shape=(nlat, nlon),
+        transform=transform,
+        fill=0,
+        dtype="int32",
+        all_touched=False,
     )
+
+    for path, data in ((output_npz, mask), (output_overlay_npz, overlay)):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(
+            path,
+            data=data.astype(np.int32, copy=False),
+            deg=np.float64(deg),
+            lat_max=np.float64(lat_max),
+            lon_min=np.float64(lon_min),
+        )
 
     output_names_json.parent.mkdir(parents=True, exist_ok=True)
     names_payload = {str(k): v for k, v in sorted(id_to_name.items())}
@@ -204,6 +231,8 @@ def build_mask(
 
     print(f"[ok] wrote mask: {output_npz} shape={mask.shape} deg={deg}")
     print(f"[ok] wrote names: {output_names_json} oceans={len(id_to_name)}")
+    overlay_names = sorted(id_to_name[i] for i in np.unique(overlay) if i > 0)
+    print(f"[ok] wrote overlay mask: {output_overlay_npz} regions={overlay_names}")
 
 
 def main() -> None:
@@ -240,6 +269,12 @@ def main() -> None:
         help='Output ocean names JSON (default: "data/locations/ocean_names.json").',
     )
     ap.add_argument(
+        "--output-overlay-npz",
+        type=Path,
+        default=Path("data/locations/ocean_overlay_mask.npz"),
+        help='Output overlay NPZ path (default: "data/locations/ocean_overlay_mask.npz").',
+    )
+    ap.add_argument(
         "--deg",
         type=float,
         default=0.25,
@@ -269,6 +304,7 @@ def main() -> None:
         input_path=input_path,
         output_npz=args.output_npz,
         output_names_json=args.output_names,
+        output_overlay_npz=args.output_overlay_npz,
         deg=float(args.deg),
         name_field=args.name_field,
         id_field=args.id_field,

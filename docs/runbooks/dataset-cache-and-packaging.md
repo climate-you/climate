@@ -216,7 +216,7 @@ After rankings are generated, run this script to generate precomputed regional a
 python scripts/precompute_regional_aggregates.py --release dev
 ```
 
-This loads the full metric tile grid into memory (~200 MB for a global 0.25° metric), builds fractional region weights from the country and ocean masks, then computes area-weighted mean and min/max time series for each country, continent, ocean, and the globe. Outputs one JSON file per aggregation under each metric's `aggregates/` folder. The API loads these at startup and uses them as a fast path for the chat `get_region_metric_series` tool.
+This loads the full metric tile grid into memory (~200 MB for a global 0.25° metric), builds fractional region weights from the country and ocean masks (plus the ocean overlay mask, which gives the Great Barrier Reef its own aggregate without taking cells from the Coral Sea — see `locations-and-ocean-mask.md`), then computes area-weighted mean and min/max time series for each country, continent, ocean, and the globe. Outputs one JSON file per aggregation under each metric's `aggregates/` folder. The API loads these at startup and uses them as a fast path for the chat `get_region_metric_series` tool.
 
 To regenerate aggregates for a specific metric only:
 
