@@ -112,9 +112,46 @@ export function regionOutline(
 }
 
 /**
+ * A point strictly inside a counter-clockwise ring: a hair to the left of its
+ * first edge, and a little off that edge's midpoint. The rings trace 0.05° grid
+ * cells, so their vertices and edges sit on grid lines; the offsets keep the
+ * point off every one of them, where a containment test would be ambiguous.
+ */
+function interiorPoint(ring: Ring): Position {
+  const [x1, y1] = ring[0];
+  const [x2, y2] = ring[1];
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.hypot(dx, dy) || 1;
+  const along = 0.5003;
+  const inward = 1e-5 / length;
+  return [x1 + dx * along - dy * inward, y1 + dy * along + dx * inward];
+}
+
+/** Whether a point lies inside a ring, by counting crossings of a ray. */
+function contains(ring: Ring, [x, y]: Position): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/**
  * Everything except the region: the world with each part of the region cut
  * out. A hole inside the region — a lake inside a country — is not part of it,
  * so it is dimmed too, as a polygon of its own.
+ *
+ * A part of the region can itself lie inside one of those holes: the channel
+ * between two islands of the Tiwi group is Timor Sea, inside the islands, which
+ * are inside the Timor Sea. Such a part is cut out of the smallest hole around
+ * it, not out of the world: a hole within a hole is something the triangulator
+ * cannot represent, and it bridges the inner one to the nearest outline instead,
+ * drawing a dimmed wedge across the region.
  *
  * `latLimit` is the latitude web-mercator tiling stops at. MapLibre draws
  * nothing beyond it, so neither the world ring nor any hole may extend further:
@@ -132,14 +169,39 @@ export function surroundingFeatures(
     [-180, L],
     [-180, -L],
   ];
-  const cutOut = region.coordinates.map(([outer]) =>
-    wound(clampLatitude(outer, L), false),
+  // Every hole in the region becomes a dimmed polygon, wound as an outer ring.
+  const holes = region.coordinates.flatMap(([, ...rings]) =>
+    rings.map((ring) => {
+      const outer = wound(ring, true);
+      return { outer, area: Math.abs(signedArea(outer)), cutOut: [] as Ring[] };
+    }),
   );
-  const holesInRegion = region.coordinates.flatMap(([, ...holes]) =>
-    holes.map((hole) => [wound(clampLatitude(hole, L), true)]),
-  );
+  const cutFromWorld: Ring[] = [];
+  for (const [outer] of region.coordinates) {
+    const part = wound(outer, true);
+    const probe = interiorPoint(part);
+    let within: (typeof holes)[number] | null = null;
+    for (const hole of holes) {
+      if (
+        (within === null || hole.area < within.area) &&
+        contains(hole.outer, probe)
+      ) {
+        within = hole;
+      }
+    }
+    const cut = wound(clampLatitude(part, L), false);
+    (within ? within.cutOut : cutFromWorld).push(cut);
+  }
   return {
     type: "FeatureCollection",
-    features: [feature([[wound(world, true), ...cutOut], ...holesInRegion])],
+    features: [
+      feature([
+        [wound(world, true), ...cutFromWorld],
+        ...holes.map((hole) => [
+          wound(clampLatitude(hole.outer, L), true),
+          ...hole.cutOut,
+        ]),
+      ]),
+    ],
   };
 }

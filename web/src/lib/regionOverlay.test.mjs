@@ -69,6 +69,50 @@ test("a hole in the region is dimmed with the surroundings", () => {
   assert.ok(isCounterClockwise(lake[0]));
 });
 
+test("a part of the region inside one of its holes is cut from that hole", () => {
+  // The Timor Sea: a sea with an island group in it (a hole), and a channel
+  // of the same sea between the islands (a part inside the hole). Cut from the
+  // world instead, the channel is a hole within a hole, which the triangulator
+  // bridges to the sea's outline as a dimmed wedge.
+  const sea = {
+    type: "MultiPolygon",
+    coordinates: [
+      [square(0, 0, 10, 10), clockwise(square(4, 4, 8, 8))],
+      [square(5, 5, 6, 6)],
+    ],
+  };
+  const [{ geometry }] = surroundingFeatures(sea, LAT_LIMIT).features;
+  const [[world, ...cutFromWorld], [islands, ...cutFromIslands]] =
+    geometry.coordinates;
+  assert.ok(isCounterClockwise(world));
+  assert.equal(cutFromWorld.length, 1, "only the sea itself");
+  assert.ok(isCounterClockwise(islands));
+  assert.equal(cutFromIslands.length, 1, "the channel");
+  assert.ok(!isCounterClockwise(cutFromIslands[0]));
+  assert.deepEqual(
+    cutFromIslands[0].map(([x, y]) => `${x},${y}`).sort(),
+    square(5, 5, 6, 6)
+      .map(([x, y]) => `${x},${y}`)
+      .sort(),
+  );
+});
+
+test("a part inside nested holes is cut from the innermost", () => {
+  // Sea ⊃ island ⊃ lagoon (sea) ⊃ islet ⊃ pool (sea).
+  const sea = {
+    type: "MultiPolygon",
+    coordinates: [
+      [square(0, 0, 20, 20), clockwise(square(2, 2, 18, 18))],
+      [square(4, 4, 16, 16), clockwise(square(6, 6, 14, 14))],
+      [square(8, 8, 12, 12)],
+    ],
+  };
+  const [{ geometry }] = surroundingFeatures(sea, LAT_LIMIT).features;
+  const cutCounts = geometry.coordinates.map((polygon) => polygon.length - 1);
+  // The world, the island and the islet each lose exactly one part.
+  assert.deepEqual(cutCounts, [1, 1, 1]);
+});
+
 test("nothing reaches past the latitude the map can draw", () => {
   // The Arctic Ocean runs to the pole; a hole poking out of the world ring
   // would corrupt the whole fill.
