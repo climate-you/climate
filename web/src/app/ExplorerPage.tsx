@@ -2278,7 +2278,7 @@ export default function ExplorerPage({
                     ) : panelHeadline?.type === "coral_global" ? (
                       <>
                         <>Globally, </>
-                        <span className={styles.panelTitleTempAccent}>10%</span>
+                        <span className={styles.panelTitleTempAccent}>5%</span>
                         <span className={styles.panelTitleSmall}>
                           {" "}
                           of coral reefs experienced heat stress every single
@@ -2398,7 +2398,7 @@ export default function ExplorerPage({
                         <span className={styles.panelTitleSmall}>
                           Globally,{" "}
                         </span>
-                        <span className={styles.panelTitleTempAccent}>10%</span>
+                        <span className={styles.panelTitleTempAccent}>5%</span>
                         <span className={styles.panelTitleSmall}>
                           {" "}
                           of coral reefs experienced heat stress every single

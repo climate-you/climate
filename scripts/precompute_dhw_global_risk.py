@@ -17,11 +17,12 @@ while its cells still count towards the Coral Sea. A sea needs at least
 --min-region-cells reef cells: below that, "10% of its reefs" is a handful of
 cells.
 
-A sea's reef cells are those of the reef-domain mask (reef polygons with DHW
-data; see docs/runbooks/reef-mask.md), the cells the map layer and the per-cell
-tiles use. The global series is different: it counts every cell with data in
-the downloaded tiles, open water between reefs included. It is left as it was
-published.
+Only reef cells count, globally as for a sea: those of the reef-domain mask
+(reef polygons with DHW data; see docs/runbooks/reef-mask.md), the cells the
+map layer and the per-cell tiles use. The downloaded tiles hold far more — every
+ocean cell in each block the mask touched, about 2.8 million against 117,000
+reef cells — so without the mask the series would describe the open water
+around reefs rather than the reefs.
 
 All thresholds are computed in a single pass over the data.  Each threshold produces
 three output files (one per risk level):
@@ -109,12 +110,30 @@ def _sample(mask, lat: np.ndarray, lon: np.ndarray) -> np.ndarray:
     return data[np.ix_(rows, cols)].ravel()
 
 
+class ReefDomain:
+    """Which cells of a daily DHW tile are reef cells.
+
+    The tiles also hold the open water around the reefs, which counts for
+    nothing here.
+    """
+
+    def __init__(self, reef_domain_mask: Path):
+        self._mask = np.load(reef_domain_mask)
+        # Filled on first sight of each tile; the grid never changes.
+        self._by_tile: dict[str, np.ndarray] = {}
+
+    def is_reef(self, tile: str, lat: np.ndarray, lon: np.ndarray) -> np.ndarray:
+        """Flat boolean over the tile's cells, in (lat, lon) order."""
+        if tile not in self._by_tile:
+            self._by_tile[tile] = _sample(self._mask, lat, lon) > 0
+        return self._by_tile[tile]
+
+
 class SeaIndex:
     """Which sea(s) each reef cell of a daily DHW tile belongs to.
 
-    Only reef-domain cells count; the tiles also hold the open water around the
-    reefs. A cell can belong to two seas: its sea in the ocean mask, and an
-    overlay sea lying inside it (the Great Barrier Reef inside the Coral Sea).
+    A cell can belong to two seas: its sea in the ocean mask, and an overlay sea
+    lying inside it (the Great Barrier Reef inside the Coral Sea).
     """
 
     def __init__(
@@ -122,7 +141,7 @@ class SeaIndex:
         ocean_mask: Path,
         overlay_mask: Path,
         ocean_names: Path,
-        reef_domain_mask: Path,
+        reef: ReefDomain,
     ):
         names = json.loads(ocean_names.read_text(encoding="utf-8"))
         self.region_ids = {int(k): ocean_region_id(v) for k, v in names.items() if v}
@@ -130,7 +149,7 @@ class SeaIndex:
         self._masks = [np.load(ocean_mask)]
         if overlay_mask.exists():
             self._masks.append(np.load(overlay_mask))
-        self._reef = np.load(reef_domain_mask)
+        self._reef = reef
         # Filled on first sight of each tile; the grid never changes.
         self.by_tile: dict[str, list[tuple[str, np.ndarray]]] = {}
 
@@ -138,7 +157,7 @@ class SeaIndex:
         """[(region_id, flat column indices)] for a tile, in (lat, lon) order."""
         if tile not in self.by_tile:
             found: list[tuple[str, np.ndarray]] = []
-            reef = _sample(self._reef, lat, lon) > 0
+            reef = self._reef.is_reef(tile, lat, lon)
             for m in self._masks:
                 ids = np.where(reef, _sample(m, lat, lon), 0)
                 for uid in np.unique(ids):
@@ -152,16 +171,17 @@ class SeaIndex:
 def compute_counts_year(
     year: int,
     cache_root: Path,
+    reef: ReefDomain,
     seas: SeaIndex | None = None,
     ever_valid: dict[str, np.ndarray] | None = None,
 ) -> tuple[Counts, dict[str, Counts]] | None:
     """
-    Return the global (n_severe, n_moderate_cumulative, n_valid) per day, and the
-    same per sea when `seas` is given.
+    Return the global (n_severe, n_moderate_cumulative, n_valid) per day over
+    reef cells, and the same per sea when `seas` is given.
 
-    n_severe              = cells with DHW >= 8
-    n_moderate_cumulative = cells with DHW >= 4  (includes severe cells)
-    n_valid               = cells with non-NaN DHW
+    n_severe              = reef cells with DHW >= 8
+    n_moderate_cumulative = reef cells with DHW >= 4  (includes severe cells)
+    n_valid               = reef cells with non-NaN DHW
 
     `ever_valid`, keyed by tile, collects which cells ever had data, from which
     each sea's reef cell count is taken at the end.
@@ -176,12 +196,16 @@ def compute_counts_year(
         dhw = ds["degree_heating_week"].values
         flat = dhw.reshape(dhw.shape[0], -1)  # (time, cells)
 
+        tile = tile_dir.name
+        lat = ds["latitude"].values.astype(np.float64)
+        lon = ds["longitude"].values.astype(np.float64)
         valid = ~np.isnan(flat)
         severe = flat >= SEVERE_THRESHOLD
         moderate = flat >= MODERATE_THRESHOLD  # includes severe
-        tile_valid = valid.sum(axis=1)
-        tile_severe = severe.sum(axis=1)
-        tile_moderate = moderate.sum(axis=1)
+        is_reef = reef.is_reef(tile, lat, lon)
+        tile_valid = valid[:, is_reef].sum(axis=1)
+        tile_severe = severe[:, is_reef].sum(axis=1)
+        tile_moderate = moderate[:, is_reef].sum(axis=1)
 
         if n_valid is None:
             n_severe, n_moderate, n_valid = tile_severe, tile_moderate, tile_valid
@@ -191,9 +215,6 @@ def compute_counts_year(
             n_valid = n_valid + tile_valid
 
         if seas is not None:
-            tile = tile_dir.name
-            lat = ds["latitude"].values.astype(np.float64)
-            lon = ds["longitude"].values.astype(np.float64)
             for region_id, cols in seas.columns(tile, lat, lon):
                 counts = [
                     severe[:, cols].sum(axis=1),
@@ -362,6 +383,7 @@ def main() -> None:
     print(f"Thresholds: {', '.join(f'{t}% ({l})' for t, l in zip(thresholds, labels))}")
     print(f"Processing {len(YEARS)} years ({YEARS[0]}–{YEARS[-1]})…")
 
+    reef = ReefDomain(args.reef_domain_mask)
     seas = (
         None
         if args.global_only
@@ -369,7 +391,7 @@ def main() -> None:
             args.ocean_mask,
             args.ocean_overlay_mask,
             args.ocean_names,
-            args.reef_domain_mask,
+            reef,
         )
     )
     ever_valid: dict[str, np.ndarray] = {}
@@ -383,7 +405,7 @@ def main() -> None:
 
     for i, year in enumerate(YEARS):
         print(f"  [{i+1:2d}/{len(YEARS)}] {year}…", end=" ", flush=True)
-        result = compute_counts_year(year, cache_root, seas, ever_valid)
+        result = compute_counts_year(year, cache_root, reef, seas, ever_valid)
         counts, sea_counts = result if result is not None else (None, {})
         for region_id, region_counts in sea_counts.items():
             for t, label in zip(thresholds, labels):

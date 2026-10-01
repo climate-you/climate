@@ -248,7 +248,7 @@ python scripts/precompute_dhw_global_risk.py --thresholds 1 5 10 --release dev \
   --cache-dir /Volumes/LaCie/Climate/cache
 ```
 
-It writes `fraction_<X>pct.json` under each of the three `dhw_*_risk_days_per_year` metrics' `aggregates/`, with a `globe` series and one per sea. A sea counts the reef-domain cells inside it (`data/masks/crw_dhw_daily_global_0p05_mask.npz`, including the Great Barrier Reef overlay), and needs at least `--min-region-cells` of them (default 100). The global series keeps its original definition: every cell with data in the downloaded tiles, open water between reefs included. One pass over the 15 GB cache takes 20–80 minutes depending on the drive; `--global-only` skips the seas.
+It writes `fraction_<X>pct.json` under each of the three `dhw_*_risk_days_per_year` metrics' `aggregates/`, with a `globe` series and one per sea. Both count only reef-domain cells (`data/masks/crw_dhw_daily_global_0p05_mask.npz`): the cached tiles also hold every ocean cell of each block the mask touched — about 2.8 million cells against 117,000 reef cells — which would otherwise turn the series into one about the open water around reefs. A sea needs at least `--min-region-cells` reef cells (default 100), and the Great Barrier Reef overlay counts as a sea of its own. One pass over the 15 GB cache takes 20–80 minutes depending on the drive; `--global-only` skips the seas.
 
 Rerun it when the DHW cache is extended, or when the ocean mask or its overlay changes.
 

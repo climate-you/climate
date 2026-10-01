@@ -26,8 +26,8 @@ def _mask(path: Path, data: np.ndarray) -> Path:
 def world(tmp_path: Path) -> dict:
     # A 4x4 tile at the window's top-left corner. Every cell is sea 1; the left
     # half is also inside overlay sea 2 (a reef within the sea). Only the top
-    # row is reef-domain: the other rows are open water that the global series
-    # counts but a sea's must not.
+    # row is reef-domain: the other rows are open water, which the downloaded
+    # tiles hold too and which must count for nothing.
     ocean = np.zeros((SIZE, SIZE), np.int32)
     ocean[:4, :4] = 1
     overlay = np.zeros((SIZE, SIZE), np.int32)
@@ -56,15 +56,16 @@ def world(tmp_path: Path) -> dict:
         },
     ).to_netcdf(tile / "crw_2024-01-01_2024-12-31.nc")
 
+    reef_domain = dhw.ReefDomain(_mask(tmp_path / "reef.npz", reef))
     seas = dhw.SeaIndex(
         _mask(tmp_path / "ocean.npz", ocean),
         _mask(tmp_path / "overlay.npz", overlay),
         names,
-        _mask(tmp_path / "reef.npz", reef),
+        reef_domain,
     )
     ever_valid: dict = {}
     counts, per_sea = dhw.compute_counts_year(
-        2024, tmp_path / "cache", seas, ever_valid
+        2024, tmp_path / "cache", reef_domain, seas, ever_valid
     )
     return {
         "counts": counts,
@@ -88,11 +89,12 @@ def test_an_overlay_sea_counts_its_reefs_too_without_taking_them(world: dict) ->
     assert world["reef_cells"]["ocean:little_reef"] == 2
 
 
-def test_the_global_series_still_counts_every_cell_with_data(world: dict) -> None:
-    # Unchanged behaviour: open water in the tiles is part of the global count.
+def test_the_global_series_counts_only_reef_cells(world: dict) -> None:
+    # The open water is hot on both days; counted, it would make day 2 severe.
     severe, moderate, valid = world["counts"]
-    assert list(valid) == [16, 16]
-    assert list(severe) == [13, 12]
+    assert list(valid) == [4, 4]
+    assert list(severe) == [1, 0]
+    assert list(moderate) == [2, 0]
 
 
 def test_a_sea_is_classified_like_the_globe(world: dict) -> None:

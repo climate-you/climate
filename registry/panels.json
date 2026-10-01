@@ -488,10 +488,10 @@
             "select_layer_id": "reef_stress",
             "select_layer_fly_to_reef": true,
             "info_bubble_texts": {
-              "coral_global": "A day is counted as globally at risk when at least 10% of coral reef cells exceed the DHW threshold (moderate: DHW ≥ 4, severe: DHW ≥ 8). In 2024, every single day in the 40-year record exceeded the moderate stress threshold (DHW ≥ 4).",
+              "coral_global": "A day is counted as globally at risk when at least 5% of the world's coral reef cells exceed the DHW threshold (moderate: DHW ≥ 4, severe: DHW ≥ 8). 2024 is the only year in the 40-year record in which every single day reached at least the moderate threshold, on 312 of them the severe one.",
               "coral_worst_year": "The worst year is the calendar year with the highest combined total of moderate (4 ≤ DHW < 8) and severe (DHW ≥ 8) heat stress days in the observed record since 1985.",
               "trend": "The change is estimated from a linear trend fitted to global coral heat stress data since 1985, counting combined moderate (4 ≤ DHW < 8) and severe (DHW ≥ 8) days per year.",
-              "coral_unavailable": "A day is counted as globally at risk when at least 10% of coral reef cells exceed the DHW threshold (moderate: DHW ≥ 4, severe: DHW ≥ 8). In 2024, every single day in the 40-year record exceeded the moderate stress threshold (DHW ≥ 4)."
+              "coral_unavailable": "A day is counted as globally at risk when at least 5% of the world's coral reef cells exceed the DHW threshold (moderate: DHW ≥ 4, severe: DHW ≥ 8). 2024 is the only year in the 40-year record in which every single day reached at least the moderate threshold, on 312 of them the severe one."
             }
           },
           "title": "Coral reef DHW risk days",

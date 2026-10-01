@@ -82,7 +82,7 @@
       "follow_up_ids": ["sea_temp_global", "sea_temp_all_oceans", "coral_risk_local"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "Ocean warming has dramatically increased the heat stress on coral reefs. In the late 1980s there was rarely a single day in the year when more than 5% of the world's reef areas faced severe bleaching risk; in 2024 that was the case on **344 days**. Sustained heat stress causes corals to expel the symbiotic algae they depend on — repeated or prolonged bleaching can kill entire reef systems.",
+      "answer": "Ocean warming has dramatically increased the heat stress on coral reefs. In the late 1980s there was rarely a single day in the year when more than 5% of the world's reef areas faced severe bleaching risk; in 2024 that was the case on **312 days**. Sustained heat stress causes corals to expel the symbiotic algae they depend on — repeated or prolonged bleaching can kill entire reef systems.",
       "locations": [],
       "chart_spec": {
         "metric_id": "dhw_severe_risk_days_per_year",
