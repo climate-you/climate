@@ -863,6 +863,19 @@ export function CumulativeRain() {
 }
 
 // ─── 07: every summer since 1979, heat against rain ─────────────────────────
+// The temperature axis is shared by every country so switching does not
+// rescale it. Its top sits 0.9 °C above the warmest summer in any country, so
+// the shaded "hotter and drier" box always has room for its label above the
+// 2026 dot (France's +3.5 °C crowded both onto one line under a fixed +3.9).
+const JOINT_Y1 = Math.max(
+  3.9,
+  Math.max(
+    ...Object.values(DATA.joint)
+      .flat()
+      .map((q) => q[1]),
+  ) + 0.9,
+);
+
 function JointSvg({ country }: { country: string }) {
   const pts = DATA.joint[country];
   const W = 680,
@@ -876,7 +889,7 @@ function JointSvg({ country }: { country: string }) {
   const x0 = 30,
     x1 = 165,
     y0 = -2.6,
-    y1 = 3.9;
+    y1 = JOINT_Y1;
   const X = (v: number) =>
     L + ((Math.min(Math.max(v, x0), x1) - x0) / (x1 - x0)) * pw;
   const Y = (v: number) => T + ((y1 - v) / (y1 - y0)) * ph;
@@ -898,20 +911,22 @@ function JointSvg({ country }: { country: string }) {
       <text x={L + 4} y={T + 16} textAnchor="start" className="sc-quad">
         hotter and drier than 2026
       </text>
-      {[-2, -1, 0, 1, 2, 3].map((v) => (
-        <g key={v}>
-          <line
-            x1={L}
-            x2={W - Rt}
-            y1={Y(v)}
-            y2={Y(v)}
-            className={v === 0 ? "sc-baseline" : "sc-grid"}
-          />
-          <text x={L - 8} y={Y(v) + 4} textAnchor="end" className="sc-tick">
-            {v > 0 ? `+${v}` : v}
-          </text>
-        </g>
-      ))}
+      {[-2, -1, 0, 1, 2, 3, 4]
+        .filter((v) => v <= y1 - 0.5)
+        .map((v) => (
+          <g key={v}>
+            <line
+              x1={L}
+              x2={W - Rt}
+              y1={Y(v)}
+              y2={Y(v)}
+              className={v === 0 ? "sc-baseline" : "sc-grid"}
+            />
+            <text x={L - 8} y={Y(v) + 4} textAnchor="end" className="sc-tick">
+              {v > 0 ? `+${v}` : v}
+            </text>
+          </g>
+        ))}
       {[50, 75, 100, 125, 150].map((v) => (
         <g key={v}>
           <line

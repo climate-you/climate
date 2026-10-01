@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/siteConfig";
+import { UPDATED as SUMMER_2026_UPDATED } from "@/content/stories/summer-2026-heat-and-drought/meta";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
@@ -32,7 +33,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     {
       url: `${SITE_URL}/stories/summer-2026-heat-and-drought`,
-      lastModified: new Date("2026-09-29"),
+      lastModified: new Date(SUMMER_2026_UPDATED),
       changeFrequency: "yearly",
       priority: 0.8,
     },

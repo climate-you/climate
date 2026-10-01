@@ -616,3 +616,18 @@
 .rights a:hover {
   text-decoration: underline;
 }
+
+/* The dated note under the byline saying what changed since publication. */
+.updateNote {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--muted);
+  margin: -8px 0 20px;
+  padding-left: 12px;
+  border-left: 3px solid var(--blue);
+  max-width: 62ch;
+}
+.updateNote b {
+  color: var(--ink);
+  font-weight: 650;
+}

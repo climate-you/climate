@@ -41,7 +41,7 @@ import {
   n1,
   pct,
 } from "./storyData";
-import { TITLE as TITLE_VALUE } from "./meta";
+import { TITLE as TITLE_VALUE, PUBLISHED, UPDATED, longDate } from "./meta";
 import {
   CumulativeRain,
   HeatRainScatter,
@@ -197,6 +197,12 @@ const WET_EXTRA = {
   hi: Math.ceil(Math.max(...WET_ABOVE) / 10) * 10,
 };
 
+// Portugal's place among the eight by rainfall, 1 June – 15 August. Worked out
+// rather than typed: splitting French Guiana out of France (1 October) made
+// France, not Portugal, the driest.
+const DRY_ORDER = [...DATA.europe].sort((a, b) => pct(a) - pct(b));
+const PT_DRY_RANK = DRY_ORDER.indexOf("Portugal");
+
 const WARM_EUROPE = DATA.warm.find(([n]) => n === "Europe")![1];
 const WARM_GLOBE = DATA.warm.find(([n]) => n.startsWith("Globe"))![1];
 const WARM_LAND = DATA.warm.find(([n]) => n === "Global land")![1];
@@ -348,7 +354,15 @@ export default function SummerStory() {
           fire. A look into the Copernicus ERA5/ERA5T record.
         </p>
         <p className={styles.published}>
-          Published <time dateTime="2026-09-29">29 September 2026</time>
+          Published <time dateTime={PUBLISHED}>{longDate(PUBLISHED)}</time>
+        </p>
+        <p className={s.updateNote}>
+          <b>
+            Updated <time dateTime={UPDATED}>{longDate(UPDATED)}</time>.
+          </b>{" "}
+          Country averages now leave out territories far from the mainland, such
+          as French Guiana for France and Alaska for the United States. Some of
+          France’s figures changed as a result; the findings did not.
         </p>
         <p className={styles.meta}>
           Contains modified Copernicus Climate Change Service information 2026 ·
@@ -483,8 +497,12 @@ export default function SummerStory() {
             <div className={`${styles.stat} ${styles.statDry}`}>
               <span className={styles.num}>{n0(pct("Portugal"))}%</span>
               <span className={styles.lab}>
-                of normal rainfall in Portugal, 1 June – 15 August, the driest
-                of the eight European countries measured here
+                of normal rainfall in Portugal, 1 June – 15 August,{" "}
+                {PT_DRY_RANK === 0
+                  ? "the driest of the eight European countries measured here"
+                  : PT_DRY_RANK === 1
+                    ? `the second driest of the eight European countries measured here, after ${DRY_ORDER[0]}`
+                    : "one of the driest of the eight European countries measured here"}
               </span>
             </div>
             <div className={styles.stat}>
@@ -784,9 +802,9 @@ export default function SummerStory() {
             <span className={s.wet}>normal rainfall or more</span>. In an
             average year the two account for 40% of the EU’s burned area. This
             year both burned less than usual.
-            <Ref n={1} /> Portugal was the driest of the eight countries until
-            mid-August, but it spent far fewer days in heat episodes than France
-            or Italy.
+            <Ref n={1} /> Portugal was among the driest of the eight countries
+            until mid-August, but it spent far fewer days in heat episodes than
+            France or Italy.
           </p>
         </div>
         <SpaghettiTabs />

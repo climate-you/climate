@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
 import { SITE_URL } from "@/lib/siteConfig";
 import SummerStory from "@/content/stories/summer-2026-heat-and-drought/SummerStory";
-import { TITLE } from "@/content/stories/summer-2026-heat-and-drought/meta";
+import {
+  PUBLISHED,
+  TITLE,
+  UPDATED,
+} from "@/content/stories/summer-2026-heat-and-drought/meta";
 
 const PATH = "/stories/summer-2026-heat-and-drought";
 const DESCRIPTION =
   "Much of the northern hemisphere was hot in summer 2026, and almost all of it still got its normal rain. Western Europe did not. Heat and rainfall, country by country, from the Copernicus ERA5/ERA5T record.";
 const SHORT_DESCRIPTION =
   "Heat was everywhere in summer 2026. Only western Europe went without rain. The two measured together, from the Copernicus ERA5/ERA5T record.";
-const PUBLISHED = "2026-09-29";
 const AUTHORS = ["Benoit Leveau", "Fanny Chaléon"];
 const OG_IMAGE = "/story/summer-2026-heat-and-drought-og.png";
 const OG_IMAGE_ALT =
@@ -27,6 +30,7 @@ export const metadata: Metadata = {
     type: "article",
     url: `${SITE_URL}${PATH}`,
     publishedTime: PUBLISHED,
+    modifiedTime: UPDATED,
     authors: AUTHORS,
     images: [{ url: OG_IMAGE, width: 1200, height: 630, alt: OG_IMAGE_ALT }],
   },
@@ -46,7 +50,7 @@ const jsonLd = {
   headline: TITLE,
   description: DESCRIPTION,
   datePublished: PUBLISHED,
-  dateModified: PUBLISHED,
+  dateModified: UPDATED,
   image: [`${SITE_URL}${OG_IMAGE}`],
   author: AUTHORS.map((name) => ({ "@type": "Person", name })),
   publisher: { "@type": "Organization", name: "climate.you" },
