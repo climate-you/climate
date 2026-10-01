@@ -8,7 +8,9 @@ import { type Bbox, DEFAULT_MERCATOR_LAT_MAX } from "@/lib/story/mercator";
 import GlobeBoundary from "@/components/story/GlobeBoundary";
 import ShareButton from "@/components/story/ShareButton";
 import { downloadAnomalyMap } from "@/lib/story/anomalyMapRender";
+import { longDate } from "@/lib/story/dates";
 import HeatwaveChart from "./HeatwaveChart";
+import { PUBLISHED, TITLE } from "./meta";
 import StoryGlobe, { type GlobeStep } from "@/components/story/StoryGlobe";
 import styles from "@/components/story/story.module.css";
 
@@ -206,14 +208,14 @@ export default function HeatwaveStory() {
             {/* No `text`: the shared link unfurls into the social card, whose
                 headline and description already carry the message. A separate
                 body line would just repeat it above the same card. */}
-            <ShareButton title="The June 2026 heatwave over Europe" />
+            <ShareButton title={TITLE} />
             {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a className={styles.backLink} href="/">
               <span aria-hidden="true">←</span> Back to the globe
             </a>
           </span>
         </div>
-        <h1>The June 2026 heatwave over Europe</h1>
+        <h1>{TITLE}</h1>
         <p className={styles.dek}>
           Between mid-June and mid-July 2026, Europe went through two spells of
           extreme heat: a dome that swept across the continent, then a second
@@ -221,7 +223,7 @@ export default function HeatwaveStory() {
           it moved, and how far above the seasonal average it was.
         </p>
         <p className={styles.published}>
-          Published <time dateTime="2026-07-19">19 July 2026</time>
+          Published <time dateTime={PUBLISHED}>{longDate(PUBLISHED)}</time>
         </p>
         <p className={styles.meta}>
           Contains modified Copernicus Climate Change Service information 2026 ·

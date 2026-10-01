@@ -41,7 +41,8 @@ import {
   n1,
   pct,
 } from "./storyData";
-import { TITLE as TITLE_VALUE, PUBLISHED, UPDATED, longDate } from "./meta";
+import { longDate } from "@/lib/story/dates";
+import { TITLE as TITLE_VALUE, PUBLISHED, UPDATED } from "./meta";
 import {
   CumulativeRain,
   HeatRainScatter,

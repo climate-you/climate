@@ -73,7 +73,15 @@ baseline or a country set. The generator prints which episode file it used.
    `’` for an apostrophe, `&` for an ampersand. Check a rendered page with
    `curl <url> | grep -oE '</(b|em|strong|span|a|sup)>[A-Za-z][a-z]{2,}'`;
    it should print nothing.
-6. **Watch the bundle.** Daily series dominate: eight countries of daily
+6. **Keep the title and dates in the story's `meta.ts`** (`TITLE`,
+   `PUBLISHED`, and `UPDATED` once the figures change after publication; ISO
+   dates), then add one entry to `web/src/content/stories/index.ts`. The
+   byline, route metadata, structured data, case-studies list and sitemap all
+   read from there, and `longDate()` in `web/src/lib/story/dates.ts` formats
+   them. The list shows the publication date; the sitemap uses the update date
+   when there is one. The slug names the route and the `/story/<slug>-thumb.png`
+   image.
+7. **Watch the bundle.** Daily series dominate: eight countries of daily
    maximum over a 31-year baseline is ~225 KB of a 273 KB file. Store them as
    `{d0, v[]}` (start day-of-year plus consecutive values) rather than pairs;
    that halved it. If it grows past a few hundred KB, load it on demand instead

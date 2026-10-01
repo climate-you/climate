@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/siteConfig";
-import { UPDATED as SUMMER_2026_UPDATED } from "@/content/stories/summer-2026-heat-and-drought/meta";
+import { STORIES, storyPath } from "@/content/stories";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
@@ -23,19 +23,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 0.6,
     },
-    {
-      url: `${SITE_URL}/stories/june-2026-heatwave`,
-      // Dated to the story's data cutoff: the page is finished, so a fresh
-      // lastModified on every build would only teach crawlers to distrust it.
-      lastModified: new Date("2026-07-19"),
-      changeFrequency: "yearly",
+    // Dated to the story's last real change: the pages are finished, so a fresh
+    // lastModified on every build would only teach crawlers to distrust it.
+    ...STORIES.map((story) => ({
+      url: `${SITE_URL}${storyPath(story.slug)}`,
+      lastModified: new Date(story.updated ?? story.published),
+      changeFrequency: "yearly" as const,
       priority: 0.8,
-    },
-    {
-      url: `${SITE_URL}/stories/summer-2026-heat-and-drought`,
-      lastModified: new Date(SUMMER_2026_UPDATED),
-      changeFrequency: "yearly",
-      priority: 0.8,
-    },
+    })),
   ];
 }

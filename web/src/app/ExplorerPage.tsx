@@ -20,6 +20,8 @@ import ColdOpenOverlay from "@/components/explorer/ColdOpenOverlay";
 import SiteNav from "@/components/explorer/SiteNav";
 import CaseStudiesOverlay from "@/components/CaseStudiesOverlay";
 import type { CaseStudy } from "@/components/CaseStudiesOverlay";
+import { STORIES, storyPath, storyThumbnail } from "@/content/stories";
+import { longDate } from "@/lib/story/dates";
 import type { MultiPolygon } from "geojson";
 import { isAggregateScope, panelScope } from "@/lib/explorer/panelScope";
 import { sentenceParts } from "@/lib/explorer/placeName";
@@ -390,21 +392,13 @@ function PanelStepIcon({
 }
 
 // Published case studies, newest first. Drives both the navigation menu and
-// the browsing overlay.
-const CASE_STUDIES: CaseStudy[] = [
-  {
-    title: "Europe's summer of heat and drought",
-    href: "/stories/summer-2026-heat-and-drought",
-    thumbnail: "/story/summer-2026-heat-and-drought-thumb.png",
-    meta: "29 September 2026",
-  },
-  {
-    title: "The June 2026 heatwave over Europe",
-    href: "/stories/june-2026-heatwave",
-    thumbnail: "/story/june-2026-heatwave-thumb.png",
-    meta: "19 July 2026",
-  },
-];
+// the browsing overlay. Shows the publication date, not the last update.
+const CASE_STUDIES: CaseStudy[] = STORIES.map((story) => ({
+  title: story.title,
+  href: storyPath(story.slug),
+  thumbnail: storyThumbnail(story.slug),
+  meta: longDate(story.published),
+}));
 
 type ExplorerPageProps = {
   coldOpen?: boolean;
