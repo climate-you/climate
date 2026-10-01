@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 from typing import Any
 
@@ -177,6 +178,21 @@ class TileDataStore:
     rankings: dict[tuple[str, str], list[dict[str, Any]]] = field(default_factory=dict)
     # Precomputed regional aggregates: (metric_id, aggregation) -> {time_axis, regions}
     aggregates: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
+
+    @cached_property
+    def region_ids(self) -> frozenset[str]:
+        """Every region key this release has data for, across all metrics.
+
+        Derived from `aggregates` rather than stored alongside it, so the two
+        cannot drift and no construction site has to remember to pass it. A
+        region appearing for even one metric counts: the panel builder drops
+        the graphs it has no data for, so partial coverage is still usable.
+        """
+        return frozenset(
+            region_id
+            for agg in self.aggregates.values()
+            for region_id in (agg.get("regions") or {})
+        )
 
     @classmethod
     def discover(

@@ -336,7 +336,7 @@ def test_build_scored_panels_tiles_registry_success_and_fallback(
     )
     monkeypatch.setattr(
         panels_module,
-        "_compute_global_t2m_preindustrial_headline",
+        "_compute_aggregate_t2m_preindustrial_headline",
         lambda tile_store, unit: {
             "key": "t2m_vs_preindustrial_global",
             "label": "Air temperature change vs pre-industrial (global)",
@@ -349,7 +349,7 @@ def test_build_scored_panels_tiles_registry_success_and_fallback(
     )
     monkeypatch.setattr(
         panels_module,
-        "_global_aggregate_recent_delta_headline",
+        "_aggregate_recent_delta_headline",
         lambda **kwargs: {
             "key": kwargs["key"],
             "label": kwargs["label"],
@@ -362,7 +362,7 @@ def test_build_scored_panels_tiles_registry_success_and_fallback(
     )
     monkeypatch.setattr(
         panels_module,
-        "_global_aggregate_trend_headline",
+        "_aggregate_trend_headline",
         lambda **kwargs: {
             "key": kwargs["key"],
             "label": kwargs["label"],
@@ -689,17 +689,17 @@ def test_build_scored_panels_score_zero_produces_stub_panels(
         "_compute_sst_hotdays_headline",
         "_compute_precip_headline",
         "_compute_cdd_headline",
-        "_compute_global_t2m_preindustrial_headline",
+        "_compute_aggregate_t2m_preindustrial_headline",
     ):
         monkeypatch.setattr(panels_module, _name, lambda *_a, **_kw: _nh)
     monkeypatch.setattr(
         panels_module, "_compute_coral_local_headlines", lambda *_a, **_kw: []
     )
     monkeypatch.setattr(
-        panels_module, "_global_aggregate_recent_delta_headline", lambda *_a, **_kw: _nh
+        panels_module, "_aggregate_recent_delta_headline", lambda *_a, **_kw: _nh
     )
     monkeypatch.setattr(
-        panels_module, "_global_aggregate_trend_headline", lambda *_a, **_kw: _nhd
+        panels_module, "_aggregate_trend_headline", lambda *_a, **_kw: _nhd
     )
 
     from types import SimpleNamespace

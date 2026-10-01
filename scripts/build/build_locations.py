@@ -31,6 +31,24 @@ from climate.geo.country import (
     NATURAL_EARTH_COUNTRIES_FALLBACK_URLS,
     apply_country_name_overrides,
 )
+from climate.geo.lakes import (
+    LAKE_SOURCE_NATURAL_EARTH,
+    NATURAL_EARTH_LAKES_MIRROR_URL,
+)
+from climate.geo.country_parts import (
+    NATURAL_EARTH_ADMIN1_URL,
+    NATURAL_EARTH_MAP_UNITS_URL,
+    CountryParts,
+    is_subdivision,
+    load_country_parts,
+    natural_earth_iso_code,
+    parent_country_code,
+)
+from climate.geo.regions import (
+    country_mask_region_id,
+    country_region_id,
+    ocean_region_id,
+)
 from climate.geo.marine import (
     MARINE_SOURCE_NATURAL_EARTH,
     NATURAL_EARTH_MARINE_POLYS_MIRROR_URL,
@@ -50,6 +68,24 @@ CITIES_SOURCES: Dict[str, str] = {
     "cities5000": f"{GEONAMES_DUMP_BASE}/cities5000.zip",
     "cities15000": f"{GEONAMES_DUMP_BASE}/cities15000.zip",
 }
+
+INDEX_COLS = [
+    "geonameid",
+    "label",
+    "city_name",
+    "country_name",
+    "country_code",
+    "lat",
+    "lon",
+    "population",
+    "norm_label",
+    "norm_city",
+    "capital",
+    "alt_names",
+    "kind",
+    "bbox",
+    "region_id",
+]
 
 OUT_COLS = [
     "city_name",
@@ -87,7 +123,36 @@ DEFAULT_EXCLUDED_FEATURE_CODES = {"PPLX", "PPLA5"}
 MARINE_SOURCES = {
     MARINE_SOURCE_NATURAL_EARTH: NATURAL_EARTH_MARINE_POLYS_MIRROR_URL,
 }
+LAKE_SOURCES = {
+    LAKE_SOURCE_NATURAL_EARTH: NATURAL_EARTH_LAKES_MIRROR_URL,
+}
+
+# Kinds of index entry. Cities come from GeoNames; the rest are areas built from
+# polygon sources and carry a bounding box so the map can fit them on select.
+KIND_CITY = "city"
+KIND_MARINE = "marine"
+KIND_LAKE = "lake"
+KIND_COUNTRY = "country"
+KIND_STATE = "state"
+
+# Synthetic geonameids for the area entries, one disjoint block per kind so ids
+# stay stable when one source is rebuilt and the others are not. Real GeoNames
+# ids are seven digits, so these can never collide with a city in practice.
 MARINE_SYNTHETIC_ID_START = 2_000_000_000
+LAKE_SYNTHETIC_ID_START = 2_100_000_000
+COUNTRY_SYNTHETIC_ID_START = 2_200_000_000
+# Parts split from a country (climate.geo.country_parts) get a block of their
+# own, so adding them does not renumber the countries after them in the sort.
+COUNTRY_PART_SYNTHETIC_ID_START = 2_300_000_000
+
+# Pseudo ISO codes for the water-body entries, which belong to no country.
+MARINE_COUNTRY_CODE = "OC"
+LAKE_COUNTRY_CODE = "LK"
+
+# Natural Earth admin_0 fields holding a hand-placed label point, which sits in
+# the country's main landmass rather than at the centroid of all its territory.
+COUNTRY_LABEL_X_FIELD = "LABEL_X"
+COUNTRY_LABEL_Y_FIELD = "LABEL_Y"
 
 
 class _LocationRow(TypedDict):
@@ -117,14 +182,30 @@ class _IndexCandidate(TypedDict):
     alias_count: int
     feature_code: str
     alt_names: str
+    kind: str
+    bbox: str
+    region_id: str
 
 
-class _MarineNameAggregate(TypedDict):
+class _Bounds(TypedDict):
+    lat_min: float
+    lat_max: float
+    # Longitude extent tracked in two frames — [-180, 180) and [0, 360) — so a
+    # feature straddling the antimeridian can be described by whichever frame
+    # gives it the smaller span. See `_bounds_to_bbox`.
+    lon_min_signed: float
+    lon_max_signed: float
+    lon_min_wrapped: float
+    lon_max_wrapped: float
+
+
+class _AreaNameAggregate(TypedDict):
     label: str
     weighted_lat_sum: float
     weighted_lon_x_sum: float
     weighted_lon_y_sum: float
     weight_sum: int
+    bounds: _Bounds
 
 
 def cities_zip_url(source: str) -> str:
@@ -158,6 +239,26 @@ def parse_country_info(path_txt: Path) -> Dict[str, str]:
             name = parts[4].strip()
             if cc and name:
                 out[cc] = name
+    return out
+
+
+def parse_country_populations(path_txt: Path) -> Dict[str, int]:
+    """Country population by ISO alpha-2 code, from countryInfo.txt column 7."""
+    out: Dict[str, int] = {}
+    with open(path_txt, "r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip() or line.startswith("#"):
+                continue
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) < 8:
+                continue
+            cc = parts[0].strip()
+            if not cc:
+                continue
+            try:
+                out[cc] = int(float(parts[7].strip() or 0))
+            except ValueError:
+                continue
     return out
 
 
@@ -320,36 +421,181 @@ def _feature_center_from_geometry(geometry: dict) -> Optional[Tuple[float, float
     return mean_lat, mean_lon, count
 
 
-def _prepare_marine_input(
+def _empty_bounds() -> _Bounds:
+    return {
+        "lat_min": math.inf,
+        "lat_max": -math.inf,
+        "lon_min_signed": math.inf,
+        "lon_max_signed": -math.inf,
+        "lon_min_wrapped": math.inf,
+        "lon_max_wrapped": -math.inf,
+    }
+
+
+def _extend_bounds(bounds: _Bounds, lon: float, lat: float) -> None:
+    bounds["lat_min"] = min(bounds["lat_min"], lat)
+    bounds["lat_max"] = max(bounds["lat_max"], lat)
+    bounds["lon_min_signed"] = min(bounds["lon_min_signed"], lon)
+    bounds["lon_max_signed"] = max(bounds["lon_max_signed"], lon)
+    wrapped = lon % 360.0
+    bounds["lon_min_wrapped"] = min(bounds["lon_min_wrapped"], wrapped)
+    bounds["lon_max_wrapped"] = max(bounds["lon_max_wrapped"], wrapped)
+
+
+def _merge_bounds(into: _Bounds, other: _Bounds) -> None:
+    into["lat_min"] = min(into["lat_min"], other["lat_min"])
+    into["lat_max"] = max(into["lat_max"], other["lat_max"])
+    into["lon_min_signed"] = min(into["lon_min_signed"], other["lon_min_signed"])
+    into["lon_max_signed"] = max(into["lon_max_signed"], other["lon_max_signed"])
+    into["lon_min_wrapped"] = min(into["lon_min_wrapped"], other["lon_min_wrapped"])
+    into["lon_max_wrapped"] = max(into["lon_max_wrapped"], other["lon_max_wrapped"])
+
+
+def _bounds_to_bbox(bounds: _Bounds) -> Optional[Tuple[float, float, float, float]]:
+    """
+    Collapse accumulated bounds to a (west, south, east, north) box.
+
+    Whichever longitude frame gives the tighter span wins, so Russia and the
+    Pacific come out as a narrow box across the antimeridian rather than the
+    whole globe. The winning frame is re-based so west lands in [-180, 180) and
+    east is west + span; east may therefore exceed 180 for a box that straddles
+    the antimeridian, which is what MapLibre's `flyTo` centre maths expects.
+    """
+    if bounds["lat_min"] > bounds["lat_max"]:
+        return None
+
+    signed_span = bounds["lon_max_signed"] - bounds["lon_min_signed"]
+    wrapped_span = bounds["lon_max_wrapped"] - bounds["lon_min_wrapped"]
+    if wrapped_span < signed_span:
+        west = bounds["lon_min_wrapped"]
+        span = wrapped_span
+    else:
+        west = bounds["lon_min_signed"]
+        span = signed_span
+    west = ((west + 180.0) % 360.0) - 180.0
+    return (west, bounds["lat_min"], west + span, bounds["lat_max"])
+
+
+def _format_bbox(bbox: Optional[Tuple[float, float, float, float]]) -> str:
+    if bbox is None:
+        return ""
+    return ",".join(f"{v:.5f}" for v in bbox)
+
+
+def _iter_geometry_parts(geometry: dict) -> Iterable[Any]:
+    """Yield each top-level part of a (Multi)Polygon geometry's coordinates."""
+    coords = geometry.get("coordinates")
+    if coords is None:
+        return
+    if str(geometry.get("type") or "").lower().startswith("multi"):
+        yield from coords
+    else:
+        yield coords
+
+
+def _largest_part_bounds(geometry: dict) -> Optional[_Bounds]:
+    """
+    Bounds of the geometry part covering the largest box.
+
+    Natural Earth files a country's remote territories in the same feature as
+    its mainland — French Guiana under France, Hawaii under the USA — and a box
+    around all of them frames neither. The biggest part is the mainland for
+    every country where the distinction matters.
+    """
+    best: Optional[_Bounds] = None
+    best_area = -1.0
+    for part in _iter_geometry_parts(geometry):
+        bounds = _empty_bounds()
+        for lon, lat in _iter_lon_lat_pairs(part):
+            _extend_bounds(bounds, lon, lat)
+        bbox = _bounds_to_bbox(bounds)
+        if bbox is None:
+            continue
+        west, south, east, north = bbox
+        area = (east - west) * (north - south)
+        if area > best_area:
+            best_area = area
+            best = bounds
+    return best
+
+
+def _prepare_polygon_input(
     *,
-    marine_input: Optional[Path],
-    marine_source: str,
-    marine_cache_dir: Path,
+    explicit_input: Optional[Path],
+    source: str,
+    sources: Dict[str, str],
+    cache_dir: Path,
+    what: str,
 ) -> Path:
-    if marine_input is not None:
-        return marine_input
-    if marine_source not in MARINE_SOURCES:
+    if explicit_input is not None:
+        return explicit_input
+    if source not in sources:
         raise ValueError(
-            f"Unknown marine source {marine_source!r}. "
-            f"Choose from: {', '.join(sorted(MARINE_SOURCES))}"
+            f"Unknown {what} source {source!r}. Choose from: {', '.join(sorted(sources))}"
         )
-    return download_cached(MARINE_SOURCES[marine_source], marine_cache_dir)
+    return download_cached(sources[source], cache_dir)
 
 
-def load_marine_index_rows(
+def _fiona_path(input_path: Path) -> str:
+    if input_path.suffix.lower() == ".zip":
+        return f"zip://{input_path}"
+    return str(input_path)
+
+
+def _prepare_country_input(*, explicit_input: Optional[Path], cache_dir: Path) -> Path:
+    """Local Natural Earth admin_0 polygons, downloading them if not cached."""
+    if explicit_input is not None:
+        return explicit_input
+    zip_path = cache_dir / "ne_50m_admin_0_countries.zip"
+    if zip_path.exists() and zip_path.stat().st_size > 0:
+        return zip_path
+    last_err: Optional[Exception] = None
+    for url in NATURAL_EARTH_COUNTRIES_FALLBACK_URLS:
+        try:
+            print(f"[download] {url} -> {zip_path}", file=sys.stderr)
+            download_cached(url, cache_dir)
+            last_err = None
+            break
+        except Exception as exc:
+            last_err = exc
+    if last_err is not None:
+        raise RuntimeError(
+            "Failed to download Natural Earth country polygons from all sources."
+        ) from last_err
+    return zip_path
+
+
+def prepare_country_parts(*, country_input_path: Path, cache_dir: Path) -> CountryParts:
+    """The parts split from their country, downloading Natural Earth's map units
+    and admin-1 states if not cached."""
+    return load_country_parts(
+        countries_path=_fiona_path(country_input_path),
+        map_units_path=_fiona_path(
+            download_cached(NATURAL_EARTH_MAP_UNITS_URL, cache_dir)
+        ),
+        admin1_path=_fiona_path(download_cached(NATURAL_EARTH_ADMIN1_URL, cache_dir)),
+    )
+
+
+def _load_area_index_rows(
     *,
     input_path: Path,
     name_field: str,
+    kind: str,
+    country_name: str,
+    country_code: str,
+    id_start: int,
     existing_ids: set[int],
+    what: str,
 ) -> List[_IndexCandidate]:
-    read_path: str | Path
-    if input_path.suffix.lower() == ".zip":
-        read_path = f"zip://{input_path}"
-    else:
-        read_path = input_path
+    """
+    Build index entries from a polygon layer, one per distinct feature name.
 
-    by_norm_name: Dict[str, _MarineNameAggregate] = {}
-    with fiona.open(str(read_path), "r") as src:
+    Features sharing a name are merged: the entry sits at their point-weighted
+    centre and its bounding box covers all of them.
+    """
+    by_norm_name: Dict[str, _AreaNameAggregate] = {}
+    with fiona.open(_fiona_path(input_path), "r") as src:
         for feat in src:
             geometry = feat.get("geometry")
             if not geometry:
@@ -372,6 +618,10 @@ def load_marine_index_rows(
             if not norm_name:
                 continue
 
+            bounds = _empty_bounds()
+            for lon, lat in _iter_lon_lat_pairs(geometry.get("coordinates")):
+                _extend_bounds(bounds, lon, lat)
+
             agg = by_norm_name.get(norm_name)
             lon_rad = math.radians(mean_lon)
             if agg is None:
@@ -381,6 +631,7 @@ def load_marine_index_rows(
                     "weighted_lon_x_sum": math.cos(lon_rad) * point_count,
                     "weighted_lon_y_sum": math.sin(lon_rad) * point_count,
                     "weight_sum": point_count,
+                    "bounds": bounds,
                 }
             else:
                 if len(name) > len(agg["label"]):
@@ -389,15 +640,16 @@ def load_marine_index_rows(
                 agg["weighted_lon_x_sum"] += math.cos(lon_rad) * point_count
                 agg["weighted_lon_y_sum"] += math.sin(lon_rad) * point_count
                 agg["weight_sum"] += point_count
+                _merge_bounds(agg["bounds"], bounds)
 
     if not by_norm_name:
         raise RuntimeError(
-            f"No marine polygons with valid names found in {input_path} "
-            f"using --marine-name-field={name_field!r}."
+            f"No {what} polygons with valid names found in {input_path} "
+            f"using name field {name_field!r}."
         )
 
     used_ids = set(existing_ids)
-    next_id = MARINE_SYNTHETIC_ID_START
+    next_id = id_start
     out: List[_IndexCandidate] = []
     for norm_name in sorted(by_norm_name.keys()):
         while next_id in used_ids:
@@ -419,14 +671,229 @@ def load_marine_index_rows(
                 "geonameid": str(synthetic_id),
                 "label": label,
                 "city_name": label,
-                "country_name": "Ocean",
-                "country_code": "OC",
+                "country_name": country_name,
+                "country_code": country_code,
                 "lat": f"{lat:.5f}",
                 "lon": f"{lon:.5f}",
                 "population": "0",
                 "alias_count": 0,
-                "feature_code": "MARINE",
+                "feature_code": kind.upper(),
                 "alt_names": "",
+                "kind": kind,
+                "bbox": _format_bbox(_bounds_to_bbox(agg["bounds"])),
+                # Seas line up with the ocean regions in the aggregates; lakes
+                # have no mask and so no region to point at.
+                "region_id": (ocean_region_id(label) if kind == KIND_MARINE else ""),
+            }
+        )
+    return out
+
+
+def load_marine_index_rows(
+    *,
+    input_path: Path,
+    name_field: str,
+    existing_ids: set[int],
+) -> List[_IndexCandidate]:
+    return _load_area_index_rows(
+        input_path=input_path,
+        name_field=name_field,
+        kind=KIND_MARINE,
+        country_name="Ocean",
+        country_code=MARINE_COUNTRY_CODE,
+        id_start=MARINE_SYNTHETIC_ID_START,
+        existing_ids=existing_ids,
+        what="marine",
+    )
+
+
+def load_lake_index_rows(
+    *,
+    input_path: Path,
+    name_field: str,
+    existing_ids: set[int],
+) -> List[_IndexCandidate]:
+    return _load_area_index_rows(
+        input_path=input_path,
+        name_field=name_field,
+        kind=KIND_LAKE,
+        country_name="Lake",
+        country_code=LAKE_COUNTRY_CODE,
+        id_start=LAKE_SYNTHETIC_ID_START,
+        existing_ids=existing_ids,
+        what="lake",
+    )
+
+
+def load_country_index_rows(
+    *,
+    input_path: Path,
+    country_names: Dict[str, str],
+    country_populations: Dict[str, int],
+    code_field: str = COUNTRY_CODE_FIELD,
+    existing_ids: set[int] | None = None,
+    parts: CountryParts | None = None,
+) -> List[_IndexCandidate]:
+    """
+    Build one index entry per country from Natural Earth admin_0 polygons, and
+    one per part split from its country (see climate.geo.country_parts).
+
+    Display names come from GeoNames rather than Natural Earth so that a country
+    entry reads exactly like the suffix of its cities' labels — the entry for FR
+    says "France", matching "Paris, France".
+    """
+    by_code: Dict[str, _Bounds] = {}
+    label_points: Dict[str, Tuple[float, float]] = {}
+
+    with fiona.open(_fiona_path(input_path), "r") as src:
+        for feat in src:
+            geometry = feat.get("geometry")
+            if not geometry:
+                continue
+            props = feat.get("properties") or {}
+            if parts is not None and props.get("ADM0_A3") in parts.fully_split_adm0:
+                # Wholly split off, so it must not stretch its country's box:
+                # Christmas Island is filed under Australia.
+                continue
+            raw_code = natural_earth_iso_code(props, code_field)
+            if not raw_code:
+                continue
+
+            bounds = _largest_part_bounds(geometry)
+            if bounds is None:
+                continue
+            existing = by_code.get(raw_code)
+            if existing is None:
+                by_code[raw_code] = bounds
+            else:
+                _merge_bounds(existing, bounds)
+
+            if raw_code not in label_points:
+                label_x = props.get(COUNTRY_LABEL_X_FIELD)
+                label_y = props.get(COUNTRY_LABEL_Y_FIELD)
+                if label_x is not None and label_y is not None:
+                    try:
+                        label_points[raw_code] = (float(label_y), float(label_x))
+                    except (TypeError, ValueError):
+                        pass
+
+    if not by_code:
+        raise RuntimeError(
+            f"No country shapes loaded from {input_path}. "
+            f"Check the country code field (currently {code_field!r})."
+        )
+
+    used_ids = set(existing_ids or set())
+    next_id = COUNTRY_SYNTHETIC_ID_START
+    out: List[_IndexCandidate] = []
+    for code in sorted(by_code):
+        name = country_names.get(code)
+        if not name:
+            # A Natural Earth polygon GeoNames has no country for (uninhabited
+            # dependencies, disputed areas); nothing sensible to label it with.
+            continue
+        bounds = by_code[code]
+        bbox = _bounds_to_bbox(bounds)
+        if bbox is None:
+            continue
+        west, south, east, north = bbox
+        lat, lon = label_points.get(code, ((south + north) / 2.0, (west + east) / 2.0))
+        lon = ((lon + 180.0) % 360.0) - 180.0
+
+        while next_id in used_ids:
+            next_id += 1
+        synthetic_id = next_id
+        used_ids.add(synthetic_id)
+        next_id += 1
+
+        out.append(
+            {
+                "geonameid": str(synthetic_id),
+                "label": name,
+                "city_name": name,
+                "country_name": name,
+                "country_code": code,
+                "lat": f"{lat:.5f}",
+                "lon": f"{lon:.5f}",
+                "population": str(int(country_populations.get(code, 0))),
+                "alias_count": 0,
+                "feature_code": KIND_COUNTRY.upper(),
+                "alt_names": "",
+                "kind": KIND_COUNTRY,
+                "bbox": _format_bbox(bbox),
+                "region_id": country_region_id(code),
+            }
+        )
+    if parts is not None:
+        out.extend(
+            _country_part_index_rows(
+                parts=parts,
+                country_names=country_names,
+                country_populations=country_populations,
+                used_ids=used_ids,
+            )
+        )
+    return out
+
+
+def _country_part_index_rows(
+    *,
+    parts: CountryParts,
+    country_names: Dict[str, str],
+    country_populations: Dict[str, int],
+    used_ids: set[int],
+) -> List[_IndexCandidate]:
+    """One entry per split part. A code spread over several map units (Svalbard
+    and Jan Mayen) frames, and is labelled at, its largest one."""
+    best: Dict[str, Tuple[float, _Bounds, Optional[Tuple[float, float]], str]] = {}
+    for part in parts.parts:
+        bounds = _largest_part_bounds(part.geometry)
+        bbox = _bounds_to_bbox(bounds) if bounds is not None else None
+        if bbox is None:
+            continue
+        west, south, east, north = bbox
+        area = (east - west) * (north - south)
+        if part.code not in best or area > best[part.code][0]:
+            best[part.code] = (area, bounds, part.label_point, part.name)
+
+    next_id = COUNTRY_PART_SYNTHETIC_ID_START
+    out: List[_IndexCandidate] = []
+    for code in sorted(best):
+        _, bounds, label_point, part_name = best[code]
+        subdivision = is_subdivision(code)
+        # GeoNames' name where it has the code, so French Guiana's entry reads
+        # like its towns' labels ("Cayenne, French Guiana").
+        name = part_name if subdivision else country_names.get(code) or part_name
+        bbox = _bounds_to_bbox(bounds)
+        west, south, east, north = bbox
+        lat, lon = label_point or ((south + north) / 2.0, (west + east) / 2.0)
+        lon = ((lon + 180.0) % 360.0) - 180.0
+
+        while next_id in used_ids:
+            next_id += 1
+        used_ids.add(next_id)
+        synthetic_id = next_id
+        next_id += 1
+
+        country_code = parent_country_code(code) if subdivision else code
+        out.append(
+            {
+                "geonameid": str(synthetic_id),
+                "label": name,
+                "city_name": name,
+                "country_name": name,
+                "country_code": country_code,
+                "lat": f"{lat:.5f}",
+                "lon": f"{lon:.5f}",
+                "population": str(
+                    0 if subdivision else int(country_populations.get(code, 0))
+                ),
+                "alias_count": 0,
+                "feature_code": (KIND_STATE if subdivision else KIND_COUNTRY).upper(),
+                "alt_names": "",
+                "kind": KIND_STATE if subdivision else KIND_COUNTRY,
+                "bbox": _format_bbox(bbox),
+                "region_id": country_mask_region_id(code),
             }
         )
     return out
@@ -492,7 +959,7 @@ def write_locations_csv(
     excluded_feature_codes: set[str],
     collect_points: bool = False,
     index_csv: Optional[Path] = None,
-    marine_index_rows: Optional[List[_IndexCandidate]] = None,
+    area_index_rows: Optional[List[_IndexCandidate]] = None,
 ) -> Tuple[int, Optional[List[Tuple[float, float]]]]:
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     total = 0
@@ -503,23 +970,7 @@ def write_locations_csv(
     if index_csv is not None:
         index_csv.parent.mkdir(parents=True, exist_ok=True)
         index_file = open(index_csv, "w", encoding="utf-8", newline="")
-        index_writer = csv.DictWriter(
-            index_file,
-            fieldnames=[
-                "geonameid",
-                "label",
-                "city_name",
-                "country_name",
-                "country_code",
-                "lat",
-                "lon",
-                "population",
-                "norm_label",
-                "norm_city",
-                "capital",
-                "alt_names",
-            ],
-        )
+        index_writer = csv.DictWriter(index_file, fieldnames=INDEX_COLS)
         index_writer.writeheader()
     else:
         index_file = None
@@ -656,38 +1107,43 @@ def write_locations_csv(
                     "alias_count": int(row["alias_count"]),
                     "feature_code": row["feature_code"],
                     "alt_names": row["alt_names"],
+                    "kind": KIND_CITY,
+                    "bbox": "",
+                    "region_id": "",
                 }
             )
 
     if index_writer is not None:
-        if marine_index_rows:
+        if area_index_rows:
             used_ids = {
                 int(row["geonameid"])
                 for row in indexed_rows
                 if str(row.get("geonameid", "")).strip()
             }
-            next_id = MARINE_SYNTHETIC_ID_START
-            for marine_row in sorted(
-                marine_index_rows, key=lambda r: _norm_index(r["label"])
-            ):
-                while next_id in used_ids:
-                    next_id += 1
-                assigned_row: _IndexCandidate = {
-                    "geonameid": str(next_id),
-                    "label": marine_row["label"],
-                    "city_name": marine_row["city_name"],
-                    "country_name": marine_row["country_name"],
-                    "country_code": marine_row["country_code"],
-                    "lat": marine_row["lat"],
-                    "lon": marine_row["lon"],
-                    "population": marine_row["population"],
-                    "alias_count": marine_row["alias_count"],
-                    "feature_code": marine_row["feature_code"],
-                    "alt_names": marine_row.get("alt_names", ""),
-                }
-                used_ids.add(next_id)
-                next_id += 1
-                indexed_rows.append(assigned_row)
+            # A state entry ranks in search by its largest town, as a country
+            # does; only here, with GeoNames' admin-1 codes to hand, is it known
+            # which towns are in it. For the US, admin-1 codes are the ISO
+            # 3166-2 suffixes: Alaska is US.AK, state:US-AK.
+            largest_by_admin1: Dict[Tuple[str, str], int] = {}
+            for row in dedupe_map.values():
+                key = (row["cc"], row["admin1"])
+                pop_i = int(float(row["population"]) or 0)
+                if pop_i > largest_by_admin1.get(key, 0):
+                    largest_by_admin1[key] = pop_i
+            for area_row in area_index_rows:
+                assigned_row = dict(area_row)
+                if assigned_row.get("kind") == KIND_STATE:
+                    code = str(assigned_row["region_id"]).split(":", 1)[1]
+                    country, admin1 = code.split("-", 1)
+                    assigned_row["population"] = str(
+                        largest_by_admin1.get((country, admin1), 0)
+                    )
+                requested_id = int(area_row["geonameid"])
+                while requested_id in used_ids:
+                    requested_id += 1
+                assigned_row["geonameid"] = str(requested_id)
+                used_ids.add(requested_id)
+                indexed_rows.append(assigned_row)  # type: ignore[arg-type]
         # Build-time dedupe by final display label for autocomplete/resolve/index lookups.
         best_by_label: Dict[str, _IndexCandidate] = {}
         for row in indexed_rows:
@@ -710,6 +1166,9 @@ def write_locations_csv(
                     "norm_city": _norm_index(row["city_name"]),
                     "capital": "true" if row.get("feature_code") == "PPLC" else "false",
                     "alt_names": row.get("alt_names", ""),
+                    "kind": row.get("kind", KIND_CITY),
+                    "bbox": row.get("bbox", ""),
+                    "region_id": row.get("region_id", ""),
                 }
             )
 
@@ -735,10 +1194,15 @@ def build_country_mask(
     cache_dir: Path,
     input_path: Optional[Path] = None,
     code_field: str = COUNTRY_CODE_FIELD,
+    parts: CountryParts | None = None,
 ) -> None:
     """
     Download Natural Earth country polygons and rasterize them into a country_mask.npz
     for fast point-in-polygon country lookup at runtime.
+
+    Parts split from their country (climate.geo.country_parts) are burned after
+    the countries, so they take their cells over: French Guiana's cells read GF,
+    Alaska's US-AK. The API's classifier reports a subdivision as its country.
 
     NPZ layout (mirrors ocean_mask.npz):
       - data: 2D uint16 array (nlat × nlon), 0 = unknown/ocean, >0 = country id
@@ -756,28 +1220,8 @@ def build_country_mask(
             "Install with: pip install rasterio"
         ) from exc
 
-    if input_path is None:
-        zip_name = "ne_50m_admin_0_countries.zip"
-        zip_path = cache_dir / zip_name
-        if not zip_path.exists() or zip_path.stat().st_size == 0:
-            last_err: Optional[Exception] = None
-            for url in NATURAL_EARTH_COUNTRIES_FALLBACK_URLS:
-                try:
-                    print(f"[download] {url} -> {zip_path}", file=sys.stderr)
-                    download_cached(url, cache_dir)
-                    last_err = None
-                    break
-                except Exception as exc:
-                    last_err = exc
-            if last_err is not None:
-                raise RuntimeError(
-                    "Failed to download Natural Earth country polygons from all sources."
-                ) from last_err
-        input_path = zip_path
-
-    read_path: str | Path = (
-        f"zip://{input_path}" if input_path.suffix.lower() == ".zip" else input_path
-    )
+    input_path = _prepare_country_input(explicit_input=input_path, cache_dir=cache_dir)
+    read_path = _fiona_path(input_path)
 
     # Assign stable integer ids to each unique ISO country code encountered.
     code_to_id: Dict[str, int] = {}
@@ -791,13 +1235,8 @@ def build_country_mask(
             if not geom:
                 continue
             props = feat.get("properties") or {}
-            raw_code = str(props.get(code_field) or "").strip().upper()
-            # Natural Earth uses "-99" as a sentinel for unassigned ISO codes.
-            # Fall back to ISO_A2_EH (Exceptionally Handled variant) which assigns
-            # correct codes to France (FR), Norway (NO), Kosovo (XK), etc.
-            if not raw_code or raw_code == "-99":
-                raw_code = str(props.get("ISO_A2_EH") or "").strip().upper()
-            if not raw_code or raw_code == "-99":
+            raw_code = natural_earth_iso_code(props, code_field)
+            if not raw_code:
                 continue
             country_id = code_to_id.get(raw_code)
             if country_id is None:
@@ -806,6 +1245,15 @@ def build_country_mask(
                 code_to_id[raw_code] = country_id
                 id_to_code[country_id] = raw_code
             shapes.append((geom, country_id))
+
+    for part in parts.parts if parts is not None else []:
+        part_id = code_to_id.get(part.code)
+        if part_id is None:
+            part_id = next_id
+            next_id += 1
+            code_to_id[part.code] = part_id
+            id_to_code[part_id] = part.code
+        shapes.append((part.geometry, part_id))
 
     if not shapes:
         raise RuntimeError(
@@ -916,6 +1364,34 @@ def main() -> None:
         help='Marine polygon property field for display name (default: "name").',
     )
     ap.add_argument(
+        "--lake-input",
+        type=str,
+        default=None,
+        help=(
+            "Optional local lake polygons input for index entries "
+            "(GeoJSON/Shapefile/zip). If omitted, a Natural Earth source is used."
+        ),
+    )
+    ap.add_argument(
+        "--lake-source",
+        type=str,
+        default=LAKE_SOURCE_NATURAL_EARTH,
+        choices=sorted(LAKE_SOURCES.keys()),
+        help='Built-in lake source when --lake-input is omitted (default: "natural_earth").',
+    )
+    ap.add_argument(
+        "--lake-cache-dir",
+        type=str,
+        default="data/cache/geodata",
+        help='Lake input cache directory (default: "data/cache/geodata").',
+    )
+    ap.add_argument(
+        "--lake-name-field",
+        type=str,
+        default="name",
+        help='Lake polygon property field for display name (default: "name").',
+    )
+    ap.add_argument(
         "--source",
         type=str,
         default="cities500",
@@ -1000,23 +1476,55 @@ def main() -> None:
     a2path = download_cached(ADMIN2_CODES_TXT, cache_dir)
 
     country_names = apply_country_name_overrides(parse_country_info(cpath))
+    country_populations = parse_country_populations(cpath)
     admin1_names = parse_admin1_codes(a1path)
     admin2_names = parse_admin2_codes(a2path)
     out_csv = Path(args.out)
     index_csv = None
-    marine_index_rows: Optional[List[_IndexCandidate]] = None
+    area_index_rows: Optional[List[_IndexCandidate]] = None
     if args.write_index:
         index_csv = Path(args.index_path)
-        marine_input_path = _prepare_marine_input(
-            marine_input=Path(args.marine_input) if args.marine_input else None,
-            marine_source=args.marine_source,
-            marine_cache_dir=Path(args.marine_cache_dir),
+        marine_input_path = _prepare_polygon_input(
+            explicit_input=Path(args.marine_input) if args.marine_input else None,
+            source=args.marine_source,
+            sources=MARINE_SOURCES,
+            cache_dir=Path(args.marine_cache_dir),
+            what="marine",
         )
-        marine_index_rows = load_marine_index_rows(
-            input_path=marine_input_path,
-            name_field=args.marine_name_field,
-            existing_ids=set(),
+        lake_input_path = _prepare_polygon_input(
+            explicit_input=Path(args.lake_input) if args.lake_input else None,
+            source=args.lake_source,
+            sources=LAKE_SOURCES,
+            cache_dir=Path(args.lake_cache_dir),
+            what="lake",
         )
+        country_input_path = _prepare_country_input(
+            explicit_input=Path(args.country_input) if args.country_input else None,
+            cache_dir=Path(args.country_cache_dir),
+        )
+        country_parts = prepare_country_parts(
+            country_input_path=country_input_path,
+            cache_dir=Path(args.country_cache_dir),
+        )
+        area_index_rows = [
+            *load_marine_index_rows(
+                input_path=marine_input_path,
+                name_field=args.marine_name_field,
+                existing_ids=set(),
+            ),
+            *load_lake_index_rows(
+                input_path=lake_input_path,
+                name_field=args.lake_name_field,
+                existing_ids=set(),
+            ),
+            *load_country_index_rows(
+                input_path=country_input_path,
+                country_names=country_names,
+                country_populations=country_populations,
+                code_field=args.country_code_field,
+                parts=country_parts,
+            ),
+        ]
 
     count, points = write_locations_csv(
         out_csv,
@@ -1027,7 +1535,7 @@ def main() -> None:
         excluded_feature_codes=excluded_feature_codes,
         collect_points=bool(args.write_kdtree),
         index_csv=index_csv,
-        marine_index_rows=marine_index_rows,
+        area_index_rows=area_index_rows,
     )
 
     if args.write_kdtree:
@@ -1037,6 +1545,10 @@ def main() -> None:
         write_kdtree(points, kdtree_path)
 
     if args.write_country_mask:
+        mask_input_path = _prepare_country_input(
+            explicit_input=Path(args.country_input) if args.country_input else None,
+            cache_dir=Path(args.country_cache_dir),
+        )
         build_country_mask(
             output_npz=Path(args.country_mask_path),
             output_codes_json=Path(args.country_codes_path),
@@ -1044,6 +1556,10 @@ def main() -> None:
             cache_dir=Path(args.country_cache_dir),
             input_path=Path(args.country_input) if args.country_input else None,
             code_field=args.country_code_field,
+            parts=prepare_country_parts(
+                country_input_path=mask_input_path,
+                cache_dir=Path(args.country_cache_dir),
+            ),
         )
 
     if args.write_country_names:

@@ -37,6 +37,8 @@ class Settings:
     analytics_enabled: bool = False
     geoip_cache_ttl_s: int = 3600
     artifacts_root: Optional[Path] = None
+    # Outlines of selectable regions; None disables the map overlay only.
+    region_shapes_json: Optional[Path] = None
     # Chat / LLM provider config
     chat_enabled: bool = False
     chat_dev_mode: bool = True  # safe default — set CHAT_DEV_MODE=0 in production
@@ -130,6 +132,11 @@ def load_settings() -> Settings:
     country_names_json = _env_optional_path(
         "COUNTRY_NAMES_JSON", repo_root / "data" / "locations" / "country_names.json"
     )
+    # Outlines drawn over a selected country or sea; optional, see
+    # climate_api/store/region_shapes.py.
+    region_shapes_json = _env_optional_path(
+        "REGION_SHAPES_JSON", repo_root / "data" / "locations" / "region_shapes.json"
+    )
     country_constrained_max_km = float(
         os.environ.get("COUNTRY_CONSTRAINED_MAX_KM", "100.0")
     )
@@ -197,6 +204,7 @@ def load_settings() -> Settings:
         country_mask_npz=country_mask_npz,
         country_codes_json=country_codes_json,
         country_names_json=country_names_json,
+        region_shapes_json=region_shapes_json,
         country_constrained_max_km=country_constrained_max_km,
         redis_url=redis_url,
         ttl_resolve_s=ttl_resolve_s,

@@ -216,7 +216,7 @@ After rankings are generated, run this script to generate precomputed regional a
 python scripts/precompute_regional_aggregates.py --release dev
 ```
 
-This loads the full metric tile grid into memory (~200 MB for a global 0.25° metric), builds fractional region weights from the country and ocean masks, then computes area-weighted mean and min/max time series for each country, continent, ocean, and the globe. Outputs one JSON file per aggregation under each metric's `aggregates/` folder. The API loads these at startup and uses them as a fast path for the chat `get_region_metric_series` tool.
+This loads the full metric tile grid into memory (~200 MB for a global 0.25° metric), builds fractional region weights from the country and ocean masks (plus the ocean overlay mask, which gives the Great Barrier Reef its own aggregate without taking cells from the Coral Sea — see `locations-and-ocean-mask.md`), then computes area-weighted mean and min/max time series for each country, continent, ocean, and the globe. Outputs one JSON file per aggregation under each metric's `aggregates/` folder. The API loads these at startup and uses them as a fast path for the chat `get_region_metric_series` tool.
 
 To regenerate aggregates for a specific metric only:
 
@@ -238,6 +238,19 @@ Validate that all expected aggregate files are present and structurally correct:
 ```bash
 python scripts/validate/aggregates.py
 ```
+
+## Post-packaging: Coral heat-stress risk days
+
+The coral panel's graph is not a mean: it counts the days per year on which at least 1%, 5% or 10% of reef cells were under moderate (DHW ≥ 4) or severe (DHW ≥ 8) heat stress. That needs the daily DHW files rather than the packaged per-cell yearly tiles, so it has its own script, reading the ERDDAP cache:
+
+```bash
+python scripts/precompute_dhw_global_risk.py --thresholds 1 5 10 --release dev \
+  --cache-dir /Volumes/LaCie/Climate/cache
+```
+
+It writes `fraction_<X>pct.json` under each of the three `dhw_*_risk_days_per_year` metrics' `aggregates/`, with a `globe` series and one per sea. A sea counts the reef-domain cells inside it (`data/masks/crw_dhw_daily_global_0p05_mask.npz`, including the Great Barrier Reef overlay), and needs at least `--min-region-cells` of them (default 100). The global series keeps its original definition: every cell with data in the downloaded tiles, open water between reefs included. One pass over the 15 GB cache takes 20–80 minutes depending on the drive; `--global-only` skips the seas.
+
+Rerun it when the DHW cache is extended, or when the ocean mask or its overlay changes.
 
 ## Cache location
 

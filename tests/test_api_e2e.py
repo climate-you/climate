@@ -232,3 +232,180 @@ def test_release_endpoint_resolves_requested_and_latest_alias() -> None:
     assert isinstance(latest.get("release"), str) and bool(latest["release"])
     assert "layers" in latest
     assert isinstance(latest.get("version"), dict)
+
+
+def _region_panel(app: Any, region_id: str) -> tuple[int, dict]:
+    return asyncio.run(
+        _asgi_get_json(
+            app,
+            f"/api/v/{API_E2E_RELEASE}/panel/region",
+            {"region_id": region_id, "unit": "C"},
+        )
+    )
+
+
+def test_country_search_hands_back_a_region_the_panel_endpoint_serves() -> None:
+    app = create_app()
+    status, data = asyncio.run(
+        _asgi_get_json(
+            app,
+            f"/api/v/{API_E2E_RELEASE}/locations/autocomplete",
+            {"q": "France", "limit": 1},
+        )
+    )
+    assert status == 200
+    (france,) = data["results"]
+    assert france["kind"] == "country"
+    assert france["region_id"] == "country:FR"
+
+    status, panel = _region_panel(app, france["region_id"])
+    assert status == 200
+    assert panel["location"]["region_id"] == "country:FR"
+    assert panel["location"]["place"]["label"] == "France"
+    assert panel["location"]["region_cell_count"] > 0
+    assert panel["location"]["place"]["population"] is None
+
+
+def test_country_region_panel_has_no_sea_temperature_data() -> None:
+    status, panel = _region_panel(create_app(), "country:FR")
+    assert status == 200
+    by_id = {p["panel"]["id"]: p["panel"] for p in panel["panels"]}
+    assert {"air_temperature", "precipitation"} <= set(by_id)
+    # Kept as a stub, so the frontend can say "not available here".
+    sea = by_id["sea_temperature"]
+    assert all(g["series_keys"] == [] for g in sea["graphs"])
+    assert all(g["title"] for g in sea["graphs"])
+    keys = {h["key"] for h in panel["headlines"]}
+    assert "precip_global" in keys
+    assert not keys & {"sst_recent_global", "sst_hotdays_global"}
+
+
+def test_sea_region_panel_includes_sea_temperature() -> None:
+    status, panel = _region_panel(create_app(), "ocean:north_sea")
+    assert status == 200
+    ids = {p["panel"]["id"] for p in panel["panels"]}
+    assert "sea_temperature" in ids
+
+
+@pytest.mark.parametrize(
+    "region_id",
+    [
+        # Aggregates exist, but nothing in search can select them.
+        "continent:europe",
+        "globe",
+        # Searchable, but too small for the mask, or with no extent in the
+        # source data at all, so no aggregate.
+        "country:MC",
+        "ocean:drake_passage",
+        # Not a region at all.
+        "country:ZZ",
+        "../../etc/passwd",
+    ],
+)
+def test_region_panel_refuses_anything_search_cannot_select(region_id: str) -> None:
+    status, _ = _region_panel(create_app(), region_id)
+    assert status == 404
+
+
+def test_the_great_barrier_reef_is_a_region_of_its_own() -> None:
+    # It lies inside the Coral Sea, which erases it from the partition mask; the
+    # overlay mask brings it back without taking any cells from the Coral Sea.
+    app = create_app()
+    status, reef = _region_panel(app, "ocean:great_barrier_reef")
+    assert status == 200
+    assert "sea_temperature" in {p["panel"]["id"] for p in reef["panels"]}
+    status, coral_sea = _region_panel(app, "ocean:coral_sea")
+    assert status == 200
+    assert (
+        coral_sea["location"]["region_cell_count"]
+        > reef["location"]["region_cell_count"]
+        > 0
+    )
+    status, _ = _region_shape(app, "ocean:great_barrier_reef")
+    assert status == 200
+
+
+def test_france_is_the_metropole_and_its_overseas_parts_are_regions() -> None:
+    app = create_app()
+    status, france = _region_panel(app, "country:FR")
+    assert status == 200
+    assert "French Guiana" in france["location"]["region_note"]
+    status, guiana = _region_panel(app, "country:GF")
+    assert status == 200
+    assert guiana["location"]["region_note"] is None
+    assert guiana["location"]["region_cell_count"] > 0
+
+
+def test_alaska_is_a_state_region_of_its_own() -> None:
+    app = create_app()
+    status, alaska = _region_panel(app, "state:US-AK")
+    assert status == 200
+    assert alaska["location"]["place"]["label"] == "Alaska"
+    status, _ = _region_shape(app, "state:US-AK")
+    assert status == 200
+    status, results = asyncio.run(
+        _asgi_get_json(
+            app,
+            f"/api/v/{API_E2E_RELEASE}/locations/autocomplete",
+            {"q": "alaska", "limit": 1},
+        )
+    )
+    assert status == 200
+    assert results["results"][0]["region_id"] == "state:US-AK"
+
+
+def test_a_sea_with_reefs_has_its_own_coral_heat_stress() -> None:
+    status, panel = _region_panel(create_app(), "ocean:coral_sea")
+    assert status == 200
+    coral = [
+        g
+        for p in panel["panels"]
+        for g in p["panel"]["graphs"]
+        if g["id"] == "dhw_risk_days"
+    ][0]
+    assert coral["series_keys"]
+    keys = {h["key"] for h in panel["headlines"]}
+    assert {"dhw_worst_year_local", "dhw_worst_year_days_local"} <= keys
+
+
+def test_global_panel_carries_no_region_fields() -> None:
+    status, panel = asyncio.run(
+        _asgi_get_json(
+            create_app(), f"/api/v/{API_E2E_RELEASE}/panel/global", {"unit": "C"}
+        )
+    )
+    assert status == 200
+    assert panel["location"]["region_id"] is None
+    assert panel["location"]["region_cell_count"] is None
+
+
+def _region_shape(app: Any, region_id: str) -> tuple[int, dict]:
+    return asyncio.run(
+        _asgi_get_json(
+            app,
+            f"/api/v/{API_E2E_RELEASE}/regions/shape",
+            {"region_id": region_id},
+        )
+    )
+
+
+def test_a_selectable_region_has_an_outline() -> None:
+    status, shape = _region_shape(create_app(), "country:FR")
+    assert status == 200
+    assert shape["type"] == "MultiPolygon"
+    assert shape["coordinates"]
+
+
+@pytest.mark.parametrize(
+    "region_id",
+    [
+        "continent:europe",
+        "globe",
+        "country:MC",
+        "ocean:drake_passage",
+        "../../etc/passwd",
+    ],
+)
+def test_no_outline_for_a_region_search_cannot_select(region_id: str) -> None:
+    status, _ = _region_shape(create_app(), region_id)
+    assert status == 404

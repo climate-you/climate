@@ -9,6 +9,8 @@ import logging
 import numpy as np
 import pandas as pd
 
+from climate.geo.names import takes_definite_article
+
 from ..cache import Cache
 from .country_classifier import CountryClassifier
 from .ocean_classifier import OceanClassifier
@@ -23,6 +25,9 @@ class Place:
     distance_km: float
     country_code: str | None = None
     population: int | None = None
+    # Whether the label needs "the" mid-sentence ("the North Sea off Aberdeen").
+    # Decided where the label is built, since only then is its kind known.
+    definite_article: bool = False
 
 
 def _haversine_km_vec(
@@ -231,6 +236,7 @@ class PlaceResolver:
                         if hit.get("population") is not None
                         else None
                     ),
+                    definite_article=bool(hit.get("definite_article", False)),
                 )
 
         # Step 1: country-constrained nearest (if enabled and country is known).
@@ -272,6 +278,7 @@ class PlaceResolver:
             city_label = str(geonameid)
 
         label = city_label
+        definite_article = False
         population: int | None = (
             int(self._populations[i])
             if i < len(self._populations) and int(self._populations[i]) > 0
@@ -289,6 +296,9 @@ class PlaceResolver:
                 )
                 if not use_city_override:
                     ocean_name = ocean.ocean_name or "Open Ocean"
+                    # The water body leads the label, so it decides the article
+                    # whether or not a nearby city is appended.
+                    definite_article = takes_definite_article(ocean_name, "marine")
                     if dist <= self.ocean_off_city_max_km:
                         label = f"{ocean_name} off {city_label}"
                     else:
@@ -302,6 +312,7 @@ class PlaceResolver:
 
         if country_override_label is not None:
             label = country_override_label
+            definite_article = takes_definite_article(label, "country")
 
         place = Place(
             geonameid=geonameid,
@@ -315,6 +326,7 @@ class PlaceResolver:
                 else None
             ),
             population=population,
+            definite_article=definite_article,
         )
 
         if self.cache is not None:
@@ -328,6 +340,7 @@ class PlaceResolver:
                     "distance_km": place.distance_km,
                     "country_code": place.country_code,
                     "population": place.population,
+                    "definite_article": place.definite_article,
                 },
                 ttl_s=self.ttl_resolve_s,
             )

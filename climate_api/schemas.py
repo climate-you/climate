@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pydantic import BaseModel
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class SeriesPayload(BaseModel):
@@ -62,6 +62,15 @@ class LocationInfo(BaseModel):
     panel_valid_bbox: Optional["PanelValidBBox"] = None
     panel_bbox_grid_id: Optional[str] = None
     panel_cell_indices: Optional[list["PanelCellIndex"]] = None
+    # Set on a region panel, where the figures are an area-weighted mean over a
+    # whole country or sea rather than a reading at `place`. `region_cell_count`
+    # is how many grid cells went into that mean, which the panel shows as the
+    # provenance line under the region's name.
+    region_id: Optional[str] = None
+    region_cell_count: Optional[int] = None
+    # What the region's figures cover where that is not the obvious whole:
+    # "Metropolitan France and Corsica. French Guiana, … have their own entries."
+    region_note: Optional[str] = None
 
 
 class PanelResponse(BaseModel):
@@ -151,6 +160,9 @@ class PlaceInfo(BaseModel):
     distance_km: float
     country_code: str | None = None
     population: int | None = None
+    # Whether `label` needs "the" in a sentence — "In the North Sea, …". The
+    # label itself stays bare, as it is also shown on its own.
+    definite_article: bool = False
 
 
 class DataCell(BaseModel):
@@ -196,6 +208,17 @@ class LocationAutocompleteItem(BaseModel):
     lon: float
     country_code: str
     population: int
+    # "city", or an area kind ("country", "marine", "lake"). Area entries carry
+    # a (west, south, east, north) box the map fits on select; east may exceed
+    # 180 where the box straddles the antimeridian.
+    kind: str = "city"
+    bbox: Optional[Tuple[float, float, float, float]] = None
+    # Set only when this release actually has aggregates for the region, so its
+    # presence is the client's signal to ask for a region panel rather than a
+    # point one. Null for cities, lakes, and areas with no data.
+    region_id: Optional[str] = None
+    # Whether `label` needs "the" in a sentence; see PlaceInfo.
+    definite_article: bool = False
 
 
 class LocationAutocompleteResponse(BaseModel):

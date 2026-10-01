@@ -20,6 +20,9 @@ import ColdOpenOverlay from "@/components/explorer/ColdOpenOverlay";
 import SiteNav from "@/components/explorer/SiteNav";
 import CaseStudiesOverlay from "@/components/CaseStudiesOverlay";
 import type { CaseStudy } from "@/components/CaseStudiesOverlay";
+import type { MultiPolygon } from "geojson";
+import { isAggregateScope, panelScope } from "@/lib/explorer/panelScope";
+import { sentenceParts } from "@/lib/explorer/placeName";
 import type { OverlayRoute } from "@/lib/explorer/routing";
 import SearchOverlay from "@/components/explorer/SearchOverlay";
 import type { AutocompleteItem } from "@/components/explorer/SearchOverlay";
@@ -203,6 +206,7 @@ type PanelResponse = {
       distance_km: number;
       country_code?: string | null;
       population?: number | null;
+      definite_article?: boolean;
     };
     panel_valid_bbox?: {
       lat_min: number;
@@ -211,6 +215,13 @@ type PanelResponse = {
       lon_max: number;
     } | null;
     panel_bbox_grid_id?: string | null;
+    // Set on a region panel: the figures are an area-weighted mean over a whole
+    // country or sea, computed over `region_cell_count` grid cells.
+    region_id?: string | null;
+    region_cell_count?: number | null;
+    // What the region covers where that is not the obvious whole, e.g.
+    // "Metropolitan France and Corsica. French Guiana, … have their own entries."
+    region_note?: string | null;
   };
   panels: Array<{
     score: number;
@@ -244,6 +255,7 @@ type NearestLocationResponse = {
     distance_km: number;
     country_code?: string | null;
     population?: number | null;
+    definite_article?: boolean;
   };
 };
 
@@ -257,6 +269,8 @@ type SelectedLocationMeta = {
   label: string;
   countryCode: string;
   population: number | null;
+  // Whether `label` needs "the" mid-sentence ("In the North Sea, …").
+  definiteArticle: boolean;
 };
 type PagedGraphItem = {
   panelId: string;
@@ -283,6 +297,9 @@ function pickGlobeBackground(): GlobeBackground {
   }
   return entry;
 }
+
+// Region panels kept in memory at once; see regionPanelCacheRef.
+const REGION_PANEL_CACHE_SIZE = 12;
 
 const FIXED_GRAPH_ORDER = [
   "t2m_annual",
@@ -428,16 +445,26 @@ export default function ExplorerPage({
   const [chatFlyToBbox, setChatFlyToBbox] = useState<
     [number, number, number, number] | null
   >(null);
+  // Bounds of the currently selected area (country, sea or lake); null while a
+  // city or a map click is selected, which the map frames as a point instead.
+  const [focusBbox, setFocusBbox] = useState<
+    [number, number, number, number] | null
+  >(null);
   const [selectedLocation, setSelectedLocation] =
     useState<SelectedLocationMeta | null>({
       geonameid: 0,
       label: "Global",
       countryCode: "",
       population: null,
+      definiteArticle: false,
     });
   const [selectedGeonameidForPanel, setSelectedGeonameidForPanel] = useState<
     number | null
   >(null);
+  // The aggregate region the panel is showing ("country:FR"), or null for a
+  // point or the globe. Kept apart from the geonameid so a reload — a unit
+  // toggle, a retry — asks for the same kind of panel it is replacing.
+  const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const [panelStale, setPanelStale] = useState<boolean>(false);
   const panelStaleTimerRef = useRef<number | null>(null);
   const panelAbortControllerRef = useRef<AbortController | null>(null);
@@ -465,6 +492,13 @@ export default function ExplorerPage({
   const lastTrackedLayerIdRef = useRef<string | null>(null);
   const globalPrefetchDoneRef = useRef(false);
   const globalPanelCacheRef = useRef<Map<string, PanelResponse>>(new Map());
+  // Recent region panels, so flipping °C/°F or revisiting a region is instant.
+  // Bounded: unlike the one global panel, a reader can visit any number.
+  const regionPanelCacheRef = useRef<Map<string, PanelResponse>>(new Map());
+  // Outline of the selected region, drawn on the map; null when none is
+  // selected, or while it loads, or if the server has no outline for it.
+  const [regionShape, setRegionShape] = useState<MultiPolygon | null>(null);
+  const regionShapeAbortRef = useRef<AbortController | null>(null);
   const preloadedBackgroundsRef = useRef<Set<string>>(new Set());
   const [graphsPerPage, setGraphsPerPage] = useState(2);
   const prevGraphsPerPageRef = useRef(2);
@@ -679,17 +713,27 @@ export default function ExplorerPage({
     const graph = visibleGraphs[0]?.graph ?? null;
     const config = graph?.headline ?? null;
     if (!config) return null;
-    const isGlobal = resp.location.place.geonameid === 0;
+    const scope = panelScope(resp.location);
+    // Headline keys follow the scope: aggregate panels (globe or region) use
+    // *_global, points use *_local. Behaviour that is genuinely about the whole
+    // planet — the precipitation note, the global coral view — keys off
+    // isGlobal alone.
+    const isGlobal = scope === "global";
+    const isAggregate = isAggregateScope(scope);
     const convertDelta = (v: number) =>
       unit === respUnit ? v : unit === "F" ? v * (9 / 5) : v * (5 / 9);
 
     switch (config.type) {
       case "air_temp": {
         const pi = h(
-          isGlobal ? config.primary_metric_global : config.primary_metric_local,
+          isAggregate
+            ? config.primary_metric_global
+            : config.primary_metric_local,
         );
         const recent = h(
-          isGlobal ? config.recent_metric_global : config.recent_metric_local,
+          isAggregate
+            ? config.recent_metric_global
+            : config.recent_metric_local,
         );
         const piVal =
           typeof pi?.value === "number" && Number.isFinite(pi.value)
@@ -711,7 +755,7 @@ export default function ExplorerPage({
         } as const;
       }
       case "sea_temp": {
-        const sst = h(isGlobal ? config.metric_global : config.metric_local);
+        const sst = h(isAggregate ? config.metric_global : config.metric_local);
         const sstVal =
           typeof sst?.value === "number" && Number.isFinite(sst.value)
             ? sst.value
@@ -730,7 +774,10 @@ export default function ExplorerPage({
               } as const);
         }
         if (!isGlobal) {
-          const globalSst = h(config.metric_global);
+          // No sea data here. A point can quote the global figure instead; a
+          // region's response carries no separate global one, so it only says
+          // the data is unavailable — rather than falling back to a bare name.
+          const globalSst = isAggregate ? null : h(config.metric_global);
           const globalDelta =
             typeof globalSst?.value === "number" &&
             Number.isFinite(globalSst.value)
@@ -750,7 +797,7 @@ export default function ExplorerPage({
         if (isGlobal && isPrecipGraph) {
           return { type: "global_precip_unavailable" } as const;
         }
-        const hd = h(isGlobal ? config.metric_global : config.metric_local);
+        const hd = h(isAggregate ? config.metric_global : config.metric_local);
         if (typeof hd?.value === "number" && Number.isFinite(hd.value)) {
           const delta =
             typeof hd.baseline_value === "number" &&
@@ -767,7 +814,9 @@ export default function ExplorerPage({
           } as const;
         }
         if (!isGlobal && config.unavailable_global_metric) {
-          const globalSst = h(config.unavailable_global_metric);
+          const globalSst = isAggregate
+            ? null
+            : h(config.unavailable_global_metric);
           const globalDelta =
             typeof globalSst?.value === "number" &&
             Number.isFinite(globalSst.value)
@@ -831,9 +880,12 @@ export default function ExplorerPage({
             type: "coral_worst_year",
             days: worstDaysVal,
             year: worstYearVal,
+            // A region counts days on which at least 10% of its reefs were
+            // stressed (the chart's default step), not days at one reef.
+            overReefShare: isAggregate,
           } as const;
         }
-        return { type: "coral_no_days" } as const;
+        return { type: "coral_no_days", overReefShare: isAggregate } as const;
       }
       default:
         return null;
@@ -1059,6 +1111,7 @@ export default function ExplorerPage({
           Number.isFinite(place.population)
             ? place.population
             : null,
+        definiteArticle: place.definite_article ?? false,
       });
     }
     return data;
@@ -1100,21 +1153,27 @@ export default function ExplorerPage({
     }
   }
 
+  // Turn to the page holding `graphId`. Returns whether it did, so a caller
+  // can fall back to a default of its own.
+  function showGraphPage(graphId: string | undefined): boolean {
+    if (!graphId) return false;
+    const graphIndex = (FIXED_GRAPH_ORDER as readonly string[]).indexOf(
+      graphId,
+    );
+    if (graphIndex < 0) return false;
+    setGraphPage(Math.floor(graphIndex / Math.max(1, graphsPerPage)));
+    return true;
+  }
+
   function applyLayerDefaultGraphPage(
     layerOverrides:
       | Record<string, { default_graph_ids: string[] }>
       | undefined
       | null,
-  ) {
-    const firstGraphId =
-      layerOverrides?.[activeLayerId]?.default_graph_ids?.[0];
-    if (!firstGraphId) return;
-    const graphIndex = (FIXED_GRAPH_ORDER as readonly string[]).indexOf(
-      firstGraphId,
+  ): boolean {
+    return showGraphPage(
+      layerOverrides?.[activeLayerId]?.default_graph_ids?.[0],
     );
-    if (graphIndex >= 0) {
-      setGraphPage(Math.floor(graphIndex / Math.max(1, graphsPerPage)));
-    }
   }
 
   async function loadGlobalPanel(
@@ -1135,13 +1194,17 @@ export default function ExplorerPage({
     );
     setChatLocations(null);
     setChatFlyToBbox(null);
+    setFocusBbox(null);
     setPicked(null);
     setSelectedGeonameidForPanel(null);
+    setSelectedRegionId(null);
+    clearRegionShape();
     setSelectedLocation({
       geonameid: 0,
       label: "Global",
       countryCode: "",
       population: null,
+      definiteArticle: false,
     });
     if (switchToGraphTab) setPanelTab("graph");
     if (openPanel) setPanelOpen(true);
@@ -1185,6 +1248,117 @@ export default function ExplorerPage({
     }
   }
 
+  async function loadRegionPanel(
+    regionId: string,
+    nextUnit: "C" | "F" = unit,
+    // A fresh selection may land on a default graph; a unit toggle or a retry
+    // leaves the reader on the page they were already reading.
+    defaultGraphId: string | null = null,
+  ) {
+    panelAbortControllerRef.current?.abort("superseded");
+    const controller = new AbortController();
+    panelAbortControllerRef.current = controller;
+    const timeoutId = window.setTimeout(
+      () => controller.abort("timeout"),
+      FETCH_TIMEOUT_MS,
+    );
+    setPanelLoadError(null);
+
+    const show = (data: PanelResponse) => {
+      // A layer the reader chose outranks the region's own default.
+      if (defaultGraphId && !applyLayerDefaultGraphPage(data.layer_overrides)) {
+        showGraphPage(defaultGraphId);
+      }
+      setResp(data);
+      setRespUnit(nextUnit);
+    };
+
+    const cache = regionPanelCacheRef.current;
+    const cacheKey = `${releaseForSession}:${regionId}:${nextUnit}`;
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      window.clearTimeout(timeoutId);
+      controller.abort("superseded");
+      // Re-insert so eviction always drops the least recently used entry.
+      cache.delete(cacheKey);
+      cache.set(cacheKey, cached);
+      show(cached);
+      return;
+    }
+
+    setResp(null);
+    setPanelLoading(true);
+    try {
+      const params = new URLSearchParams({
+        region_id: regionId,
+        unit: nextUnit,
+      });
+      const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/panel/region?${params.toString()}`;
+      const r = await fetch(url, { signal: controller.signal });
+      if (!r.ok) throw new Error(await r.text());
+      const data = (await r.json()) as PanelResponse;
+      window.clearTimeout(timeoutId);
+      pinSessionRelease(data.release);
+      cache.set(cacheKey, data);
+      while (cache.size > REGION_PANEL_CACHE_SIZE) {
+        const oldest = cache.keys().next().value;
+        if (oldest === undefined) break;
+        cache.delete(oldest);
+      }
+      show(data);
+      setPanelLoadError(null);
+      setPanelLoading(false);
+    } catch {
+      window.clearTimeout(timeoutId);
+      if (controller.signal.reason === "superseded") return;
+      setPanelLoading(false);
+      setPanelLoadError(CLIMATE_DATA_LOAD_ERROR);
+    }
+  }
+
+  // Reload whatever the panel is showing — a region, the globe, or a point —
+  // in `nextUnit`. The unit toggles and the retry button all come through
+  // here, so none of them can swap a region panel for a point one.
+  function reloadActivePanel(nextUnit: "C" | "F" = unit) {
+    if (selectedRegionId) return loadRegionPanel(selectedRegionId, nextUnit);
+    if (selectedLocation?.geonameid === 0) {
+      return loadGlobalPanel(nextUnit, false, panelOpen, false);
+    }
+    return loadPanel(lat, lon, nextUnit);
+  }
+
+  // Drop the outline, and any outline still on its way: a slow response for
+  // the previous region must not draw over whatever was chosen next.
+  function clearRegionShape() {
+    regionShapeAbortRef.current?.abort("superseded");
+    regionShapeAbortRef.current = null;
+    setRegionShape(null);
+  }
+
+  async function loadRegionShape(regionId: string) {
+    clearRegionShape();
+    const controller = new AbortController();
+    regionShapeAbortRef.current = controller;
+    const timeoutId = window.setTimeout(
+      () => controller.abort("timeout"),
+      FETCH_TIMEOUT_MS,
+    );
+    try {
+      const params = new URLSearchParams({ region_id: regionId });
+      const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/regions/shape?${params.toString()}`;
+      const r = await fetch(url, { signal: controller.signal });
+      // No outline is not an error: the panel is complete without one.
+      if (!r.ok) return;
+      const geometry = (await r.json()) as MultiPolygon;
+      if (controller.signal.aborted) return;
+      setRegionShape(geometry);
+    } catch {
+      // Superseded, timed out or offline: carry on without an outline.
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
   async function fetchNearestLocation(nextLat: number, nextLon: number) {
     const url = `${apiBase}/api/v/${encodeURIComponent(releaseForSession)}/locations/nearest?lat=${encodeURIComponent(nextLat)}&lon=${encodeURIComponent(
       nextLon,
@@ -1204,14 +1378,38 @@ export default function ExplorerPage({
     setPicked({ lat: item.lat, lon: item.lon });
     setChatLocations(null);
     setChatFlyToBbox(null);
-    setSelectedGeonameidForPanel(item.geonameid);
+    // Countries, seas and lakes carry a bounding box: frame the whole area
+    // rather than zooming in on its representative point.
+    setFocusBbox(item.bbox ?? null);
     setSelectedLocation({
       geonameid: item.geonameid,
       label: item.label,
       countryCode: item.country_code,
-      population: item.population,
+      // A region panel shows its cell count in this slot rather than a
+      // population, whose only source is years stale. Anything read as a point
+      // keeps its population exactly as before.
+      population: item.region_id ? null : item.population,
+      definiteArticle: item.definite_article ?? false,
     });
     setPanelOpen(true);
+    // An area the release has aggregates for gets a region-wide panel; any
+    // other selection — a city, a lake, a country too small for the mask —
+    // reads the point it was placed at.
+    if (item.region_id) {
+      setSelectedGeonameidForPanel(null);
+      setSelectedRegionId(item.region_id);
+      void loadRegionShape(item.region_id);
+      // A sea opens on sea-surface temperature, the reason to look at one.
+      void loadRegionPanel(
+        item.region_id,
+        unit,
+        item.kind === "marine" ? "sst_annual" : null,
+      );
+      return;
+    }
+    setSelectedRegionId(null);
+    clearRegionShape();
+    setSelectedGeonameidForPanel(item.geonameid);
     void loadPanel(item.lat, item.lon, unit, item.geonameid);
   }
 
@@ -1229,7 +1427,11 @@ export default function ExplorerPage({
       setChatLocations(null);
       setChatFlyToBbox(null);
     }
+    setFocusBbox(null);
     setSelectedGeonameidForPanel(null);
+    // A click is always a point, even inside a highlighted region.
+    setSelectedRegionId(null);
+    clearRegionShape();
 
     // When the panel is closed, wait up to PANEL_OPEN_AWAIT_MS for the API so
     // the panel can open with data already populated rather than flashing a
@@ -1267,6 +1469,7 @@ export default function ExplorerPage({
             Number.isFinite(place.population)
               ? place.population
               : null,
+          definiteArticle: place.definite_article ?? false,
         });
         setResp((prev) => {
           if (!prev) return prev;
@@ -1284,6 +1487,7 @@ export default function ExplorerPage({
                 distance_km: place.distance_km,
                 country_code: place.country_code ?? null,
                 population: place.population ?? null,
+                definite_article: place.definite_article ?? false,
               },
             },
           };
@@ -1604,6 +1808,20 @@ export default function ExplorerPage({
   const locationLabel =
     selectedLocation?.label ?? resp?.location.place.label ?? "";
   const titleLocationLabel = locationLabel || "this location";
+  // The same name as it reads mid-sentence: "In the North Sea, …". It is split
+  // so "the" is set small with the words before it ("In the") and only the
+  // name itself is emphasised. The article comes from wherever the label did,
+  // so the two can never disagree.
+  const { article: locationArticle, name: sentenceLocationName } = locationLabel
+    ? sentenceParts(
+        locationLabel,
+        selectedLocation?.label
+          ? selectedLocation.definiteArticle
+          : (resp?.location.place.definite_article ?? false),
+      )
+    : { article: "", name: titleLocationLabel };
+  const withArticle = (words: string) =>
+    locationArticle ? `${words} ${locationArticle}` : words;
   const panelTitleInfoText = (() => {
     if (!panelHeadline) {
       return "Headline values are derived from local climate trend data. See the chart below for the full time series.";
@@ -1615,6 +1833,22 @@ export default function ExplorerPage({
     );
   })();
   const populationText = formatPopulation(selectedLocation?.population);
+  // "Country average · 1,295 cells": what a region panel's figures were
+  // computed over, in the slot a point panel uses for population. Tied to the
+  // current selection, so it cannot linger beside a newly chosen city while
+  // that city's panel is still loading.
+  const regionSubtitle = (() => {
+    const regionId = resp?.location.region_id;
+    const cells = resp?.location.region_cell_count;
+    if (!regionId || regionId !== selectedRegionId) return null;
+    if (typeof cells !== "number") return null;
+    const scope = regionId.startsWith("ocean:")
+      ? "Sea average"
+      : regionId.startsWith("state:")
+        ? "State average"
+        : "Country average";
+    return `${scope} · ${new Intl.NumberFormat("en-US").format(cells)} cells`;
+  })();
   const debugBbox = resp?.location?.panel_valid_bbox ?? null;
   const debugInBbox = inBbox(lat, lon, debugBbox);
   // Only emitted while a touch drag is actually moving the panel: a resting
@@ -1637,6 +1871,9 @@ export default function ExplorerPage({
         <MapLibreGlobe
           panelOpen={panelOpen}
           focusLocation={picked}
+          focusBbox={focusBbox}
+          regionShape={regionShape}
+          hideFocusMarker={selectedRegionId !== null}
           showDebugOverlay={debugMode}
           debugBbox={
             debugMode ? (resp?.location.panel_valid_bbox ?? null) : null
@@ -1721,10 +1958,8 @@ export default function ExplorerPage({
                 onClick={() => {
                   const nextUnit: "C" | "F" = unit === "C" ? "F" : "C";
                   setUnit(nextUnit);
-                  if (selectedLocation?.geonameid === 0) {
-                    void loadGlobalPanel(nextUnit, false, panelOpen, false);
-                  } else if (selectedLocation !== null) {
-                    void loadPanel(lat, lon, nextUnit);
+                  if (selectedLocation !== null) {
+                    void reloadActivePanel(nextUnit);
                   }
                 }}
               >
@@ -1894,8 +2129,10 @@ export default function ExplorerPage({
                           <>Globally, </>
                         ) : (
                           <>
-                            <span className={styles.panelTitleSmall}>In</span>{" "}
-                            {titleLocationLabel},{" "}
+                            <span className={styles.panelTitleSmall}>
+                              {withArticle("In")}
+                            </span>{" "}
+                            {sentenceLocationName},{" "}
                           </>
                         )}
                         {panelHeadline.warming ? (
@@ -1956,8 +2193,10 @@ export default function ExplorerPage({
                           <>Globally, </>
                         ) : (
                           <>
-                            <span className={styles.panelTitleSmall}>In</span>{" "}
-                            {titleLocationLabel},{" "}
+                            <span className={styles.panelTitleSmall}>
+                              {withArticle("In")}
+                            </span>{" "}
+                            {sentenceLocationName},{" "}
                           </>
                         )}
                         <span className={styles.panelTitleSmall}>
@@ -1983,8 +2222,10 @@ export default function ExplorerPage({
                           <>Globally, </>
                         ) : (
                           <>
-                            <span className={styles.panelTitleSmall}>In</span>{" "}
-                            {titleLocationLabel},{" "}
+                            <span className={styles.panelTitleSmall}>
+                              {withArticle("In")}
+                            </span>{" "}
+                            {sentenceLocationName},{" "}
                           </>
                         )}
                         <span className={styles.panelTitleSmall}>
@@ -1997,8 +2238,10 @@ export default function ExplorerPage({
                           <>Globally, </>
                         ) : (
                           <>
-                            <span className={styles.panelTitleSmall}>In</span>{" "}
-                            {titleLocationLabel},{" "}
+                            <span className={styles.panelTitleSmall}>
+                              {withArticle("In")}
+                            </span>{" "}
+                            {sentenceLocationName},{" "}
                           </>
                         )}
                         {Math.round(panelHeadline.value) === 0 ? (
@@ -2050,25 +2293,53 @@ export default function ExplorerPage({
                       </>
                     ) : panelHeadline?.type === "coral_worst_year" ? (
                       <>
-                        <span className={styles.panelTitleSmall}>In</span>{" "}
-                        {titleLocationLabel},{" "}
                         <span className={styles.panelTitleSmall}>
-                          {Math.round(panelHeadline.days) === 1
-                            ? "there was "
-                            : "there were "}
-                        </span>
-                        <span className={styles.panelTitleTempAccent}>
-                          {Math.round(panelHeadline.days)}
+                          {withArticle("In")}
                         </span>{" "}
-                        <span className={styles.panelTitleTempAccent}>
-                          {Math.round(panelHeadline.days) === 1
-                            ? "day"
-                            : "days"}
-                        </span>
-                        <span className={styles.panelTitleSmall}>
-                          {" "}
-                          of coral heat stress in{" "}
-                        </span>
+                        {sentenceLocationName},{" "}
+                        {panelHeadline.overReefShare ? (
+                          <>
+                            <span className={styles.panelTitleSmall}>
+                              at least{" "}
+                            </span>
+                            <span className={styles.panelTitleTempAccent}>
+                              10%
+                            </span>
+                            <span className={styles.panelTitleSmall}>
+                              {" "}
+                              of reefs were under heat stress on{" "}
+                            </span>
+                            <span className={styles.panelTitleTempAccent}>
+                              {Math.round(panelHeadline.days)}
+                            </span>{" "}
+                            <span className={styles.panelTitleTempAccent}>
+                              {Math.round(panelHeadline.days) === 1
+                                ? "day"
+                                : "days"}
+                            </span>
+                            <span className={styles.panelTitleSmall}> of </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className={styles.panelTitleSmall}>
+                              {Math.round(panelHeadline.days) === 1
+                                ? "there was "
+                                : "there were "}
+                            </span>
+                            <span className={styles.panelTitleTempAccent}>
+                              {Math.round(panelHeadline.days)}
+                            </span>{" "}
+                            <span className={styles.panelTitleTempAccent}>
+                              {Math.round(panelHeadline.days) === 1
+                                ? "day"
+                                : "days"}
+                            </span>
+                            <span className={styles.panelTitleSmall}>
+                              {" "}
+                              of coral heat stress in{" "}
+                            </span>
+                          </>
+                        )}
                         <span className={styles.panelTitleTempAccent}>
                           {panelHeadline.year}
                         </span>
@@ -2078,23 +2349,26 @@ export default function ExplorerPage({
                       </>
                     ) : panelHeadline?.type === "coral_no_days" ? (
                       <>
-                        <span className={styles.panelTitleSmall}>In</span>{" "}
-                        {titleLocationLabel},{" "}
                         <span className={styles.panelTitleSmall}>
-                          no days of coral heat stress have been recorded since
-                          1985.
+                          {withArticle("In")}
+                        </span>{" "}
+                        {sentenceLocationName},{" "}
+                        <span className={styles.panelTitleSmall}>
+                          {panelHeadline.overReefShare
+                            ? "heat stress has not reached 10% of reefs on any day since 1985."
+                            : "no days of coral heat stress have been recorded since 1985."}
                         </span>
                       </>
                     ) : panelHeadline?.type === "sst_unavailable" ? (
                       <>
                         <span className={styles.panelTitleSmall}>
-                          Sea temperature data not available in
+                          {withArticle("Sea temperature data not available in")}
                         </span>{" "}
-                        {titleLocationLabel}.{" "}
+                        {sentenceLocationName}.{" "}
                         {panelHeadline.globalDelta !== null ? (
                           <>
                             <span className={styles.panelTitleSmall}>
-                              Globally, the sea has warmed of{" "}
+                              Globally, the sea has warmed by{" "}
                             </span>
                             <span
                               className={
@@ -2118,9 +2392,9 @@ export default function ExplorerPage({
                     ) : panelHeadline?.type === "coral_unavailable" ? (
                       <>
                         <span className={styles.panelTitleSmall}>
-                          Coral stress data not available in
+                          {withArticle("Coral stress data not available in")}
                         </span>{" "}
-                        {titleLocationLabel}.{" "}
+                        {sentenceLocationName}.{" "}
                         <span className={styles.panelTitleSmall}>
                           Globally,{" "}
                         </span>
@@ -2156,7 +2430,17 @@ export default function ExplorerPage({
                     ) : null}
                   </h2>
                 </div>
-                {populationText ? (
+                {regionSubtitle ? (
+                  <p className={styles.panelPopulation}>
+                    {regionSubtitle}
+                    {resp?.location.region_note ? (
+                      <>
+                        <br />
+                        {resp.location.region_note}
+                      </>
+                    ) : null}
+                  </p>
+                ) : populationText ? (
                   <p className={styles.panelPopulation}>
                     Population: {populationText}
                   </p>
@@ -2169,12 +2453,7 @@ export default function ExplorerPage({
                       onClick={async () => {
                         if (panelRetrying) return;
                         setPanelRetrying(true);
-                        await loadPanel(
-                          lat,
-                          lon,
-                          unit,
-                          selectedGeonameidForPanel,
-                        );
+                        await reloadActivePanel(unit);
                         setPanelRetrying(false);
                       }}
                     >
@@ -2367,11 +2646,7 @@ export default function ExplorerPage({
                   onClick={() => {
                     if (unit === "C") return;
                     setUnit("C");
-                    if (selectedLocation?.geonameid === 0) {
-                      void loadGlobalPanel("C");
-                    } else {
-                      void loadPanel(lat, lon, "C");
-                    }
+                    void reloadActivePanel("C");
                   }}
                 >
                   °C
@@ -2386,11 +2661,7 @@ export default function ExplorerPage({
                   onClick={() => {
                     if (unit === "F") return;
                     setUnit("F");
-                    if (selectedLocation?.geonameid === 0) {
-                      void loadGlobalPanel("F");
-                    } else {
-                      void loadPanel(lat, lon, "F");
-                    }
+                    void reloadActivePanel("F");
                   }}
                 >
                   °F

@@ -138,6 +138,8 @@ def test_create_app_routes_with_mocked_dependencies(
                     lon=20.0,
                     country_code="US",
                     population=1000,
+                    kind="city",
+                    bbox=None,
                 )
             ]
 
@@ -150,6 +152,8 @@ def test_create_app_routes_with_mocked_dependencies(
                     lon=20.0,
                     country_code="US",
                     population=1000,
+                    kind="city",
+                    bbox=None,
                 )
             return None
 
@@ -177,7 +181,7 @@ def test_create_app_routes_with_mocked_dependencies(
     context = SimpleNamespace(
         release="dev",
         release_root=tmp_path / "releases" / "dev",
-        tile_store=object(),
+        tile_store=SimpleNamespace(region_ids=frozenset()),
         panels_manifest={"panels": {}},
         maps_manifest={"version": "0.1"},
         maps_root=asset_dir,
@@ -503,7 +507,7 @@ def test_rate_limit_returns_429_when_window_is_exceeded(
         def resolve_release_context(self, requested_release: str):
             return SimpleNamespace(
                 release="dev",
-                tile_store=object(),
+                tile_store=SimpleNamespace(region_ids=frozenset()),
                 panels_manifest={"panels": {}},
                 maps_manifest={"version": "0.1"},
                 maps_root=tmp_path / "releases" / "dev",

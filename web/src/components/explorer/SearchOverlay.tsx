@@ -11,6 +11,23 @@ export type AutocompleteItem = {
   lon: number;
   country_code: string;
   population: number;
+  // "city", or an area kind ("country", "marine", "lake"). Area entries carry a
+  // [west, south, east, north] box for the map to fit; east may exceed 180 for
+  // a box that straddles the antimeridian.
+  kind?: string;
+  bbox?: [number, number, number, number] | null;
+  // Present only when this release has aggregates for the area, so it doubles
+  // as the signal to open a region panel instead of a point one.
+  region_id?: string | null;
+  // Whether `label` needs "the" mid-sentence ("In the North Sea, …").
+  definite_article?: boolean;
+};
+
+const KIND_LABELS: Record<string, string> = {
+  country: "Country",
+  state: "State",
+  marine: "Sea",
+  lake: "Lake",
 };
 
 type AutocompleteResponse = {
@@ -158,7 +175,7 @@ export default function SearchOverlay({
       <div ref={searchWrapRef} className={styles.searchWrap}>
         <input
           className={styles.searchInput}
-          placeholder="Type a city name..."
+          placeholder="Type a city, country, sea or lake..."
           suppressHydrationWarning
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -204,7 +221,12 @@ export default function SearchOverlay({
                   i === suggestIndex ? styles.suggestionItemActive : ""
                 }`}
               >
-                {s.label}
+                <span>{s.label}</span>
+                {s.kind && KIND_LABELS[s.kind] ? (
+                  <span className={styles.suggestionKind}>
+                    {KIND_LABELS[s.kind]}
+                  </span>
+                ) : null}
               </div>
             ))}
           </div>

@@ -853,7 +853,7 @@ def test_local_graph_ui() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _global_aggregate_recent_delta_headline  (new)
+# _aggregate_recent_delta_headline  (new)
 # ---------------------------------------------------------------------------
 
 
@@ -869,12 +869,12 @@ def _make_agg_store(metric, aggregation, time_axis, values):
     return _Store()
 
 
-def test_global_aggregate_recent_delta_headline_success() -> None:
+def test_aggregate_recent_delta_headline_success() -> None:
     years = list(range(1979, 2024))
     values = [float(10 + i * 0.05) for i in range(len(years))]
     store = _make_agg_store("tp_annual_total_mm", "mean", years, values)
 
-    h = panels_module._global_aggregate_recent_delta_headline(
+    h = panels_module._aggregate_recent_delta_headline(
         tile_store=store,
         metric="tp_annual_total_mm",
         key="precip_global",
@@ -888,12 +888,12 @@ def test_global_aggregate_recent_delta_headline_success() -> None:
     assert h.period is not None
 
 
-def test_global_aggregate_recent_delta_headline_temperature_unit_conversion() -> None:
+def test_aggregate_recent_delta_headline_temperature_unit_conversion() -> None:
     years = list(range(1979, 2024))
     values = [float(15 + i * 0.05) for i in range(len(years))]
     store = _make_agg_store("t2m_yearly_mean_c", "mean", years, values)
 
-    h_c = panels_module._global_aggregate_recent_delta_headline(
+    h_c = panels_module._aggregate_recent_delta_headline(
         tile_store=store,
         metric="t2m_yearly_mean_c",
         key="t2m_recent_global",
@@ -903,7 +903,7 @@ def test_global_aggregate_recent_delta_headline_temperature_unit_conversion() ->
         baseline_year=1979,
     )
     store2 = _make_agg_store("t2m_yearly_mean_c", "mean", years, values)
-    h_f = panels_module._global_aggregate_recent_delta_headline(
+    h_f = panels_module._aggregate_recent_delta_headline(
         tile_store=store2,
         metric="t2m_yearly_mean_c",
         key="t2m_recent_global",
@@ -916,11 +916,11 @@ def test_global_aggregate_recent_delta_headline_temperature_unit_conversion() ->
     assert h_f.value == pytest.approx(h_c.value * 1.8, abs=1e-3)
 
 
-def test_global_aggregate_recent_delta_headline_missing() -> None:
+def test_aggregate_recent_delta_headline_missing() -> None:
     class _Empty:
         aggregates: dict = {}
 
-    h = panels_module._global_aggregate_recent_delta_headline(
+    h = panels_module._aggregate_recent_delta_headline(
         tile_store=_Empty(),
         metric="m",
         key="k",
@@ -934,7 +934,7 @@ def test_global_aggregate_recent_delta_headline_missing() -> None:
     class _NoGlobe:
         aggregates = {("m", "mean"): {"time_axis": [2020], "regions": {}}}
 
-    h2 = panels_module._global_aggregate_recent_delta_headline(
+    h2 = panels_module._aggregate_recent_delta_headline(
         tile_store=_NoGlobe(),
         metric="m",
         key="k",
@@ -947,16 +947,16 @@ def test_global_aggregate_recent_delta_headline_missing() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _global_aggregate_trend_headline  (new)
+# _aggregate_trend_headline  (new)
 # ---------------------------------------------------------------------------
 
 
-def test_global_aggregate_trend_headline_success() -> None:
+def test_aggregate_trend_headline_success() -> None:
     years = list(range(1979, 2024))
     values = [float(5 + i * 0.1) for i in range(len(years))]
     store = _make_agg_store("t2m_hotdays_per_year", "mean", years, values)
 
-    h = panels_module._global_aggregate_trend_headline(
+    h = panels_module._aggregate_trend_headline(
         tile_store=store,
         metric="t2m_hotdays_per_year",
         key="t2m_hotdays_global",
@@ -969,11 +969,11 @@ def test_global_aggregate_trend_headline_success() -> None:
     assert h.period == str(years[-1])
 
 
-def test_global_aggregate_trend_headline_missing() -> None:
+def test_aggregate_trend_headline_missing() -> None:
     class _Empty:
         aggregates: dict = {}
 
-    h = panels_module._global_aggregate_trend_headline(
+    h = panels_module._aggregate_trend_headline(
         tile_store=_Empty(),
         metric="m",
         key="k",
@@ -985,11 +985,11 @@ def test_global_aggregate_trend_headline_missing() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _compute_global_t2m_preindustrial_headline  (new)
+# _compute_aggregate_t2m_preindustrial_headline  (new)
 # ---------------------------------------------------------------------------
 
 
-def test_compute_global_t2m_preindustrial_headline_success() -> None:
+def test_compute_aggregate_t2m_preindustrial_headline_success() -> None:
     class _Store:
         aggregates = {
             ("t2m_total_warming_vs_preindustrial_c", "mean"): {
@@ -998,24 +998,24 @@ def test_compute_global_t2m_preindustrial_headline_success() -> None:
             }
         }
 
-    h = panels_module._compute_global_t2m_preindustrial_headline(
+    h = panels_module._compute_aggregate_t2m_preindustrial_headline(
         tile_store=_Store(), unit="C"
     )
     assert h.value == pytest.approx(1.2)
     assert h.period == "2023"
 
-    h_f = panels_module._compute_global_t2m_preindustrial_headline(
+    h_f = panels_module._compute_aggregate_t2m_preindustrial_headline(
         tile_store=_Store(), unit="F"
     )
     assert h_f.value == pytest.approx(1.2 * 1.8, abs=1e-3)
 
 
-def test_compute_global_t2m_preindustrial_headline_missing() -> None:
+def test_compute_aggregate_t2m_preindustrial_headline_missing() -> None:
     class _Empty:
         aggregates: dict = {}
 
     assert (
-        panels_module._compute_global_t2m_preindustrial_headline(
+        panels_module._compute_aggregate_t2m_preindustrial_headline(
             tile_store=_Empty(), unit="C"
         ).value
         is None
@@ -1030,7 +1030,7 @@ def test_compute_global_t2m_preindustrial_headline_missing() -> None:
         }
 
     assert (
-        panels_module._compute_global_t2m_preindustrial_headline(
+        panels_module._compute_aggregate_t2m_preindustrial_headline(
             tile_store=_NoGlobe(), unit="C"
         ).value
         is None
@@ -1045,7 +1045,7 @@ def test_compute_global_t2m_preindustrial_headline_missing() -> None:
         }
 
     assert (
-        panels_module._compute_global_t2m_preindustrial_headline(
+        panels_module._compute_aggregate_t2m_preindustrial_headline(
             tile_store=_EmptyValues(), unit="C"
         ).value
         is None

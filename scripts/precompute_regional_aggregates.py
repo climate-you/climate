@@ -17,7 +17,6 @@ import argparse
 import json
 import sys
 import time
-import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,6 +26,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from climate.geo.continents import CONTINENT_TO_CC
+from climate.geo.country_parts import SUBDIVISIONS, is_subdivision, parent_country_code
+from climate.geo.regions import (
+    continent_region_id,
+    country_mask_region_id,
+    ocean_region_id,
+)
 from climate.registry.metrics import load_metrics
 from climate.tiles.layout import GridSpec, tile_counts, tile_path
 from climate.tiles.spec import read_tile_array
@@ -38,6 +43,9 @@ _DEFAULT_COUNTRY_CODES = REPO_ROOT / "data" / "locations" / "country_codes.json"
 _DEFAULT_COUNTRY_NAMES = REPO_ROOT / "data" / "locations" / "country_names.json"
 _DEFAULT_OCEAN_MASK = REPO_ROOT / "data" / "locations" / "ocean_mask.npz"
 _DEFAULT_OCEAN_NAMES = REPO_ROOT / "data" / "locations" / "ocean_names.json"
+_DEFAULT_OCEAN_OVERLAY_MASK = (
+    REPO_ROOT / "data" / "locations" / "ocean_overlay_mask.npz"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -49,13 +57,6 @@ def _load_npz_mask(path: Path) -> tuple[np.ndarray, float]:
     """Load mask data and deg from NPZ file. Returns (data, deg)."""
     with np.load(path, allow_pickle=False) as f:
         return np.asarray(f["data"]), float(f["deg"])
-
-
-def _slugify(name: str) -> str:
-    """Convert ocean name to a URL-safe slug: lowercase, spaces→underscores."""
-    normalized = unicodedata.normalize("NFD", name)
-    ascii_str = normalized.encode("ascii", "ignore").decode("ascii")
-    return ascii_str.lower().replace(" ", "_").replace("-", "_")
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +330,7 @@ def precompute_aggregates(
     country_names_path: Path,
     ocean_mask_path: Path,
     ocean_names_path: Path,
+    ocean_overlay_mask_path: Path | None = None,
 ) -> int:
     releases_root = Path(releases_root)
     series_root = releases_root / release / "series"
@@ -362,6 +364,26 @@ def precompute_aggregates(
         for k, v in json.loads(ocean_names_path.read_text(encoding="utf-8")).items():
             ocean_id_to_name[int(k)] = str(v)
     print(f" {len(ocean_id_to_name)} ocean regions")
+
+    # Seas lying inside another sea (the Great Barrier Reef inside the Coral
+    # Sea), which the partition mask erases. Same ids as the ocean mask; each
+    # replaces its partition footprint with its full extent, so a cell counts
+    # towards both the reef and the Coral Sea — which is physically true.
+    ocean_overlay_mask: np.ndarray | None = None
+    if ocean_overlay_mask_path is not None and ocean_overlay_mask_path.exists():
+        ocean_overlay_mask, overlay_deg = _load_npz_mask(ocean_overlay_mask_path)
+        if overlay_deg != ocean_mask_deg:
+            print(
+                f"ERROR: overlay mask deg={overlay_deg} differs from ocean mask "
+                f"deg={ocean_mask_deg}",
+                file=sys.stderr,
+            )
+            return 1
+        overlay_ids = np.unique(ocean_overlay_mask)
+        print(
+            "[aggregates] ocean overlay regions:",
+            ", ".join(ocean_id_to_name.get(int(i), str(i)) for i in overlay_ids if i),
+        )
 
     # -----------------------------------------------------------------
     # Iterate metrics
@@ -497,6 +519,10 @@ def precompute_aggregates(
         ocean_weights: dict[int, np.ndarray] = {}
         if domain in ("global", "ocean"):
             ocean_weights = _build_fractional_weights(ocean_mask, ocean_mask_deg, grid)
+            if ocean_overlay_mask is not None:
+                ocean_weights.update(
+                    _build_fractional_weights(ocean_overlay_mask, ocean_mask_deg, grid)
+                )
 
         # Continent weights: union of country cell fractions
         continent_weights: dict[str, np.ndarray] = {}
@@ -504,7 +530,8 @@ def precompute_aggregates(
             for cont_name, cc_set in CONTINENT_TO_CC.items():
                 cont_frac = np.zeros((grid.nlat, grid.nlon), dtype=np.float32)
                 for uid, code in country_id_to_code.items():
-                    if code in cc_set and uid in country_weights:
+                    # Alaska counts towards North America as the US does.
+                    if parent_country_code(code) in cc_set and uid in country_weights:
                         cont_frac += country_weights[uid]
                 cont_frac = np.clip(cont_frac, 0.0, 1.0)
                 if np.any(cont_frac > 0):
@@ -522,16 +549,17 @@ def precompute_aggregates(
             code = country_id_to_code.get(uid)
             if code is None:
                 continue
-            key = f"country:{code}"
+            # A country, or a subdivision split from one (Alaska, US-AK).
+            key = country_mask_region_id(code)
             named_regions.append((key, frac))
             region_meta[key] = {
-                "name": country_code_to_name.get(code, code),
-                "type": "country",
+                "name": country_code_to_name.get(code) or SUBDIVISIONS.get(code, code),
+                "type": "state" if is_subdivision(code) else "country",
                 "cell_count": int(np.sum(frac > 0)),
             }
 
         for cont_name, frac in continent_weights.items():
-            key = f"continent:{cont_name.replace(' ', '_')}"
+            key = continent_region_id(cont_name)
             named_regions.append((key, frac))
             region_meta[key] = {
                 "name": cont_name.title(),
@@ -541,7 +569,7 @@ def precompute_aggregates(
 
         for uid, frac in ocean_weights.items():
             name = ocean_id_to_name.get(uid, f"ocean_{uid}")
-            key = f"ocean:{_slugify(name)}"
+            key = ocean_region_id(name)
             named_regions.append((key, frac))
             region_meta[key] = {
                 "name": name,
@@ -680,6 +708,15 @@ def main() -> int:
         default=_DEFAULT_OCEAN_NAMES,
         help=f"Ocean names JSON (default: {_DEFAULT_OCEAN_NAMES})",
     )
+    ap.add_argument(
+        "--ocean-overlay-mask",
+        type=Path,
+        default=_DEFAULT_OCEAN_OVERLAY_MASK,
+        help=(
+            "Overlay NPZ of seas lying inside another sea; skipped if absent "
+            f"(default: {_DEFAULT_OCEAN_OVERLAY_MASK})"
+        ),
+    )
     args = ap.parse_args()
 
     return precompute_aggregates(
@@ -692,6 +729,7 @@ def main() -> int:
         country_names_path=args.country_names,
         ocean_mask_path=args.ocean_mask,
         ocean_names_path=args.ocean_names,
+        ocean_overlay_mask_path=args.ocean_overlay_mask,
     )
 
 

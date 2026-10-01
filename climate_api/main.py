@@ -25,6 +25,7 @@ from fastapi.responses import (
 from uvicorn.logging import AccessFormatter
 
 from climate.geo.country import apply_country_name_overrides
+from climate.geo.names import takes_definite_article
 
 from .analytics.db import AnalyticsDB, IPBlocklist
 from .analytics.session_log import format_session_log, session_log_filename
@@ -45,7 +46,7 @@ from .schemas import (
     ReleaseResolveResponse,
 )
 from .services.panels import (
-    build_global_panels,
+    build_region_panels,
     build_panel_tiles_registry,
     build_scored_panels_tiles_registry,
 )
@@ -63,6 +64,7 @@ from .chat.question_tree import (
 )
 from .store.country_classifier import CountryClassifier
 from .store.location_index import LocationIndex
+from .store.region_shapes import RegionShapes
 from .store.ocean_classifier import OceanClassifier
 from .store.place_resolver import PlaceResolver
 from .system_stats import current_rss_bytes, system_memory
@@ -111,6 +113,31 @@ class _ChatRequest(BaseModel):
 
 class _FeedbackBody(BaseModel):
     feedback: str | None  # "good", "bad", or null to clear
+
+
+def _autocomplete_item(hit, region_ids) -> LocationAutocompleteItem:
+    """Shape a location hit for the wire.
+
+    `region_id` is carried by the index for every country and sea, but only
+    surfaced when this release actually holds aggregates for it. Gating here
+    means the client can treat its presence as "a region panel will work",
+    with no extra round trip to discover the fallback.
+    """
+    region_id = getattr(hit, "region_id", None)
+    return LocationAutocompleteItem(
+        geonameid=hit.geonameid,
+        label=hit.label,
+        lat=hit.lat,
+        lon=hit.lon,
+        country_code=hit.country_code,
+        population=hit.population,
+        kind=hit.kind,
+        bbox=hit.bbox,
+        region_id=region_id if region_id in region_ids else None,
+        definite_article=takes_definite_article(
+            hit.label, getattr(hit, "kind", "city")
+        ),
+    )
 
 
 def _normalize_lon(lon: float) -> float:
@@ -441,6 +468,7 @@ def create_app() -> FastAPI:
         round_decimals=3,
     )
     location_index = LocationIndex(settings.locations_index_csv)
+    region_shapes = RegionShapes(settings.region_shapes_json)
 
     analytics_db = AnalyticsDB(settings.analytics_db_path)
     analytics_db.check_schema()
@@ -722,11 +750,87 @@ def create_app() -> FastAPI:
             else:
                 # Alias (e.g. "latest") — don't let proxies cache; browser may revalidate
                 response.headers["Cache-Control"] = "private, max-age=300"
-        return build_global_panels(
+        return build_region_panels(
             tile_store=context.tile_store,
             panels_manifest=context.panels_manifest,
             unit=unit,
             release=context.release,
+        )
+
+    @app.get("/api/v/{release}/panel/region", response_model=PanelListResponse)
+    def get_region_panel(
+        release: str,
+        region_id: str = Query(..., min_length=1, max_length=128),
+        unit: str = Query("C", pattern="^(C|F|c|f)$"),
+        response: Response = None,
+    ):
+        context = release_resolver.resolve_release_context(release)
+        # Only regions a user can select: a search entry *and* data in this
+        # release. The aggregates also hold continents and the globe, but
+        # continents are not searchable, and the globe has its own endpoint.
+        hit = location_index.resolve_by_region_id(region_id)
+        if hit is None or region_id not in context.tile_store.region_ids:
+            raise HTTPException(status_code=404, detail=f"Unknown region: {region_id}")
+        place = PlaceInfo(
+            geonameid=hit.geonameid,
+            label=hit.label,
+            lat=hit.lat,
+            lon=hit.lon,
+            distance_km=0.0,
+            country_code=hit.country_code,
+            # Suppressed for regions: the only figure available is eight years
+            # stale, and the cell count is the useful provenance.
+            population=None,
+            definite_article=takes_definite_article(hit.label, hit.kind),
+        )
+        region_label = hit.label
+
+        if response is not None:
+            if release == context.release:
+                response.headers["Cache-Control"] = "public, max-age=3600"
+            else:
+                response.headers["Cache-Control"] = "private, max-age=300"
+        return build_region_panels(
+            tile_store=context.tile_store,
+            panels_manifest=context.panels_manifest,
+            unit=unit,
+            release=context.release,
+            region_id=region_id,
+            region_label=region_label,
+            place=place,
+        )
+
+    @app.get("/api/v/{release}/regions/shape")
+    def get_region_shape(
+        release: str,
+        region_id: str = Query(..., min_length=1, max_length=128),
+    ):
+        """The outline of a region, as a GeoJSON geometry.
+
+        Gated exactly like the region panel, so the map is only ever asked to
+        outline a region the reader could have selected. The id is only used as
+        a dictionary key, never to build a path.
+        """
+        context = release_resolver.resolve_release_context(release)
+        shape = region_shapes.get(region_id)
+        if (
+            shape is None
+            or location_index.resolve_by_region_id(region_id) is None
+            or region_id not in context.tile_store.region_ids
+        ):
+            raise HTTPException(status_code=404, detail=f"No outline for: {region_id}")
+        # Outlines come from the masks, not the release, so they only change
+        # when the location assets are rebuilt; the release in the path still
+        # decides which regions are served.
+        cache_control = (
+            "public, max-age=86400"
+            if release == context.release
+            else "private, max-age=300"
+        )
+        return Response(
+            content=shape,
+            media_type="application/json",
+            headers={"Cache-Control": cache_control},
         )
 
     @app.get("/api/v/{release}/panel", response_model=PanelListResponse)
@@ -751,6 +855,7 @@ def create_app() -> FastAPI:
                     distance_km=0.0,
                     country_code=hit.country_code,
                     population=hit.population,
+                    definite_article=takes_definite_article(hit.label, hit.kind),
                 )
         return build_scored_panels_tiles_registry(
             place_resolver=place_resolver,
@@ -778,19 +883,10 @@ def create_app() -> FastAPI:
         q: str = Query(..., min_length=2),
         limit: int = Query(10, ge=1, le=50),
     ):
-        release_resolver.resolve_release_context(release)
+        context = release_resolver.resolve_release_context(release)
+        region_ids = context.tile_store.region_ids
         hits = location_index.autocomplete(q, limit=limit)
-        results = [
-            LocationAutocompleteItem(
-                geonameid=h.geonameid,
-                label=h.label,
-                lat=h.lat,
-                lon=h.lon,
-                country_code=h.country_code,
-                population=h.population,
-            )
-            for h in hits
-        ]
+        results = [_autocomplete_item(h, region_ids) for h in hits]
         return LocationAutocompleteResponse(query=q, results=results)
 
     @app.get(
@@ -802,7 +898,7 @@ def create_app() -> FastAPI:
         geonameid: int | None = Query(None),
         label: str | None = Query(None),
     ):
-        release_resolver.resolve_release_context(release)
+        context = release_resolver.resolve_release_context(release)
         hit = None
         if geonameid is not None:
             hit = location_index.resolve_by_id(geonameid)
@@ -813,14 +909,7 @@ def create_app() -> FastAPI:
 
         result = None
         if hit is not None:
-            result = LocationAutocompleteItem(
-                geonameid=hit.geonameid,
-                label=hit.label,
-                lat=hit.lat,
-                lon=hit.lon,
-                country_code=hit.country_code,
-                population=hit.population,
-            )
+            result = _autocomplete_item(hit, context.tile_store.region_ids)
 
         return LocationResolveResponse(
             query=str(geonameid or label or ""),
@@ -849,6 +938,7 @@ def create_app() -> FastAPI:
                 distance_km=float(place.distance_km),
                 country_code=place.country_code,
                 population=place.population,
+                definite_article=getattr(place, "definite_article", False),
             ),
         )
 
