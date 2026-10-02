@@ -72,3 +72,8 @@ example.com {
     format json
   }
 }
+
+# Other sites hosted on this VM, one file each (e.g. a static site served with
+# file_server). Top level, not inside the block above: each file holds whole
+# site blocks of its own.
+import /etc/caddy/sites/*.caddy
