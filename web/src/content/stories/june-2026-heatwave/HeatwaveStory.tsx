@@ -5,6 +5,7 @@ import type { MapLayerOption } from "@/components/MapLibreGlobe";
 import { useReleaseResolution } from "@/hooks/explorer/useReleaseResolution";
 import type { ReleaseLayer } from "@/hooks/explorer/useReleaseResolution";
 import { type Bbox, DEFAULT_MERCATOR_LAT_MAX } from "@/lib/story/mercator";
+import { ERA5_SOURCE } from "@/lib/story/download";
 import GlobeBoundary from "@/components/story/GlobeBoundary";
 import ShareButton from "@/components/story/ShareButton";
 import { downloadAnomalyMap } from "@/lib/story/anomalyMapRender";
@@ -18,9 +19,6 @@ const LINES_URL = "/story/europe-lines.json";
 const EUROPE_BBOX: Bbox = { west: -10, south: 37, east: 30, north: 54 };
 // Tighter frame for the globe (span ~21° → zoom 4), centred on Europe.
 const GLOBE_BBOX: [number, number, number, number] = [-4, 37, 17, 55];
-// The Copernicus licence prescribes this wording for modified products.
-const ATTRIB_BASE =
-  "Contains modified Copernicus Climate Change Service information 2026";
 // YlOrRd palette used by the anomaly maps (0 → +12 °C).
 const SCALE_COLORS = [
   "#ffffcc",
@@ -181,7 +179,7 @@ export default function HeatwaveStory() {
         },
         {
           title: `Temperature anomaly over Europe, ${def.dates} 2026`,
-          sourceText: ATTRIB_BASE,
+          sourceText: ERA5_SOURCE,
           scale: {
             min: "0°C",
             max: "+12°C above normal",
@@ -341,7 +339,7 @@ export default function HeatwaveStory() {
         </p>
         <HeatwaveChart
           title="Daily temperature anomaly · June–July 2026"
-          sourceText="Contains modified Copernicus Climate Change Service information 2026"
+          sourceText={ERA5_SOURCE}
         />
         <p className={styles.cities}>
           <b>Cities included:</b> Paris, London, Madrid, Barcelona, Lisbon,
@@ -377,7 +375,7 @@ export default function HeatwaveStory() {
           European cities. Data runs through 13 July 2026.
         </p>
         <p className={styles.copyright}>
-          Generated using Copernicus Climate Change Service information 2026.
+          Contains modified Copernicus Climate Change Service information 2026.
           Neither the European Commission nor ECMWF is responsible for any use
           that may be made of the Copernicus information or data this page
           contains.

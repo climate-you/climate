@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import DownloadIcon from "@/components/story/DownloadIcon";
-import { downloadSvgWithAttribution } from "@/lib/story/download";
+import { downloadSvgWithAttribution, ERA5_SOURCE } from "@/lib/story/download";
 import storyStyles from "@/components/story/story.module.css";
 import s from "./summerStory.module.css";
 import {
@@ -21,10 +21,6 @@ import {
 
 // Every chart reads from data.json and draws its own SVG; none of them call
 // the API. See docs/runbooks/case-study-data.md for how that file is made.
-
-// The Copernicus licence prescribes this wording for modified products.
-const SOURCE =
-  "Contains modified Copernicus Climate Change Service information 2026";
 
 /**
  * True while the chart column is too narrow for the wide geometry.
@@ -130,7 +126,7 @@ function Frame({
     try {
       downloadSvgWithAttribution(
         svg,
-        { title, subtitle, sourceText: SOURCE },
+        { title, subtitle, sourceText: ERA5_SOURCE },
         filename,
       );
     } finally {

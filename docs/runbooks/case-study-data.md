@@ -180,11 +180,26 @@ citation markers and the blue emphasis.
 
 ## Attribution
 
-The Copernicus licence prescribes the wording for derived products. Pages and
-exported images carry:
+The [Copernicus licence](https://apps.ecmwf.int/datasets/licences/copernicus/)
+(clause 5.1) asks for "clear and visible attribution", with a given notice "or
+any similar notice", plus a statement that neither the European Commission nor
+ECMWF is responsible for any use of the data (5.1.3).
 
-> Contains modified Copernicus Climate Change Service information \<year\>
+- **The page** carries the formal notice for modified products in its header
+  line and in the footer, with the no-endorsement statement:
 
-and the page also carries the no-endorsement note the licence asks for. Do not
+  > Contains modified Copernicus Climate Change Service information \<year\>
+
+- **Exported images and the social card** carry a short credit instead,
+  `ERA5_SOURCE` in `web/src/lib/story/download.ts` (and the OG script's
+  `--source` default):
+
+  > Source: ERA5/ERA5T reanalysis, Copernicus Climate Change Service / ECMWF
+
+  ERA5T is the provisional release of the most recent months, which ECMWF
+  replaces with final ERA5 two to three months later. Name it while a figure
+  uses data from it; drop it if the data is refreshed with final ERA5.
+
+Do not
 embed the ECMWF or Copernicus logos: ECMWF's terms permit the logo for linking
 to their site and no other purpose, and a logo on a figure reads as endorsement.

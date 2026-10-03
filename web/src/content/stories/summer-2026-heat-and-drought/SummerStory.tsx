@@ -16,6 +16,7 @@ import {
   downloadAnomalyMap,
   downloadAnomalyMapPair,
 } from "@/lib/story/anomalyMapRender";
+import { ERA5_SOURCE } from "@/lib/story/download";
 import GlobeBoundary from "@/components/story/GlobeBoundary";
 import ShareButton from "@/components/story/ShareButton";
 import SwipeCompare from "@/components/story/SwipeCompare";
@@ -58,9 +59,6 @@ const EUROPE_LINES = "/story/europe-lines.json";
 const WORLD_LINES = "/story/world-lines.json";
 // Rainfall is a land story here, so the hemisphere map knocks the sea out.
 const LAND_MASK = "/story/land-mask-mercator.png";
-// The Copernicus licence prescribes this wording for modified products.
-const ATTRIB =
-  "Contains modified Copernicus Climate Change Service information 2026";
 const RAIN_SCALE = ["#5c3708", "#c98a10", "#f7f7f7", "#74add1", "#313695"];
 const HEAT_SCALE = [
   "#ffffcc",
@@ -286,7 +284,7 @@ export default function SummerStory() {
           "1 June – 15 August 2026 as a percentage of the " +
           BASE_LABEL +
           " normal, over land",
-        sourceText: ATTRIB,
+        sourceText: ERA5_SOURCE,
         scale: { min: "0%", max: "200% of normal", colors: RAIN_SCALE },
       },
       "summer-2026-rainfall-northern-hemisphere.png",
@@ -322,7 +320,7 @@ export default function SummerStory() {
           "ERA5 2 m air temperature (t2m) and total precipitation (tp), " +
           "1 June – 15 August 2026 against " +
           BASE_LABEL,
-        sourceText: ATTRIB,
+        sourceText: ERA5_SOURCE,
       },
       "summer-2026-heat-and-rain.png",
     );
@@ -954,10 +952,10 @@ export default function SummerStory() {
         <div className={s.rights}>
           <h2 className={s.footHead}>Attribution and rights</h2>
           <p>
-            Generated using Copernicus Climate Change Service information 2026.
-            Neither the European Commission nor ECMWF is responsible for any use
-            that may be made of the Copernicus information or data this page
-            contains.
+            Contains modified Copernicus Climate Change Service information
+            2026. Neither the European Commission nor ECMWF is responsible for
+            any use that may be made of the Copernicus information or data this
+            page contains.
           </p>
           <p>
             © 2026 Benoit Leveau & Fanny Chaléon. This article, its figures, and
