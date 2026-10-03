@@ -9,6 +9,7 @@ react rather than crashing the loop.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import numpy as np
@@ -22,7 +23,7 @@ from climate.geo.continents import CONTINENT_ALIASES as _CONTINENT_ALIASES
 from climate.geo.continents import resolve_continent as _resolve_continent
 
 from climate_api.store.location_index import LocationIndex
-from climate_api.store.sovereignty import is_sovereign
+from climate_api.store.sovereignty import is_sovereign, sovereign_of
 from climate_api.store.tile_data_store import TileDataStore
 
 
@@ -327,9 +328,12 @@ def _resolve_region_id(
     if candidate_upper in regions:
         return candidate_upper
 
-    # Scan region names for a case-insensitive match
+    # Scan region names for a case-insensitive match. Answers name territories
+    # with their state in brackets ("Svalbard and Jan Mayen (Norway)"), and a
+    # follow-up may pass that back, so the bracket is dropped before matching.
+    bare = re.sub(r"\s*\([^()]*\)$", "", norm)
     for rid, info in regions.items():
-        if info.get("name", "").casefold() == norm:
+        if info.get("name", "").casefold() in (norm, bare):
             return rid
 
     return None
@@ -858,6 +862,38 @@ def find_similar_locations(
 # on merit; the smallest that still ranks highly is Åland at seven cells.
 _MIN_RANKABLE_CELLS = 5
 
+# Country-type regions that are not a country at all. Antarctica belongs to no
+# state and is already ranked as a continent; left in, it tops every "coldest
+# country" list. Like microstates, it stays reachable by name.
+_NOT_A_COUNTRY = frozenset({"country:AQ"})
+
+
+def _is_rankable(region_id: str, region_info: dict) -> bool:
+    """Whether a region may enter a ranking; see the two rules above."""
+    if region_info.get("cell_count", 0) < _MIN_RANKABLE_CELLS:
+        return False
+    return region_id not in _NOT_A_COUNTRY
+
+
+def _region_display_name(region_id: str, region_info: dict, regions: dict) -> str:
+    """A region's name as answers should give it.
+
+    Territories carry the state they belong to — "Svalbard and Jan Mayen
+    (Norway)" — because they are ranked separately from that state's
+    mainland, and a bare name at the top of a country ranking reads as a
+    country of its own, or worse, as the mainland's figure.
+    """
+    name = region_info.get("name") or region_id
+    if region_info.get("type") != "country" or name.endswith(")"):
+        return name
+    sovereign = sovereign_of(region_id.split(":", 1)[-1])
+    if sovereign is None:
+        return name
+    # A bare ISO code in brackets would read worse than no bracket at all.
+    sovereign_name = (regions.get(f"country:{sovereign}") or {}).get("name")
+    return f"{name} ({sovereign_name})" if sovereign_name else name
+
+
 _MAJOR_OCEAN_IDS = frozenset(
     {
         "ocean:arctic_ocean",
@@ -934,7 +970,7 @@ def find_extreme_region(
             continue
         if rtype == "ocean" and region_id not in _MAJOR_OCEAN_IDS:
             continue
-        if region_info.get("cell_count", 0) < _MIN_RANKABLE_CELLS:
+        if not _is_rankable(region_id, region_info):
             # A region covering a couple of grid cells has no meaningful
             # area-weighted mean — its "national average" is one reading. Left
             # in, microstates dominate the extremes of any ranking for reasons
@@ -995,7 +1031,7 @@ def find_extreme_region(
         score, region_id, info = top[0]
         return {
             "region_id": region_id,
-            "region_name": info["name"],
+            "region_name": _region_display_name(region_id, info, regions),
             "region_type": info["type"],
             "value": _convert_temp(
                 round(score, 3), spec, is_delta=is_delta, target=temperature_unit
@@ -1007,7 +1043,7 @@ def find_extreme_region(
             {
                 "rank": i + 1,
                 "region_id": region_id,
-                "region_name": info["name"],
+                "region_name": _region_display_name(region_id, info, regions),
                 "region_type": info["type"],
                 "value": _convert_temp(
                     round(score, 3), spec, is_delta=is_delta, target=temperature_unit
@@ -1122,13 +1158,19 @@ def get_region_metric_series(
         kept = [(y, v) for y, v in zip(time_axis, values) if int(str(y)[5:7]) in wanted]
         time_axis = [y for y, _ in kept]
         values = [v for _, v in kept]
+    collapsed_to_yearly = False
     if monthly and aggregate_by_year:
-        by_year: dict[str, list[float]] = {}
+        by_year: dict[int, list[float]] = {}
         for y, v in zip(time_axis, values):
             if v is not None:
-                by_year.setdefault(str(y)[:4], []).append(v)
+                by_year.setdefault(int(str(y)[:4]), []).append(v)
+        # Numeric years, as a natively yearly series has; trend fits need them.
         time_axis = sorted(by_year)
         values = [sum(by_year[y]) / len(by_year[y]) for y in time_axis]
+        # Matches the point tool: a whole monthly record reduced to yearly
+        # means is captioned as such; a month-filtered one already says which
+        # months it covers.
+        collapsed_to_yearly = not month_filter
 
     # Unit conversion
     is_delta = _is_delta_metric(spec)
@@ -1143,7 +1185,7 @@ def get_region_metric_series(
             for v in values
         ]
 
-    region_name = region_info.get("name", resolved)
+    region_name = _region_display_name(resolved, region_info, agg_data["regions"])
     result = {
         "region_id": resolved,
         "region_name": region_name,
@@ -1156,6 +1198,7 @@ def get_region_metric_series(
         "cell_count": region_info.get("cell_count"),
         "data": [{"year": y, "value": v} for y, v in zip(time_axis, values)],
         **({"month_filter": list(month_filter)} if monthly and month_filter else {}),
+        **({"collapsed_to_yearly": True} if collapsed_to_yearly else {}),
     }
 
     # Backstop: even with the filters above a caller can still ask for a full

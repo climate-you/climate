@@ -9,6 +9,10 @@ producing the same (answer, locations, charts, follow_up_ids) payload as a
 canned answer. The LLM remains the fallback for anything this module cannot
 answer (unknown question id, missing data at the location).
 
+The location is either a point, read from the grid cell under it, or a whole
+country or sea selected from search, read from the release's precomputed
+area averages.
+
 Temperature values are encoded as [[C|F]] tokens, resolved by
 canned._apply_unit at stream time, exactly like canned answers.
 """
@@ -16,9 +20,12 @@ canned._apply_unit at stream time, exactly like canned answers.
 from __future__ import annotations
 
 import calendar
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+
+from climate.geo.names import takes_definite_article
 
 from .question_tree import QUESTION_TREE
 
@@ -71,6 +78,64 @@ def _series(
     return list(axis), values
 
 
+def _region_series(
+    tile_store: Any, metric: str, region_id: str, aggregation: str = "mean"
+) -> tuple[list, np.ndarray] | None:
+    """Return (axis, values) for a region's precomputed aggregate, or None."""
+    agg = tile_store.aggregates.get((metric, aggregation))
+    if not agg:
+        return None
+    region = agg.get("regions", {}).get(region_id)
+    if not region:
+        return None
+    axis = list(agg["time_axis"])
+    values = np.asarray(
+        [v if v is not None else np.nan for v in region["values"]], dtype=np.float64
+    )
+    if len(axis) != values.size or np.count_nonzero(np.isfinite(values)) < 2:
+        return None
+    return axis, values
+
+
+@dataclass(frozen=True)
+class _Place:
+    """Where an answer reads its numbers: one grid cell, or a whole region."""
+
+    tile_store: Any
+    lat: float
+    lon: float
+    label: str
+    region_id: str | None = None
+
+    @property
+    def is_region(self) -> bool:
+        return self.region_id is not None
+
+    @property
+    def is_sea(self) -> bool:
+        return (self.region_id or "").startswith("ocean:")
+
+    @property
+    def kind_noun(self) -> str:
+        return "sea" if self.is_sea else "country"
+
+    def name(self, *, start: bool = False, bold: bool = True) -> str:
+        """Display name, with "the" where a country or sea takes one."""
+        shown = f"**{self.label}**" if bold else self.label
+        kind = "marine" if self.is_sea else "country"
+        if self.is_region and takes_definite_article(self.label, kind):
+            return f"{'The' if start else 'the'} {shown}"
+        return shown
+
+    def series(
+        self, metric: str, aggregation: str = "mean"
+    ) -> tuple[list, np.ndarray] | None:
+        """The place's series; `aggregation` picks a region's mean, min or max."""
+        if self.region_id is None:
+            return _series(self.tile_store, metric, self.lat, self.lon)
+        return _region_series(self.tile_store, metric, self.region_id, aggregation)
+
+
 def _trend_per_decade(years: np.ndarray, values: np.ndarray) -> float | None:
     finite = np.isfinite(values)
     if np.count_nonzero(finite) < 2:
@@ -90,16 +155,10 @@ def _window_mean(values: np.ndarray, sl: slice) -> float | None:
 
 
 def _global_trend_per_decade(tile_store: Any, metric: str) -> float | None:
-    agg = tile_store.aggregates.get((metric, "mean"))
-    if not agg:
+    s = _region_series(tile_store, metric, "globe")
+    if s is None:
         return None
-    globe = agg.get("regions", {}).get("globe")
-    if not globe:
-        return None
-    values = np.asarray(
-        [v if v is not None else np.nan for v in globe["values"]], dtype=np.float64
-    )
-    years = np.asarray([int(str(a)[:4]) for a in agg["time_axis"]], dtype=np.float64)
+    years, values = _yearly(*s)
     return _trend_per_decade(years, values)
 
 
@@ -159,12 +218,12 @@ def _compare_to_global(local: float, global_: float | None) -> str:
 # ---------------------------------------------------------------------------
 # Per-question generators
 # ---------------------------------------------------------------------------
-# Each returns (answer_text, chart_spec) or None when the location has no
-# usable data for the question. `label` is the display name from the map pin.
+# Each returns (answer_text, chart_spec) or None when the place has no usable
+# data for the question, which hands the question to the LLM instead.
 
 
-def _gen_local_temp_trend(tile_store, lat, lon, label):
-    s = _series(tile_store, "t2m_yearly_mean_c", lat, lon)
+def _gen_local_temp_trend(place):
+    s = place.series("t2m_yearly_mean_c")
     if s is None:
         return None
     axis, values = s
@@ -174,66 +233,81 @@ def _gen_local_temp_trend(tile_store, lat, lon, label):
     last = _window_mean(values, slice(-5, None))
     if trend is None or first is None or last is None:
         return None
-    global_trend = _global_trend_per_decade(tile_store, "t2m_yearly_mean_c")
+    global_trend = _global_trend_per_decade(place.tile_store, "t2m_yearly_mean_c")
+    averaged = f", averaged across the {place.kind_noun}," if place.is_region else ""
     answer = (
-        f"**{label}** has warmed at **{_tok(trend, delta=True, nd=2)} per decade** "
+        f"{place.name(start=True)} has warmed at **{_tok(trend, delta=True, nd=2)} per decade** "
         f"since {int(years[0])}{_compare_to_global(trend, global_trend)}. "
-        f"Its mean annual temperature rose from {_tok(first)} (average of the first five years) "
+        f"Its mean annual temperature{averaged} rose from {_tok(first)} (average of the first five years) "
         f"to {_tok(last)} over the most recent five years."
     )
     return answer, {"metric_id": "t2m_yearly_mean_c", "show_trend": True}
 
 
-def _gen_local_summer_heat(tile_store, lat, lon, label):
-    s = _series(tile_store, "t2m_monthly_max_c", lat, lon)
+def _gen_extreme_days(place, *, metric, extreme):
+    """Hottest days or coldest nights; the two questions differ only in direction.
+
+    At a point both figures come from the one cell. Over a region the typical
+    figure is the area average, and the record is the most extreme cell
+    anywhere in it — an area-average record would understate both.
+    """
+    s = place.series(metric)
     if s is None:
         return None
     axis, values = s
-    typical = _monthly_typical_extreme(axis, values, extreme="max")
+    typical = _monthly_typical_extreme(axis, values, extreme=extreme)
     if typical is None:
         return None
     typical_value, typical_month = typical
-    idx = int(np.nanargmax(values))
+    cell_record = place.series(metric, extreme) if place.is_region else None
+    record_axis, record_values = cell_record or (axis, values)
+    pick = np.nanargmax if extreme == "max" else np.nanargmin
+    idx = int(pick(record_values))
+    hot = extreme == "max"
+    days = "hottest days" if hot else "coldest nights"
+    reach = "reach" if hot else "drop to"
+    record = "highest" if hot else "lowest"
+    if place.is_region:
+        where = (
+            f"anywhere in {place.name(bold=False)}"
+            if cell_record
+            else "averaged across it"
+        )
+        opening = (
+            f"Averaged across {place.name()}, the {days} typically {reach} about "
+            f"**{_tok(typical_value)}** in {_month_name(typical_month)} "
+            f"(average over the last decade). "
+            f"The {record} temperature {where} in our "
+            f"data is **{_tok(record_values[idx])}**, "
+        )
+    else:
+        opening = (
+            f"The {days} in {place.name()} typically {reach} about "
+            f"**{_tok(typical_value)}** in {_month_name(typical_month)} "
+            f"(average over the last decade). "
+            f"The {record} temperature in our data is **{_tok(record_values[idx])}**, "
+        )
     answer = (
-        f"The hottest days in **{label}** typically reach about **{_tok(typical_value)}** "
-        f"in {_month_name(typical_month)} (average over the last decade). "
-        f"The highest temperature in our data is **{_tok(values[idx])}**, "
-        f"recorded in {_axis_month_name(axis[idx])}. "
-        f"The chart shows how the year's hottest days have trended over time."
+        f"{opening}recorded in {_axis_month_name(record_axis[idx])}. "
+        f"The chart shows how the year's {days} have trended over time."
     )
     return answer, {
-        "metric_id": "t2m_monthly_max_c",
+        "metric_id": metric,
         "aggregate_by_year": True,
         "show_trend": True,
     }
 
 
-def _gen_local_night_cold(tile_store, lat, lon, label):
-    s = _series(tile_store, "t2m_monthly_min_c", lat, lon)
-    if s is None:
-        return None
-    axis, values = s
-    typical = _monthly_typical_extreme(axis, values, extreme="min")
-    if typical is None:
-        return None
-    typical_value, typical_month = typical
-    idx = int(np.nanargmin(values))
-    answer = (
-        f"The coldest nights in **{label}** typically drop to about **{_tok(typical_value)}** "
-        f"in {_month_name(typical_month)} (average over the last decade). "
-        f"The lowest temperature in our data is **{_tok(values[idx])}**, "
-        f"recorded in {_axis_month_name(axis[idx])}. "
-        f"The chart shows how the year's coldest nights have trended over time."
-    )
-    return answer, {
-        "metric_id": "t2m_monthly_min_c",
-        "aggregate_by_year": True,
-        "show_trend": True,
-    }
+def _gen_local_summer_heat(place):
+    return _gen_extreme_days(place, metric="t2m_monthly_max_c", extreme="max")
 
 
-def _gen_rainfall_local(tile_store, lat, lon, label):
-    s = _series(tile_store, "tp_annual_total_mm", lat, lon)
+def _gen_local_night_cold(place):
+    return _gen_extreme_days(place, metric="t2m_monthly_min_c", extreme="min")
+
+
+def _gen_rainfall_local(place):
+    s = place.series("tp_annual_total_mm")
     if s is None:
         return None
     axis, values = s
@@ -249,8 +323,10 @@ def _gen_rainfall_local(tile_store, lat, lon, label):
         change_txt = f"have decreased by about {abs(change_pct):.0f}%"
     else:
         change_txt = "have remained roughly stable"
+    averaged = f" averaged across the {place.kind_noun}" if place.is_region else ""
     answer = (
-        f"**{label}** receives about **{mean_annual:,.0f} mm** of precipitation per year. "
+        f"{place.name(start=True)} receives about **{mean_annual:,.0f} mm** of precipitation "
+        f"per year{averaged}. "
         f"Annual totals {change_txt}, averaging {first:,.0f} mm in the first decade of the "
         f"record versus {last:,.0f} mm in the most recent decade — though year-to-year "
         f"variation is typically much larger than the long-term change."
@@ -258,13 +334,14 @@ def _gen_rainfall_local(tile_store, lat, lon, label):
     return answer, {"metric_id": "tp_annual_total_mm"}
 
 
-def _gen_local_winters(tile_store, lat, lon, label):
-    s = _series(tile_store, "t2m_monthly_mean_c", lat, lon)
+def _gen_local_winters(place):
+    s = place.series("t2m_monthly_mean_c")
     if s is None:
         return None
     axis, values = s
-    months = [12, 1, 2] if lat >= 0 else [6, 7, 8]
-    season = "December–February" if lat >= 0 else "June–August"
+    # A region's hemisphere is taken from its representative point.
+    months = [12, 1, 2] if place.lat >= 0 else [6, 7, 8]
+    season = "December–February" if place.lat >= 0 else "June–August"
     years, winter_means = _seasonal_yearly_means(axis, values, months)
     if years.size < 2:
         return None
@@ -281,7 +358,7 @@ def _gen_local_winters(tile_store, lat, lon, label):
             f"{direction} at **{_tok(abs(trend), delta=True, nd=2)} per decade**"
         )
     answer = (
-        f"Winters ({season}) in **{label}** have {trend_txt} since {int(years[0])}. "
+        f"Winters ({season}) in {place.name()} have {trend_txt} since {int(years[0])}. "
         f"A typical winter now averages {_tok(last)}, compared with {_tok(first)} "
         f"in the first decade of the record."
     )
@@ -293,14 +370,14 @@ def _gen_local_winters(tile_store, lat, lon, label):
     }
 
 
-def _gen_local_vs_global(tile_store, lat, lon, label):
-    s = _series(tile_store, "t2m_yearly_mean_c", lat, lon)
+def _gen_local_vs_global(place):
+    s = place.series("t2m_yearly_mean_c")
     if s is None:
         return None
     axis, values = s
     years, values = _yearly(axis, values)
     trend = _trend_per_decade(years, values)
-    global_trend = _global_trend_per_decade(tile_store, "t2m_yearly_mean_c")
+    global_trend = _global_trend_per_decade(place.tile_store, "t2m_yearly_mean_c")
     if trend is None or global_trend is None:
         return None
     ratio = trend / global_trend if global_trend else None
@@ -310,11 +387,16 @@ def _gen_local_vs_global(tile_store, lat, lon, label):
         verdict = "**slower than** the global average"
     else:
         verdict = "**in step with** the global average"
+    context = (
+        "The open oceans generally warm more slowly than land, which pulls the "
+        "global mean below the rate seen over the continents."
+        if place.is_sea
+        else "Land locations generally warm faster than the global mean, which is "
+        "pulled down by the slower-warming oceans."
+    )
     answer = (
-        f"**{label}** is warming at {_tok(trend, delta=True, nd=2)} per decade — "
-        f"{verdict} of {_tok(global_trend, delta=True, nd=2)} per decade. "
-        f"Land locations generally warm faster than the global mean, which is pulled "
-        f"down by the slower-warming oceans."
+        f"{place.name(start=True)} is warming at {_tok(trend, delta=True, nd=2)} per decade — "
+        f"{verdict} of {_tok(global_trend, delta=True, nd=2)} per decade. {context}"
     )
     # Local series + global mean on one chart (same metric → merged by the builder).
     return answer, {
@@ -323,8 +405,9 @@ def _gen_local_vs_global(tile_store, lat, lon, label):
     }
 
 
-def _gen_sea_temp_local(tile_store, lat, lon, label):
-    s = _series(tile_store, "sst_yearly_mean_c", lat, lon)
+def _gen_sea_temp_local(place):
+    # Sea surface temperature is aggregated over seas only; a country has none.
+    s = place.series("sst_yearly_mean_c")
     if s is None:
         return None
     axis, values = s
@@ -335,18 +418,24 @@ def _gen_sea_temp_local(tile_store, lat, lon, label):
     if trend is None or first is None or last is None:
         return None
     direction = "warmed" if trend >= 0 else "cooled"
+    where = f"of {place.name()}" if place.is_region else f"near {place.name()}"
+    water = "water" if place.is_region else "coastal water"
     answer = (
-        f"The sea surface near **{label}** has {direction} at "
+        f"The sea surface {where} has {direction} at "
         f"**{_tok(abs(trend), delta=True, nd=2)} per decade** since {int(years[0])}, "
         f"rising from about {_tok(first)} to {_tok(last)} "
-        f"(first vs latest five-year average). Warmer coastal water affects marine life, "
+        f"(first vs latest five-year average). Warmer {water} affects marine life, "
         f"local weather, and — in the tropics — coral bleaching risk."
     )
     return answer, {"metric_id": "sst_yearly_mean_c", "show_trend": True}
 
 
-def _gen_coral_risk_local(tile_store, lat, lon, label):
-    s = _series(tile_store, "dhw_severe_risk_days_per_year", lat, lon)
+def _gen_coral_risk_local(place):
+    # Regions only carry the share of reef at risk, a different measure from
+    # this answer's days per year; the LLM handles those.
+    if place.is_region:
+        return None
+    s = place.series("dhw_severe_risk_days_per_year")
     if s is None:
         return None
     axis, values = s
@@ -355,7 +444,7 @@ def _gen_coral_risk_local(tile_store, lat, lon, label):
     if first is None or last is None:
         return None
     answer = (
-        f"Coral reefs near **{label}** now face severe bleaching risk on about "
+        f"Coral reefs near {place.name()} now face severe bleaching risk on about "
         f"**{last:.0f} days per year** (average of the last five years), compared with "
         f"{first:.0f} days per year at the start of the record in {str(axis[0])[:4]}. "
         f"Severe risk means accumulated heat stress high enough to cause widespread "
@@ -364,14 +453,54 @@ def _gen_coral_risk_local(tile_store, lat, lon, label):
     return answer, {"metric_id": "dhw_severe_risk_days_per_year"}
 
 
-def _gen_local_rank(tile_store, lat, lon, label):
-    ranking = tile_store.rankings.get(("t2m_yearly_mean_c", "mean"))
+def _gen_country_rank(place):
+    """Rank a country against every other by long-term mean temperature.
+
+    Regions are admitted exactly as in the assistant's rankings: microstates,
+    with a single reading rather than an average, and Antarctica, which is no
+    country, are left out. Selecting one hands the question to the LLM, which
+    can say why it is not ranked.
+    """
+    from .tools import _is_rankable
+
+    agg = place.tile_store.aggregates.get(("t2m_yearly_mean_c", "mean"))
+    if not agg:
+        return None
+    means: dict[str, float] = {}
+    for region_id, region in agg.get("regions", {}).items():
+        if region.get("type") != "country" or not _is_rankable(region_id, region):
+            continue
+        values = np.asarray(
+            [v for v in region["values"] if v is not None], dtype=np.float64
+        )
+        if values.size:
+            means[region_id] = float(np.mean(values))
+    if place.region_id not in means:
+        return None
+    ordered = sorted(means, key=means.get, reverse=True)
+    total = len(ordered)
+    rank = ordered.index(place.region_id) + 1
+    hotter_than_pct = (total - rank) / total * 100
+    answer = (
+        f"{place.name(start=True)} ranks **#{rank:,}** warmest out of {total:,} countries "
+        f"and territories in our data, with a mean annual temperature of "
+        f"**{_tok(means[place.region_id])}** averaged across the country — warmer than "
+        f"{hotter_than_pct:.0f}% of them."
+    )
+    return answer, {"metric_id": "t2m_yearly_mean_c"}
+
+
+def _gen_local_rank(place):
+    if place.is_region:
+        # Seas have no ranking to place them in; the LLM handles those.
+        return _gen_country_rank(place) if not place.is_sea else None
+    ranking = place.tile_store.rankings.get(("t2m_yearly_mean_c", "mean"))
     if not ranking:
         return None
     # Nearest ranked city within ~0.35° (roughly one 0.25° grid cell).
     best_idx, best_dist = None, 0.35
     for i, city in enumerate(ranking):
-        d = max(abs(city["lat"] - lat), abs(city["lon"] - lon))
+        d = max(abs(city["lat"] - place.lat), abs(city["lon"] - place.lon))
         if d < best_dist:
             best_idx, best_dist = i, d
     if best_idx is None:
@@ -381,7 +510,7 @@ def _gen_local_rank(tile_store, lat, lon, label):
     rank = best_idx + 1
     hotter_than_pct = (total - rank) / total * 100
     answer = (
-        f"**{label}** ranks **#{rank:,}** warmest out of {total:,} cities worldwide in our "
+        f"{place.name(start=True)} ranks **#{rank:,}** warmest out of {total:,} cities worldwide in our "
         f"data, with a mean annual temperature of **{_tok(entry['value'])}** — warmer than "
         f"{hotter_than_pct:.0f}% of ranked cities."
     )
@@ -413,10 +542,14 @@ def generate(
     label: str,
     tile_store: Any,
     temperature_unit: str = "C",
+    region_id: str | None = None,
 ) -> dict | None:
     """
     Build a templated answer for a location question, or None to fall back to
     the LLM. Returns {"answer", "locations", "charts", "follow_up_ids"}.
+
+    With `region_id` the answer covers that whole country or sea, read from
+    its area averages; `lat`/`lon` then only pick its hemisphere.
     """
     node = QUESTION_TREE.get(question_id)
     generator = _GENERATORS.get(question_id)
@@ -426,8 +559,9 @@ def generate(
     # Short display name: "Paris, Île-de-France, France" → "Paris"
     short_label = label.split(",")[0].strip() or label
 
+    place = _Place(tile_store, lat, lon, short_label, region_id)
     try:
-        result = generator(tile_store, lat, lon, short_label)
+        result = generator(place)
     except Exception:
         return None
     if result is None:
@@ -435,6 +569,18 @@ def generate(
     answer, chart_spec = result
 
     from .canned import build_canned_charts
+
+    if region_id is not None:
+        # The region is already selected and outlined on the map: no pin, and
+        # its own aggregate series (plus any comparison regions) on the chart.
+        chart_spec["region_ids"] = [region_id] + chart_spec.pop("extra_region_ids", [])
+        return {
+            "answer": answer,
+            "locations": [],
+            "charts": build_canned_charts([], chart_spec, tile_store, temperature_unit),
+            "follow_up_ids": node.follow_up_ids,
+            "chart_spec": chart_spec,
+        }
 
     locations = [{"label": short_label, "lat": lat, "lon": lon}]
     extra_region_ids = (chart_spec or {}).pop("extra_region_ids", None)

@@ -1,5 +1,5 @@
 {
-  "version": "2026-08-25",
+  "version": "2026-10-01",
   "root_ids": [
     "local_temp_trend",
     "local_summer_heat",
@@ -14,6 +14,8 @@
     "sea_temp_global",
     "sea_temp_all_oceans",
     "coral_risk_global",
+    "country_warming_most",
+    "driest_country",
     "hottest_capital",
     "coldest_capital",
     "hottest_recorded_capital",
@@ -27,7 +29,7 @@
       "question": "How has air temperature changed globally?",
       "scope": "global",
       "datasets": ["temperature"],
-      "follow_up_ids": ["fastest_warming_continent", "sea_temp_increase", "fastest_warming_city", "hot_days_global", "country_warming_most", "local_vs_global"],
+      "follow_up_ids": ["fastest_warming_continent", "country_warming_most", "sea_temp_increase", "fastest_warming_city", "hot_days_global", "local_vs_global"],
       "requires_location": false,
       "location_filter": "any",
       "answer": "Global mean temperature has been increasing steadily, rising from [[13.94°C|57.09°F]] in 1979 to [[14.96°C|58.93°F]] in 2025 — an increase of [[1.02°C|1.84°F]] over 46 years. The warmest year in the record is **2024**, at [[15.09°C|59.16°F]]. Most of this warming has occurred since the 1990s, and each of the last ten years ranks among the warmest on record.",
@@ -45,7 +47,7 @@
       "question": "Which continent is warming the fastest?",
       "scope": "global",
       "datasets": ["temperature"],
-      "follow_up_ids": ["june_2026_heatwave", "country_warming_most", "europe_vs_asia", "arctic_amplification", "slowest_warming_continent", "country_in_europe_warming", "local_vs_global"],
+      "follow_up_ids": ["june_2026_heatwave", "country_warming_most", "country_in_europe_warming", "europe_vs_asia", "arctic_amplification", "slowest_warming_continent", "local_vs_global"],
       "requires_location": false,
       "location_filter": "any",
       "answer": "The continent that is warming the fastest is **Europe**, with a warming trend of **[[0.50°C|0.90°F]] per decade** — well ahead of North America ([[0.39°C|0.70°F]]) and Asia ([[0.36°C|0.65°F]]). Europe's proximity to the rapidly warming Arctic and shrinking snow cover both contribute to its accelerated warming.",
@@ -262,13 +264,13 @@
       "follow_up_ids": ["fastest_warming_continent", "top5_warming_countries", "europe_vs_asia"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "The country with the strongest warming trend since 1979 is **Ukraine**, at **[[0.65°C|1.17°F]] per decade**, closely followed by **Moldova** ([[0.64°C|1.15°F]]) and **Iran** ([[0.63°C|1.13°F]]). Eastern Europe and the Middle East are warming rapidly because large continental land masses heat up much faster than ocean-moderated regions.",
+      "answer": "The strongest warming trend since 1979 is in **Svalbard and Jan Mayen (Norway)**, Norway's Arctic archipelago, at **[[1.11°C|2.00°F]] per decade** — about five times the global average of [[0.21°C|0.38°F]], and more than twice mainland Norway's [[0.48°C|0.86°F]]. Among independent countries, **Ukraine** leads at **[[0.65°C|1.17°F]] per decade**, closely followed by **Moldova** ([[0.64°C|1.15°F]]) and **Iran** ([[0.63°C|1.13°F]]). The Arctic warms fastest because retreating sea ice exposes dark open water that absorbs far more sunlight; Eastern Europe and the Middle East warm rapidly because large continental land masses heat up much faster than ocean-moderated regions.",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_yearly_mean_c",
         "start_year": 1979,
         "end_year": 2025,
-        "region_ids": ["country:UA"]
+        "region_ids": ["country:SJ"]
       },
       "status": "active"
     },
@@ -365,13 +367,13 @@
       "follow_up_ids": ["fastest_warming_continent", "europe_vs_asia", "top5_warming_countries"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "**Ukraine** has warmed the most in Europe — and in the world — with a trend of **[[0.65°C|1.17°F]] per decade** since 1979. Its neighbour **Moldova** ([[0.64°C|1.15°F]]) and Alpine **Austria** ([[0.61°C|1.10°F]]) are close behind: continental interiors and mountain regions losing snow cover warm the fastest.",
+      "answer": "**Svalbard and Jan Mayen (Norway)**, Norway's Arctic archipelago, has warmed the most in Europe — and in the world — with a trend of **[[1.11°C|2.00°F]] per decade** since 1979, more than twice mainland Norway's [[0.48°C|0.86°F]]. Among independent countries, **Ukraine** ([[0.65°C|1.17°F]]) leads, ahead of its neighbour **Moldova** ([[0.64°C|1.15°F]]) and Alpine **Austria** ([[0.61°C|1.10°F]]): the Arctic warms fastest as its sea ice retreats, followed by continental interiors and mountain regions losing snow cover.",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_yearly_mean_c",
         "start_year": 1979,
         "end_year": 2025,
-        "region_ids": ["country:UA", "country:AT"]
+        "region_ids": ["country:SJ", "country:UA"]
       },
       "status": "active"
     },
@@ -383,13 +385,13 @@
       "follow_up_ids": ["country_warming_most", "europe_vs_asia", "fastest_warming_continent"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "The five countries with the strongest warming trends since 1979 are:\n\n1. **Ukraine** — [[0.65°C|1.17°F]] per decade\n2. **Moldova** — [[0.64°C|1.15°F]] per decade\n3. **Iran** — [[0.63°C|1.13°F]] per decade\n4. **Austria** — [[0.61°C|1.10°F]] per decade\n5. **Syria** — [[0.61°C|1.10°F]] per decade\n\nAll are continental or mountain regions far from the moderating influence of the open ocean.",
+      "answer": "The five countries and territories with the strongest warming trends since 1979 are:\n\n1. **Svalbard and Jan Mayen (Norway)** — [[1.11°C|2.00°F]] per decade\n2. **Ukraine** — [[0.65°C|1.17°F]] per decade\n3. **Moldova** — [[0.64°C|1.15°F]] per decade\n4. **Iran** — [[0.63°C|1.13°F]] per decade\n5. **Austria** — [[0.61°C|1.10°F]] per decade\n\nSvalbard, Norway's Arctic archipelago, stands far apart: the Arctic warms fastest because retreating sea ice exposes dark open water that absorbs far more sunlight. Mainland Norway, ranked separately, has warmed at [[0.48°C|0.86°F]] per decade. The others are continental or mountain regions far from the moderating influence of the open ocean.",
       "locations": [],
       "chart_spec": {
         "metric_id": "t2m_yearly_mean_c",
         "start_year": 1979,
         "end_year": 2025,
-        "region_ids": ["country:UA", "country:MD", "country:IR", "country:SY", "country:LI"]
+        "region_ids": ["country:SJ", "country:UA", "country:MD", "country:IR", "country:AT"]
       },
       "status": "active"
     },
@@ -552,7 +554,7 @@
       "question": "What is the wettest major city in the world?",
       "scope": "city",
       "datasets": ["precipitation"],
-      "follow_up_ids": ["wettest_capital", "least_rain_capital", "driest_country", "rainfall_local"],
+      "follow_up_ids": ["wettest_capital", "driest_country", "least_rain_capital", "rainfall_local"],
       "requires_location": false,
       "location_filter": "any",
       "answer": "Among cities of over a million people, the wettest in our data is **Quito, Ecuador**, with about **4,400 mm** of precipitation per year, followed closely by **Cali, Colombia** (4,360 mm). Both sit on the slopes of the Andes near the equator, where moist air is forced upward and wrings out rain nearly every day. **Monrovia, Liberia** (3,480 mm) is the wettest major city outside South America.",
@@ -590,7 +592,7 @@
       "follow_up_ids": ["driest_country", "least_rain_capital", "rainfall_local"],
       "requires_location": false,
       "location_filter": "any",
-      "answer": "UK annual rainfall has stayed roughly stable on average — about 1,060 mm per year in both the first and the most recent decade of the record — but the year-to-year swings are large, ranging from under 960 mm to well over 1,200 mm. Climate change in the UK shows up less as a change in total rainfall and more as a shift in *when* and *how intensely* it falls.",
+      "answer": "Annual rainfall in the **United Kingdom** has stayed roughly stable on average — about 1,060 mm per year in both the first and the most recent decade of the record — but the year-to-year swings are large, ranging from under 960 mm to well over 1,200 mm. Climate change in the UK shows up less as a change in total rainfall and more as a shift in *when* and *how intensely* it falls.",
       "locations": [],
       "chart_spec": {
         "metric_id": "tp_annual_total_mm",

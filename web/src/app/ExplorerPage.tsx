@@ -2606,6 +2606,8 @@ export default function ExplorerPage({
                   lon,
                   label: selectedLocation.label,
                   countryCode: selectedLocation.countryCode,
+                  regionId: selectedRegionId,
+                  definiteArticle: selectedLocation.definiteArticle,
                 }
               : null
           }
@@ -2622,6 +2624,7 @@ export default function ExplorerPage({
             setChatFlyToBbox(bbox);
             setChatLocations(null);
           }}
+          onSelectRegion={applyLocation}
           onClose={() => setPanelOpen(false)}
           onSwitchToGraph={() => setPanelTab("graph")}
         />

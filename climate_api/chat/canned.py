@@ -54,7 +54,6 @@ def build_canned_charts(
     temperature_unit: str = "C",
 ) -> list[dict]:
     """Fetch series for each canned location and build chart payloads."""
-    import numpy as np
     from climate_api.chat import tools as _tools
     from climate_api.chat.orchestrator import _build_chart_payloads
 
@@ -113,6 +112,8 @@ def build_canned_charts(
             if "error" in result or "data" not in result:
                 continue
             series_results.append(result)
+            if show_trend:
+                series_results.extend(_trend_series(result, metric_id))
     else:
         for loc in locations:
             result = _tools._get_metric_series(
@@ -141,30 +142,33 @@ def build_canned_charts(
                 result["unit"] = _tools._output_unit(spec, "F")
             result["location"] = loc["label"]
             series_results.append(result)
-
             if show_trend:
-                data_pts = result.get("data", [])
-                years = [d["year"] for d in data_pts]
-                values = [d["value"] for d in data_pts]
-                if len(years) >= 2:
-                    coeffs = np.polyfit(years, values, 1)
-                    trend_values = [
-                        round(float(np.polyval(coeffs, y)), 3) for y in years
-                    ]
-                    series_results.append(
-                        {
-                            "metric_id": metric_id,
-                            "unit": result.get("unit", ""),
-                            "location": loc["label"],
-                            "role": "trend",
-                            "data": [
-                                {"year": y, "value": v}
-                                for y, v in zip(years, trend_values)
-                            ],
-                        }
-                    )
+                series_results.extend(_trend_series(result, metric_id))
 
     return _build_chart_payloads(series_results, tile_store)
+
+
+def _trend_series(result: dict, metric_id: str) -> list[dict]:
+    """A fitted linear trend over one series, as an extra chart series."""
+    import numpy as np
+
+    points = [d for d in result.get("data", []) if d.get("value") is not None]
+    years = [d["year"] for d in points]
+    if len(years) < 2:
+        return []
+    coeffs = np.polyfit(years, [d["value"] for d in points], 1)
+    return [
+        {
+            "metric_id": metric_id,
+            "unit": result.get("unit", ""),
+            "location": result.get("location", ""),
+            "role": "trend",
+            "data": [
+                {"year": y, "value": round(float(np.polyval(coeffs, y)), 3)}
+                for y in years
+            ],
+        }
+    ]
 
 
 def _summarise_places(labels: list[str]) -> str | None:
@@ -233,6 +237,30 @@ def build_chart_provenance(
     return cards
 
 
+def answer_regions(
+    answer: str,
+    chart_spec: dict | None,
+    location_index: Any,
+    tile_store: Any,
+) -> list[dict]:
+    """The countries and seas a canned answer is about, as selectable items.
+
+    A canned answer never calls a tool, so the regions it charts stand in for
+    the ones a live answer's tools would have returned; as there, only those
+    the text actually names are offered.
+    """
+    if not chart_spec:
+        return []
+
+    from .orchestrator import _regions_for_answer
+
+    subs = chart_spec.get("series") or [chart_spec]
+    refs = [(rid, "") for sub in subs for rid in sub.get("region_ids") or []]
+    if not refs:
+        return []
+    return _regions_for_answer(answer, refs, location_index, tile_store.region_ids)
+
+
 def stream_canned(
     answer: str,
     locations: list[dict],
@@ -242,6 +270,7 @@ def stream_canned(
     temperature_unit: str = "C",
     tier: str = "canned",
     provenance: list[dict] | None = None,
+    regions: list[dict] | None = None,
 ):
     """
     Yield SSE event dicts that mimic a real orchestrator response.
@@ -279,4 +308,5 @@ def stream_canned(
         "charts": charts or [],
         "follow_up_ids": follow_up_ids or [],
         "question_tree_version": TREE_VERSION,
+        **({"regions": regions} if regions else {}),
     }

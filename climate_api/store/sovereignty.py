@@ -21,78 +21,81 @@ member states plus the Vatican, Palestine, Taiwan and Kosovo, and excludes
 the territories listed below.
 """
 
-# Non-sovereign entities that GeoNames may flag with a PPLC capital.
-# Codes are listed here even when no capital for them is currently present,
-# so that a future locations rebuild stays correct.
-NON_SOVEREIGN_COUNTRY_CODES: frozenset[str] = frozenset(
-    {
-        # United Kingdom — overseas territories
-        "AI",  # Anguilla
-        "BM",  # Bermuda
-        "FK",  # Falkland Islands
-        "GI",  # Gibraltar
-        "GS",  # South Georgia and the South Sandwich Islands
-        "IO",  # British Indian Ocean Territory
-        "KY",  # Cayman Islands
-        "MS",  # Montserrat
-        "PN",  # Pitcairn
-        "SH",  # Saint Helena
-        "TC",  # Turks and Caicos Islands
-        "VG",  # British Virgin Islands
-        # United Kingdom — crown dependencies
-        "GG",  # Guernsey
-        "IM",  # Isle of Man
-        "JE",  # Jersey
-        # United States
-        "AS",  # American Samoa
-        "GU",  # Guam
-        "MP",  # Northern Mariana Islands
-        "PR",  # Puerto Rico
-        "UM",  # United States Minor Outlying Islands
-        "VI",  # U.S. Virgin Islands
-        # France — overseas departments, collectivities and territories
-        "BL",  # Saint Barthelemy
-        "GF",  # French Guiana
-        "GP",  # Guadeloupe
-        "MF",  # Saint Martin
-        "MQ",  # Martinique
-        "NC",  # New Caledonia
-        "PF",  # French Polynesia
-        "PM",  # Saint Pierre and Miquelon
-        "RE",  # Reunion
-        "TF",  # French Southern Territories
-        "WF",  # Wallis and Futuna
-        "YT",  # Mayotte
-        # Kingdom of the Netherlands
-        "AW",  # Aruba
-        "BQ",  # Bonaire, Saint Eustatius and Saba
-        "CW",  # Curacao
-        "SX",  # Sint Maarten
-        # Kingdom of Denmark
-        "FO",  # Faroe Islands
-        "GL",  # Greenland
-        # Norway
-        "BV",  # Bouvet Island
-        "SJ",  # Svalbard and Jan Mayen
-        # Finland
-        "AX",  # Aland Islands
-        # Australia
-        "CC",  # Cocos Islands
-        "CX",  # Christmas Island
-        "HM",  # Heard Island and McDonald Islands
-        "NF",  # Norfolk Island
-        # New Zealand — territory and freely associated states
-        "CK",  # Cook Islands
-        "NU",  # Niue
-        "TK",  # Tokelau
-        # China — special administrative regions
-        "HK",  # Hong Kong
-        "MO",  # Macao
-        # Other non-self-governing territories
-        "AQ",  # Antarctica
-        "EH",  # Western Sahara
-    }
-)
+# Non-sovereign entities, mapped to the state they belong to. GeoNames may
+# flag any of them with a PPLC capital, and each is a region of its own in
+# the aggregates. Codes are listed here even when no capital for them is
+# currently present, so that a future locations rebuild stays correct.
+# None marks a territory that belongs to no state, or whose status is
+# disputed: naming a country beside it would take a side.
+TERRITORY_SOVEREIGN: dict[str, str | None] = {
+    # United Kingdom — overseas territories
+    "AI": "GB",  # Anguilla
+    "BM": "GB",  # Bermuda
+    "FK": "GB",  # Falkland Islands
+    "GI": "GB",  # Gibraltar
+    "GS": "GB",  # South Georgia and the South Sandwich Islands
+    "IO": "GB",  # British Indian Ocean Territory
+    "KY": "GB",  # Cayman Islands
+    "MS": "GB",  # Montserrat
+    "PN": "GB",  # Pitcairn
+    "SH": "GB",  # Saint Helena
+    "TC": "GB",  # Turks and Caicos Islands
+    "VG": "GB",  # British Virgin Islands
+    # United Kingdom — crown dependencies
+    "GG": "GB",  # Guernsey
+    "IM": "GB",  # Isle of Man
+    "JE": "GB",  # Jersey
+    # United States
+    "AS": "US",  # American Samoa
+    "GU": "US",  # Guam
+    "MP": "US",  # Northern Mariana Islands
+    "PR": "US",  # Puerto Rico
+    "UM": "US",  # United States Minor Outlying Islands
+    "VI": "US",  # U.S. Virgin Islands
+    # France — overseas departments, collectivities and territories
+    "BL": "FR",  # Saint Barthelemy
+    "GF": "FR",  # French Guiana
+    "GP": "FR",  # Guadeloupe
+    "MF": "FR",  # Saint Martin
+    "MQ": "FR",  # Martinique
+    "NC": "FR",  # New Caledonia
+    "PF": "FR",  # French Polynesia
+    "PM": "FR",  # Saint Pierre and Miquelon
+    "RE": "FR",  # Reunion
+    "TF": "FR",  # French Southern Territories
+    "WF": "FR",  # Wallis and Futuna
+    "YT": "FR",  # Mayotte
+    # Kingdom of the Netherlands
+    "AW": "NL",  # Aruba
+    "BQ": "NL",  # Bonaire, Saint Eustatius and Saba
+    "CW": "NL",  # Curacao
+    "SX": "NL",  # Sint Maarten
+    # Kingdom of Denmark
+    "FO": "DK",  # Faroe Islands
+    "GL": "DK",  # Greenland
+    # Norway
+    "BV": "NO",  # Bouvet Island
+    "SJ": "NO",  # Svalbard and Jan Mayen
+    # Finland
+    "AX": "FI",  # Aland Islands
+    # Australia
+    "CC": "AU",  # Cocos Islands
+    "CX": "AU",  # Christmas Island
+    "HM": "AU",  # Heard Island and McDonald Islands
+    "NF": "AU",  # Norfolk Island
+    # New Zealand — territory and freely associated states
+    "CK": "NZ",  # Cook Islands
+    "NU": "NZ",  # Niue
+    "TK": "NZ",  # Tokelau
+    # China — special administrative regions
+    "HK": "CN",  # Hong Kong
+    "MO": "CN",  # Macao
+    # Other non-self-governing territories
+    "AQ": None,  # Antarctica
+    "EH": None,  # Western Sahara
+}
+
+NON_SOVEREIGN_COUNTRY_CODES: frozenset[str] = frozenset(TERRITORY_SOVEREIGN)
 
 
 def is_sovereign(country_code: str | None) -> bool:
@@ -105,3 +108,16 @@ def is_sovereign(country_code: str | None) -> bool:
     if not country_code:
         return True
     return country_code.strip().upper() not in NON_SOVEREIGN_COUNTRY_CODES
+
+
+def sovereign_of(country_code: str | None) -> str | None:
+    """
+    The ISO code of the state a territory belongs to, or None.
+
+    None for sovereign states themselves, for unknown codes, and for
+    territories that belong to no state (Antarctica) or are disputed
+    (Western Sahara).
+    """
+    if not country_code:
+        return None
+    return TERRITORY_SOVEREIGN.get(country_code.strip().upper())

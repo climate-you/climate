@@ -79,3 +79,72 @@ class TestLookup:
             canned_module, "CANNED", {"known question": ("answer", [], None, [])}
         )
         assert lookup("unknown question") is None
+
+
+class TestAnswerRegions:
+    """A canned answer offers the regions its chart plots and its text names."""
+
+    def _index(self):
+        from types import SimpleNamespace
+
+        hits = {
+            "country:EG": SimpleNamespace(
+                geonameid=1,
+                label="Egypt",
+                lat=26.5,
+                lon=29.9,
+                country_code="EG",
+                population=1,
+                alt_names="",
+                kind="country",
+                bbox=None,
+            ),
+            "country:LY": SimpleNamespace(
+                geonameid=2,
+                label="Libya",
+                lat=27.0,
+                lon=17.0,
+                country_code="LY",
+                population=1,
+                alt_names="",
+                kind="country",
+                bbox=None,
+            ),
+        }
+        return SimpleNamespace(resolve_by_region_id=hits.get)
+
+    def test_named_charted_country_is_offered(self):
+        from types import SimpleNamespace
+
+        from climate_api.chat.canned import answer_regions
+
+        store = SimpleNamespace(
+            region_ids=frozenset({"country:EG", "country:LY", "globe"})
+        )
+        spec = {"metric_id": "tp", "region_ids": ["country:EG", "globe"]}
+        regions = answer_regions("**Egypt** is the driest.", spec, self._index(), store)
+        assert [r["region_id"] for r in regions] == ["country:EG"]
+
+    def test_no_chart_or_no_regions_offers_nothing(self):
+        from types import SimpleNamespace
+
+        from climate_api.chat.canned import answer_regions
+
+        store = SimpleNamespace(region_ids=frozenset({"country:EG"}))
+        assert answer_regions("Egypt", None, self._index(), store) == []
+        assert answer_regions("Egypt", {"metric_id": "tp"}, self._index(), store) == []
+
+    def test_multi_series_spec_is_read(self):
+        from types import SimpleNamespace
+
+        from climate_api.chat.canned import answer_regions
+
+        store = SimpleNamespace(region_ids=frozenset({"country:EG", "country:LY"}))
+        spec = {
+            "series": [
+                {"metric_id": "a", "region_ids": ["country:EG"]},
+                {"metric_id": "b", "region_ids": ["country:LY"]},
+            ]
+        }
+        regions = answer_regions("Egypt and Libya.", spec, self._index(), store)
+        assert {r["region_id"] for r in regions} == {"country:EG", "country:LY"}

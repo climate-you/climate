@@ -628,3 +628,53 @@ class TestFindExtremeRegionMinimumSize:
             tile_store=_AggStore(regions),
         )
         assert "results" not in res or not res.get("results")
+
+
+class TestTerritoriesInRankings:
+    """Territories rank as themselves, named with the state they belong to."""
+
+    _regions = {
+        "country:SJ": _country("Svalbard and Jan Mayen", 60, 9.0),
+        "country:NO": _country("Norway", 600, 4.0),
+        "country:UA": _country("Ukraine", 1244, 5.0),
+        "country:EH": _country("Western Sahara", 300, 3.0),
+        "country:AQ": _country("Antarctica", 20000, -35.0),
+    }
+
+    def _rank(self, extremum="max"):
+        return tools.find_extreme_region(
+            metric_id="m",
+            aggregation="mean",
+            extremum=extremum,
+            region_type="country",
+            limit=5,
+            tile_store=_AggStore(self._regions),
+        )["results"]
+
+    def test_territory_is_named_with_its_state(self):
+        top = self._rank()[0]
+        assert top["region_id"] == "country:SJ"
+        assert top["region_name"] == "Svalbard and Jan Mayen (Norway)"
+
+    def test_sovereign_and_disputed_names_are_unchanged(self):
+        names = {r["region_id"]: r["region_name"] for r in self._rank()}
+        assert names["country:NO"] == "Norway"
+        assert names["country:EH"] == "Western Sahara"
+
+    def test_antarctica_is_not_ranked_as_a_country(self):
+        assert "country:AQ" not in [r["region_id"] for r in self._rank("min")]
+
+    def test_region_series_carries_the_same_name(self):
+        res = tools.get_region_metric_series(
+            region_id="country:SJ",
+            metric_id="m",
+            aggregation="mean",
+            tile_store=_AggStore(self._regions),
+        )
+        assert res["region_name"] == "Svalbard and Jan Mayen (Norway)"
+        assert res["location"] == "Svalbard and Jan Mayen (Norway)"
+
+    def test_name_with_its_state_resolves_back(self):
+        store = _AggStore(self._regions)
+        for name in ("Svalbard and Jan Mayen (Norway)", "Svalbard and Jan Mayen"):
+            assert _resolve_region_id(name, store, "m", "mean") == "country:SJ"

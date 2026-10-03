@@ -15,6 +15,7 @@ from climate_api.chat.orchestrator import (
     _compress_series_for_context,
     _compute_fly_to_bbox,
     _extract_locations,
+    _extract_region_refs,
     _filter_series_results,
     _is_context_too_large,
     _is_quota_exhausted,
@@ -22,6 +23,7 @@ from climate_api.chat.orchestrator import (
     _parse_retry_after_s,
     _estimate_request_tokens,
     _parse_text_tool_calls,
+    _regions_for_answer,
     _strip_internal_fields,
     _supplement_locations_from_answer,
 )
@@ -640,6 +642,179 @@ class TestComputeFlyToBbox:
 
 
 # ---------------------------------------------------------------------------
+# _extract_region_refs / _regions_for_answer
+# ---------------------------------------------------------------------------
+
+
+def _region_hit(region_id, label, kind="country", alt_names=""):
+    return SimpleNamespace(
+        geonameid=hash(region_id) % 1000,
+        label=label,
+        lat=1.0,
+        lon=2.0,
+        country_code=region_id.split(":")[-1][:2].upper(),
+        population=1000,
+        alt_names=alt_names,
+        kind=kind,
+        bbox=(0.0, 0.0, 3.0, 3.0),
+        region_id=region_id,
+    )
+
+
+def _make_region_index(*hits):
+    by_id = {h.region_id: h for h in hits}
+    return SimpleNamespace(resolve_by_region_id=by_id.get)
+
+
+class TestExtractRegionRefs:
+    def test_single_extreme_region(self):
+        refs = _extract_region_refs(
+            "find_extreme_region", {"region_id": "country:EG", "region_name": "Egypt"}
+        )
+        assert refs == [("country:EG", "Egypt")]
+
+    def test_ranked_extreme_regions_keep_order(self):
+        result = {
+            "results": [
+                {"rank": 1, "region_id": "country:EG", "region_name": "Egypt"},
+                {"rank": 2, "region_id": "country:LY", "region_name": "Libya"},
+            ]
+        }
+        refs = _extract_region_refs("find_extreme_region", result)
+        assert refs == [("country:EG", "Egypt"), ("country:LY", "Libya")]
+
+    def test_region_series(self):
+        result = {"region_id": "country:FR", "region_name": "France", "data": []}
+        refs = _extract_region_refs("get_region_metric_series", result)
+        assert refs == [("country:FR", "France")]
+
+    def test_error_and_other_tools_ignored(self):
+        assert _extract_region_refs("find_extreme_region", {"error": "x"}) == []
+        assert _extract_region_refs("get_metric_series", {"region_id": "a"}) == []
+
+
+class TestRegionsForAnswer:
+    def test_named_region_is_shaped_like_a_search_item(self):
+        idx = _make_region_index(_region_hit("country:EG", "Egypt"))
+        regions = _regions_for_answer(
+            "The hottest country is **Egypt**.",
+            [("country:EG", "Egypt")],
+            idx,
+            {"country:EG"},
+        )
+        assert len(regions) == 1
+        r = regions[0]
+        assert r["region_id"] == "country:EG"
+        assert r["label"] == "Egypt"
+        assert r["kind"] == "country"
+        assert r["bbox"] == [0.0, 0.0, 3.0, 3.0]
+        assert r["names"] == ["Egypt"]
+        assert "definite_article" in r
+        json.dumps(regions)  # must survive the SSE wire
+
+    def test_unmentioned_regions_dropped(self):
+        idx = _make_region_index(
+            _region_hit("country:EG", "Egypt"), _region_hit("country:LY", "Libya")
+        )
+        regions = _regions_for_answer(
+            "Egypt is the hottest.",
+            [("country:EG", "Egypt"), ("country:LY", "Libya")],
+            idx,
+            {"country:EG", "country:LY"},
+        )
+        assert [r["region_id"] for r in regions] == ["country:EG"]
+
+    def test_region_without_data_or_search_entry_dropped(self):
+        idx = _make_region_index(_region_hit("country:EG", "Egypt"))
+        # No data in this release
+        assert (
+            _regions_for_answer("Egypt.", [("country:EG", "Egypt")], idx, set()) == []
+        )
+        # Continents have no search entry
+        assert (
+            _regions_for_answer(
+                "Africa.", [("continent:africa", "Africa")], idx, {"continent:africa"}
+            )
+            == []
+        )
+
+    def test_tool_region_name_also_matches(self):
+        idx = _make_region_index(_region_hit("country:CI", "Côte d'Ivoire"))
+        regions = _regions_for_answer(
+            "Ivory Coast is the wettest.",
+            [("country:CI", "Ivory Coast")],
+            idx,
+            {"country:CI"},
+        )
+        assert regions and regions[0]["names"] == ["Ivory Coast"]
+
+    def test_shorter_name_not_found_inside_longer_one(self):
+        idx = _make_region_index(
+            _region_hit("country:PG", "Papua New Guinea"),
+            _region_hit("country:GN", "Guinea"),
+        )
+        regions = _regions_for_answer(
+            "Papua New Guinea tops the list.",
+            [("country:GN", "Guinea"), ("country:PG", "Papua New Guinea")],
+            idx,
+            {"country:GN", "country:PG"},
+        )
+        assert [r["region_id"] for r in regions] == ["country:PG"]
+
+    def test_name_inside_another_word_does_not_match(self):
+        idx = _make_region_index(_region_hit("country:NE", "Niger"))
+        regions = _regions_for_answer(
+            "Nigeria is hot.", [("country:NE", "Niger")], idx, {"country:NE"}
+        )
+        assert regions == []
+
+    def test_ocean_basin_matches_without_ocean(self):
+        idx = _make_region_index(
+            _region_hit("ocean:north_atlantic_ocean", "North Atlantic Ocean", "marine"),
+            _region_hit("ocean:arctic_ocean", "Arctic Ocean", "marine"),
+        )
+        regions = _regions_for_answer(
+            "The North Atlantic warmed most; Arctic sea ice shrank.",
+            [("ocean:north_atlantic_ocean", ""), ("ocean:arctic_ocean", "")],
+            idx,
+            {"ocean:north_atlantic_ocean", "ocean:arctic_ocean"},
+        )
+        # "Arctic" alone is an adjective, not the ocean
+        assert [r["region_id"] for r in regions] == ["ocean:north_atlantic_ocean"]
+        assert regions[0]["names"] == ["North Atlantic"]
+
+    def test_paired_name_matches_its_first_part(self):
+        idx = _make_region_index(_region_hit("country:SJ", "Svalbard and Jan Mayen"))
+        regions = _regions_for_answer(
+            "Svalbard warms fastest.",
+            [("country:SJ", "Svalbard and Jan Mayen (Norway)")],
+            idx,
+            {"country:SJ"},
+        )
+        assert regions and regions[0]["names"] == ["Svalbard"]
+
+    def test_name_with_its_state_matches_whole(self):
+        idx = _make_region_index(_region_hit("country:SJ", "Svalbard and Jan Mayen"))
+        regions = _regions_for_answer(
+            "**Svalbard and Jan Mayen (Norway)** leads.",
+            [("country:SJ", "Svalbard and Jan Mayen (Norway)")],
+            idx,
+            {"country:SJ"},
+        )
+        assert regions[0]["names"] == ["Svalbard and Jan Mayen (Norway)"]
+
+    def test_duplicate_refs_collapse(self):
+        idx = _make_region_index(_region_hit("country:FR", "France"))
+        regions = _regions_for_answer(
+            "France warmed.",
+            [("country:FR", "France"), ("country:FR", "France")],
+            idx,
+            {"country:FR"},
+        )
+        assert len(regions) == 1
+
+
+# ---------------------------------------------------------------------------
 # _is_quota_exhausted
 # ---------------------------------------------------------------------------
 
@@ -989,3 +1164,84 @@ class TestPreflightSkipsOversizedTier:
         events = list(orch.run(question="Harder", session_id="s1"))
         answers = [e for e in events if e["type"] == "answer"]
         assert answers and answers[0]["text"] == _CONVERSATION_TOO_LONG_MSG
+
+
+class TestDoneEventCarriesRegions:
+    """Asking for the hottest country should hand the client Egypt to select."""
+
+    def _run(self, monkeypatch, answer):
+        client = _ScriptedClient(
+            [
+                [
+                    _tool_call_chunk(
+                        "find_extreme_region",
+                        '{"metric_id": "t2m", "aggregation": "mean", "extremum": "max"}',
+                    )
+                ],
+                [_chunk(content=answer)],
+            ]
+        )
+        tile_store = SimpleNamespace(
+            metrics={}, rankings={}, region_ids=frozenset({"country:EG"})
+        )
+        orch = ChatOrchestrator(
+            tiers=[ProviderTier(name="t", client=client, model="m")],
+            tile_store=tile_store,
+            location_index=_make_region_index(_region_hit("country:EG", "Egypt")),
+            max_steps=3,
+        )
+        monkeypatch.setattr(
+            orch,
+            "_dispatch",
+            lambda name, args, unit: json.dumps(
+                {"region_id": "country:EG", "region_name": "Egypt", "value": 23.1}
+            ),
+        )
+        events = list(orch.run(question="What is the hottest country?"))
+        return [e for e in events if e["type"] == "done"][0]
+
+    def test_named_country_is_sent(self, monkeypatch):
+        done = self._run(monkeypatch, "The hottest country is **Egypt**.")
+        assert [r["region_id"] for r in done["regions"]] == ["country:EG"]
+
+    def test_unnamed_country_is_not_sent(self, monkeypatch):
+        done = self._run(monkeypatch, "No data.")
+        assert done["regions"] == []
+
+
+class TestSystemPromptMapContext:
+    """A selected country or sea must be read as a region, not a grid cell."""
+
+    def _prompt(self, map_context):
+        from climate_api.chat.orchestrator import _build_system_prompt
+
+        return _build_system_prompt(_MockTileStore(), map_context)
+
+    def test_point_context_uses_the_label_as_a_location(self):
+        prompt = self._prompt({"lat": 30.0, "lon": 31.2, "label": "Cairo, Egypt"})
+        assert 'pass "Cairo, Egypt" as the location parameter' in prompt
+        assert "get_region_metric_series with region_id" not in prompt
+
+    def test_selected_country_routes_here_to_region_series(self):
+        prompt = self._prompt(
+            {"lat": 26.5, "lon": 29.9, "label": "Egypt", "region_id": "country:EG"}
+        )
+        assert 'get_region_metric_series with region_id="country:EG"' in prompt
+        assert 'country="Egypt"' in prompt
+        assert "as the location parameter" not in prompt
+
+    def test_selected_sea_has_no_city_search_hint(self):
+        prompt = self._prompt(
+            {
+                "lat": 43.3,
+                "lon": 15.9,
+                "label": "Adriatic Sea",
+                "region_id": "ocean:adriatic_sea",
+            }
+        )
+        assert 'region_id="ocean:adriatic_sea"' in prompt
+        assert "this sea" in prompt
+        assert (
+            "find_extreme_location"
+            not in prompt.split("Map context:")[1].split("\n")[0]
+        )

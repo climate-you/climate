@@ -3,7 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from climate_api.store.location_index import LocationIndex
-from climate_api.store.sovereignty import is_sovereign
+from climate_api.store.sovereignty import (
+    NON_SOVEREIGN_COUNTRY_CODES,
+    is_sovereign,
+    sovereign_of,
+)
 
 
 def _write_capitals_index(path: Path) -> None:
@@ -62,3 +66,29 @@ def test_iter_all_without_capital_filter_keeps_every_location(tmp_path: Path) ->
     index = LocationIndex(index_csv, min_query_len=2, prefix_len=2)
 
     assert len(index.iter_all()) == 5
+
+
+def test_territories_name_their_state() -> None:
+    assert sovereign_of("SJ") == "NO"
+    assert sovereign_of("gl") == "DK"
+    assert sovereign_of("PR") == "US"
+
+
+def test_stateless_and_disputed_territories_name_none() -> None:
+    assert sovereign_of("AQ") is None
+    assert sovereign_of("EH") is None
+    assert not is_sovereign("EH")
+
+
+def test_sovereign_states_name_none() -> None:
+    assert sovereign_of("NO") is None
+    assert sovereign_of(None) is None
+
+
+def test_every_named_state_is_itself_sovereign() -> None:
+    from climate_api.store.sovereignty import TERRITORY_SOVEREIGN
+
+    for code, state in TERRITORY_SOVEREIGN.items():
+        if state is not None:
+            assert is_sovereign(state), f"{code} maps to non-sovereign {state}"
+    assert set(TERRITORY_SOVEREIGN) == NON_SOVEREIGN_COUNTRY_CODES

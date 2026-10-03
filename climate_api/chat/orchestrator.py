@@ -10,7 +10,8 @@ Event types yielded by ChatOrchestrator.run():
                          "model": "...", "rejected_tiers": [...], "model_override": "...|null",
                          "total_ms": N, "steps_timing": [{"step": N, "model_ms": N, "tools_ms": N}, ...],
                          "charts": [{"title": "...", "unit": "...", "series": [{"label": "...", "x": [...], "y": [...]}]}],
-                         "fly_to_bbox": [west, south, east, north] | absent}
+                         "fly_to_bbox": [west, south, east, north] | absent,
+                         "regions": [{<autocomplete item>, "names": [...]}] | absent}
   {"type": "error",      "message": "..."}
 
 Provider tiers are tried in order. If a tier's API call returns a daily-token-quota error
@@ -34,6 +35,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterator
 
 from climate.geo.country import LEGACY_COUNTRY_NAMES
+from climate.geo.names import takes_definite_article
 from climate_api.store.location_index import LocationIndex, _norm as _norm_location
 from climate_api.store.tile_data_store import TileDataStore
 from climate_api.chat import tools as _tools
@@ -472,6 +474,104 @@ def _extract_locations(name: str, args: dict, result_dict: dict) -> list[dict]:
         if lat is not None and lon is not None:
             return [{"label": result_dict.get("reference", ""), "lat": lat, "lon": lon}]
     return []
+
+
+def _extract_region_refs(name: str, result_dict: dict) -> list[tuple[str, str]]:
+    """Return the (region_id, region_name) pairs a region tool answered about."""
+    if "error" in result_dict or name not in (
+        "find_extreme_region",
+        "get_region_metric_series",
+    ):
+        return []
+    entries = result_dict.get("results") or [result_dict]
+    return [
+        (str(r["region_id"]), str(r.get("region_name") or ""))
+        for r in entries
+        if isinstance(r, dict) and r.get("region_id")
+    ]
+
+
+def _regions_for_answer(
+    answer: str,
+    region_refs: list[tuple[str, str]],
+    location_index: Any,
+    available_region_ids: frozenset[str] | set[str],
+) -> list[dict]:
+    """Turn the regions the tools returned into selectable search items.
+
+    Only regions the answer actually names are kept — a top-10 ranking whose
+    answer lists three countries should offer those three, not ten. Each one
+    is shaped like a search autocomplete item, so the client can select it
+    exactly as if the reader had searched for it. Regions with no search
+    entry (continents, the globe) or no data in this release are dropped:
+    selecting them would open nothing.
+
+    Each item carries `names`, the spellings found in the answer, so the
+    client can turn them into links without guessing again.
+    """
+    # Names are matched longest first and blanked once matched, so "Guinea"
+    # is not found inside an earlier "Papua New Guinea".
+    text = answer.replace("*", "").casefold()
+    candidates: list[tuple[str, str, Any]] = []
+    seen_ids: set[str] = set()
+    hits: dict[str, Any] = {}
+    for region_id, region_name in region_refs:
+        if region_id in seen_ids:
+            continue
+        seen_ids.add(region_id)
+        if region_id not in available_region_ids:
+            continue
+        hit = location_index.resolve_by_region_id(region_id)
+        if hit is None:
+            continue
+        hits[region_id] = hit
+        names = {hit.label, region_name}
+        names.update(a.strip() for a in (hit.alt_names or "").split(","))
+        # Ocean basins are usually written without "Ocean" ("the North
+        # Atlantic"). Only two-word stems are shortened: "Arctic" or
+        # "Southern" alone is far more often an adjective than the ocean.
+        for n in list(names):
+            stem = n[: -len(" Ocean")] if n.endswith(" Ocean") else ""
+            if len(stem.split()) >= 2:
+                names.add(stem)
+            # Paired names are shortened to their first part in prose:
+            # "Svalbard" for "Svalbard and Jan Mayen", "Bosnia" for "Bosnia
+            # and Herzegovina". Safe here: only regions a tool returned are
+            # looked for at all.
+            if " and " in n:
+                names.add(n.split(" and ")[0].rstrip(","))
+        for n in names:
+            if n:
+                candidates.append((n, region_id, hit))
+
+    matched: dict[str, list[str]] = {}
+    for n, region_id, _ in sorted(candidates, key=lambda c: -len(c[0])):
+        pattern = re.compile(rf"(?<!\w){re.escape(n.casefold())}(?!\w)")
+        if not pattern.search(text):
+            continue
+        text = pattern.sub(lambda m: " " * len(m.group(0)), text)
+        matched.setdefault(region_id, []).append(n)
+
+    regions: list[dict] = []
+    for region_id, hit in hits.items():
+        if region_id not in matched:
+            continue
+        regions.append(
+            {
+                "geonameid": hit.geonameid,
+                "label": hit.label,
+                "lat": hit.lat,
+                "lon": hit.lon,
+                "country_code": hit.country_code,
+                "population": hit.population,
+                "kind": hit.kind,
+                "bbox": list(hit.bbox) if hit.bbox else None,
+                "region_id": region_id,
+                "definite_article": takes_definite_article(hit.label, hit.kind),
+                "names": matched[region_id],
+            }
+        )
+    return regions
 
 
 def _collect_series_for_extreme(
@@ -1432,6 +1532,9 @@ For country ranking, limit=1 is fine unless the user asks for a top-N list. \
 Use the continent parameter to filter countries by continent \
 (e.g. "which country in South America sees the most rain?" → continent="South America", region_type="country"). \
 For ocean questions, only the 7 major oceans are included (Arctic, Indian, North/South Atlantic, North/South Pacific, Southern).
+- Country rankings include territories, named with the state they belong to, e.g. \
+"Svalbard and Jan Mayen (Norway)". Always keep the state in brackets: a territory is \
+ranked separately from its state's mainland, and must not read as that country itself.
 - When the user names a specific known region (e.g. "Brazil", "Europe", "Indian Ocean"), \
 call get_region_metric_series directly — do not call find_extreme_region first.
 - For comparative questions where you already know the specific regions to compare \
@@ -1504,7 +1607,28 @@ def _build_system_prompt(
     catalogue = _format_metric_catalogue(metrics_result.get("metrics", []))
     current_date = datetime.date.today().strftime("%Y-%m-%d")
 
-    if map_context:
+    region_id = (map_context or {}).get("region_id")
+    if region_id:
+        # A selected country or sea: "here" means the whole region. Passing its
+        # name to get_metric_series would read the one cell under its marker.
+        label = map_context.get("label") or region_id
+        is_country = region_id.startswith("country:")
+        map_context_block = (
+            f"\nMap context: the user is currently viewing the "
+            f"{'country' if is_country else 'sea'} [{label}] as a whole "
+            f"(region_id \"{region_id}\"). For questions about 'here', "
+            f"'this {'country' if is_country else 'sea'}', or this area, call "
+            f'get_region_metric_series with region_id="{region_id}" — do not '
+            "use get_metric_series, which reads a single grid cell."
+            + (
+                f' To find cities within it, pass country="{label}" to '
+                "find_extreme_location."
+                if is_country
+                else ""
+            )
+            + "\n"
+        )
+    elif map_context:
         label = (
             map_context.get("label")
             or f"{map_context.get('lat', 0)}, {map_context.get('lon', 0)}"
@@ -1754,6 +1878,7 @@ class ChatOrchestrator:
         tools_called: list[str] = []
         locations: list[dict] = []
         _location_keys: set[tuple] = set()
+        region_refs: list[tuple[str, str]] = []  # (region_id, name) from region tools
         series_results: list[dict] = (
             []
         )  # successful get_metric_series results for charting
@@ -2064,13 +2189,13 @@ class ChatOrchestrator:
                                     series_results,
                                 )
                         try:
-                            for loc in _extract_locations(
-                                name, args, json.loads(result)
-                            ):
+                            result_dict = json.loads(result)
+                            for loc in _extract_locations(name, args, result_dict):
                                 key = (round(loc["lat"], 1), round(loc["lon"], 1))
                                 if key not in _location_keys:
                                     _location_keys.add(key)
                                     locations.append(loc)
+                            region_refs.extend(_extract_region_refs(name, result_dict))
                         except Exception:
                             pass
                     messages.append(
@@ -2121,6 +2246,15 @@ class ChatOrchestrator:
                         series_results, self.tile_store, temperature_unit
                     ),
                 }
+                # Countries and seas the answer names, so the client can select
+                # them as if they had been searched for.
+                if region_refs:
+                    done_event["regions"] = _regions_for_answer(
+                        answer,
+                        region_refs,
+                        self.location_index,
+                        self.tile_store.region_ids,
+                    )
                 # Fly to continent bbox when the answer is about a single continent
                 # and there are no city-level pins that already handle camera.
                 if not locations:

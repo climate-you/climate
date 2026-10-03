@@ -13,6 +13,7 @@ import {
 } from "@/lib/explorer/constants";
 import { isAnalyticsDisabled } from "@/lib/analytics/optOut";
 import ChatChart, { type ChatChartPayload } from "./ChatChart";
+import type { AutocompleteItem } from "@/components/explorer/SearchOverlay";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +24,10 @@ type MapContext = {
   lon: number;
   label: string;
   countryCode?: string | null;
+  /** Set when a whole country or sea is selected rather than a point. */
+  regionId?: string | null;
+  /** Whether the label needs "the" mid-sentence ("the United States"). */
+  definiteArticle?: boolean;
 } | null;
 type ModelOverride =
   | "groq_small"
@@ -46,6 +51,10 @@ type ChatLocation = {
   lon: number;
   alt_names?: string;
 };
+// A country or sea the answer names, shaped like a search result so selecting
+// it behaves exactly as if the reader had searched for it. `names` are the
+// spellings the answer used, which become links.
+type ChatRegion = AutocompleteItem & { region_id: string; names: string[] };
 type ToolProvenance = {
   datasetTitle: string | null;
   provider: string | null;
@@ -73,6 +82,7 @@ type ChatMessage = {
   aborted?: boolean;
   exhausted?: boolean;
   locations?: ChatLocation[];
+  regions?: ChatRegion[];
   charts?: ChatChartPayload[];
   toolCalls?: ToolCallInfo[];
 };
@@ -107,6 +117,7 @@ type ChatDrawerProps = {
   onLocations?: (locs: ChatLocation[] | null) => void;
   onPickLocation?: (lat: number, lon: number) => void;
   onFlyToBbox?: (bbox: [number, number, number, number]) => void;
+  onSelectRegion?: (region: AutocompleteItem) => void;
   embedded?: boolean;
   embeddedVisible?: boolean;
   onClose?: () => void;
@@ -179,6 +190,25 @@ function linkifyCities(text: string, locs: ChatLocation[]): string {
         `[${city}](#loc:${loc.lat}:${loc.lon})`,
       );
     }
+  }
+  return result;
+}
+
+function linkifyRegions(text: string, regions: ChatRegion[]): string {
+  // Longest names first, so "Papua New Guinea" is linked before "Guinea"
+  // could claim part of it.
+  const names = regions
+    .flatMap((r) => r.names.map((name) => ({ name, id: r.region_id })))
+    .sort((a, b) => b.name.length - a.name.length);
+  let result = text;
+  for (const { name, id } of names) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Skip text already inside a link label, whether a city link or a
+    // longer region name linked a moment ago.
+    result = result.replace(
+      new RegExp(`(?<![\\[\\w])${escaped}(?![\\w\\]])`, "gi"),
+      (match) => `[${match}](#region:${id})`,
+    );
   }
   return result;
 }
@@ -263,6 +293,7 @@ export default function ChatDrawer({
   onLocations,
   onPickLocation,
   onFlyToBbox,
+  onSelectRegion,
   embedded = false,
   embeddedVisible = true,
   onClose,
@@ -446,7 +477,12 @@ export default function ChatDrawer({
               .map(({ role, text }) => ({ role, text }));
             return filtered.length > 0 ? filtered : undefined;
           })(),
-          map_context: mapContext,
+          map_context: mapContext && {
+            lat: mapContext.lat,
+            lon: mapContext.lon,
+            label: mapContext.label,
+            region_id: mapContext.regionId ?? undefined,
+          },
           session_id: conversationId,
           message_id: messageId,
           model_override: modelOverride ?? undefined,
@@ -623,8 +659,20 @@ export default function ChatDrawer({
                 ),
               );
             }
+            const regions = (event.regions as ChatRegion[] | undefined) ?? [];
+            if (regions.length > 0) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.messageId === messageId ? { ...m, regions } : m,
+                ),
+              );
+            }
             if (locsToShow && locsToShow.length >= 1) {
               onLocations?.(locsToShow);
+            } else if (regions.length === 1) {
+              // An answer about one country or sea selects it, as a search
+              // would. Several (a ranking, a comparison) are left as links.
+              onSelectRegion?.(regions[0]);
             } else if (event.fly_to_bbox) {
               const raw = event.fly_to_bbox as number[];
               if (raw.length === 4) {
@@ -772,7 +820,9 @@ export default function ChatDrawer({
 
   function resolveChipText(node: QuestionMeta): string {
     if (!node.requires_location) return node.question;
-    return node.question.replace("{location}", cityName ?? "");
+    const place =
+      cityName && mapContext?.definiteArticle ? `the ${cityName}` : cityName;
+    return node.question.replace("{location}", place ?? "");
   }
 
   function passesLocationFilter(node: QuestionMeta): boolean {
@@ -1122,6 +1172,26 @@ export default function ChatDrawer({
                           </a>
                         );
                       }
+                      if (href?.startsWith("#region:")) {
+                        const regionId = href.slice("#region:".length);
+                        const region = msg.regions?.find(
+                          (r) => r.region_id === regionId,
+                        );
+                        if (region) {
+                          return (
+                            <a
+                              href="#"
+                              className={styles.locationLink}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                onSelectRegion?.(region);
+                              }}
+                            >
+                              {children}
+                            </a>
+                          );
+                        }
+                      }
                       if (href === "#locs" && msg.locations?.length) {
                         return (
                           <a
@@ -1151,9 +1221,18 @@ export default function ChatDrawer({
                     },
                   }}
                 >
-                  {msg.locations && msg.locations.length > 0
-                    ? addSummaryLineLink(linkifyCities(msg.text, msg.locations))
-                    : msg.text}
+                  {(() => {
+                    let text = msg.text;
+                    if (msg.locations && msg.locations.length > 0) {
+                      text = addSummaryLineLink(
+                        linkifyCities(text, msg.locations),
+                      );
+                    }
+                    if (msg.regions && msg.regions.length > 0) {
+                      text = linkifyRegions(text, msg.regions);
+                    }
+                    return text;
+                  })()}
                 </Markdown>
               </div>
             )}

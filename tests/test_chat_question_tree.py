@@ -407,3 +407,55 @@ def test_every_pinned_location_resolves(node_id: str, tile_store):
         assert result.get(
             "data"
         ), f"{node_id}: pinned location {loc['label']!r} returned no data points"
+
+
+@pytest.fixture(scope="module")
+def location_index():
+    path = REPO_ROOT / "data" / "locations" / "locations.index.csv"
+    if not path.is_file():
+        pytest.skip(f"no location index at {path}")
+    from climate_api.store.location_index import LocationIndex
+
+    return LocationIndex(path)
+
+
+@pytest.mark.parametrize(
+    "node_id",
+    [
+        nid
+        for nid in CHARTED_NODES
+        if any(
+            r.startswith(("country:", "ocean:"))
+            for r in _spec_region_ids(ACTIVE_NODES[nid].chart_spec)
+        )
+    ],
+)
+def test_charted_regions_are_named_in_the_answer(
+    node_id: str, tile_store, location_index
+):
+    """
+    Every country or sea a canned answer charts must be named in its text.
+
+    The answer offers the regions it names for selection on the map, so one
+    charted but never mentioned can't be selected — and usually means the text
+    and the chart have drifted apart, as when a microstate was dropped from a
+    ranking's text but left on its chart.
+    """
+    from climate_api.chat.canned import answer_regions
+
+    node = ACTIVE_NODES[node_id]
+    charted = {
+        r
+        for r in _spec_region_ids(node.chart_spec)
+        if r.startswith(("country:", "ocean:"))
+        and location_index.resolve_by_region_id(r) is not None
+    }
+    named = {
+        r["region_id"]
+        for r in answer_regions(
+            node.answer, node.chart_spec, location_index, tile_store
+        )
+    }
+    assert (
+        charted == named
+    ), f"{node_id} charts {sorted(charted - named)} without naming them in its answer"

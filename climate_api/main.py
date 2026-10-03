@@ -53,6 +53,7 @@ from .services.panels import (
 from .chat.orchestrator import ChatOrchestrator, ProviderTier
 from .chat.templated import generate as _templated_generate
 from .chat.canned import (
+    answer_regions as _canned_answer_regions,
     lookup as _canned_lookup,
     stream_canned as _stream_canned,
     build_canned_charts as _build_canned_charts,
@@ -82,6 +83,9 @@ class _MapContext(BaseModel):
     lat: float
     lon: float
     label: str
+    # Set when the reader has a whole country or sea selected rather than a
+    # point, so "here" can be answered for the region instead of one cell.
+    region_id: str | None = None
 
 
 class _ConversationTurn(BaseModel):
@@ -1001,6 +1005,14 @@ def create_app() -> FastAPI:
             if body.map_context
             else None
         )
+        # A region the release has no aggregates for is read as a point, the
+        # same fallback the panel uses.
+        if (
+            map_ctx
+            and body.map_context.region_id
+            and body.map_context.region_id in chat_orchestrator.tile_store.region_ids
+        ):
+            map_ctx["region_id"] = body.map_context.region_id
 
         def _event_stream():
             import json as _json
@@ -1027,11 +1039,14 @@ def create_app() -> FastAPI:
                 and body.question_id
                 and map_ctx
             ):
+                # A selected country or sea is answered from its area
+                # averages; a question with no region template goes to the LLM.
                 templated = _templated_generate(
                     question_id=body.question_id,
                     lat=map_ctx["lat"],
                     lon=map_ctx["lon"],
                     label=map_ctx["label"],
+                    region_id=map_ctx.get("region_id"),
                     tile_store=chat_orchestrator.tile_store,
                     temperature_unit=body.temperature_unit,
                 )
@@ -1061,6 +1076,12 @@ def create_app() -> FastAPI:
                         chat_orchestrator.tile_store,
                         dataset_titles,
                         country_names,
+                    ),
+                    regions=_canned_answer_regions(
+                        canned_answer,
+                        canned_chart_spec,
+                        location_index,
+                        chat_orchestrator.tile_store,
                     ),
                 )
             elif templated is not None:
