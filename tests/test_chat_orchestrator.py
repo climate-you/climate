@@ -803,6 +803,31 @@ class TestRegionsForAnswer:
         )
         assert regions[0]["names"] == ["Svalbard and Jan Mayen (Norway)"]
 
+    def test_short_forms_match_case_sensitively(self):
+        idx = _make_region_index(
+            _region_hit("country:GB", "United Kingdom"),
+            _region_hit("country:US", "United States"),
+        )
+        refs = [("country:GB", "United Kingdom"), ("country:US", "United States")]
+        ids = {"country:GB", "country:US"}
+        # The pronoun "us" is not the United States.
+        regions = _regions_for_answer("Let us compare: the UK warmed.", refs, idx, ids)
+        assert [(r["region_id"], r["names"]) for r in regions] == [
+            ("country:GB", ["UK"])
+        ]
+        regions = _regions_for_answer("The USA and the U.K. warmed.", refs, idx, ids)
+        assert {r["region_id"]: r["names"] for r in regions} == {
+            "country:GB": ["U.K."],
+            "country:US": ["USA"],
+        }
+
+    def test_names_are_reported_as_written(self):
+        idx = _make_region_index(_region_hit("country:EG", "Egypt"))
+        regions = _regions_for_answer(
+            "EGYPT, then Egypt again.", [("country:EG", "Egypt")], idx, {"country:EG"}
+        )
+        assert regions[0]["names"] == ["EGYPT", "Egypt"]
+
     def test_duplicate_refs_collapse(self):
         idx = _make_region_index(_region_hit("country:FR", "France"))
         regions = _regions_for_answer(

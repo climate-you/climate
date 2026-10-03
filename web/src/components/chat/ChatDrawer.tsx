@@ -195,22 +195,26 @@ function linkifyCities(text: string, locs: ChatLocation[]): string {
 }
 
 function linkifyRegions(text: string, regions: ChatRegion[]): string {
-  // Longest names first, so "Papua New Guinea" is linked before "Guinea"
-  // could claim part of it.
-  const names = regions
-    .flatMap((r) => r.names.map((name) => ({ name, id: r.region_id })))
-    .sort((a, b) => b.name.length - a.name.length);
-  let result = text;
-  for (const { name, id } of names) {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    // Skip text already inside a link label, whether a city link or a
-    // longer region name linked a moment ago.
-    result = result.replace(
-      new RegExp(`(?<![\\[\\w])${escaped}(?![\\w\\]])`, "gi"),
-      (match) => `[${match}](#region:${id})`,
-    );
+  const idByName = new Map<string, string>();
+  for (const r of regions) {
+    for (const name of r.names) {
+      if (!idByName.has(name)) idByName.set(name, r.region_id);
+    }
   }
-  return result;
+  if (idByName.size === 0) return text;
+  // One pass over every name, so a link just inserted is never scanned again
+  // — "US" would otherwise match inside "#region:country:US". Longest names
+  // first, so "Papua New Guinea" wins over the "Guinea" inside it.
+  const alternation = [...idByName.keys()]
+    .sort((a, b) => b.length - a.length)
+    .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  // Skips text already inside a city link's label. Case-sensitive: the names
+  // are the answer's own spellings, and "US" must not link the word "us".
+  return text.replace(
+    new RegExp(`(?<![\\[\\w])(?:${alternation})(?![\\w\\]])`, "g"),
+    (match) => `[${match}](#region:${idByName.get(match)})`,
+  );
 }
 
 function addSummaryLineLink(text: string): string {
@@ -822,7 +826,12 @@ export default function ChatDrawer({
     if (!node.requires_location) return node.question;
     const place =
       cityName && mapContext?.definiteArticle ? `the ${cityName}` : cityName;
-    return node.question.replace("{location}", place ?? "");
+    // A selected sea is not "near" itself: "the sea temperature in the
+    // Adriatic Sea", not "near" it.
+    const question = mapContext?.regionId?.startsWith("ocean:")
+      ? node.question.replace("near {location}", "in {location}")
+      : node.question;
+    return question.replace("{location}", place ?? "");
   }
 
   function passesLocationFilter(node: QuestionMeta): boolean {

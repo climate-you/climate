@@ -491,6 +491,17 @@ def _extract_region_refs(name: str, result_dict: dict) -> list[tuple[str, str]]:
     ]
 
 
+# Short forms answers use for countries whose index name is longer. Matched
+# case-sensitively: "US" must not be found in the word "us".
+_REGION_ALIASES: dict[str, tuple[str, ...]] = {
+    "country:GB": ("UK", "U.K.", "Britain", "Great Britain"),
+    "country:US": ("US", "U.S.", "USA", "U.S.A."),
+    "country:AE": ("UAE",),
+    "country:CD": ("DRC", "DR Congo"),
+    "country:CZ": ("Czech Republic",),
+}
+
+
 def _regions_for_answer(
     answer: str,
     region_refs: list[tuple[str, str]],
@@ -506,13 +517,15 @@ def _regions_for_answer(
     entry (continents, the globe) or no data in this release are dropped:
     selecting them would open nothing.
 
-    Each item carries `names`, the spellings found in the answer, so the
-    client can turn them into links without guessing again.
+    Each item carries `names`, the spellings found in the answer exactly as
+    written, so the client can turn them into links without guessing again.
     """
     # Names are matched longest first and blanked once matched, so "Guinea"
-    # is not found inside an earlier "Papua New Guinea".
-    text = answer.replace("*", "").casefold()
-    candidates: list[tuple[str, str, Any]] = []
+    # is not found inside an earlier "Papua New Guinea". Matching runs on the
+    # answer's own text so each spelling is reported in its own case.
+    text = answer.replace("*", "")
+    # (name, region_id, case-sensitive)
+    candidates: list[tuple[str, str, bool]] = []
     seen_ids: set[str] = set()
     hits: dict[str, Any] = {}
     for region_id, region_name in region_refs:
@@ -540,17 +553,22 @@ def _regions_for_answer(
             # looked for at all.
             if " and " in n:
                 names.add(n.split(" and ")[0].rstrip(","))
-        for n in names:
-            if n:
-                candidates.append((n, region_id, hit))
+        candidates.extend((n, region_id, False) for n in names if n)
+        candidates.extend(
+            (a, region_id, True) for a in _REGION_ALIASES.get(region_id, ())
+        )
 
     matched: dict[str, list[str]] = {}
-    for n, region_id, _ in sorted(candidates, key=lambda c: -len(c[0])):
-        pattern = re.compile(rf"(?<!\w){re.escape(n.casefold())}(?!\w)")
-        if not pattern.search(text):
+    for n, region_id, exact in sorted(candidates, key=lambda c: -len(c[0])):
+        pattern = re.compile(
+            rf"(?<!\w){re.escape(n)}(?!\w)", 0 if exact else re.IGNORECASE
+        )
+        found = pattern.findall(text)
+        if not found:
             continue
         text = pattern.sub(lambda m: " " * len(m.group(0)), text)
-        matched.setdefault(region_id, []).append(n)
+        spellings = matched.setdefault(region_id, [])
+        spellings.extend(f for f in dict.fromkeys(found) if f not in spellings)
 
     regions: list[dict] = []
     for region_id, hit in hits.items():
