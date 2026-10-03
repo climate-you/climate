@@ -4,6 +4,13 @@
 
 const LOGO_URL = "/story/logo.png";
 
+// The source credit on exported images, and on the stories' social cards.
+// The Copernicus licence asks for its notice "or any similar notice"; the page
+// itself carries the full notice and the no-endorsement statement. ERA5T is
+// the provisional release of the most recent months, which 2026 figures use.
+export const ERA5_SOURCE =
+  "Source: ERA5/ERA5T reanalysis, Copernicus Climate Change Service / ECMWF";
+
 export type DownloadScale = {
   min: string;
   max: string;
@@ -155,9 +162,8 @@ export async function composeAndDownload(
   const fontPx = Math.round(stripH * 0.42);
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#111111";
-  // The Copernicus licence wording is a long sentence rather than a short
-  // credit, so it is set smaller and greyer than the brand it sits opposite,
-  // and shrinks further if it would otherwise reach the brand.
+  // The source credit is set smaller and greyer than the brand it sits
+  // opposite, and shrinks further if it would otherwise reach the brand.
   const sourcePx = Math.round(stripH * 0.3);
   ctx.font = `400 ${sourcePx}px ${SANS}`;
   ctx.fillStyle = "#555555";

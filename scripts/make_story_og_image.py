@@ -126,9 +126,10 @@ def main() -> int:
     ap.add_argument("--kicker", default="climate.you · Case study")
     ap.add_argument(
         "--source",
-        default="Contains modified Copernicus Climate Change Service information 2026",
-        help="Attribution line. The Copernicus licence prescribes this wording "
-        "for products derived from its data.",
+        default="Source: ERA5/ERA5T reanalysis, Copernicus Climate Change Service / ECMWF",
+        help="Source credit, the same one exported images carry. The Copernicus "
+        "licence asks for its notice or any similar notice; the page carries "
+        "the full notice.",
     )
     ap.add_argument(
         "--texture-right",
@@ -254,8 +255,8 @@ def main() -> int:
     title_font = font(_SERIF_BOLD, 62)
     source_font = font(_SANS, 21)
     lines = wrap(args.title, title_font, text_w)
-    # The attribution is a sentence, not a short credit, so it wraps inside the
-    # text column instead of running on under the map.
+    # The source credit wraps inside the text column instead of running on
+    # under the map.
     source_lines = wrap(args.source, source_font, text_w)
     line_h, rule_gap, source_gap, source_line_h = 74, 22, 30, 28
     block_h = (
