@@ -1,0 +1,12 @@
+[Unit]
+Description=Reboot every Sunday at 00:00 UTC
+
+[Timer]
+# The zone is explicit so the slot does not depend on the VM's own time zone.
+OnCalendar=Sun *-*-* 00:00:00 UTC
+AccuracySec=1min
+# A slot missed while the VM was off is skipped, not caught up on at boot.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

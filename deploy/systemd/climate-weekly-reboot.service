@@ -1,0 +1,6 @@
+[Unit]
+Description=Weekly reboot: apply installed updates and prove the VM restarts unattended
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl reboot

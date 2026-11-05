@@ -760,6 +760,41 @@ its email address:
 None of these touch the site itself. The real failure path of the deep check
 (a 503 when no data can be read) is covered by `tests/test_healthz_deep.py`.
 
+### Updates and weekly reboot
+
+`unattended-upgrades` installs security updates daily; `install_ops.sh` makes
+sure it is switched on (`/etc/apt/apt.conf.d/20auto-upgrades`). Kernel and core
+library updates only take effect after a reboot, so
+`climate-weekly-reboot.timer` reboots the VM every Sunday at 00:00 UTC, whether
+or not an update asked for it. The weekly reboot also proves the VM comes back
+on its own: a boot that has quietly broken shows up within a week. The site is
+down for a minute or two each time.
+
+The timer is installed but **not enabled** by bootstrap, because a VM should
+not reboot unattended before something would tell you it failed to come back.
+Once the external monitors above are set up and have each alerted once:
+
+```bash
+sudo scripts/deploy/install_ops.sh --enable-reboot   # or the /tmp/ops copy on a live VM
+systemctl list-timers climate-weekly-reboot.timer --no-pager
+```
+
+Give both uptime monitors a weekly maintenance window over the slot (Sunday
+00:00–00:15 UTC). At a 5-minute interval, about one reboot in three would
+otherwise land a check in the outage and send a false alert. The window still
+catches a reboot that fails: checks resume when it ends, and a site that is
+still down alerts then. The disk heartbeat needs no window: its period plus
+grace is much longer than a reboot, and the VM pings again 2 minutes after boot.
+
+To change the slot, edit `OnCalendar=` in
+`deploy/systemd/climate-weekly-reboot.timer` (keep an explicit zone) and re-run
+`install_ops.sh`. To pause reboots: `sudo systemctl disable --now
+climate-weekly-reboot.timer`.
+
+After a reboot, `systemctl status caddy climate-backend climate-web` should
+show all three running, and `journalctl --list-boots | tail -3` lists the
+recent boots.
+
 ### Other checks
 
 Minimum checks to add in your monitoring stack:
