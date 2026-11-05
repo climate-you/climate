@@ -689,6 +689,41 @@ backend log (`journalctl -u climate-backend | grep "Deep health check failed"`).
 Both are proxied by Caddy (`@backend` matches `/healthz` and `/healthz/*`), and
 `smoke_check.sh` calls the deep one VM-locally.
 
+### External monitors
+
+Two alerts from a free uptime service, delivered by email. Nothing about the
+account lives in this repository: create your own, and keep a note of the
+monitor names and dashboard links wherever you keep operator notes.
+
+| alert | service | what fires it |
+|---|---|---|
+| site down | an uptime monitor (e.g. [UptimeRobot](https://uptimerobot.com), free tier) | no 2xx/3xx from the site root |
+| site unhealthy | the same uptime monitor | `"status":"ok"` missing from `/healthz/deep` (a 503, or no answer) |
+
+Any service with keyword checks and email alerts works.
+
+**1. Uptime monitors.** Create an account, and check that the email address
+it alerts is one you read. Add two monitors at the free tier's interval (5 min
+on UptimeRobot):
+
+- **HTTP(s)** on `https://<your-domain>/`;
+- **Keyword** on `https://<your-domain>/healthz/deep`, keyword `"status":"ok"`,
+  alerting when the keyword does **not** exist.
+
+Turn on TLS-expiry alerts if the free tier offers them (Caddy renews
+certificates, so an expiry alert means renewal is broken).
+
+**2. Trigger each alert once**, and again whenever you change an account or
+its email address:
+
+- site down: point the HTTP(s) monitor at a path that 404s, wait for the email,
+  point it back;
+- site unhealthy: change the keyword to one that never appears, wait, change it
+  back.
+
+None of these touch the site itself. The real failure path of the deep check
+(a 503 when no data can be read) is covered by `tests/test_healthz_deep.py`.
+
 ### Other checks
 
 Minimum checks to add in your monitoring stack:
