@@ -48,6 +48,7 @@ done
 
 if [[ $CHECK_LOCAL -eq 1 ]]; then
   curl --fail --silent --show-error "http://127.0.0.1:${API_PORT}/healthz" >/dev/null
+  curl --fail --silent --show-error "http://127.0.0.1:${API_PORT}/healthz/deep" >/dev/null
   curl --fail --silent --show-error "http://127.0.0.1:${WEB_PORT}" >/dev/null
   curl --fail --silent --show-error "http://127.0.0.1:${API_PORT}/api/v/${RELEASE}/release" >/dev/null
 fi

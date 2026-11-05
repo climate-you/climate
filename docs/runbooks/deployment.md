@@ -554,6 +554,7 @@ systemctl is-active climate-backend
 systemctl is-active climate-web
 systemctl is-active caddy
 curl -fsS http://127.0.0.1:8001/healthz
+curl -fsS http://127.0.0.1:8001/healthz/deep
 curl -fsS http://127.0.0.1:8001/api/v/latest/release
 ```
 
@@ -657,6 +658,21 @@ Once domain is chosen:
 - restart `caddy`, `climate-backend`, `climate-web`
 
 ## 14) Basic Monitoring Setup
+
+### Health endpoints
+
+| endpoint | what it proves | cost |
+|---|---|---|
+| `/healthz` | the backend process answers; touches no data (Caddy's own upstream check) | none |
+| `/healthz/deep` | the `latest` release resolves and one cell of `t2m_yearly_mean_c` (Paris) reads from disk | ~1 ms warm |
+
+`/healthz/deep` returns `200 {"status":"ok","release":"<id>",...}` or
+`503 {"status":"fail","error":"<exception class>"}`; the full reason is in the
+backend log (`journalctl -u climate-backend | grep "Deep health check failed"`).
+Both are proxied by Caddy (`@backend` matches `/healthz` and `/healthz/*`), and
+`smoke_check.sh` calls the deep one VM-locally.
+
+### Other checks
 
 Minimum checks to add in your monitoring stack:
 

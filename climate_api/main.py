@@ -73,6 +73,12 @@ from .versioning import resolve_app_version
 
 logging.getLogger("uvicorn.access").disabled = True
 
+# What /healthz/deep reads: a yearly series, so the tile is small, at a land
+# point every release covers (Paris).
+_DEEP_HEALTH_METRIC = "t2m_yearly_mean_c"
+_DEEP_HEALTH_LAT = 48.85
+_DEEP_HEALTH_LON = 2.35
+
 
 class _ClickBody(BaseModel):
     lat: float
@@ -627,6 +633,46 @@ def create_app() -> FastAPI:
     @app.get("/healthz")
     def healthz():
         return {"status": "ok"}
+
+    @app.get("/healthz/deep")
+    def healthz_deep():
+        """Whether the site can actually serve data, for an external monitor.
+
+        Resolves the release the site serves and reads one cell from disk, so
+        a broken release pointer, manifest or tile fails it where `/healthz`
+        would still pass. The release context is cached, but the tile is read
+        from disk on every call, bypassing the panel cache.
+        """
+        no_store = {"Cache-Control": "no-store"}
+        t0 = time.perf_counter()
+        try:
+            context = release_resolver.resolve_release_context("latest")
+            vector = context.tile_store.try_get_metric_vector(
+                _DEEP_HEALTH_METRIC, _DEEP_HEALTH_LAT, _DEEP_HEALTH_LON
+            )
+            if vector is None or vector.size == 0:
+                raise ValueError(
+                    f"{_DEEP_HEALTH_METRIC} has no data at the check location"
+                )
+        except Exception as exc:
+            uvicorn_logger.warning("Deep health check failed: %r", exc)
+            # The reason stays in the log: the endpoint is public, and the
+            # message can carry server paths.
+            return JSONResponse(
+                status_code=503,
+                content={"status": "fail", "error": type(exc).__name__},
+                headers=no_store,
+            )
+        return JSONResponse(
+            content={
+                "status": "ok",
+                "release": context.release,
+                "metric": _DEEP_HEALTH_METRIC,
+                "values": int(vector.size),
+                "read_ms": round((time.perf_counter() - t0) * 1000.0, 1),
+            },
+            headers=no_store,
+        )
 
     def _extract_ip(request: Request) -> str:
         test_ip = os.environ.get("GEOIP_TEST_IP", "").strip()
