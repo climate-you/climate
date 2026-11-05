@@ -505,9 +505,17 @@ group. That combination is what keeps ownership correct:
 - the publish script creates remote directories **as the SSH user with
   `umask 002`**, never via `sudo mkdir` (which would create them root-owned)
 - setgid makes every new directory inherit the `climate` group
-- after each artifact sync the script runs
-  `sudo chown -R climate:climate <artifact_dir>` (the default for
+- after each artifact sync the script makes the files it wrote group-writable,
+  then runs `sudo chown -R climate:climate <artifact_dir>` (the default for
   `--remote-chown`), so the final owner is the service user
+
+Group-writable files are what let the next publish hardlink unchanged tiles.
+Ubuntu's `fs.protected_hardlinks` only lets the SSH user link to a
+`climate`-owned file it can write, and when a link fails rsync copies the file
+in full and carries on. On 2026-11-05 that turned a few-MB aggregates update
+into ~7.7 GB of copies. The publish now checks the previous versions it will
+link against before writing anything, dry run included, and stops with the
+`chmod` to run if any file is not group-writable.
 
 Bootstrap sets this up. On a VM provisioned before this was automated, or if
 ownership has drifted, repair it once:

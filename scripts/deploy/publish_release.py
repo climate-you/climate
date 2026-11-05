@@ -48,6 +48,12 @@ Permissions:
   target, and a developer machine's 0644 never matches the store's 0664, so
   preserving the local mode silently turns hardlinking off and republishes
   every tile. See _rsync_dir.
+
+  The store's files must also stay group-writable: under Ubuntu's
+  fs.protected_hardlinks, the SSH user can only hardlink to a service-owned
+  file it can write. Each sync makes its new files group-writable before the
+  chown, and the publish refuses to start if a previous version it would link
+  against is not (see _UNLINKABLE_FILES_SH).
 """
 
 from __future__ import annotations
@@ -168,11 +174,10 @@ def _rsync_dir(
     Permissions and ownership are deliberately not preserved. rsync can only
     hardlink a file it would give the same attributes as the candidate, and the
     two sides disagree: a developer machine writes 0644 under umask 022 while
-    the artifact store holds 0664 from the server's umask 002 and setgid
-    directories. Preserving the local mode makes every file look different and
-    silently defeats link_dest. Dropping it lets the modes come from the
-    server's umask and the chown that follows each sync, which is what the
-    store wants anyway.
+    the artifact store holds 0664. Preserving the local mode makes every file
+    look different and silently defeats link_dest. Dropping it does not make
+    new files 0664 by itself -- rsync still starts from the source mode -- so
+    _ssh_group_writable adds the group bit after each sync.
 
     `chmod` therefore defaults to empty and should stay that way: --chmod
     implies --perms, so setting it re-enables the comparison and turns
@@ -193,6 +198,64 @@ def _rsync_dir(
         cmd += [f"--link-dest={link_dest}"]
     cmd += [src, dst]
     _run(cmd, dry_run=dry_run)
+
+
+# Lists, per directory, the files the SSH user could not hardlink to. With
+# fs.protected_hardlinks=1 (the Ubuntu default) linking to a file you do not own
+# needs read and write access to it, and when a link fails rsync quietly copies
+# the file instead, leaving only an error line in its output. Without the guard
+# the kernel allows every link, so there is nothing to report.
+_UNLINKABLE_FILES_SH = r"""
+[ "$(cat /proc/sys/fs/protected_hardlinks 2>/dev/null)" = 1 ] || exit 0
+me=$(id -un)
+for d in "$@"; do
+  [ -d "$d" ] || continue
+  n=$(find "$d" -type f ! -user "$me" \( ! -readable -o ! -writable \) | wc -l)
+  [ "$n" -eq 0 ] || echo "$n $d"
+done
+"""
+
+
+def _unlinkable_files(remote: str | None, dirs: list[str]) -> list[tuple[int, str]]:
+    """(count, dir) for each link-dest directory holding files we cannot link to."""
+    if not dirs:
+        return []
+    cmd = ["sh", "-c", _UNLINKABLE_FILES_SH, "sh", *dirs]
+    if remote is not None:
+        cmd = ["ssh", remote, " ".join(shlex.quote(a) for a in cmd)]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        raise SystemExit(
+            f"ERROR: could not check link-dest permissions: {result.stderr.strip()}"
+        )
+    found = []
+    for line in result.stdout.splitlines():
+        count, _, path = line.partition(" ")
+        found.append((int(count), path))
+    return found
+
+
+def _ssh_group_writable(
+    remote: str | None, path: str, *, dry_run: bool = False
+) -> None:
+    """Make what the SSH user just wrote under `path` group-writable.
+
+    rsync gives a new file the source file's mode masked by the receiver's
+    umask, so a developer machine's 0644 arrives as 0644 whatever the server's
+    umask is. Once chowned to the service user, such a file can no longer be
+    hardlinked by the publishing user (see _UNLINKABLE_FILES_SH), so the next
+    publish would copy it in full. Only files we still own are touched: the
+    hardlinked ones belong to the service user already, and are group-writable
+    or the link would have failed.
+    """
+    if remote is None:
+        return
+    _ssh_run(
+        remote,
+        f'find {shlex.quote(path)} -user "$(id -un)" ! -perm -g+w '
+        "-exec chmod g+w {} +",
+        dry_run=dry_run,
+    )
 
 
 def _link_dest_for(
@@ -464,9 +527,9 @@ def main() -> int:
         help=(
             "chmod spec for the release directory's own files -- registry, aux "
             "and manifests (default: 'a+rX', world-readable). Set to '' to "
-            "disable. Artifact directories ignore this: they take their modes "
-            "from the server's umask so that unchanged files can be "
-            "hardlinked, which preserving a local mode would prevent."
+            "disable. Artifact directories ignore this: their files are made "
+            "group-writable after each sync instead, so that unchanged files "
+            "can be hardlinked, which preserving a local mode would prevent."
         ),
     )
     ap.add_argument(
@@ -667,6 +730,36 @@ def main() -> int:
             print(f"  - maps/{m}")
         print()
 
+    # Checked before anything is written, and in a dry run too: a link that
+    # fails becomes a full copy, which on a tight disk can fill it mid-publish.
+    if not args.no_link_dest:
+        link_dests = [
+            f"{remote_artifacts_root}/{kind}/{artifact_id}/{versions[artifact_id]}"
+            for kind, changed, versions in (
+                ("series", changed_metrics, prod_series),
+                ("maps", changed_maps, prod_maps),
+            )
+            for artifact_id in changed
+            if versions.get(artifact_id) and versions[artifact_id] != release
+        ]
+        unlinkable = _unlinkable_files(remote, link_dests)
+        if unlinkable:
+            print(
+                "ERROR: these previous versions hold files the SSH user cannot "
+                "hardlink to (fs.protected_hardlinks needs read and write "
+                "access), so rsync would copy them in full instead:",
+                file=sys.stderr,
+            )
+            for count, path in unlinkable:
+                print(f"  {count:6d} file(s) in {path}", file=sys.stderr)
+            print(
+                "Make the artifact store group-writable, then re-run:\n"
+                f"  sudo find {remote_artifacts_root} -type f ! -perm -g+w "
+                "-exec chmod g+w {} +",
+                file=sys.stderr,
+            )
+            return 1
+
     if not args.yes and not args.dry_run:
         ans = input("Proceed with publish? [y/N] ").strip().lower()
         if ans not in ("y", "yes"):
@@ -725,6 +818,7 @@ def main() -> int:
                 dry_run=args.dry_run,
                 chmod=args.rsync_chmod,
             )
+            _ssh_group_writable(remote, dst_dir, dry_run=args.dry_run)
             if args.remote_chown:
                 _ssh_chown(
                     remote,
@@ -768,6 +862,7 @@ def main() -> int:
                 dry_run=args.dry_run,
                 chmod=args.rsync_chmod,
             )
+            _ssh_group_writable(remote, dst_dir, dry_run=args.dry_run)
             if args.remote_chown:
                 _ssh_chown(
                     remote,
