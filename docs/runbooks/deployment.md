@@ -141,9 +141,17 @@ Recommended: use `/opt/climate/source` as the single deployment checkout to avoi
 
 Recommended production data layout:
 
-- `/opt/climate/source` — git checkout
+- `/opt/climate/source` — git checkout (has no `data/` directory)
 - `/opt/climate/data/releases/` — release directories (`RELEASES_ROOT`)
 - `/opt/climate/data/artifacts/` — artifact store for v2 releases (default: sibling of `releases/`)
+- `/opt/climate/data/locations/` — location assets (search index, masks, region outlines)
+- `/opt/climate/data/analytics/` — analytics database and IP blocklist
+
+Every data path the backend reads defaults to `$REPO_ROOT/data/...`, so with
+this layout each one must be set in `/etc/climate/backend.env`;
+`deploy/env/backend.env.example` lists them all. A path left out does not
+always fail loudly: a missing optional file (region outlines, for example) only
+logs a warning at startup and disables its feature.
 
 Bootstrap sets `chown -R climate:climate .../data/`, so both `releases/` and
 `artifacts/` start owned by the `climate` service user. When you deploy new
@@ -154,30 +162,31 @@ for permission options.
 
 ## 6) Copy Data Package Before First Bootstrap
 
-Backend and web services depend on data assets under `<repo>/data` (release artifacts, location assets, masks, and related files). On a fresh VM, copy a prepared archive from your local machine before service validation.
+Backend and web services depend on data assets under `/opt/climate/data` (release artifacts, location assets, masks, and related files). On a fresh VM, copy a prepared archive from your local machine before service validation. The archive is rooted at `data/` (as in a local checkout), so unpack it in `/opt/climate`.
 
 From your local machine:
 
 ```bash
-scp /path/to/archive.tar.gz <SSH_USER>@<PUBLIC_IP>:/opt/climate/source/
+scp /path/to/archive.tar.gz <SSH_USER>@<PUBLIC_IP>:/tmp/
 ```
 
-From inside the VM checkout:
+On the VM:
 
 ```bash
-cd /opt/climate/source
-tar xvf archive.tar.gz
+cd /opt/climate
+sudo tar xvf /tmp/archive.tar.gz
+sudo chown -R climate:climate /opt/climate/data
 ```
 
 If your archive is compressed and `tar xvf` fails to unpack, use:
 
 ```bash
-tar xzvf archive.tar.gz
+sudo tar xzvf /tmp/archive.tar.gz
 ```
 
 Quick verification checklist:
 
-- required folders exist under `/opt/climate/source/data/`
+- required folders exist under `/opt/climate/data/`
 - expected release/data files are present for your configured backend paths
 - API-required artifacts are available before running bootstrap health checks
 
@@ -341,13 +350,13 @@ curl -s https://checkip.amazonaws.com
 Then SSH into the VM and append the IP to the blocklist file (one IP per line; lines starting with `#` are treated as comments):
 
 ```bash
-echo "YOUR_IP_HERE" >> /opt/climate/source/data/analytics/ip_blocklist.txt
+echo "YOUR_IP_HERE" | sudo tee -a /opt/climate/data/analytics/ip_blocklist.txt
 ```
 
 Verify it was added:
 
 ```bash
-cat /opt/climate/source/data/analytics/ip_blocklist.txt
+cat /opt/climate/data/analytics/ip_blocklist.txt
 ```
 
 The blocklist is loaded at startup, so restart the backend for it to take effect:
@@ -364,7 +373,7 @@ sudo journalctl -u climate-backend -n 30 | grep -i blocklist
 
 You should see a line reporting the number of IPs loaded (e.g. `Analytics IP blocklist: 1 entries`).
 
-> **Note:** The blocklist file path defaults to `/opt/climate/source/data/analytics/ip_blocklist.txt`. To override it, set `ANALYTICS_IP_BLOCKLIST` in `/etc/climate/backend.env`.
+> **Note:** The blocklist path is set by `ANALYTICS_IP_BLOCKLIST` in `/etc/climate/backend.env`. Its built-in default is under `$REPO_ROOT/data/`, which does not exist on the VM, so keep the setting.
 
 ## 8d) Enable Chat Assistant (optional)
 
@@ -581,7 +590,7 @@ journalctl -u caddy -n 200 --no-pager
 
 - inspect `climate-backend` logs for missing file/path errors
 - verify configured paths in `/etc/climate/backend.env`
-- verify extracted files exist in `<repo>/data`
+- verify extracted files exist in `/opt/climate/data`
 - restart after fixing paths or missing files:
 
 ```bash
