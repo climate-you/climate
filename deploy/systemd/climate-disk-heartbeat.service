@@ -1,0 +1,14 @@
+[Unit]
+Description=Report free disk space to the heartbeat monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/climate/heartbeat.env
+ExecStart=/usr/local/bin/climate-disk-heartbeat
+DynamicUser=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true

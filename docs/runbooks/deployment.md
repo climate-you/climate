@@ -691,16 +691,19 @@ Both are proxied by Caddy (`@backend` matches `/healthz` and `/healthz/*`), and
 
 ### External monitors
 
-Two alerts from a free uptime service, delivered by email. Nothing about the
-account lives in this repository: create your own, and keep a note of the
+Three alerts, from two free services, all delivered by email. Nothing about the
+accounts lives in this repository: create your own, and keep a note of the
 monitor names and dashboard links wherever you keep operator notes.
 
 | alert | service | what fires it |
 |---|---|---|
 | site down | an uptime monitor (e.g. [UptimeRobot](https://uptimerobot.com), free tier) | no 2xx/3xx from the site root |
 | site unhealthy | the same uptime monitor | `"status":"ok"` missing from `/healthz/deep` (a 503, or no answer) |
+| disk low, or VM not running | a heartbeat monitor (e.g. [healthchecks.io](https://healthchecks.io), free tier) | a `/fail` ping from the VM, or no ping at all |
 
-Any service with keyword checks and email alerts works.
+Any service with keyword checks and email alerts works for the first two; the
+heartbeat needs a service that takes a `/fail` ping URL (healthchecks.io's
+format).
 
 **1. Uptime monitors.** Create an account, and check that the email address
 it alerts is one you read. Add two monitors at the free tier's interval (5 min
@@ -713,13 +716,46 @@ on UptimeRobot):
 Turn on TLS-expiry alerts if the free tier offers them (Caddy renews
 certificates, so an expiry alert means renewal is broken).
 
-**2. Trigger each alert once**, and again whenever you change an account or
+**2. Disk heartbeat.** Create an account and a check with a simple schedule:
+period 15 minutes (the timer's interval), grace 15 minutes. It alerts when the
+VM pings `/fail`, or when no ping arrives for period + grace, which also covers
+a VM that is down or stuck.
+
+On the VM, `scripts/deploy/install_ops.sh` (bootstrap runs it) installs
+`climate-disk-heartbeat.timer` and creates `/etc/climate/heartbeat.env`
+(mode 0600) from `deploy/env/heartbeat.env.example`. Put the check's ping URL
+in `DISK_HEARTBEAT_URL` there -- it is the check's only credential, so it never
+goes into git -- then:
+
+```bash
+sudo systemctl start climate-disk-heartbeat
+journalctl -u climate-disk-heartbeat -n 5 --no-pager   # "ok: 12G free of 38G on / (alert below 5G)"
+```
+
+The alert threshold is `DISK_MIN_FREE_GB` in the same file (default 5).
+
+On a VM that is already running, install from `main` without changing the
+deployed tag:
+
+```bash
+cd /opt/climate/source && git fetch origin
+rm -rf /tmp/ops && mkdir /tmp/ops && git archive origin/main scripts/deploy deploy | tar -x -C /tmp/ops
+sudo /tmp/ops/scripts/deploy/install_ops.sh
+```
+
+**3. Trigger each alert once**, and again whenever you change an account or
 its email address:
 
 - site down: point the HTTP(s) monitor at a path that 404s, wait for the email,
   point it back;
 - site unhealthy: change the keyword to one that never appears, wait, change it
-  back.
+  back;
+- disk low: set `DISK_MIN_FREE_GB=100` in `heartbeat.env`, run
+  `sudo systemctl start climate-disk-heartbeat`, wait, restore it and run the
+  service again;
+- VM not running (optional, takes ~30 min):
+  `sudo systemctl stop climate-disk-heartbeat.timer`, wait for the missed-ping
+  email, then start the timer again.
 
 None of these touch the site itself. The real failure path of the deep check
 (a 503 when no data can be read) is covered by `tests/test_healthz_deep.py`.

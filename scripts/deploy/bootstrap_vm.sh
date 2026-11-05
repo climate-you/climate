@@ -207,6 +207,8 @@ ufw allow 80/tcp
 ufw allow 443/tcp
 ufw --force enable
 
+"$APP_ROOT/scripts/deploy/install_ops.sh"
+
 systemctl daemon-reload
 systemctl enable caddy climate-backend climate-web
 systemctl restart caddy climate-backend climate-web
