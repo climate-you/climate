@@ -15,6 +15,8 @@ Installs the VM's unattended maintenance jobs from this checkout:
     rebooting before its monitors exist; once enabled it stays enabled.
   - unattended-upgrades switched on (/etc/apt/apt.conf.d/20auto-upgrades), so
     the weekly reboot has security updates to apply.
+  - the systemd journal capped at 500 MB
+    (/etc/systemd/journald.conf.d/climate.conf), so logs cannot fill the disk.
 
 Options:
   --enable-reboot   Enable the weekly reboot timer. Do this only once the
@@ -71,6 +73,16 @@ APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 APT
 
+# journald only reads its config at start, so restart it when the cap changes
+# (running services keep their log streams across the restart). The disk
+# usage printed at the end shows whether the journal is within the cap.
+JOURNALD_CONF=/etc/systemd/journald.conf.d/climate.conf
+if ! cmp -s "$SRC/deploy/journald/climate.conf" "$JOURNALD_CONF"; then
+  install -d -o root -g root -m 0755 "$(dirname "$JOURNALD_CONF")"
+  install -m 0644 "$SRC/deploy/journald/climate.conf" "$JOURNALD_CONF"
+  systemctl restart systemd-journald
+fi
+
 systemctl daemon-reload
 systemctl enable --now climate-disk-heartbeat.timer
 if [[ $ENABLE_REBOOT -eq 1 ]]; then
@@ -80,3 +92,4 @@ fi
 for timer in climate-disk-heartbeat.timer climate-weekly-reboot.timer; do
   echo "$timer: $(systemctl is-enabled "$timer" 2>/dev/null || true), $(systemctl is-active "$timer" 2>/dev/null || true)"
 done
+journalctl --disk-usage

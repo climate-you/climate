@@ -779,12 +779,15 @@ sudo scripts/deploy/install_ops.sh --enable-reboot   # or the /tmp/ops copy on a
 systemctl list-timers climate-weekly-reboot.timer --no-pager
 ```
 
-Give both uptime monitors a weekly maintenance window over the slot (Sunday
-00:00–00:15 UTC). At a 5-minute interval, about one reboot in three would
-otherwise land a check in the outage and send a false alert. The window still
-catches a reboot that fails: checks resume when it ends, and a site that is
-still down alerts then. The disk heartbeat needs no window: its period plus
-grace is much longer than a reboot, and the VM pings again 2 minutes after boot.
+At a 5-minute check interval, about one reboot in three lands an uptime check
+in the outage, so expect a "down" email around Sunday 00:01 UTC followed by an
+"up" email a few minutes later. That pair is the weekly reboot working. A
+"down" with no "up" after it means the VM did not come back. If your uptime
+service offers maintenance windows (a paid feature on UptimeRobot), one over
+Sunday 00:00–00:15 UTC on both monitors silences the pair while still alerting
+on a reboot that fails, since checks resume when the window ends. The disk
+heartbeat needs nothing: its period plus grace is much longer than a reboot,
+and the VM pings again 2 minutes after boot.
 
 To change the slot, edit `OnCalendar=` in
 `deploy/systemd/climate-weekly-reboot.timer` (keep an explicit zone) and re-run
@@ -794,6 +797,15 @@ climate-weekly-reboot.timer`.
 After a reboot, `systemctl status caddy climate-backend climate-web` should
 show all three running, and `journalctl --list-boots | tail -3` lists the
 recent boots.
+
+### Log size
+
+`install_ops.sh` caps the systemd journal at 500 MB
+(`deploy/journald/climate.conf`, installed in `/etc/systemd/journald.conf.d/`).
+journald's default cap is 10% of the filesystem, about 4 GB on a 40 GB disk.
+Caddy's access log rotates on its own (10 files of 10 MiB, see the Caddyfile).
+Check usage with `journalctl --disk-usage`; trim at once with
+`sudo journalctl --vacuum-size=500M`.
 
 ### Other checks
 
