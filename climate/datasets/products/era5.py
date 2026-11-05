@@ -8,7 +8,7 @@ ERA5_DAILY_STATS_DATASET = "derived-era5-single-levels-daily-statistics"
 def build_monthly_means_request(
     *,
     years: List[str],
-    grid_deg: float,
+    grid_deg: float | None,
     area: Tuple[float, float, float, float] | None,
     variable: str = "2m_temperature",
     months: List[str] | None = None,
@@ -20,9 +20,11 @@ def build_monthly_means_request(
         "year": years,
         "month": months if months is not None else [f"{m:02d}" for m in range(1, 13)],
         "time": ["00:00"],
-        # Coarsen the native 0.25° grid to keep files reasonable for a web app.
-        "grid": [grid_deg, grid_deg],
     }
+    # Without "grid" (and "area") CDS returns ERA5's own point grid, with no
+    # interpolation on its side.
+    if grid_deg is not None:
+        req["grid"] = [grid_deg, grid_deg]
     if area is not None:
         # CDS uses [N, W, S, E]
         req["area"] = [area[0], area[1], area[2], area[3]]
@@ -32,7 +34,7 @@ def build_monthly_means_request(
 def build_daily_stats_request(
     *,
     years: List[str],
-    grid_deg: float,
+    grid_deg: float | None,
     area: Tuple[float, float, float, float] | None,
     variable: str = "2m_temperature",
     daily_statistic: str = "daily_mean",
@@ -56,8 +58,9 @@ def build_daily_stats_request(
         "day": days if days is not None else [f"{d:02d}" for d in range(1, 32)],
         "daily_statistic": daily_statistic,
         "format": "netcdf",
-        "grid": [grid_deg, grid_deg],
     }
+    if grid_deg is not None:
+        req["grid"] = [grid_deg, grid_deg]
     if time_zone is not None:
         req["time_zone"] = time_zone
     if frequency is not None:

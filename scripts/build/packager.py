@@ -122,6 +122,12 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=None)
     ap.add_argument("--summary-interval", type=int, default=30)
     ap.add_argument("--download-only", action="store_true")
+    ap.add_argument(
+        "--native-download",
+        action="store_true",
+        help="v3: fetch ERA5 whole-globe on its native grid (no area/grid keys) "
+        "into <cache-dir>/cds_native. Requires --download-only.",
+    )
     ap.add_argument("--debug", action="store_true")
 
     args = ap.parse_args()
@@ -166,6 +172,7 @@ def main() -> None:
         workers=args.workers,
         summary_interval_s=args.summary_interval,
         download_only=args.download_only,
+        native_download=args.native_download,
         maps_path=args.maps_path,
         maps_schema_path=args.maps_schema_path,
         layers_path=args.layers_path,

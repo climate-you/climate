@@ -1761,6 +1761,136 @@ def _write_missing_yearly_tiles_for_batch(
     return written
 
 
+# Native ERA5 downloads (v3). Whole-globe requests with no area/grid keys, so
+# CDS returns ERA5's own point grid instead of interpolating onto ours. They
+# live under their own cache root so the cell-grid cache in cds/ is never read,
+# moved or overwritten by them. Files are kept exactly as CDS returns them,
+# longitudes 0 -> 359.75, so downloads stay comparable over time; readers
+# move them to -180 -> 179.75 with roll_native_to_pm180.
+NATIVE_CACHE_SUBDIR = "cds_native"
+ERA5_NATIVE_DEG = 0.25
+ERA5_NATIVE_NLAT = 721
+ERA5_NATIVE_NLON = 1440
+
+
+def _native_cache_path(
+    cache_dir: Path, prefix: str, start_year: int, end_year: int, month_tag: str
+) -> Path:
+    name = f"{prefix}_native_globe"
+    return cache_dir / name / f"{name}_{start_year}-{end_year}{month_tag}.nc"
+
+
+def _native_geometry_error(
+    lat: np.ndarray, lon: np.ndarray, *, lon0: float = 0.0
+) -> str | None:
+    """None if (lat, lon) is exactly ERA5's native point grid, lat 90 -> -90 and
+    lon starting at lon0 (0 as CDS stores it, -180 once rolled), else what is
+    wrong. Exact up to float64 noise: multiples of 0.25 are exact in float32
+    too, so anything looser would only hide a real displacement like the
+    0.005 deg rounding found in August."""
+    exp_lat = 90.0 - ERA5_NATIVE_DEG * np.arange(ERA5_NATIVE_NLAT)
+    exp_lon = lon0 + ERA5_NATIVE_DEG * np.arange(ERA5_NATIVE_NLON)
+    if lat.shape != exp_lat.shape or not np.allclose(lat, exp_lat, rtol=0, atol=1e-9):
+        return (
+            f"latitude is {lat.size} values {lat[:1]}..{lat[-1:]}, expected "
+            f"{ERA5_NATIVE_NLAT} values 90..-90 step {ERA5_NATIVE_DEG}"
+        )
+    if lon.shape != exp_lon.shape or not np.allclose(lon, exp_lon, rtol=0, atol=1e-9):
+        return (
+            f"longitude is {lon.size} values {lon[:1]}..{lon[-1:]}, expected "
+            f"{ERA5_NATIVE_NLON} values {exp_lon[0]:g}..{exp_lon[-1]:g} "
+            f"step {ERA5_NATIVE_DEG}"
+        )
+    return None
+
+
+def _native_file_geometry_error(path: Path) -> str | None:
+    with xr.open_dataset(path) as ds:
+        lat_name, lon_name = _find_lat_lon_names(ds)
+        return _native_geometry_error(
+            np.asarray(ds[lat_name].values, dtype=np.float64),
+            np.asarray(ds[lon_name].values, dtype=np.float64),
+        )
+
+
+def roll_native_to_pm180(ds: xr.Dataset) -> xr.Dataset:
+    """Move a native cache file's longitudes from CDS's 0 -> 359.75 to our
+    -180 -> 179.75. Pure reordering: the two halves swap and 360 is
+    subtracted from the moved labels, exact for multiples of 0.25. Indexing
+    stays lazy, so this is free on an unloaded dataset. Raises unless the
+    input is the native grid as CDS stores it."""
+    lat_name, lon_name = _find_lat_lon_names(ds)
+    lon = np.asarray(ds[lon_name].values, dtype=np.float64)
+    err = _native_geometry_error(np.asarray(ds[lat_name].values, dtype=np.float64), lon)
+    if err is not None:
+        raise ValueError(f"Not a native ERA5 file as CDS stores it: {err}")
+    half = ERA5_NATIVE_NLON // 2
+    order = np.r_[half:ERA5_NATIVE_NLON, 0:half]
+    lon_pm180 = np.where(lon >= 180.0, lon - 360.0, lon)[order]
+    return ds.isel({lon_name: order}).assign_coords({lon_name: lon_pm180})
+
+
+def _download_native_era5(
+    *,
+    dataset: str,
+    request: dict[str, Any],
+    cache_dir: Path,
+    prefix: str,
+    start_year: int,
+    end_year: int,
+    month_tag: str,
+) -> Path:
+    """Fetch one whole-globe request on ERA5's native grid, or reuse it.
+
+    The cached file is CDS's payload byte for byte (a ZIP is unpacked, nothing
+    else). Never deletes or overwrites a finished file: one that no longer
+    opens or no longer passes the geometry check raises, for a human to look at.
+    """
+    if "area" in request or "grid" in request:
+        raise ValueError("Native ERA5 requests must not carry area or grid keys.")
+    dl_path = _native_cache_path(cache_dir, prefix, start_year, end_year, month_tag)
+    if dl_path.exists():
+        err = _native_file_geometry_error(dl_path)
+        if err is not None:
+            raise RuntimeError(f"Cached native file {dl_path} is not native: {err}")
+        print(f"Using cached download: {dl_path}")
+        return dl_path
+
+    # The CDS payload lands beside the final file under a non-.nc suffix, so a
+    # cache audit never mistakes it for a finished file, and is renamed only
+    # once its grid has been checked. If a run stops in between, the next run
+    # checks the payload instead of re-fetching.
+    raw_path = dl_path.with_suffix(".cds")
+    if raw_path.exists():
+        print(f"Checking payload left by an earlier run: {raw_path}")
+    else:
+        months_label = ",".join(request.get("month", [])) or "all"
+        print(
+            f"Downloading native ERA5 ({dataset}): years={start_year}..{end_year} "
+            f"months={months_label} whole globe, no area/grid"
+        )
+    t0 = time.monotonic()
+    try:
+        retrieve(dataset, request, raw_path)
+        _normalize_cds_payload_to_netcdf(raw_path)
+    except Exception:
+        req_path = Path(f"{dl_path}.request.json")
+        req_path.parent.mkdir(parents=True, exist_ok=True)
+        req_path.write_text(json.dumps(request, indent=2, sort_keys=True))
+        print(f"Request dump written (error): {req_path}")
+        raise
+    elapsed = time.monotonic() - t0
+    err = _native_file_geometry_error(raw_path)
+    if err is not None:
+        raise RuntimeError(
+            f"CDS returned a non-native grid for {raw_path.name}: {err}. "
+            f"The payload is kept for inspection; no .nc was written."
+        )
+    raw_path.replace(dl_path)
+    print(f"Downloaded: {dl_path} (request took {elapsed:.0f} s)")
+    return dl_path
+
+
 def _download_batch_monthly_means(
     *,
     dataset: str,
@@ -1774,11 +1904,32 @@ def _download_batch_monthly_means(
     variable: str,
     params: dict[str, Any] | None,
     months: list[str] | None = None,
+    native: bool = False,
 ) -> Path:
     p = params or {}
     years_int = list(range(int(start_year), int(end_year) + 1))
     years_str = [str(y) for y in years_int]
     month_tag = f"_m{months[0]}-{months[-1]}" if months else ""
+
+    if native:
+        if dataset != ERA5_MONTHLY_MEANS_DATASET:
+            raise ValueError(f"Native download supports ERA5 only, not {dataset}")
+        dataset_tag = re.sub(r"[^a-z0-9]+", "_", str(dataset).lower()).strip("_")
+        return _download_native_era5(
+            dataset=dataset,
+            request=build_monthly_means_request(
+                years=years_str,
+                grid_deg=None,
+                area=None,
+                variable=variable,
+                months=months,
+            ),
+            cache_dir=cache_dir,
+            prefix=f"cds_monthly_{dataset_tag}_{variable}",
+            start_year=start_year,
+            end_year=end_year,
+            month_tag=month_tag,
+        )
 
     area, total_h, total_w = _compute_batch_bbox(
         grid,
@@ -1906,9 +2057,39 @@ def _download_batch_daily_stats(
     months: list[str] | None,
     days: list[str] | None = None,
     download_tile_range: TileRange | None = None,
+    native: bool = False,
 ) -> Path:
     years_int = list(range(int(start_year), int(end_year) + 1))
     years_str = [str(y) for y in years_int]
+
+    if native:
+        # Whole-globe on ERA5's own grid: no area, no grid, no slicing (there
+        # is no cell-centre target a native point could match). Unlike the
+        # cell-grid names below, the statistic is always in the name.
+        p = params or {}
+        daily_stat = str(p.get("daily_statistic", "daily_mean"))
+        month_tag = f"_m{months[0]}-{months[-1]}" if months else ""
+        if days:
+            month_tag += f"_d{days[0]}-{days[-1]}"
+        return _download_native_era5(
+            dataset=ERA5_DAILY_STATS_DATASET,
+            request=build_daily_stats_request(
+                years=years_str,
+                grid_deg=None,
+                area=None,
+                variable=variable,
+                daily_statistic=daily_stat,
+                time_zone=str(p.get("time_zone", "utc+00:00")),
+                frequency=str(p.get("frequency", "1_hourly")),
+                months=months,
+                days=days,
+            ),
+            cache_dir=cache_dir,
+            prefix=f"era5_daily_{variable}_{daily_stat}",
+            start_year=start_year,
+            end_year=end_year,
+            month_tag=month_tag,
+        )
 
     area, total_h, total_w = _compute_batch_bbox(
         grid,
@@ -2868,6 +3049,7 @@ def package_registry(
     workers: int | None = None,
     summary_interval_s: int = 30,
     download_only: bool = False,
+    native_download: bool = False,
     maps_path: Path | str | None = None,
     maps_schema_path: Path | str | None = None,
     layers_path: Path | str | None = None,
@@ -2879,6 +3061,11 @@ def package_registry(
     all_maps: bool = False,
     skip_maps: bool = False,
 ) -> int:
+    if native_download and not download_only:
+        # Packaging native files needs the ERA5 point grid (Stream E).
+        raise ValueError("native_download requires download_only.")
+    if native_download and overwrite_download:
+        raise ValueError("native_download never overwrites cached files.")
     metrics_path = (
         Path(metrics_path) if metrics_path is not None else DEFAULT_METRICS_PATH
     )
@@ -3019,6 +3206,11 @@ def package_registry(
 
         source_type = source.get("type")
 
+        if native_download and source_type != "cds":
+            raise ValueError(
+                f"native_download covers ERA5 CDS sources only, not {metric_id}"
+            )
+
         if source_type == "derived":
             # Tiled derived metrics are packaged after all CDS/ERDDAP metrics
             # via _package_derived_metrics(); skip here.
@@ -3114,6 +3306,13 @@ def package_registry(
         download_batch_tiles_eff = _resolve_download_batch_tiles(
             batch_tiles, source, batch_tiles_eff
         )
+        if native_download:
+            # Native requests are whole-globe, so one batch over the whole
+            # range fetches each request once instead of once per batch.
+            batch_tiles_eff = download_batch_tiles_eff = max(
+                metric_tile_range.tile_r1 - metric_tile_range.tile_r0 + 1,
+                metric_tile_range.tile_c1 - metric_tile_range.tile_c0 + 1,
+            )
         n_batches_processed = 0
         download_count = 0
         total_written = 0
@@ -3297,7 +3496,9 @@ def package_registry(
                                 )
 
                         if source_type == "cds":
-                            cache_dir_eff = cache_dir / "cds"
+                            cache_dir_eff = cache_dir / (
+                                NATIVE_CACHE_SUBDIR if native_download else "cds"
+                            )
                             dataset = source.get("dataset")
                             params = source.get("params", {}) or {}
                             is_monthly_cds = _is_cds_monthly_dataset(
@@ -3371,6 +3572,7 @@ def package_registry(
                                         months=_partial_block_months(
                                             years_part, partial_end
                                         ),
+                                        native=native_download,
                                     )
                                     download_count += 1
                                     with counters_lock:
@@ -3416,6 +3618,7 @@ def package_registry(
                                                 metric_tile_range,
                                                 download_batch_tiles_eff,
                                             ),
+                                            native=native_download,
                                         )
                                         download_count += 1
                                         with counters_lock:
@@ -3735,7 +3938,9 @@ def package_registry(
                     continue
 
                 if source_type == "cds":
-                    cache_dir_eff = cache_dir / "cds"
+                    cache_dir_eff = cache_dir / (
+                        NATIVE_CACHE_SUBDIR if native_download else "cds"
+                    )
                     dataset = source.get("dataset")
                     params = source.get("params", {}) or {}
                     is_monthly_cds = _is_cds_monthly_dataset(str(dataset), params)
@@ -3800,6 +4005,7 @@ def package_registry(
                                 variable=variable,
                                 params=params,
                                 months=_partial_block_months(years_part, partial_end),
+                                native=native_download,
                             )
                             download_count += 1
                             downloads.append((years_part, [dl_path]))
@@ -3840,6 +4046,7 @@ def package_registry(
                                         metric_tile_range,
                                         download_batch_tiles_eff,
                                     ),
+                                    native=native_download,
                                 )
                                 download_count += 1
                                 paths.append(dl_path)
