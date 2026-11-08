@@ -20,28 +20,38 @@ A registry-driven climate data platform with:
       <em>Landing Page</em>
     </td>
     <td align="center">
-      <img src="docs/images/global_temp.webp" alt="Global Temperature" height="250" /><br/>
-      <em>Global Temperature</em>
+      <img src="docs/images/alternative_backgrounds.webp" alt="Alternative Backgrounds" height="250" /><br/>
+      <em>Alternative Backgrounds</em>
     </td>
   </tr>
   <tr>
+    <td align="center">
+      <img src="docs/images/global_temp.webp" alt="Global Temperature" height="250" /><br/>
+      <em>Global Temperature</em>
+    </td>
     <td align="center">
       <img src="docs/images/local_temp.webp" alt="Local Temperature" height="250" /><br/>
       <em>Local Temperature</em>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <img src="docs/images/local_precipitations.webp" alt="Local Precipitations" height="250" /><br/>
       <em>Local Precipitations</em>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <img src="docs/images/local_coral.webp" alt="Local Coral" height="250" /><br/>
       <em>Local Coral</em>
     </td>
+  </tr>
+  <tr>
     <td align="center">
-      <img src="docs/images/alternative_backgrounds.webp" alt="Alternative Backgrounds" height="250" /><br/>
-      <em>Alternative Backgrounds</em>
+      <img src="docs/images/aggregates_country.webp" alt="Country Aggregates" height="250" /><br/>
+      <em>Country Aggregates</em>
+    </td>
+    <td align="center">
+      <img src="docs/images/aggregates_ocean.webp" alt="Sea Aggregates" height="250" /><br/>
+      <em>Sea Aggregates</em>
     </td>
   </tr>
   <tr>
