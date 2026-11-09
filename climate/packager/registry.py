@@ -59,14 +59,16 @@ from climate.registry.panels import (
     validate_panels_against_metrics,
 )
 from climate.geo import ensure_lon_pm180_da
+from climate.tiles.io import (
+    open_tile_writer,
+    tile_written,
+)
 from climate.tiles.layout import (
     GridSpec,
     cell_center_latlon,
     grid_from_id,
     tile_counts,
-    tile_path,
 )
-from climate.tiles.spec import write_tile
 from climate.datasets.products.erddap_specs import ERDDAP_DATASETS
 from climate.datasets.sources.erddap import build_griddap_query, make_griddap_url
 from climate.datasets.sources.http import download_to
@@ -208,6 +210,7 @@ def _compute_tiles_from_cds_downloads(
     dtype: np.dtype,
     missing: object,
     compression: dict | None,
+    storage: dict | None = None,
     debug: bool,
     resume: bool,
     dask_enabled: bool,
@@ -395,6 +398,7 @@ def _compute_tiles_from_cds_downloads(
         dtype=dtype,
         missing=missing,
         compression=compression,
+        storage=storage,
         debug=debug,
         resume=resume,
         dataset_mask=dataset_mask,
@@ -420,6 +424,7 @@ def _compute_tiles_from_erddap_downloads(
     dtype: np.dtype,
     missing: object,
     compression: dict | None,
+    storage: dict | None = None,
     debug: bool,
     resume: bool,
     dask_enabled: bool,
@@ -521,6 +526,7 @@ def _compute_tiles_from_erddap_downloads(
         dtype=dtype,
         missing=missing,
         compression=compression,
+        storage=storage,
         debug=debug,
         resume=resume,
         dataset_mask=dataset_mask,
@@ -1043,6 +1049,7 @@ def _concat_and_write_time_tiles(
     dtype: str,
     missing: float,
     compression: dict | None,
+    storage: dict | None = None,
     debug: bool,
     resume: bool,
     dataset_mask: np.ndarray | None = None,
@@ -1068,6 +1075,7 @@ def _concat_and_write_time_tiles(
             dtype=dtype,
             missing=missing,
             compression=compression,
+            storage=storage,
             debug=debug,
             resume=resume,
             dataset_mask=dataset_mask,
@@ -1117,6 +1125,7 @@ def _concat_and_write_time_tiles(
         dtype=dtype,
         missing=missing,
         compression=compression,
+        storage=storage,
         debug=debug,
         resume=resume,
         dataset_mask=dataset_mask,
@@ -1522,6 +1531,7 @@ def _tiles_from_time_da(
     dtype: np.dtype,
     missing: object,
     compression: dict | None,
+    storage: dict | None = None,
     debug: bool,
     resume: bool,
     dataset_mask: np.ndarray | None = None,
@@ -1546,19 +1556,16 @@ def _tiles_from_time_da(
                 )
     write_axis_json(out_root, grid, metric_id, axis_name, axis_values)
     fill_value = normalize_missing_value(missing, dtype)
-
-    codec = "zstd"
-    level = 10
-    if compression is not None:
-        codec = compression.get("codec", codec)
-        level = int(compression.get("level", level))
-
-    if codec == "zstd":
-        ext = ".bin.zst"
-    elif codec == "none":
-        ext = ".bin"
-    else:
-        raise ValueError(f"Unsupported compression codec: {codec}")
+    writer = open_tile_writer(
+        out_root,
+        grid,
+        metric_id,
+        ntime=axis_len,
+        dtype=dtype,
+        storage=_storage_with_compression(storage, compression),
+        time_axis=axis_name,
+        resume=resume,
+    )
 
     lat_name, lon_name = _find_lat_lon_names(da.to_dataset(name="v"))
     written = 0
@@ -1659,27 +1666,16 @@ def _tiles_from_time_da(
                     )
                 debug_tiles_printed += 1
 
-            out_path = tile_path(
-                out_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
-            )
-            if resume and out_path.exists():
+            if resume and writer.exists(tr, tc):
                 if debug:
-                    print(f"Skip existing tile: {out_path}")
+                    print(f"Skip existing tile: {metric_id} r{tr:03d} c{tc:03d}")
                 continue
 
-            write_tile(
-                out_path,
-                tile,
-                dtype=dtype,
-                nyears=axis_len,
-                tile_h=grid.tile_size,
-                tile_w=grid.tile_size,
-                compress_level=level,
-            )
+            writer.write(tr, tc, tile, fill=fill_value, label=metric_id)
             written += 1
             if debug:
                 print(
-                    f"Wrote {out_path} (tile r{tr:03d} c{tc:03d} valid={valid_h}x{valid_w})"
+                    f"Wrote {metric_id} tile r{tr:03d} c{tc:03d} valid={valid_h}x{valid_w}"
                 )
 
     # A match that lands further out than float noise means the source is not on
@@ -1714,6 +1710,7 @@ def _write_missing_yearly_tiles_for_batch(
     dtype: np.dtype,
     missing: object,
     compression: dict | None,
+    storage: dict | None = None,
     resume: bool,
     output_years: list[int],
 ) -> int:
@@ -1721,18 +1718,16 @@ def _write_missing_yearly_tiles_for_batch(
     axis_len = len(axis_values)
     write_axis_json(out_root, grid, metric_id, "yearly", axis_values)
     fill_value = normalize_missing_value(missing, dtype)
-
-    codec = "zstd"
-    level = 10
-    if compression is not None:
-        codec = compression.get("codec", codec)
-        level = int(compression.get("level", level))
-    if codec == "zstd":
-        ext = ".bin.zst"
-    elif codec == "none":
-        ext = ".bin"
-    else:
-        raise ValueError(f"Unsupported compression codec: {codec}")
+    writer = open_tile_writer(
+        out_root,
+        grid,
+        metric_id,
+        ntime=axis_len,
+        dtype=dtype,
+        storage=_storage_with_compression(storage, compression),
+        time_axis="yearly",
+        resume=resume,
+    )
 
     tile = np.full(
         (grid.tile_size, grid.tile_size, axis_len),
@@ -1743,20 +1738,9 @@ def _write_missing_yearly_tiles_for_batch(
     written = 0
     for tr in range(tile_range.tile_r0, tile_range.tile_r1 + 1):
         for tc in range(tile_range.tile_c0, tile_range.tile_c1 + 1):
-            out_path = tile_path(
-                out_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
-            )
-            if resume and out_path.exists():
+            if resume and writer.exists(tr, tc):
                 continue
-            write_tile(
-                out_path,
-                tile,
-                dtype=dtype,
-                nyears=axis_len,
-                tile_h=grid.tile_size,
-                tile_w=grid.tile_size,
-                compress_level=level,
-            )
+            writer.write(tr, tc, tile, fill=fill_value, label=metric_id)
             written += 1
     return written
 
@@ -3016,6 +3000,7 @@ def _package_derived_metrics(
             dtype=dtype,
             missing=missing,
             compression=compression,
+            storage=storage,
             resume=resume,
         )
         print(f"[derived] done metric={metric_id} tiles_written={written}")
@@ -3249,7 +3234,6 @@ def package_registry(
                     f"[mask] metric={metric_id} file={mask_file} "
                     f"valid={valid_ratio:.4%} ({int(np.count_nonzero(dataset_mask))}/{dataset_mask.size})"
                 )
-
         (
             analysis_start_year,
             analysis_end_year,
@@ -3350,7 +3334,12 @@ def package_registry(
                 for batch in _iter_batches(metric_tile_range, batch_tiles_eff):
                     if resume:
                         missing_tiles = _batch_missing_tiles(
-                            out_root, grid, metric_id, batch, compression
+                            out_root,
+                            grid,
+                            metric_id,
+                            batch,
+                            compression,
+                            storage=storage,
                         )
                         if not missing_tiles:
                             continue
@@ -3371,6 +3360,7 @@ def package_registry(
                                 dtype=dtype,
                                 missing=missing,
                                 compression=compression,
+                                storage=storage,
                                 resume=resume,
                                 output_years=years_int,
                             )
@@ -3488,7 +3478,12 @@ def package_registry(
                             break
                         if debug and resume:
                             missing_tiles = _batch_missing_tiles(
-                                out_root, grid, metric_id, batch, compression
+                                out_root,
+                                grid,
+                                metric_id,
+                                batch,
+                                compression,
+                                storage=storage,
                             )
                             if missing_tiles:
                                 print(
@@ -3682,6 +3677,7 @@ def package_registry(
                                     dtype=dtype,
                                     missing=missing,
                                     compression=compression,
+                                    storage=storage,
                                     debug=debug,
                                     resume=resume,
                                     dask_enabled=dask_enabled,
@@ -3803,6 +3799,7 @@ def package_registry(
                                     dtype=dtype,
                                     missing=missing,
                                     compression=compression,
+                                    storage=storage,
                                     debug=debug,
                                     resume=resume,
                                     dask_enabled=dask_enabled,
@@ -3897,7 +3894,12 @@ def package_registry(
                     break
                 if resume:
                     missing_tiles = _batch_missing_tiles(
-                        out_root, grid, metric_id, batch, compression
+                        out_root,
+                        grid,
+                        metric_id,
+                        batch,
+                        compression,
+                        storage=storage,
                     )
                     if not missing_tiles:
                         if debug:
@@ -3931,6 +3933,7 @@ def package_registry(
                             dtype=dtype,
                             missing=missing,
                             compression=compression,
+                            storage=storage,
                             resume=resume,
                             output_years=years_int,
                         )
@@ -4082,6 +4085,7 @@ def package_registry(
                         dtype=dtype,
                         missing=missing,
                         compression=compression,
+                        storage=storage,
                         debug=debug,
                         resume=resume,
                         dask_enabled=dask_enabled,
@@ -4177,6 +4181,7 @@ def package_registry(
                         dtype=dtype,
                         missing=missing,
                         compression=compression,
+                        storage=storage,
                         debug=debug,
                         resume=resume,
                         dask_enabled=dask_enabled,
@@ -4259,15 +4264,11 @@ def package_registry(
     return 0
 
 
-def _compression_ext(compression: dict | None) -> str:
-    codec = "zstd"
-    if compression is not None:
-        codec = compression.get("codec", codec)
-    if codec == "zstd":
-        return ".bin.zst"
-    if codec == "none":
-        return ".bin"
-    raise ValueError(f"Unsupported compression codec: {codec}")
+def _storage_with_compression(storage: dict | None, compression: dict | None) -> dict:
+    """The metric's storage spec; callers that only pass `compression` get the old format."""
+    if storage is not None:
+        return storage
+    return {"compression": compression} if compression is not None else {}
 
 
 def _batch_missing_tiles(
@@ -4276,14 +4277,13 @@ def _batch_missing_tiles(
     metric_id: str,
     tile_range: TileRange,
     compression: dict | None,
+    storage: dict | None = None,
 ) -> list[tuple[int, int]]:
-    ext = _compression_ext(compression)
+    """Tiles of the batch that --resume still has to write."""
+    storage_eff = _storage_with_compression(storage, compression)
     missing: list[tuple[int, int]] = []
     for tr in range(tile_range.tile_r0, tile_range.tile_r1 + 1):
         for tc in range(tile_range.tile_c0, tile_range.tile_c1 + 1):
-            p = tile_path(
-                out_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
-            )
-            if not p.exists():
+            if not tile_written(out_root, grid, metric_id, tr, tc, storage_eff):
                 missing.append((tr, tc))
     return missing

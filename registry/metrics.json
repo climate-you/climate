@@ -22,9 +22,11 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
+      "format": "zarr",
+      "encoding": {
+        "dtype": "int16",
+        "scale": 0.01,
+        "delta": true
       }
     }
   },
@@ -53,10 +55,7 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
-      }
+      "format": "zarr"
     }
   },
   "t2m_total_warming_vs_preindustrial_c": {
@@ -91,10 +90,7 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
-      }
+      "format": "zarr"
     }
   },
   "t2m_june_2026_anomaly_vs_1991_2020_c": {
@@ -124,10 +120,7 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
-      }
+      "format": "zarr"
     }
   },
   "t2m_heatwave_2026_w1_anomaly_c": {
@@ -158,10 +151,7 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
-      }
+      "format": "zarr"
     }
   },
   "t2m_heatwave_2026_w2_anomaly_c": {
@@ -192,10 +182,7 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
-      }
+      "format": "zarr"
     }
   },
   "t2m_heatwave_2026_w3_anomaly_c": {
@@ -226,10 +213,7 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
-      }
+      "format": "zarr"
     }
   },
   "t2m_heatwave_2026_w4_anomaly_c": {
@@ -260,10 +244,7 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
-      }
+      "format": "zarr"
     }
   },
   "t2m_yearly_5y_mean_c": {
@@ -316,10 +297,7 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
-      }
+      "format": "zarr"
     }
   },
   "t2m_monthly_mean_c": {
@@ -344,9 +322,11 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
+      "format": "zarr",
+      "encoding": {
+        "dtype": "int16",
+        "scale": 0.01,
+        "delta": true
       }
     }
   },
@@ -374,9 +354,11 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
+      "format": "zarr",
+      "encoding": {
+        "dtype": "int16",
+        "scale": 0.01,
+        "delta": true
       }
     }
   },
@@ -404,9 +386,11 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
+      "format": "zarr",
+      "encoding": {
+        "dtype": "int16",
+        "scale": 0.01,
+        "delta": true
       }
     }
   },
@@ -433,9 +417,10 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
+      "format": "zarr",
+      "encoding": {
+        "dtype": "uint16",
+        "scale": 0.01
       }
     }
   },
@@ -463,9 +448,10 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
+      "format": "zarr",
+      "encoding": {
+        "dtype": "uint16",
+        "scale": 0.02
       }
     }
   },
@@ -497,10 +483,7 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
-      }
+      "format": "zarr"
     }
   },
   "tp_summer_2026_pct_of_normal": {
@@ -535,10 +518,7 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
-      }
+      "format": "zarr"
     }
   },
   "t2m_heatwave_2026_w5_anomaly_c": {
@@ -569,10 +549,7 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
-      }
+      "format": "zarr"
     }
   },
   "t2m_daily_max_c": {
@@ -602,9 +579,11 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
+      "format": "zarr",
+      "encoding": {
+        "dtype": "int16",
+        "scale": 0.01,
+        "delta": true
       }
     }
   },
@@ -635,9 +614,11 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
+      "format": "zarr",
+      "encoding": {
+        "dtype": "int16",
+        "scale": 0.01,
+        "delta": true
       }
     }
   },
@@ -662,9 +643,10 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
+      "format": "zarr",
+      "encoding": {
+        "dtype": "int16",
+        "scale": 1
       }
     },
     "aggregates": ["mean"]
@@ -691,9 +673,10 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
+      "format": "zarr",
+      "encoding": {
+        "dtype": "uint16",
+        "scale": 1
       }
     }
   },
@@ -720,9 +703,10 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
+      "format": "zarr",
+      "encoding": {
+        "dtype": "int16",
+        "scale": 1
       }
     }
   },
@@ -742,9 +726,11 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
+      "format": "zarr",
+      "encoding": {
+        "dtype": "int16",
+        "scale": 0.01,
+        "delta": true
       }
     }
   },
@@ -767,9 +753,10 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
+      "format": "zarr",
+      "encoding": {
+        "dtype": "int16",
+        "scale": 1
       }
     },
     "aggregates": ["mean"]
@@ -790,10 +777,7 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
-      }
+      "format": "zarr"
     },
     "chart_group": {
       "id": "dhw_risk_days",
@@ -825,10 +809,7 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
-      }
+      "format": "zarr"
     },
     "chart_group": {
       "id": "dhw_risk_days",
@@ -860,10 +841,7 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
-      }
+      "format": "zarr"
     },
     "chart_group": {
       "id": "dhw_risk_days",
@@ -895,10 +873,7 @@
     },
     "storage": {
       "tiled": true,
-      "compression": {
-        "codec": "zstd",
-        "level": 10
-      }
+      "format": "zarr"
     }
   },
   "t2m_summer_2026_anomaly_c": {
@@ -927,7 +902,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_00_anomaly_c": {
     "id": "t2m_heatslider_sum26_00_anomaly_c",
@@ -955,7 +930,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_01_anomaly_c": {
     "id": "t2m_heatslider_sum26_01_anomaly_c",
@@ -983,7 +958,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_02_anomaly_c": {
     "id": "t2m_heatslider_sum26_02_anomaly_c",
@@ -1011,7 +986,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_03_anomaly_c": {
     "id": "t2m_heatslider_sum26_03_anomaly_c",
@@ -1039,7 +1014,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_04_anomaly_c": {
     "id": "t2m_heatslider_sum26_04_anomaly_c",
@@ -1067,7 +1042,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_05_anomaly_c": {
     "id": "t2m_heatslider_sum26_05_anomaly_c",
@@ -1095,7 +1070,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_06_anomaly_c": {
     "id": "t2m_heatslider_sum26_06_anomaly_c",
@@ -1123,7 +1098,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_07_anomaly_c": {
     "id": "t2m_heatslider_sum26_07_anomaly_c",
@@ -1151,7 +1126,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_08_anomaly_c": {
     "id": "t2m_heatslider_sum26_08_anomaly_c",
@@ -1179,7 +1154,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_09_anomaly_c": {
     "id": "t2m_heatslider_sum26_09_anomaly_c",
@@ -1207,7 +1182,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_10_anomaly_c": {
     "id": "t2m_heatslider_sum26_10_anomaly_c",
@@ -1235,7 +1210,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_11_anomaly_c": {
     "id": "t2m_heatslider_sum26_11_anomaly_c",
@@ -1263,7 +1238,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_12_anomaly_c": {
     "id": "t2m_heatslider_sum26_12_anomaly_c",
@@ -1291,7 +1266,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_13_anomaly_c": {
     "id": "t2m_heatslider_sum26_13_anomaly_c",
@@ -1319,7 +1294,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_14_anomaly_c": {
     "id": "t2m_heatslider_sum26_14_anomaly_c",
@@ -1347,7 +1322,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_15_anomaly_c": {
     "id": "t2m_heatslider_sum26_15_anomaly_c",
@@ -1375,7 +1350,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_16_anomaly_c": {
     "id": "t2m_heatslider_sum26_16_anomaly_c",
@@ -1403,7 +1378,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "t2m_heatslider_sum26_17_anomaly_c": {
     "id": "t2m_heatslider_sum26_17_anomaly_c",
@@ -1431,7 +1406,7 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   },
   "tp_late_aug_2026_pct_of_normal": {
     "id": "tp_late_aug_2026_pct_of_normal",
@@ -1463,6 +1438,6 @@
         }
       ]
     },
-    "storage": { "tiled": true, "compression": { "codec": "zstd", "level": 10 } }
+    "storage": { "tiled": true, "format": "zarr" }
   }
 }

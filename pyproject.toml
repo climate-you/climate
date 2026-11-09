@@ -27,6 +27,9 @@ api = [
   "jsonschema>=4.0",
   "xarray>=2023.0",
   "zstandard>=0.21",
+  # Decodes zarr tiles (climate/tiles/zarr_tiles.read_cell); zarr itself is
+  # only needed to write them.
+  "numcodecs>=0.16",
   "groq>=1.1",
 ]
 
@@ -78,12 +81,19 @@ packager = [
   "Pillow>=10.0",
   "xarray>=2023.0",
   "zstandard>=0.21",
+  "zarr>=3.1",
+  "numcodecs>=0.16",
+  # numcodecs prefers it to the crc32c that zarr pulls in, and warns without it.
+  "google-crc32c>=1.5",
 ]
 
 # scripts/tile_coverage.py
 tile-coverage = [
   "jsonschema>=4.0",
   "zstandard>=0.21",
+  "zarr>=3.1",
+  "numcodecs>=0.16",
+  "google-crc32c>=1.5",
 ]
 
 # scripts/validate/all.py and scripts/validate/*.py

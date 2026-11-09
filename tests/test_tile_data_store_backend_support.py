@@ -181,3 +181,61 @@ def test_try_get_metric_vector_handles_missing_and_nan(
     )
     vec = store.try_get_metric_vector("m", lat=0.0, lon=0.0)
     assert np.allclose(vec, np.array([1.0, 2.0], dtype=np.float32))
+
+
+def test_try_get_metric_vector_reads_zarr_and_clmtile_side_by_side(
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("zarr")
+    from climate.tiles import spec
+    from climate.tiles.zarr_tiles import Encoding, ZarrTileWriter
+
+    grid = GridSpec.global_0p25(tile_size=64)
+    tiles_root = tmp_path / "series"
+    rng = np.random.default_rng(3)
+    tile = rng.normal(15, 5, (64, 64, 12)).astype(np.float32)
+
+    # clmtile metric at the cell of (48.8, 2.35): tile r002_c011, offset (36, 25)
+    p = tiles_root / "global_0p25" / "m_old" / "z64" / "r002_c011.bin.zst"
+    spec.write_tile(p, tile, dtype=np.float32, nyears=12, tile_h=64, tile_w=64)
+    # zarr metric with the same values, written through an artifact-style root
+    zroot = tmp_path / "artifacts" / "m_new" / "2026_11_10"
+    w = ZarrTileWriter(
+        zroot,
+        grid=grid,
+        ntime=12,
+        shard_time=5,
+        encoding=Encoding(dtype=np.dtype("int16"), scale=0.01, delta=True),
+    )
+    w.write(2, 11, tile)
+
+    store = TileDataStore(
+        tiles_root=tiles_root,
+        grid=grid,
+        metrics={
+            "m_old": {"grid_id": "global_0p25", "storage": {"tiled": True}},
+            "m_new": {"grid_id": "global_0p25", "storage": {"format": "zarr"}},
+        },
+        grids={"global_0p25": grid},
+        per_metric_roots={"m_new": zroot},
+    )
+    old = store.try_get_metric_vector("m_old", 48.8, 2.35)
+    new = store.try_get_metric_vector("m_new", 48.8, 2.35)
+    assert old.shape == new.shape == (12,)
+    assert np.allclose(old, tile[36, 25])
+    assert np.max(np.abs(new - old)) <= 0.0051
+
+    # A tile stored empty has no data (None); a tile with no shard is an error,
+    # as a missing tile file is in the old format, and so is an absent array.
+    w.write(9, 5, np.full((64, 64, 12), np.nan, dtype=np.float32))  # (-60, -100)
+    assert store.try_get_metric_vector("m_new", -60.0, -100.0) is None
+    with pytest.raises(FileNotFoundError):
+        store.try_get_metric_vector("m_new", 60.0, 100.0)
+    store_missing = TileDataStore(
+        tiles_root=tiles_root,
+        grid=grid,
+        metrics={"m_new": {"grid_id": "global_0p25", "storage": {"format": "zarr"}}},
+        grids={"global_0p25": grid},
+    )
+    with pytest.raises(FileNotFoundError, match="Missing zarr array"):
+        store_missing.try_get_metric_vector("m_new", 48.8, 2.35)

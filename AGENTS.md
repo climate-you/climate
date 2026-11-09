@@ -68,7 +68,7 @@ cd web && npm run lint && npm run build
   - `geo/`: geographic utilities (longitude normalization, marine naming)
   - `packager/`: metric and map packaging pipeline
   - `registry/`: registry loaders (metrics, maps, panels, layers)
-  - `tiles/`: tile layout, spec read/write (`.bin`, `.bin.zst`)
+  - `tiles/`: tile layout; zarr storage (`zarr_tiles.py`) and the legacy `.bin.zst` format (`spec.py`), behind format-independent helpers (`io.py`)
 - `climate_api/`: FastAPI app and endpoint services
 - `registry/*.json`: authoritative metric/map/panel/layer manifests
 - `data/`: local artifacts (locations, masks, releases) — not committed

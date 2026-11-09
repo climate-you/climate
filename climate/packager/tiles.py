@@ -6,8 +6,8 @@ from typing import Sequence
 
 import numpy as np
 
-from climate.tiles.layout import GridSpec, tile_counts, tile_path
-from climate.tiles.spec import write_tile
+from climate.tiles.io import open_tile_writer
+from climate.tiles.layout import GridSpec, tile_counts
 
 
 def normalize_missing_value(missing: object, dtype: np.dtype) -> object:
@@ -69,26 +69,31 @@ def write_series_tiles(
     dtype: np.dtype | str,
     missing: object,
     compression: dict | None = None,
+    storage: dict | None = None,
+    time_axis: str | None = None,
     resume: bool = False,
 ) -> int:
-    """Write a full series into tiled files using climate.tiles.spec.write_tile."""
+    """Write a full series into tiles, in the format `storage` asks for.
+
+    `storage` is the metric's registry storage spec; callers that only pass
+    `compression` get the old format.
+    """
     dtype = np.dtype(dtype)
     axis_len = len(axis_values)
     arr = _series_to_grid_time(series, grid, axis_len)
     fill_value = normalize_missing_value(missing, dtype)
-
-    codec = "zstd"
-    level = 10
-    if compression is not None:
-        codec = compression.get("codec", codec)
-        level = int(compression.get("level", level))
-
-    if codec == "zstd":
-        ext = ".bin.zst"
-    elif codec == "none":
-        ext = ".bin"
-    else:
-        raise ValueError(f"Unsupported compression codec: {codec}")
+    if storage is None:
+        storage = {"compression": compression} if compression is not None else {}
+    writer = open_tile_writer(
+        out_root,
+        grid,
+        metric_id,
+        ntime=axis_len,
+        dtype=dtype,
+        storage=storage,
+        time_axis=time_axis,
+        resume=resume,
+    )
 
     ntr, ntc = tile_counts(grid)
     written = 0
@@ -122,21 +127,10 @@ def write_series_tiles(
                     dtype=dtype,
                 )
 
-            out_path = tile_path(
-                out_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
-            )
-            if resume and out_path.exists():
+            if resume and writer.exists(tr, tc):
                 continue
 
-            write_tile(
-                out_path,
-                tile,
-                dtype=dtype,
-                nyears=axis_len,
-                tile_h=grid.tile_size,
-                tile_w=grid.tile_size,
-                compress_level=level,
-            )
+            writer.write(tr, tc, tile, fill=fill_value, label=metric_id)
             written += 1
 
     return written

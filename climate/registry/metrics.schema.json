@@ -213,7 +213,29 @@
       "properties": {
         "tiled": { "type": "boolean", "default": true },
         "tile_size": { "type": "integer", "minimum": 1, "default": 64 },
-        "compression": { "$ref": "#/$defs/compression" }
+        "compression": { "$ref": "#/$defs/compression" },
+        "format": {
+          "type": "string",
+          "enum": ["clmtile", "zarr"],
+          "default": "clmtile",
+          "description": "On-disk format: 'clmtile' = one zstd .bin.zst file per tile under z<tile_size>/ (climate/tiles/spec.py); 'zarr' = one sharded zarr v3 array under zarr/ (climate/tiles/zarr_tiles.py). 'compression' applies to clmtile only."
+        },
+        "encoding": {
+          "type": "object",
+          "description": "zarr only: how values are stored. Integer dtypes store round((x - offset) / scale), refusing values out of range.",
+          "properties": {
+            "dtype": { "type": "string", "enum": ["float32", "int16", "uint16"], "default": "float32" },
+            "scale": { "type": "number", "exclusiveMinimum": 0, "default": 1 },
+            "offset": { "type": "number", "default": 0 },
+            "delta": { "type": "boolean", "default": false, "description": "Apply a first-difference filter before compression." }
+          },
+          "additionalProperties": false
+        },
+        "shard_time": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "zarr only: time steps per shard file. Default: 366 for daily axes, 120 for monthly, the whole series otherwise."
+        }
       },
       "additionalProperties": false
     },

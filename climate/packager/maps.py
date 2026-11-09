@@ -8,8 +8,8 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
-from climate.tiles.layout import GridSpec, grid_from_id, tile_counts, tile_path
-from climate.tiles.spec import read_tile_array
+from climate.tiles.io import read_metric_tile
+from climate.tiles.layout import GridSpec, grid_from_id, tile_counts
 
 MERCATOR_MAX_LAT = 85.05112878
 LONGITUDE_EDGE_STITCH_COLS = 8
@@ -184,8 +184,6 @@ def load_series_grid_from_metric(
     Returns (arr, grid, axis) where arr has shape (nlat, nlon, nyears).
     """
     storage = metric_spec.get("storage", {})
-    compression = storage.get("compression")
-    ext = _compression_ext(compression)
     tile_size = int(storage.get("tile_size", 64))
     grid = grid_from_id(str(metric_spec["grid_id"]), tile_size=tile_size)
     axis = _load_metric_axis(
@@ -202,15 +200,19 @@ def load_series_grid_from_metric(
         for tc in range(ntc):
             i_lon0 = tc * grid.tile_size
             valid_w = min(grid.tile_size, grid.nlon - i_lon0)
-            p = tile_path(
-                series_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
+            arr = read_metric_tile(
+                series_root,
+                grid,
+                metric_id,
+                tr,
+                tc,
+                storage,
             )
-            if not p.exists():
-                raise FileNotFoundError(f"Missing source tile: {p}")
-            _hdr, arr = read_tile_array(p)
             tile_series = np.asarray(arr, dtype=np.float64)
             if tile_series.ndim != 3:
-                raise ValueError(f"Expected 3-D tile for {p}: {tile_series.shape}")
+                raise ValueError(
+                    f"Expected 3-D tile for {metric_id} r{tr} c{tc}: {tile_series.shape}"
+                )
             out[i_lat0 : i_lat0 + valid_h, i_lon0 : i_lon0 + valid_w, :] = tile_series[
                 :valid_h, :valid_w, :
             ]
@@ -344,7 +346,6 @@ def reduce_metric_mean_over_indices(
     (the full daily series would be tens of GB if loaded whole).
     """
     storage = metric_spec.get("storage", {})
-    ext = _compression_ext(storage.get("compression"))
     tile_size = int(storage.get("tile_size", 64))
     grid = grid_from_id(str(metric_spec["grid_id"]), tile_size=tile_size)
     idx = np.asarray(indices, dtype=int)
@@ -359,15 +360,19 @@ def reduce_metric_mean_over_indices(
         for tc in range(ntc):
             i_lon0 = tc * grid.tile_size
             valid_w = min(grid.tile_size, grid.nlon - i_lon0)
-            p = tile_path(
-                series_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
+            arr = read_metric_tile(
+                series_root,
+                grid,
+                metric_id,
+                tr,
+                tc,
+                storage,
             )
-            if not p.exists():
-                raise FileNotFoundError(f"Missing source tile: {p}")
-            _hdr, arr = read_tile_array(p)
             arr = np.asarray(arr, dtype=np.float64)
             if arr.ndim != 3:
-                raise ValueError(f"Expected 3-D tile for {p}: {arr.shape}")
+                raise ValueError(
+                    f"Expected 3-D tile for {metric_id} r{tr} c{tc}: {arr.shape}"
+                )
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=RuntimeWarning)
                 tile_mean = np.nanmean(arr[:, :, idx], axis=2)
@@ -385,8 +390,6 @@ def _load_scalar_grid_from_metric(
     reducer: dict[str, Any] | None,
 ) -> tuple[np.ndarray, GridSpec, list[int]]:
     storage = metric_spec.get("storage", {})
-    compression = storage.get("compression")
-    ext = _compression_ext(compression)
     tile_size = int(storage.get("tile_size", 64))
     grid = grid_from_id(str(metric_spec["grid_id"]), tile_size=tile_size)
     axis = _load_metric_axis(
@@ -402,30 +405,25 @@ def _load_scalar_grid_from_metric(
         for tc in range(ntc):
             i_lon0 = tc * grid.tile_size
             valid_w = min(grid.tile_size, grid.nlon - i_lon0)
-            p = tile_path(
-                series_root,
-                grid,
-                metric=metric_id,
-                tile_r=tr,
-                tile_c=tc,
-                ext=ext,
+            arr = np.asarray(
+                read_metric_tile(
+                    series_root,
+                    grid,
+                    metric_id,
+                    tr,
+                    tc,
+                    storage,
+                ),
+                dtype=np.float64,
             )
-            if not p.exists():
-                raise FileNotFoundError(f"Missing source tile for map generation: {p}")
-            hdr, arr = read_tile_array(p)
-            if hdr.nyears == 0:
-                tile_scalar = np.asarray(arr, dtype=np.float64)
-                if tile_scalar.ndim != 2:
-                    raise ValueError(
-                        f"Unexpected scalar tile shape for {p}: {tile_scalar.shape}"
-                    )
+            if arr.ndim == 2:
+                tile_scalar = arr
+            elif arr.ndim == 3:
+                tile_scalar = _reduce_series(arr, axis, reducer)
             else:
-                tile_series = np.asarray(arr, dtype=np.float64)
-                if tile_series.ndim != 3:
-                    raise ValueError(
-                        f"Unexpected series tile shape for {p}: {tile_series.shape}"
-                    )
-                tile_scalar = _reduce_series(tile_series, axis, reducer)
+                raise ValueError(
+                    f"Unexpected tile shape for {metric_id} r{tr} c{tc}: {arr.shape}"
+                )
 
             out[
                 i_lat0 : i_lat0 + valid_h,
@@ -1162,17 +1160,6 @@ def _save_texture(path: Path, image: np.ndarray, *, file_format: str) -> None:
         return
 
     raise ValueError(f"Unsupported texture file format: {file_format}")
-
-
-def _compression_ext(compression: dict | None) -> str:
-    codec = "zstd"
-    if compression is not None:
-        codec = compression.get("codec", codec)
-    if codec == "zstd":
-        return ".bin.zst"
-    if codec == "none":
-        return ".bin"
-    raise ValueError(f"Unsupported compression codec: {codec}")
 
 
 def _load_metric_axis(

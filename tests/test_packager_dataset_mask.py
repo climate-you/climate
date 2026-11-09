@@ -75,7 +75,7 @@ def test_tiles_from_time_da_applies_dataset_mask(
     ) -> None:
         captured.append(np.array(tile, copy=True))
 
-    monkeypatch.setattr("climate.packager.registry.write_tile", _fake_write_tile)
+    monkeypatch.setattr("climate.tiles.io.write_tile", _fake_write_tile)
 
     written = _tiles_from_time_da(
         da=da,

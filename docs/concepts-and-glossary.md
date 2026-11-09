@@ -125,7 +125,7 @@ There are two release formats:
 **Format v1** (self-contained): all tiles and maps live inside the release directory.
 
 ```
-data/releases/<release>/series/<grid_id>/<metric>/z64/...
+data/releases/<release>/series/<grid_id>/<metric>/zarr/...
 data/releases/<release>/maps/<grid_id>/<map_id>/<filename>
 data/releases/<release>/registry/
 ```
@@ -135,11 +135,24 @@ data/releases/<release>/registry/
 ```
 data/releases/<release>/manifest.json   ← format_version: 2, series/maps pointers
 data/releases/<release>/registry/
-data/artifacts/series/<metric_id>/<date>/<grid_id>/<metric_id>/z64/...
+data/artifacts/series/<metric_id>/<date>/zarr/...
 data/artifacts/maps/<map_id>/<date>/<filename>
 ```
 
 The `dev` release always uses the self-contained format and reads registry files from the repo root.
+
+### Tile storage
+
+Each metric's tiles are one zarr v3 array (`zarr/`), sharded so that each 64×64 tile is a file: one per tile
+for yearly and scalar metrics, one per tile and year for daily metrics, and one per tile and decade for
+monthly ones. Values are stored as scaled integers (0.01 °C for temperatures; 0.02 mm daily and 0.01 mm
+monthly for precipitation) or float32, as the metric's registry `storage.encoding` says. Every tile is stored,
+an empty one included, so a missing file is an error. The API reads a single cell without decompressing the
+whole tile.
+
+Releases before v2.5 use the legacy format: one `z64/rXXX_cYYY.bin.zst` file per tile holding the whole series.
+A release's own registry snapshot says which format each metric uses (`storage.format`; missing means legacy),
+so the API reads old and new releases alike.
 
 ### Artifact Store
 

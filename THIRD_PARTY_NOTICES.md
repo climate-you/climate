@@ -12,15 +12,17 @@ Generated: 2026-04-26 00:00 UTC.
 
 Data/map attributions are maintained in the in-app Sources/Licenses tab.
 
-## Python Packages (18)
+## Python Packages (21)
 
 | Package | Version | License | Home / Project URL |
 | --- | --- | --- | --- |
 | cdsapi | 0.7.7 | Apache 2.0 | https://github.com/ecmwf/cdsapi |
 | fastapi | 0.128.0 | MIT | https://github.com/fastapi/fastapi |
 | fiona | 1.10.1 | BSD License | https://github.com/Toblerity/Fiona |
+| google-crc32c | 1.9.0 | Apache-2.0 | https://github.com/googleapis/python-crc32c |
 | jsonschema | 4.25.1 | MIT | https://github.com/python-jsonschema/jsonschema |
 | netCDF4 | 1.7.3 | MIT | https://github.com/Unidata/netcdf4-python |
+| numcodecs | 0.16.6 | MIT | https://github.com/zarr-developers/numcodecs |
 | numpy | 2.3.4 | BSD License | https://numpy.org |
 | pandas | 2.3.3 | BSD License | https://pandas.pydata.org |
 | pillow | 11.3.0 | MIT-CMU | https://python-pillow.github.io |
@@ -33,6 +35,7 @@ Data/map attributions are maintained in the in-app Sources/Licenses tab.
 | scipy | 1.16.3 | BSD License | https://scipy.org/ |
 | uvicorn | 0.40.0 | BSD-3-Clause | https://uvicorn.dev/ |
 | xarray | 2025.10.1 | Apache-2.0 | https://xarray.dev/ |
+| zarr | 3.1.3 | MIT | https://github.com/zarr-developers/zarr-python |
 | zstandard | 0.25.0 | BSD-3-Clause | https://github.com/indygreg/python-zstandard |
 
 

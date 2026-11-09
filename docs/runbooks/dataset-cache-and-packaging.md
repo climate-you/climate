@@ -78,7 +78,9 @@ Series layout within a metric folder:
 
 ```
 data/releases/dev/series/<grid_id>/<metric_id>/
-  z64/                          ← tile binaries (r000_c000.bin.zst …)
+  zarr/                         ← tiles, one zarr array (see "Tile storage" in docs/concepts-and-glossary.md)
+    zarr.json                   ← array metadata: shape, shards, encoding
+    c/<t>/<r>/<c>               ← one shard file per tile and time block (c/<r>/<c> for a scalar metric)
   time/yearly.json              ← time axis
   rankings/                     ← precomputed city rankings (generated separately, see below)
     mean.json

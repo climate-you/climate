@@ -14,6 +14,7 @@ Example:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 from pathlib import Path
 
@@ -32,8 +33,9 @@ from climate.registry.panels import (
     DEFAULT_PANELS_SCHEMA_PATH,
     load_panels,
 )
-from climate.tiles.layout import GridSpec, grid_from_id
-from climate.tiles.spec import read_tile_array
+from climate.tiles import zarr_tiles
+from climate.tiles.io import metric_root, read_metric_tile, storage_format, tile_written
+from climate.tiles.layout import GridSpec, grid_from_id, tile_counts
 
 
 _TILE_RE = re.compile(r"r(\d+)_c(\d+)\.bin(\.zst)?$")
@@ -57,6 +59,90 @@ def _iter_tile_files(zdir: Path) -> list[Path]:
         return (rc[0], rc[1]) if rc else (10**9, 10**9)
 
     return sorted(files, key=key)
+
+
+def _tiles_present(
+    root: Path, grid: GridSpec, metric_id: str, storage: dict | None
+) -> tuple[Path, list[tuple[int, int]] | None]:
+    """(where the tiles live, sorted (tile_r, tile_c) on disk), or None when that place is missing.
+
+    A zarr tile is listed once every time shard of it is on disk.
+    """
+    mroot = metric_root(root / "series", grid, metric_id)
+    if storage_format(storage) == "zarr":
+        zdir = zarr_tiles.zarr_dir(mroot)
+        meta = zdir / "zarr.json"
+        if not meta.exists():
+            return zdir, None
+        meta_json = json.loads(meta.read_text(encoding="utf-8"))
+        shape = meta_json["shape"]
+        if len(shape) == 2:
+            pattern, blocks = "*/*", 1
+        else:
+            st = int(meta_json["chunk_grid"]["configuration"]["chunk_shape"][0])
+            pattern, blocks = "*/*/*", -(-int(shape[0]) // st)
+        counts: dict[tuple[int, int], int] = {}
+        for p in (zdir / "c").glob(pattern):
+            if p.is_file():
+                rc = (int(p.parent.name), int(p.name))
+                counts[rc] = counts.get(rc, 0) + 1
+        return zdir, sorted(rc for rc, n in counts.items() if n == blocks)
+    zdir = mroot / f"z{grid.tile_size}"
+    if not zdir.exists():
+        return zdir, None
+    rcs = [rc for rc in (_parse_tile_rc(p) for p in _iter_tile_files(zdir)) if rc]
+    return zdir, rcs
+
+
+def _format_mismatch(
+    root: Path, grid: GridSpec, metric_id: str, storage: dict | None
+) -> str | None:
+    """Why the files on disk disagree with the registry's storage.format, or None.
+
+    The API reads each metric in the format its release registry declares, so a
+    release whose files are in the other format would fail in production.
+    """
+    mroot = metric_root(root / "series", grid, metric_id)
+    has_zarr = (zarr_tiles.zarr_dir(mroot) / "zarr.json").exists()
+    has_clmtile = (mroot / f"z{grid.tile_size}").is_dir()
+    declared = storage_format(storage)
+    if has_zarr and has_clmtile:
+        return f"{metric_id}: both zarr/ and z{grid.tile_size}/ on disk (registry says {declared})"
+    if declared == "zarr" and has_clmtile:
+        return f"{metric_id}: registry says zarr but the files are clmtile (z{grid.tile_size}/)"
+    if declared == "clmtile" and has_zarr:
+        return f"{metric_id}: registry says clmtile but the files are zarr (zarr/)"
+    return None
+
+
+def _read_tile(
+    root: Path, grid: GridSpec, metric_id: str, tr: int, tc: int, storage: dict | None
+) -> tuple[int, np.ndarray]:
+    """(nyears, tile) with nyears = 0 for a scalar metric, as the old tile header says."""
+    arr = read_metric_tile(root / "series", grid, metric_id, tr, tc, storage)
+    return (0 if arr.ndim == 2 else int(arr.shape[2])), arr
+
+
+def _missing_tiles(
+    root: Path, grid: GridSpec, metric_id: str, storage: dict | None
+) -> list[tuple[int, int]]:
+    """Tiles of the grid that are not (fully) on disk.
+
+    Every tile is stored, an empty one included, so readers treat a missing
+    tile as an error; this lists them before a publish does.
+    """
+    ntr, ntc = tile_counts(grid)
+    return [
+        (tr, tc)
+        for tr in range(ntr)
+        for tc in range(ntc)
+        if not tile_written(root / "series", grid, metric_id, tr, tc, storage)
+    ]
+
+
+def _tile_list(tiles: list[tuple[int, int]]) -> str:
+    shown = ", ".join(f"r{tr} c{tc}" for tr, tc in tiles[:5])
+    return f"{shown}{', ...' if len(tiles) > 5 else ''}"
 
 
 def _valid_hw(grid: GridSpec, tr: int, tc: int) -> tuple[int, int]:
@@ -155,10 +241,18 @@ def _metric_summary(
     summary_only: bool,
     domain_mask: np.ndarray | None = None,
     domain_label: str = "global",
-) -> dict[str, float]:
+    storage: dict | None = None,
+    count_outside: bool = False,
+) -> dict:
+    """Coverage of one metric; with count_outside, also its data cells outside domain_mask.
+
+    count_outside only makes sense when domain_mask is a dataset mask, which
+    says cell by cell where data may be, not a mask built from another
+    metric's data.
+    """
     grid = grid_from_id(grid_id, tile_size=tile_size)
-    zdir = root / "series" / grid.grid_id / metric_id / f"z{grid.tile_size}"
-    if not zdir.exists():
+    zdir, tiles = _tiles_present(root, grid, metric_id, storage)
+    if tiles is None:
         print(f"[warn] Tile directory not found: {zdir}")
         return {
             "tiles_found": 0.0,
@@ -166,11 +260,10 @@ def _metric_summary(
             "real_coverage_pct": 0.0,
         }
 
-    files = _iter_tile_files(zdir)
     if max_tiles and max_tiles > 0:
-        files = files[:max_tiles]
+        tiles = tiles[:max_tiles]
 
-    if not files:
+    if not tiles:
         print(f"[warn] No tile files found in: {zdir}")
         return {
             "tiles_found": 0.0,
@@ -194,23 +287,20 @@ def _metric_summary(
         else total_real_cells
     )
     domain_nonempty = 0
+    outside_cells = 0
+    outside_tiles: list[tuple[int, int]] = []
 
-    for p in files:
-        rc = _parse_tile_rc(p)
-        if rc is None:
-            continue
-        tr, tc = rc
+    for tr, tc in tiles:
+        nyears, arr = _read_tile(root, grid, metric_id, tr, tc, storage)
 
-        hdr, arr = read_tile_array(p)
-
-        nonempty_c, total_c = _count_nonempty_cells(hdr.nyears, arr)
+        nonempty_c, total_c = _count_nonempty_cells(nyears, arr)
         frac_c = 100.0 * (nonempty_c / total_c if total_c else 0.0)
 
         valid_h, valid_w = _valid_hw(grid, tr, tc)
         nonempty_r, total_r = _count_nonempty_cells_window(
-            hdr.nyears, arr, valid_h, valid_w
+            nyears, arr, valid_h, valid_w
         )
-        nonempty_mask_r = _nonempty_mask_window(hdr.nyears, arr, valid_h, valid_w)
+        nonempty_mask_r = _nonempty_mask_window(nyears, arr, valid_h, valid_w)
         frac_r = 100.0 * (nonempty_r / total_r if total_r else 0.0)
 
         total_tiles += 1
@@ -222,16 +312,20 @@ def _metric_summary(
             c0 = tc * grid.tile_size
             dm = domain_mask[r0 : r0 + valid_h, c0 : c0 + valid_w]
             domain_nonempty += int(np.count_nonzero(nonempty_mask_r & dm))
+            if count_outside:
+                n_out = int(np.count_nonzero(nonempty_mask_r & ~dm))
+                if n_out:
+                    outside_cells += n_out
+                    outside_tiles.append((tr, tc))
         else:
             domain_nonempty += nonempty_r
 
         if not summary_only:
             print(
-                f"tile r{tr:03d} c{tc:03d}  nyears={hdr.nyears:>3d}  "
+                f"tile r{tr:03d} c{tc:03d}  nyears={nyears:>3d}  "
                 f"dtype={str(arr.dtype):>6s}  "
                 f"container={nonempty_c:5d}/{total_c:5d}  ({frac_c:6.2f}%)  "
-                f"real={nonempty_r:5d}/{total_r:5d}  ({frac_r:6.2f}%)  "
-                f"{p.name}"
+                f"real={nonempty_r:5d}/{total_r:5d}  ({frac_r:6.2f}%)"
             )
 
     total_container_cells_expected = (
@@ -252,13 +346,17 @@ def _metric_summary(
         f"\nSUMMARY: metric={metric_id} tiles={total_tiles}/{total_tiles_expected}  "
         f"container_nonempty={total_container_nonempty}/{total_container_cells_expected}  ({overall_c:.2f}%)  "
         f"real_nonempty={total_real_nonempty}/{total_real_cells}  ({overall_r:.2f}%)  "
-        f"domain={domain_label} nonempty={domain_nonempty}/{domain_total_cells}  ({overall_domain:.2f}%)\n"
+        f"domain={domain_label} nonempty={domain_nonempty}/{domain_total_cells}  ({overall_domain:.2f}%)"
+        + (f"  outside={outside_cells}" if count_outside else "")
+        + "\n"
     )
     return {
         "tiles_found": float(total_tiles),
         "tiles_expected": float(total_tiles_expected),
         "real_coverage_pct": float(overall_r),
         "domain_coverage_pct": float(overall_domain),
+        "outside_cells": float(outside_cells),
+        "outside_tiles": outside_tiles,
     }
 
 
@@ -403,27 +501,22 @@ def _build_metric_presence_mask(
     metric_id: str,
     grid_id: str,
     tile_size: int,
+    storage: dict | None = None,
 ) -> np.ndarray:
     grid = grid_from_id(grid_id, tile_size=tile_size)
-    zdir = root / "series" / grid.grid_id / metric_id / f"z{grid.tile_size}"
-    if not zdir.exists():
+    zdir, tiles = _tiles_present(root, grid, metric_id, storage)
+    if tiles is None:
         raise SystemExit(f"Mask metric tiles not found: {zdir}")
-
-    files = _iter_tile_files(zdir)
-    if not files:
+    if not tiles:
         raise SystemExit(f"No mask tiles found: {zdir}")
 
     mask = np.zeros((grid.nlat, grid.nlon), dtype=bool)
-    for p in files:
-        rc = _parse_tile_rc(p)
-        if rc is None:
-            continue
-        tr, tc = rc
-        hdr, arr = read_tile_array(p)
+    for tr, tc in tiles:
+        nyears, arr = _read_tile(root, grid, metric_id, tr, tc, storage)
         valid_h, valid_w = _valid_hw(grid, tr, tc)
         if valid_h <= 0 or valid_w <= 0:
             continue
-        local = _nonempty_mask_window(hdr.nyears, arr, valid_h, valid_w)
+        local = _nonempty_mask_window(nyears, arr, valid_h, valid_w)
         r0 = tr * grid.tile_size
         c0 = tc * grid.tile_size
         mask[r0 : r0 + valid_h, c0 : c0 + valid_w] = local
@@ -665,6 +758,7 @@ def main() -> None:
                                 metric_id=args.ocean_mask_metric,
                                 grid_id=ocean_grid_id,
                                 tile_size=ocean_tile_size,
+                                storage=ocean_storage,
                             )
                         )
                     source_grid = grid_from_id(ocean_grid_id, tile_size=ocean_tile_size)
@@ -689,6 +783,23 @@ def main() -> None:
                     )
                 domain_mask = dataset_mask_cache[key]
         print(f"== metric: {metric_id}  grid={grid_id}  tile_size={tile_size} ==")
+        mismatch = _format_mismatch(
+            args.root, grid_from_id(grid_id, tile_size=tile_size), metric_id, storage
+        )
+        if mismatch:
+            print(f"[error] {mismatch}")
+            failures.append(mismatch)
+            continue
+        missing_tiles = _missing_tiles(
+            args.root, grid_from_id(grid_id, tile_size=tile_size), metric_id, storage
+        )
+        if missing_tiles:
+            msg = (
+                f"{metric_id}: {len(missing_tiles)} tile(s) missing "
+                f"({_tile_list(missing_tiles)})"
+            )
+            print(f"[error] {msg}")
+            failures.append(msg)
         stats = _metric_summary(
             root=args.root,
             metric_id=metric_id,
@@ -698,7 +809,18 @@ def main() -> None:
             summary_only=args.summary_only,
             domain_mask=domain_mask,
             domain_label=domain_label,
+            storage=storage,
+            # A dataset mask says cell by cell where data may be; the ocean mask
+            # is built from SST's own data, so nothing can fall outside it.
+            count_outside=domain_label == "dataset_mask",
         )
+        if stats.get("outside_cells"):
+            msg = (
+                f"{metric_id}: {int(stats['outside_cells'])} data cell(s) outside the dataset mask "
+                f"(tiles {_tile_list(stats['outside_tiles'])})"
+            )
+            print(f"[error] {msg}")
+            failures.append(msg)
         check_pct = (
             stats["domain_coverage_pct"]
             if args.domain_aware

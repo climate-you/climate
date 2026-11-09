@@ -20,6 +20,7 @@ from climate.registry.metrics import (
 )
 from climate.tiles.layout import GridSpec, locate_tile, tile_path
 from climate.tiles.spec import read_cell_series
+from climate.tiles.zarr_tiles import read_cell, zarr_dir
 
 
 def _grid_from_id(grid_id: str, *, tile_size: int) -> GridSpec:
@@ -205,9 +206,10 @@ class TileDataStore:
         datasets_path: Path | str | None = DEFAULT_DATASETS_PATH,
     ) -> "TileDataStore":
         """
-        Discover grid_id and tile_size from folder layout.
+        Load the metrics, grids, rankings and aggregates from the registry.
 
-        Expected layout:
+        Without a registry, fall back to guessing grid_id and tile_size from a
+        legacy folder layout:
           {tiles_root}/{grid_id}/{metric}/z{tile_size}/rXXX_cYYY.bin.zst
         """
         tiles_root = Path(tiles_root)
@@ -378,6 +380,17 @@ class TileDataStore:
             ext=ext,
         )
 
+    def _metric_format(self, metric: str) -> str:
+        spec = self.metrics.get(metric) or {}
+        return str((spec.get("storage") or {}).get("format", "clmtile"))
+
+    def _metric_root(self, metric: str) -> Path:
+        """Directory holding the metric's time/ and its z64/ or zarr/."""
+        artifact_root = self.per_metric_roots.get(metric)
+        if artifact_root is not None:
+            return artifact_root
+        return self.tiles_root / self._metric_grid(metric).grid_id / metric
+
     def try_get_metric_vector(
         self, metric: str, lat: float, lon: float
     ) -> np.ndarray | None:
@@ -386,9 +399,18 @@ class TileDataStore:
           - yearly series metric -> shape (nyears,)
           - scalar metric -> shape (1,)
         None if tile missing or the cell is NaN-filled (dev harness sparse tiles).
+        A missing tile raises FileNotFoundError in both formats (in zarr, a
+        missing shard).
         """
         grid = self._metric_grid(metric)
-        _cell, t = locate_tile(lat, lon, grid)
+        cell, t = locate_tile(lat, lon, grid)
+        if self._metric_format(metric) == "zarr":
+            root = self._metric_root(metric)
+            if not zarr_dir(root).is_dir():
+                raise FileNotFoundError(f"Missing zarr array: {zarr_dir(root)}")
+            vec = read_cell(root, cell.i_lat, cell.i_lon)
+            return None if np.all(np.isnan(vec)) else vec
+
         p = self._metric_tile_path(metric, t.tile_r, t.tile_c)
         if not p.exists():
             raise FileNotFoundError(f"Missing tile file: {p}")

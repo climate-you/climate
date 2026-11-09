@@ -18,8 +18,10 @@ Where it applies:
 
 ## Why Storage Runs Out
 
-A single copy of the release data is roughly 19 GB, dominated by the daily
-metrics (`t2m_daily_mean_c` and `t2m_daily_max_c` are about 5.8 GB each).
+A single copy of the release data is roughly 6.3 GB, dominated by the daily
+metrics (`t2m_daily_mean_c` and `t2m_daily_max_c` are about 1.7–1.8 GB each).
+Releases before v2.5, in the legacy tile format, are about 20 GB, so a cutover
+from one to the other holds both for a while.
 
 `publish_release.py` writes each changed artifact into a **new dated
 directory** and leaves earlier dates in place, so a release can be pinned or
@@ -55,8 +57,10 @@ numbers.
 This deployment is unusually sensitive to storage latency, so do not pick a
 Volume on cost alone.
 
-`TileDataStore.try_get_metric_vector` stats and reads a tile file **on every
-call**, with no cache in front of it. The `Cache` object in `climate_api/cache.py`
+`TileDataStore.try_get_metric_vector` reads from disk **on every call**, with no
+cache in front of it: in zarr, one shard index and one small chunk per shard
+file the series spans (one file per year for a daily metric, per decade for a
+monthly one); in the legacy format, the whole tile file. The `Cache` object in `climate_api/cache.py`
 is wired to the panel and graph endpoints, not to tile reads, and its in-process
 fallback does not cover them either. Redis, when configured, does not change
 this.
@@ -89,7 +93,7 @@ for root in /opt/climate/data/artifacts/series/t2m_yearly_mean_c/<date> \
             /mnt/test-volume/series/global_0p25/t2m_yearly_mean_c; do
   echo "== $root"
   sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'   # cold cache, else you time RAM
-  /usr/bin/time -f '  %e s' find "$root/z64" -name '*.bin.zst' \
+  /usr/bin/time -f '  %e s' find "$root/zarr/c" -type f \
     | head -2000 | xargs -n1 dd of=/dev/null bs=64k status=none
 done
 ```
@@ -204,13 +208,14 @@ filesystems, publish with `--no-link-dest` and accept full copies.
 
 ## Sizing Guidance
 
-Budget roughly four times the working set — about 80 GB for today's 19 GB, and
-100 GB for comfort. That covers:
+Budget roughly four times the working set — about 25 GB for today's 6.3 GB, and
+40 GB for comfort. That covers:
 
 - the working set itself
 - a full second copy during a migration or large republish
-- growth, which comes mainly from new metrics rather than new years (each
-  daily-resolution metric lands around 6 GB)
+- growth, which comes mainly from new metrics rather than new years (a daily
+  temperature metric is about 1.7 GB for 2021–2026, plus about 0.3 GB for each
+  further year)
 
 Hardlinking removes most of the per-publish growth, but not the first copy of a
 genuinely new metric, which is what fills a disk quickly.

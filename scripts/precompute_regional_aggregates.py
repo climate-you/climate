@@ -33,8 +33,8 @@ from climate.geo.regions import (
     ocean_region_id,
 )
 from climate.registry.metrics import load_metrics
-from climate.tiles.layout import GridSpec, tile_counts, tile_path
-from climate.tiles.spec import read_tile_array
+from climate.tiles.io import metric_ntime, read_metric_tile, tile_written
+from climate.tiles.layout import GridSpec, tile_counts
 
 
 _DEFAULT_RELEASES_ROOT = REPO_ROOT / "data" / "releases"
@@ -117,7 +117,7 @@ def _compute_globe_mean_incremental(
     tiles_root: Path,
     grid: GridSpec,
     metric_id: str,
-    ext: str,
+    storage: dict,
 ) -> tuple[list[float | None], int] | None:
     """Area-weighted globe mean computed tile-by-tile to avoid loading the full grid.
 
@@ -126,19 +126,7 @@ def _compute_globe_mean_incremental(
     n_tiles_lat, n_tiles_lon = tile_counts(grid)
     ts = int(grid.tile_size)
 
-    ntime: int | None = None
-    for tr in range(n_tiles_lat):
-        for tc in range(n_tiles_lon):
-            p = tile_path(
-                tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
-            )
-            if p.exists():
-                hdr, _ = read_tile_array(p)
-                ntime = hdr.nyears if hdr.nyears > 0 else 1
-                break
-        if ntime is not None:
-            break
-
+    ntime = metric_ntime(tiles_root, grid, metric_id, storage)
     if ntime is None:
         return None
 
@@ -156,13 +144,10 @@ def _compute_globe_mean_incremental(
         tile_w_area = w_area[r0:r1]
 
         for tc in range(n_tiles_lon):
-            p = tile_path(
-                tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
-            )
-            if not p.exists():
+            if not tile_written(tiles_root, grid, metric_id, tr, tc, storage):
                 continue
 
-            _, arr = read_tile_array(p)
+            arr = read_metric_tile(tiles_root, grid, metric_id, tr, tc, storage)
             if arr.ndim == 2:
                 arr = arr[:, :, np.newaxis]
 
@@ -186,7 +171,7 @@ def _compute_aggregates_incremental(
     tiles_root: Path,
     grid: GridSpec,
     metric_id: str,
-    ext: str,
+    storage: dict,
     aggregations: list[str],
     named_regions: list[tuple[str, np.ndarray]],
     w_area: np.ndarray,
@@ -203,18 +188,7 @@ def _compute_aggregates_incremental(
     n_tiles_lat, n_tiles_lon = tile_counts(grid)
     ts = int(grid.tile_size)
 
-    ntime: int | None = None
-    for tr in range(n_tiles_lat):
-        for tc in range(n_tiles_lon):
-            p = tile_path(
-                tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
-            )
-            if p.exists():
-                hdr, _ = read_tile_array(p)
-                ntime = hdr.nyears if hdr.nyears > 0 else 1
-                break
-        if ntime is not None:
-            break
+    ntime = metric_ntime(tiles_root, grid, metric_id, storage)
     if ntime is None:
         return None
 
@@ -243,13 +217,10 @@ def _compute_aggregates_incremental(
         w_row = w_area[r0:r1]  # (tile_rows,)
 
         for tc in range(n_tiles_lon):
-            p = tile_path(
-                tiles_root, grid, metric=metric_id, tile_r=tr, tile_c=tc, ext=ext
-            )
-            if not p.exists():
+            if not tile_written(tiles_root, grid, metric_id, tr, tc, storage):
                 continue
 
-            _, arr = read_tile_array(p)
+            arr = read_metric_tile(tiles_root, grid, metric_id, tr, tc, storage)
             if arr.ndim == 2:
                 arr = arr[:, :, np.newaxis]
 
@@ -401,8 +372,6 @@ def precompute_aggregates(
         grid_id: str = spec.get("grid_id", "global_0p25")
         storage = spec.get("storage", {})
         tile_size = int(storage.get("tile_size", 64))
-        codec = storage.get("compression", {}).get("codec", "zstd")
-        ext = ".bin.zst" if codec == "zstd" else ".bin"
 
         if grid_id == "global_0p25":
             grid = GridSpec.global_0p25(tile_size=tile_size)
@@ -446,7 +415,7 @@ def precompute_aggregates(
                     tiles_root=series_root,
                     grid=grid,
                     metric_id=metric_id,
-                    ext=ext,
+                    storage=storage,
                 )
                 if result is None:
                     print(" no tiles found, skipping")
@@ -602,7 +571,7 @@ def precompute_aggregates(
             tiles_root=series_root,
             grid=grid,
             metric_id=metric_id,
-            ext=ext,
+            storage=storage,
             aggregations=aggregations,
             named_regions=named_regions,
             w_area=w_area,

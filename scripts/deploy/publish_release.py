@@ -330,7 +330,7 @@ def _metric_sha256(dev_series_root: Path, metric_id: str) -> str:
     """Hash all tile files for metric_id across every grid_id in the dev series root.
 
     Relative paths are rooted at each metric_dir, producing paths like:
-      z64/r000_c000.bin.zst
+      zarr/c/0/0/0  (z64/r000_c000.bin.zst in the legacy format)
     This matches the flat artifact store layout (no grid_id prefix), so the
     same hash can be compared against the stored tree_sha256 on subsequent runs.
     """

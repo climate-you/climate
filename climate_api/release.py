@@ -478,7 +478,8 @@ class ReleaseResolver:
                             "format_version 2 release requires artifacts_root to be configured."
                         )
                     # Build per_metric_roots: metric_id -> artifact date dir
-                    # Artifact layout: artifacts/series/{metric_id}/{date}/z64/...  (flat, no grid_id)
+                    # Artifact layout: artifacts/series/{metric_id}/{date}/zarr/... (z64/... before
+                    # v2.5)  (flat, no grid_id)
                     series_pointers: dict[str, str] = release_manifest.get("series", {})
                     for metric_id, artifact_date in series_pointers.items():
                         artifact_dir = (
