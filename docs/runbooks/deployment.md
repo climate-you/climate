@@ -669,8 +669,13 @@ Expected result:
 
 Once domain is chosen:
 
-- map DNS `A` record to the VM public IP
+- map DNS `A` record to the VM public IP, and `www` to the same place (an `A`
+  record or a `CNAME` to the bare domain). Prefer these two records to a
+  wildcard `*` record: every name a wildcard sends here fails TLS, because
+  Caddy only holds certificates for the names it serves
 - update Caddy site label from `:80` to `your-domain.example`
+- install the www redirect (bootstrap does this for a domain):
+  `sudo sed "s|example.com|your-domain.example|g" deploy/proxy/www-redirect.caddy | sudo tee /etc/caddy/sites/www-redirect.caddy`
 - update env URLs and CORS to `https://your-domain.example`
 - restart `caddy`, `climate-backend`, `climate-web`
 

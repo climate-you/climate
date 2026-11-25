@@ -1,0 +1,11 @@
+# Sends www.<domain> to the bare domain, so a visitor typing www lands on the
+# site instead of a TLS error. Caddy fetches the certificate for the www name
+# on its own once DNS points www at this VM. The bare-domain block sets HSTS
+# with includeSubDomains, so browsers that have visited the site only ever try
+# www over HTTPS: without this block (and its certificate) www cannot work.
+#
+# Installed by bootstrap_vm.sh as /etc/caddy/sites/www-redirect.caddy, with
+# example.com replaced by the domain; skipped when the domain is an IP.
+www.example.com {
+  redir https://example.com{uri} permanent
+}

@@ -182,6 +182,10 @@ sed -i "s|example.com|$DOMAIN|g" /etc/caddy/Caddyfile
 install -d -o root -g root -m 0755 /etc/caddy/conf.d
 install -m 0644 "$APP_ROOT/deploy/proxy/conf.d/00-base.caddy" /etc/caddy/conf.d/00-base.caddy
 install -d -o root -g root -m 0755 /etc/caddy/sites
+if [[ "$URL_SCHEME" == "https" ]]; then
+  install -m 0644 "$APP_ROOT/deploy/proxy/www-redirect.caddy" /etc/caddy/sites/www-redirect.caddy
+  sed -i "s|example.com|$DOMAIN|g" /etc/caddy/sites/www-redirect.caddy
+fi
 
 # Keep repository ownership stable for operator git workflows.
 # Only grant service-user ownership where runtime writes are expected.
