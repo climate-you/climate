@@ -42,8 +42,8 @@
     --hairline-strong: rgba(242, 242, 242, 0.6);
     --blue: #7fa0ff;
     --heat: #ff7b66;
-  --dry: #d9a066;
-  --warm: #ffa94d;
+    --dry: #d9a066;
+    --warm: #ffa94d;
     --grid: rgba(242, 242, 242, 0.18);
     --bandbg: rgba(242, 242, 242, 0.06);
     --bandbg-alt: rgba(127, 160, 255, 0.12);
@@ -808,6 +808,36 @@
 }
 .methods a:hover {
   text-decoration: underline;
+}
+
+.moreLinks {
+  margin-top: 40px;
+  padding-top: 18px;
+  border-top: 1px solid var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+.moreLinks a {
+  color: var(--blue);
+  text-decoration: none;
+}
+.moreLinks a:hover {
+  text-decoration: underline;
+}
+.moreLinksHeading {
+  margin: 0;
+  font-weight: 600;
+  color: var(--ink);
+}
+.moreLinksStories {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.moreLinksSite {
+  margin: 14px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 .methods .copyright {

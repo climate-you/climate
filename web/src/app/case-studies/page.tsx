@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import { pageTitle } from "@/lib/siteIdentity";
 import ExplorerPage from "../ExplorerPage";
 
 export const metadata: Metadata = {
-  title: "Case studies | Your Climate",
+  title: pageTitle("Case studies"),
   description:
     "Deep dives into individual climate events, mapped from the Copernicus ERA5 record.",
   alternates: {

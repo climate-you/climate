@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SITE_URL } from "@/lib/siteConfig";
+import { PUBLISHER_REF, SITE_NAME, pageTitle } from "@/lib/siteIdentity";
 import HeatwaveStory from "@/content/stories/june-2026-heatwave/HeatwaveStory";
 import { PUBLISHED, TITLE } from "@/content/stories/june-2026-heatwave/meta";
 
@@ -14,13 +15,14 @@ const OG_IMAGE_ALT =
   "Temperature anomaly over Europe during the June–July 2026 heat, with France and the Low Countries far above the seasonal average.";
 
 export const metadata: Metadata = {
-  title: `${TITLE} | Your Climate`,
+  title: pageTitle(TITLE),
   description: DESCRIPTION,
   authors: AUTHORS.map((name) => ({ name })),
   alternates: {
     canonical: PATH,
   },
   openGraph: {
+    siteName: SITE_NAME,
     title: TITLE,
     description: SHORT_DESCRIPTION,
     type: "article",
@@ -48,7 +50,7 @@ const jsonLd = {
   dateModified: PUBLISHED,
   image: [`${SITE_URL}${OG_IMAGE}`],
   author: AUTHORS.map((name) => ({ "@type": "Person", name })),
-  publisher: { "@type": "Organization", name: "climate.you" },
+  publisher: PUBLISHER_REF,
   mainEntityOfPage: { "@type": "WebPage", "@id": `${SITE_URL}${PATH}` },
   isBasedOn: {
     "@type": "Dataset",

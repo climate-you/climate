@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
-"""Build the social sharing (Open Graph) image for a story page.
+"""Build the social sharing (Open Graph) image for a story page or the site.
 
 Composes a 1200x630 card in the story's visual language: a serif headline and
 the climate.you mark on the left, and a framed anomaly map on the right,
 cropped from a release mercator texture at its true conformal aspect and drawn
-over the coastline overlay.
+over the coastline overlay. With --image, the frame holds a screenshot instead,
+which is how the home page card shows the globe and its panel.
 
 Usage:
     python scripts/make_story_og_image.py \\
         --texture data/releases/dev/maps/global_0p25/t2m_heatwave_2026_w2_mercator_texture/t2m_heatwave_2026_w2_mercator.webp \\
         --title "The June-July 2026 heat over Europe" \\
         --out web/public/story/june-2026-heatwave-og.png
+
+    python scripts/make_story_og_image.py \\
+        --image docs/images/global_temp.webp --map-width 640 --title-size 50 \\
+        --kicker "climate.you" \\
+        --title "Visualising local and global climate change" \\
+        --source "Data: ERA5 (Copernicus Climate Change Service / ECMWF), CMIP6, NOAA OISST and Coral Reef Watch" \\
+        --out web/public/og/home-og.png
 """
 from __future__ import annotations
 
@@ -118,8 +126,22 @@ def wrap(text: str, fnt: ImageFont.FreeTypeFont, max_w: int) -> list[str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
+    picture = ap.add_mutually_exclusive_group(required=True)
+    picture.add_argument("--texture", type=Path, help="Mercator texture to crop")
+    picture.add_argument(
+        "--image",
+        type=Path,
+        help="Picture to frame as it is (a screenshot), scaled to the frame "
+        "width, instead of a map cropped from a texture",
+    )
     ap.add_argument(
-        "--texture", type=Path, required=True, help="Mercator texture to crop"
+        "--map-width", type=int, default=560, help="Width of the framed picture"
+    )
+    ap.add_argument(
+        "--title-size",
+        type=int,
+        default=62,
+        help="Headline size in px; a longer headline needs a smaller one",
     )
     ap.add_argument("--title", required=True, help="Headline shown on the card")
     ap.add_argument("--out", type=Path, required=True, help="Output PNG path")
@@ -160,6 +182,10 @@ def main() -> int:
     args = ap.parse_args()
 
     def build_map(width: int) -> Image.Image:
+        if args.image:
+            pic = Image.open(args.image).convert("RGB")
+            height = round(pic.height * width / pic.width)
+            return pic.resize((width, height), Image.LANCZOS)
         left = render_map(
             args.texture, args.lines, tuple(args.bbox), width, args.lat_max
         )
@@ -212,7 +238,7 @@ def main() -> int:
     draw = ImageDraw.Draw(card, "RGBA")
 
     # ── Right: framed map ────────────────────────────────────────────────
-    map_w = 560
+    map_w = args.map_width
     map_img = build_map(map_w)
     map_x = W - MARGIN - map_w
     map_y = (H - map_img.height) // 2
@@ -252,13 +278,14 @@ def main() -> int:
 
     # Centre the headline block in the space below the mark, so the card does
     # not sit top-heavy with a dead band along the bottom.
-    title_font = font(_SERIF_BOLD, 62)
+    title_font = font(_SERIF_BOLD, args.title_size)
     source_font = font(_SANS, 21)
     lines = wrap(args.title, title_font, text_w)
     # The source credit wraps inside the text column instead of running on
     # under the map.
     source_lines = wrap(args.source, source_font, text_w)
-    line_h, rule_gap, source_gap, source_line_h = 74, 22, 30, 28
+    line_h = round(args.title_size * 1.2)
+    rule_gap, source_gap, source_line_h = 22, 30, 28
     block_h = (
         len(lines) * line_h
         + rule_gap

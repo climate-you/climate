@@ -19,6 +19,7 @@ import {
 import { ERA5_SOURCE } from "@/lib/story/download";
 import GlobeBoundary from "@/components/story/GlobeBoundary";
 import ShareButton from "@/components/story/ShareButton";
+import StoryMoreLinks from "@/components/story/StoryMoreLinks";
 import SwipeCompare from "@/components/story/SwipeCompare";
 import StoryGlobe, {
   type GlobeStep,
@@ -973,6 +974,7 @@ export default function SummerStory() {
           </p>
         </div>
       </footer>
+      <StoryMoreLinks slug="summer-2026-heat-and-drought" />
     </article>
   );
 }

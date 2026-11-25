@@ -2,13 +2,21 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { ANALYTICS_OPT_OUT_BOOTSTRAP } from "@/lib/analytics/optOut";
 import { GOATCOUNTER_ENDPOINT, SITE_HOST, SITE_URL } from "@/lib/siteConfig";
+import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/siteIdentity";
 import "./globals.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "Your Climate",
-  description: "Interactive climate map for exploring local climate trends.",
+  title: SITE_NAME,
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  // A page that sets its own openGraph replaces this whole block, so each
+  // one repeats siteName.
+  openGraph: {
+    siteName: SITE_NAME,
+    type: "website",
+  },
 };
 
 export default function RootLayout({

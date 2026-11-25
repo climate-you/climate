@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SITE_URL } from "@/lib/siteConfig";
+import { PUBLISHER_REF, SITE_NAME, pageTitle } from "@/lib/siteIdentity";
 import SummerStory from "@/content/stories/summer-2026-heat-and-drought/SummerStory";
 import {
   PUBLISHED,
@@ -18,13 +19,14 @@ const OG_IMAGE_ALT =
   "Two maps of Europe sharing one frame: the left half shows summer 2026 temperature far above normal over France and Iberia, the right half shows rainfall far below normal across the same ground.";
 
 export const metadata: Metadata = {
-  title: `${TITLE} | Your Climate`,
+  title: pageTitle(TITLE),
   description: DESCRIPTION,
   authors: AUTHORS.map((name) => ({ name })),
   alternates: {
     canonical: PATH,
   },
   openGraph: {
+    siteName: SITE_NAME,
     title: TITLE,
     description: SHORT_DESCRIPTION,
     type: "article",
@@ -53,7 +55,7 @@ const jsonLd = {
   dateModified: UPDATED,
   image: [`${SITE_URL}${OG_IMAGE}`],
   author: AUTHORS.map((name) => ({ "@type": "Person", name })),
-  publisher: { "@type": "Organization", name: "climate.you" },
+  publisher: PUBLISHER_REF,
   mainEntityOfPage: { "@type": "WebPage", "@id": `${SITE_URL}${PATH}` },
   isBasedOn: {
     "@type": "Dataset",

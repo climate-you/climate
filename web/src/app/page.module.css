@@ -769,6 +769,12 @@
   gap: 10px;
 }
 
+/* Kept in the markup during the cold open (its links are how crawlers leave
+   the home page) but out of sight and out of the tab order. */
+.sourcesLinkDock.navConcealed {
+  visibility: hidden;
+}
+
 .sourcesLinkDock .navToggle {
   display: none;
 }

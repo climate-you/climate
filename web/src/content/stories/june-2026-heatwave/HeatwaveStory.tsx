@@ -8,6 +8,7 @@ import { type Bbox, DEFAULT_MERCATOR_LAT_MAX } from "@/lib/story/mercator";
 import { ERA5_SOURCE } from "@/lib/story/download";
 import GlobeBoundary from "@/components/story/GlobeBoundary";
 import ShareButton from "@/components/story/ShareButton";
+import StoryMoreLinks from "@/components/story/StoryMoreLinks";
 import { downloadAnomalyMap } from "@/lib/story/anomalyMapRender";
 import { longDate } from "@/lib/story/dates";
 import HeatwaveChart from "./HeatwaveChart";
@@ -396,6 +397,7 @@ export default function HeatwaveStory() {
           .
         </p>
       </footer>
+      <StoryMoreLinks slug="june-2026-heatwave" />
     </article>
   );
 }

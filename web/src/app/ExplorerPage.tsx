@@ -2010,19 +2010,23 @@ export default function ExplorerPage({
         onLocationSelect={applyLocation}
         externalError={locationError}
       />
-      {!introActive ? (
-        <SiteNav
-          stories={CASE_STUDIES}
-          onOpenCaseStudies={() => setOverlayOpenWithUrl("case-studies")}
-          links={[
-            { label: "About", onSelect: () => setOverlayOpenWithUrl("about") },
-            {
-              label: "Sources",
-              onSelect: () => setOverlayOpenWithUrl("sources"),
-            },
-          ]}
-        />
-      ) : null}
+      <SiteNav
+        concealed={introActive}
+        stories={CASE_STUDIES}
+        onOpenCaseStudies={() => setOverlayOpenWithUrl("case-studies")}
+        links={[
+          {
+            label: "About",
+            href: "/about",
+            onSelect: () => setOverlayOpenWithUrl("about"),
+          },
+          {
+            label: "Sources",
+            href: "/sources",
+            onSelect: () => setOverlayOpenWithUrl("sources"),
+          },
+        ]}
+      />
 
       {aboutOpen ? (
         <AboutOverlay
